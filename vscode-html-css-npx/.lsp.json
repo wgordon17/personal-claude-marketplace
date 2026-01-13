@@ -1,0 +1,27 @@
+{
+  "html": {
+    "command": "npx",
+    "args": ["-y", "--package=vscode-langservers-extracted", "vscode-html-language-server", "--stdio"],
+    "extensionToLanguage": {
+      ".html": "html",
+      ".htm": "html"
+    },
+    "transport": "stdio",
+    "initializationOptions": {},
+    "settings": {},
+    "maxRestarts": 3
+  },
+  "css": {
+    "command": "npx",
+    "args": ["-y", "--package=vscode-langservers-extracted", "vscode-css-language-server", "--stdio"],
+    "extensionToLanguage": {
+      ".css": "css",
+      ".scss": "scss",
+      ".less": "less"
+    },
+    "transport": "stdio",
+    "initializationOptions": {},
+    "settings": {},
+    "maxRestarts": 3
+  }
+}

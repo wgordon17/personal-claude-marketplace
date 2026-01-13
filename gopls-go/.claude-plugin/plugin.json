@@ -1,0 +1,8 @@
+{
+  "name": "gopls-go",
+  "description": "Go language server (install with: go install golang.org/x/tools/gopls@latest)",
+  "version": "1.0.0",
+  "author": {
+    "name": "wgordon"
+  }
+}

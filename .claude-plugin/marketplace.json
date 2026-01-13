@@ -1,0 +1,69 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "private-claude-marketplace",
+  "metadata": {
+    "description": "Private Claude Code plugins: LSP servers (uvx/npx) and custom agents",
+    "version": "1.0.0"
+  },
+  "owner": {
+    "name": "wgordon"
+  },
+  "plugins": [
+    {
+      "name": "pyright-uvx",
+      "version": "1.0.0",
+      "source": "./pyright-uvx",
+      "description": "Python language server (via uvx - always latest)",
+      "category": "development",
+      "tags": ["python", "lsp", "uvx"],
+      "author": {
+        "name": "wgordon"
+      }
+    },
+    {
+      "name": "vtsls-npx",
+      "version": "1.0.0",
+      "source": "./vtsls-npx",
+      "description": "TypeScript/JavaScript language server (via npx - always latest)",
+      "category": "development",
+      "tags": ["typescript", "javascript", "lsp", "npx"],
+      "author": {
+        "name": "wgordon"
+      }
+    },
+    {
+      "name": "gopls-go",
+      "version": "1.0.0",
+      "source": "./gopls-go",
+      "description": "Go language server (via go install - always latest)",
+      "category": "development",
+      "tags": ["go", "lsp"],
+      "author": {
+        "name": "wgordon"
+      }
+    },
+    {
+      "name": "vscode-html-css-npx",
+      "version": "1.0.0",
+      "source": "./vscode-html-css-npx",
+      "description": "HTML/CSS language servers (via npx - always latest)",
+      "category": "development",
+      "tags": ["html", "css", "lsp", "npx"],
+      "author": {
+        "name": "wgordon"
+      }
+    },
+    {
+      "name": "project-dev",
+      "version": "1.0.0",
+      "source": "./project-dev",
+      "description": "Project development agents (10) and skills (6) for feature development, security review, and quality assurance"
+    },
+    {
+      "name": "test-execution",
+      "version": "1.0.0",
+      "source": "./test-execution",
+      "description": "Intelligent test execution patterns for pytest and pre-commit"
+    }
+  ]
+}
