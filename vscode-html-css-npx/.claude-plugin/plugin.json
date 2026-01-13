@@ -1,0 +1,8 @@
+{
+  "name": "vscode-html-css-npx",
+  "description": "HTML/CSS language servers via npx (always latest)",
+  "version": "1.0.0",
+  "author": {
+    "name": "wgordon17"
+  }
+}

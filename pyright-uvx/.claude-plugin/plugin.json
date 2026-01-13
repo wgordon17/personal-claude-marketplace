@@ -1,0 +1,8 @@
+{
+  "name": "pyright-uvx",
+  "description": "Python language server via uvx (always latest)",
+  "version": "1.0.0",
+  "author": {
+    "name": "wgordon17"
+  }
+}
