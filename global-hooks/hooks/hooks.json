@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-push-review.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-push-review.sh"
           }
         ],
         "matcher": "Bash(git push origin*)"
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/validate-commit-message.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/validate-commit-message.sh"
           }
         ],
         "matcher": "Bash(git commit:*)"
