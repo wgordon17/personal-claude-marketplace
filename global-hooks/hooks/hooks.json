@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/pre-push-review.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-push-review.sh",
             "timeout": 10
           }
         ],
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-commit-message.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/validate-commit-message.sh",
             "timeout": 10
           }
         ],
