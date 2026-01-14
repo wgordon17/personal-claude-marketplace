@@ -3,26 +3,26 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash(git push origin*)",
         "hooks": [
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/pre-push-review.sh",
             "timeout": 10
           }
-        ]
+        ],
+        "matcher": "Bash(git push origin*)"
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash(git commit:*)",
         "hooks": [
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-commit-message.sh",
             "timeout": 10
           }
-        ]
+        ],
+        "matcher": "Bash(git commit:*)"
       }
     ]
   }
