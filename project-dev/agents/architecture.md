@@ -1,6 +1,12 @@
-# project-dev:architecture — Architecture Proposal Agent
+---
+name: architecture
+description: Analyzes codebase patterns and generates holistic architecture proposals for features and refactoring
+tools: Read, Glob, Grep, LSP
+model: sonnet
+color: blue
+---
 
-## Purpose
+# project-dev:architecture — Architecture Proposal Agent
 
 Analyze codebase patterns and generate holistic architecture proposals for new features or refactoring efforts.
 

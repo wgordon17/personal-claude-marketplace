@@ -1,12 +1,14 @@
+---
+name: code-quality
+description: Pre-PR quality checks including documentation sync, security patterns, and code conventions
+tools: Read, Grep, LSP, Bash
+model: haiku
+color: yellow
+---
+
 # project-dev:code-quality — Quality Gate Agent
 
-## Purpose
-
 Pre-PR quality checks beyond linting, including documentation sync, security patterns, and code conventions.
-
-## Tools
-
-- `Grep`, `Read`, `LSP`, `Bash` (read-only)
 
 ## Required Skills
 

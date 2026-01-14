@@ -1,12 +1,14 @@
+---
+name: bug-fixer
+description: Diagnoses issues, implements minimal fixes, and adds regression tests to prevent recurrence
+tools: Read, Write, Edit, Glob, Grep, LSP, Bash
+model: sonnet
+color: red
+---
+
 # project-dev:bug-fixer — Bug Fixing Agent
 
-## Purpose
-
 Diagnose issues, implement minimal fixes, and add regression tests to prevent recurrence.
-
-## Tools
-
-- All tools: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `LSP`, `Bash`
 
 ## Required Skills
 

@@ -55,19 +55,19 @@
     },
     {
       "name": "project-dev",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./project-dev",
       "description": "Project development agents (10) and skills (6) for feature development, security review, and quality assurance"
     },
     {
       "name": "test-execution",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./test-execution",
       "description": "Intelligent test execution patterns for pytest and pre-commit"
     },
     {
       "name": "global-skills",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./global-skills",
       "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python",
       "category": "productivity",
@@ -75,7 +75,7 @@
     },
     {
       "name": "global-commands",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./global-commands",
       "description": "Global commands: session management, project review, commit validation, LSP status",
       "category": "productivity",
@@ -83,7 +83,7 @@
     },
     {
       "name": "global-hooks",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "source": "./global-hooks",
       "description": "Global hooks: git safety checks, commit validation, pre-push review",
       "category": "quality",

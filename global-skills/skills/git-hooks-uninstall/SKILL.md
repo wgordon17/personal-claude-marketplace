@@ -1,9 +1,9 @@
+---
+name: git-hooks-uninstall
+description: Safely remove defense-in-depth git hooks from project
+---
+
 # Uninstall Defense-in-Depth Git Hooks
-
-**Skill Name:** git-hooks-uninstall
-**Slash Command:** `/git-hooks-uninstall`
-
-## Purpose
 
 Safely remove defense-in-depth git hooks from any project. Removes hook configurations from `.pre-commit-config.yaml` and uninstalls the hook scripts from `.git/hooks/`.
 
