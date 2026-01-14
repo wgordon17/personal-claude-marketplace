@@ -1,6 +1,12 @@
-# project-dev:orchestrator — Meta-Orchestrator Agent
+---
+name: orchestrator
+description: Meta-orchestrator that coordinates complex workflows by launching subagents and preventing context explosion
+tools: Task, Read, TodoWrite, Skill, AskUserQuestion
+model: opus
+color: purple
+---
 
-## Purpose
+# project-dev:orchestrator — Meta-Orchestrator Agent
 
 Coordinate complex workflows by launching subagents, reviewing outputs, and preventing context explosion. This is the **entry point** for multi-step tasks in Project.
 

@@ -1,12 +1,14 @@
+---
+name: frontend-design
+description: Frontend design guidance for Tailwind CSS v4 and Alpine.js CSP build patterns
+tools: Read, Glob, Grep, WebSearch
+model: haiku
+color: pink
+---
+
 # project-dev:frontend-design — Web Design Agent
 
-## Purpose
-
 Frontend design guidance following Tailwind CSS v4 and Alpine.js CSP build patterns used in Project.
-
-## Tools
-
-- `Read`, `Glob`, `Grep`, `WebSearch`, `Context7`
 
 ## Required Skills
 

@@ -1,12 +1,14 @@
+---
+name: pr-reviewer
+description: Comprehensive PR review with security, documentation, tests, and convention checks
+tools: Bash, Grep, Read, LSP
+model: sonnet
+color: orange
+---
+
 # project-dev:pr-reviewer — Pull Request Review Agent
 
-## Purpose
-
 Comprehensive PR review with Project-specific checks for security, documentation, tests, and conventions.
-
-## Tools
-
-- `Bash` (gh command), `Grep`, `Read`, `LSP`
 
 ## Required Skills
 

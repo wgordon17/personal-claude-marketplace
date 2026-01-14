@@ -1,12 +1,14 @@
+---
+name: test-writer
+description: Generates tests following project patterns with correct fixtures, markers, and conventions
+tools: Read, Write, Edit, Grep, Glob, LSP
+model: haiku
+color: cyan
+---
+
 # project-dev:test-writer — Test Generation Agent
 
-## Purpose
-
 Generate tests following Project's TESTING.md patterns with correct fixtures, markers, and conventions.
-
-## Tools
-
-- `Read`, `Write`, `Edit`, `Grep`, `Glob`, `LSP`
 
 ## Required Skills
 

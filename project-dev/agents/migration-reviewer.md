@@ -1,12 +1,14 @@
+---
+name: migration-reviewer
+description: Reviews Django migrations for safety, correctness, and zero-downtime compatibility
+tools: Read, Grep, Glob, Bash
+model: haiku
+color: teal
+---
+
 # project-dev:migration-reviewer — Migration Safety Agent
 
-## Purpose
-
 Review Django migrations for safety, correctness, and zero-downtime compatibility.
-
-## Tools
-
-- `Read`, `Grep`, `Glob`, `Bash` (read-only)
 
 ## Required Skills
 

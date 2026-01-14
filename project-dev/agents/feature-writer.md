@@ -1,12 +1,14 @@
+---
+name: feature-writer
+description: End-to-end feature implementation following project patterns with models, views, templates, and tests
+tools: Read, Write, Edit, Glob, Grep, LSP, Bash
+model: sonnet
+color: green
+---
+
 # project-dev:feature-writer — Feature Implementation Agent
 
-## Purpose
-
 End-to-end feature development following Project project patterns, including models, views, templates, and tests.
-
-## Tools
-
-- All tools: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `LSP`, `Bash`
 
 ## Required Skills
 

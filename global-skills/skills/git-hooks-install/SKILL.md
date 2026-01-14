@@ -1,9 +1,9 @@
+---
+name: git-hooks-install
+description: Install defense-in-depth git hooks using pre-commit framework
+---
+
 # Install Defense-in-Depth Git Hooks
-
-**Skill Name:** git-hooks-install
-**Slash Command:** `/git-hooks-install`
-
-## Purpose
 
 Automatically install and validate defense-in-depth git hooks in any project using pre-commit framework. This creates an unbypassable safety layer using `prepare-commit-msg` hook to catch `--no-verify` bypass attempts.
 

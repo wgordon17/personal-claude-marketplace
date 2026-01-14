@@ -1,12 +1,14 @@
+---
+name: refactor
+description: Improves code structure through extraction, consolidation, and cleanup while preserving behavior
+tools: Read, Write, Edit, Glob, Grep, LSP
+model: sonnet
+color: indigo
+---
+
 # project-dev:refactor — Refactoring Specialist Agent
 
-## Purpose
-
 Improve code structure through extraction, consolidation, and cleanup while preserving all existing behavior.
-
-## Tools
-
-- `Read`, `Write`, `Edit`, `Glob`, `Grep`, `LSP`
 
 ## Required Skills
 
