@@ -20,19 +20,61 @@ Private Claude Code plugins: LSP servers (uvx/npx) and custom agents.
 | project-dev | Project feature development agents | 10 agents |
 | test-execution | Test execution patterns | test-runner |
 
+### Productivity Plugins
+
+| Plugin | Description | Components |
+|--------|-------------|------------|
+| global-skills | Code quality & tooling skills | 7 skills |
+| global-commands | Session & project management | 6 commands |
+| global-hooks | Git safety & validation | 3 hooks |
+
+#### global-skills
+
+**Skills included:**
+- `/file-audit` - Deep code quality audit system
+- `/git-history` - Git history manipulation (git-branchless)
+- `/git-hooks-install` & `/git-hooks-uninstall` - Git hooks utilities
+- `/lsp-navigation` - PROACTIVE semantic code navigation
+- `/test-runner` - Efficient test execution patterns
+- `/uv-python` - PROACTIVE Python tooling enforcement
+
+#### global-commands
+
+**Commands included:**
+- `/contributing` - Generate/update CONTRIBUTING.md
+- `/lsp-status` - Check LSP server status
+- `/review-commits` - AI-assisted commit review for PRs
+- `/review-project` - Comprehensive TODO validation
+- `/session-end` - Sync project memory before ending
+- `/session-start` - Load project context or initialize
+
+#### global-hooks
+
+**Hooks included:**
+- **PreToolUse**: Pre-push review validation
+- **PostToolUse**: Commit message validation (Conventional Commits)
+- Git safety checks for destructive operations
+
 ## Installation
 
 ```bash
 # Add marketplace
 claude plugin marketplace add ~/Projects/personal/private-claude-marketplace
 
-# Install all plugins
+# Install LSP plugins
 claude plugin install pyright-uvx@private-claude-marketplace
 claude plugin install vtsls-npx@private-claude-marketplace
 claude plugin install gopls-go@private-claude-marketplace
 claude plugin install vscode-html-css-npx@private-claude-marketplace
+
+# Install agent plugins
 claude plugin install project-dev@private-claude-marketplace
 claude plugin install test-execution@private-claude-marketplace
+
+# Install productivity plugins
+claude plugin install global-skills@private-claude-marketplace
+claude plugin install global-commands@private-claude-marketplace
+claude plugin install global-hooks@private-claude-marketplace
 ```
 
 ## Prerequisites
