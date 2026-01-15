@@ -12,7 +12,7 @@ Automatically install and validate defense-in-depth git hooks in any project usi
 1. **Validates environment**:
    - Checks you're in a git repository
    - Verifies pre-commit framework is configured
-   - Confirms hook scripts exist at `~/.claude/scripts/git-hooks/`
+   - Locates hook scripts in the global-skills plugin
 
 2. **Updates .pre-commit-config.yaml**:
    - Adds defense-in-depth hooks to local repo configuration
@@ -43,25 +43,61 @@ When this skill is invoked:
    # Check for .pre-commit-config.yaml
    [ -f .pre-commit-config.yaml ] || exit 1
 
-   # Verify hook scripts exist
-   [ -f ~/.claude/scripts/git-hooks/prepare-commit-msg.sh ] || exit 1
-   [ -f ~/.claude/scripts/git-hooks/post-commit.sh ] || exit 1
+   # Find global-skills plugin path
+   PLUGIN_HOOKS_DIR="$(find ~/.claude/plugins/cache -path "*/global-skills/*/git-hooks" -type d | head -1)"
+   if [ -z "$PLUGIN_HOOKS_DIR" ]; then
+       echo "Error: global-skills plugin not found. Install with:"
+       echo "  claude plugin install global-skills@private-claude-marketplace"
+       exit 1
+   fi
+
+   # Verify hook scripts exist in plugin
+   [ -f "$PLUGIN_HOOKS_DIR/prepare-commit-msg.sh" ] || exit 1
+   [ -f "$PLUGIN_HOOKS_DIR/post-commit.sh" ] || exit 1
+
+   echo "✓ Found hook scripts at: $PLUGIN_HOOKS_DIR"
    ```
 
-2. **Check if already installed**:
+2. **Check if already installed and detect version**:
    ```bash
    # Check if hooks already in config
-   grep -q "defense-in-depth-safety" .pre-commit-config.yaml
+   if grep -q "defense-in-depth-safety" .pre-commit-config.yaml; then
+       echo "Defense-in-depth hooks already installed"
+
+       # Check if using old path (~/.claude/scripts/git-hooks/)
+       if grep -q "~/.claude/scripts/git-hooks" .pre-commit-config.yaml; then
+           echo "⚠️  Hooks are using OLD path: ~/.claude/scripts/git-hooks/"
+           echo "   Will update to plugin path: $PLUGIN_HOOKS_DIR"
+           NEEDS_UPDATE=true
+       else
+           echo "✓ Hooks already using plugin path"
+           NEEDS_UPDATE=false
+       fi
+   else
+       echo "Defense-in-depth hooks not installed"
+       NEEDS_UPDATE=false
+   fi
    ```
 
-   If already installed, ask user if they want to:
-   - Skip (already installed)
-   - Reinstall (update configuration)
+   If already installed with OLD path, automatically update the paths.
+
+   If already installed with correct path, ask user if they want to:
+   - Skip (already up-to-date)
+   - Reinstall (force reinstall)
    - Uninstall (remove hooks)
 
-3. **Add hooks to .pre-commit-config.yaml**:
+3. **Add or update hooks in .pre-commit-config.yaml**:
 
-   Read the current config, then append this block to the END:
+   **If NEEDS_UPDATE=true (old paths detected):**
+   ```bash
+   # Update old paths to new plugin path
+   sed -i.bak "s|~/.claude/scripts/git-hooks/|$PLUGIN_HOOKS_DIR/|g" .pre-commit-config.yaml
+   echo "✓ Updated hook paths to plugin location"
+   ```
+
+   **If hooks not installed yet:**
+
+   Read the current config, then append this block to the END, using the absolute path from `$PLUGIN_HOOKS_DIR`:
 
    ```yaml
 
@@ -70,7 +106,7 @@ When this skill is invoked:
          # Defense-in-depth: prepare-commit-msg (cannot be bypassed with --no-verify)
          - id: defense-in-depth-safety
            name: Defense-in-depth safety checks
-           entry: ~/.claude/scripts/git-hooks/prepare-commit-msg.sh
+           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.2/git-hooks/prepare-commit-msg.sh
            language: system
            always_run: true
            pass_filenames: true
@@ -79,14 +115,17 @@ When this skill is invoked:
          # Sets marker after successful commit
          - id: set-success-marker
            name: Set commit success marker
-           entry: ~/.claude/scripts/git-hooks/post-commit.sh
+           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.2/git-hooks/post-commit.sh
            language: system
            always_run: true
            pass_filenames: false
            stages: [post-commit]
    ```
 
-   **IMPORTANT**: Add to the END of the file, after all existing hooks
+   **IMPORTANT**:
+   - Replace the example paths with the actual absolute path from `$PLUGIN_HOOKS_DIR`
+   - Add to the END of the file, after all existing hooks
+   - Use the absolute path (substitute the variable value into the YAML)
 
 4. **Install hook types**:
    ```bash
