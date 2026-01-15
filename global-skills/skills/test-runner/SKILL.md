@@ -371,7 +371,7 @@ pre-commit run  # NEVER
 uvx pytest  # if not in a project context
 ```
 
-See `~/.claude/skills/uv-python/SKILL.md` for comprehensive Python tooling guidance.
+See `/uv-python skill` for comprehensive Python tooling guidance.
 
 ## Quick Reference
 

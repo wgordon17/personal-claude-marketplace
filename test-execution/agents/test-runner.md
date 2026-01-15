@@ -251,12 +251,12 @@ After running a test command, report what failed before taking any other action.
 
 **Consult test-runner skill** for detailed guidance:
 ```
-See ~/.claude/skills/test-runner/SKILL.md for comprehensive test execution patterns
+See /test-runner skill for comprehensive test execution patterns
 ```
 
 **Consult uv-python skill** for UV usage:
 ```
-All test commands must use `uv run` - see ~/.claude/skills/uv-python/SKILL.md
+All test commands must use `uv run` - see /uv-python skill
 ```
 
 ## Success Metrics

@@ -74,9 +74,9 @@ Show the configuration for each LSP plugin:
 
 ```bash
 echo "=== LSP Plugin Configurations ==="
-for config in ~/.claude/plugins/cache/private-claude-marketplace/*/1.0.0/.lsp.json; do
+for config in ~/.claude/plugins/cache/*/*/*/.lsp.json; do
     if [ -f "$config" ]; then
-        plugin_name=$(echo "$config" | sed 's|.*/cache/private-claude-marketplace/\([^/]*\)/.*|\1|')
+        plugin_name=$(echo "$config" | sed 's|.*/cache/[^/]*/\([^/]*\)/.*|\1|')
         echo ""
         echo "--- $plugin_name ---"
         cat "$config"
@@ -160,6 +160,5 @@ If LSP plugins are not installed:
 
 ## Documentation
 
-- Full skill documentation: `~/.claude/skills/lsp-navigation/SKILL.md`
-- LSP plugins marketplace: Check `~/Projects/personal/private-claude-marketplace`
+- LSP navigation skill: `/lsp-navigation`
 - CLAUDE.md LSP section: See "LSP Tooling — RECOMMENDED"
