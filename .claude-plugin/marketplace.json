@@ -67,7 +67,7 @@
     },
     {
       "name": "global-skills",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "source": "./global-skills",
       "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python",
       "category": "productivity",

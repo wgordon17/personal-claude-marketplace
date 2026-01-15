@@ -69,8 +69,15 @@ When this skill is invoked:
            echo "⚠️  Hooks are using OLD path: ~/.claude/scripts/git-hooks/"
            echo "   Will update to plugin path: $PLUGIN_HOOKS_DIR"
            NEEDS_UPDATE=true
+       # Check if using outdated plugin version
+       elif ! grep -q "$PLUGIN_HOOKS_DIR" .pre-commit-config.yaml; then
+           CURRENT_PATH=$(grep "prepare-commit-msg.sh" .pre-commit-config.yaml | grep -o "/Users/[^\"]*" | head -1)
+           echo "⚠️  Hooks are using outdated version:"
+           echo "   Current: $CURRENT_PATH"
+           echo "   Latest:  $PLUGIN_HOOKS_DIR"
+           NEEDS_UPDATE=true
        else
-           echo "✓ Hooks already using plugin path"
+           echo "✓ Hooks already up-to-date"
            NEEDS_UPDATE=false
        fi
    else
@@ -79,20 +86,24 @@ When this skill is invoked:
    fi
    ```
 
-   If already installed with OLD path, automatically update the paths.
+   If NEEDS_UPDATE=true, automatically update the paths to latest version.
 
-   If already installed with correct path, ask user if they want to:
+   If already up-to-date, ask user if they want to:
    - Skip (already up-to-date)
    - Reinstall (force reinstall)
    - Uninstall (remove hooks)
 
 3. **Add or update hooks in .pre-commit-config.yaml**:
 
-   **If NEEDS_UPDATE=true (old paths detected):**
+   **If NEEDS_UPDATE=true (old or outdated paths detected):**
    ```bash
-   # Update old paths to new plugin path
+   # Update old ~/.claude/scripts/git-hooks/ paths
    sed -i.bak "s|~/.claude/scripts/git-hooks/|$PLUGIN_HOOKS_DIR/|g" .pre-commit-config.yaml
-   echo "✓ Updated hook paths to plugin location"
+
+   # Update outdated plugin version paths (e.g., 1.0.2 → 1.0.3)
+   sed -i.bak "s|/global-skills/[0-9.]*\+/git-hooks/|$PLUGIN_HOOKS_DIR/|g" .pre-commit-config.yaml
+
+   echo "✓ Updated hook paths to latest plugin version: $PLUGIN_HOOKS_DIR"
    ```
 
    **If hooks not installed yet:**
