@@ -464,7 +464,7 @@ black .  # Now available globally
 
 ### Test Execution (Pytest and Pre-commit)
 
-**CRITICAL**: For comprehensive test execution guidance, see `~/.claude/skills/test-runner/SKILL.md`
+**CRITICAL**: For comprehensive test execution guidance, see `/test-runner skill`
 
 **Quick reference for pytest with uv:**
 
@@ -501,7 +501,7 @@ uv run pre-commit run --files file1.py file2.py
 - Use `pytest --lf` for efficient failure re-runs
 - Use `pytest -k "pattern"` for targeted test selection
 
-See `~/.claude/skills/test-runner/SKILL.md` for detailed patterns and workflows.
+See `/test-runner skill` for detailed patterns and workflows.
 
 ## Error Handling
 
@@ -543,11 +543,11 @@ uv cache clean pyright
 - `documentSymbol` - List all functions/classes in file
 - `workspaceSymbol` - Search for symbols by name
 
-**See the `lsp-navigation` skill** (`~/.claude/skills/lsp-navigation/`) for comprehensive LSP usage guidance.
+**See the `lsp-navigation` skill** (`/lsp-navigation skill`) for comprehensive LSP usage guidance.
 
 ## Additional Resources
 
 - **Command Mappings**: `references/command-mappings.md` - Comprehensive legacy → uv command table
 - **PEP 723 Examples**: `references/pep723-examples.md` - Practical inline dependency examples
-- **LSP Navigation**: `~/.claude/skills/lsp-navigation/SKILL.md` - LSP tool usage guide
+- **LSP Navigation**: `/lsp-navigation skill` - LSP tool usage guide
 - **Official Docs**: https://docs.astral.sh/uv/

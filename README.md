@@ -58,8 +58,8 @@ Private Claude Code plugins: LSP servers (uvx/npx) and custom agents.
 ## Installation
 
 ```bash
-# Add marketplace
-claude plugin marketplace add ~/Projects/personal/private-claude-marketplace
+# Add marketplace (GitHub)
+claude plugin marketplace add wgordon17/private-claude-marketplace
 
 # Install LSP plugins
 claude plugin install pyright-uvx@private-claude-marketplace
