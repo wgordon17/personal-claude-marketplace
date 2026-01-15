@@ -132,36 +132,36 @@ When this skill is invoked:
    uv run pre-commit install --install-hooks --hook-type prepare-commit-msg --hook-type post-commit
    ```
 
-5. **Run validation tests**:
+5. **Verify installation**:
 
-   **Test 1: Normal commit flow**
    ```bash
-   # Clear any stale markers
-   rm -f ~/.cache/hook-checks/*.mark
-
-   # Commit on feature branch
-   git commit --allow-empty -m "test: validate defense hooks"
-
-   # Check marker was created
-   [ -f ~/.cache/hook-checks/*.mark ] && echo "✅ Marker created" || echo "❌ No marker"
-   ```
-
-   **Test 2: Marker consumption**
-   ```bash
-   # Second commit should consume marker
-   git commit --allow-empty -m "test: marker consumption"
-
-   # Marker should be recreated (not the same timestamp)
-   ```
-
-   **Test 3: Branch protection** (if not on main):
-   ```bash
-   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   if [[ "$CURRENT_BRANCH" != "main" && "$CURRENT_BRANCH" != "master" ]]; then
-       git switch main 2>/dev/null || git switch -c test-main
-       git commit --allow-empty -m "test: should block" 2>&1 | grep -q "BLOCKED" && echo "✅ Blocked" || echo "❌ Not blocked"
-       git switch "$CURRENT_BRANCH"
+   # Check hooks are installed in .git/hooks/
+   if [ -x .git/hooks/prepare-commit-msg ] && [ -x .git/hooks/post-commit ]; then
+       echo "✅ Git hooks installed successfully"
+   else
+       echo "❌ Git hooks not installed"
+       exit 1
    fi
+
+   # Verify hooks point to plugin scripts
+   if grep -q "$PLUGIN_HOOKS_DIR" .git/hooks/prepare-commit-msg; then
+       echo "✅ Hooks using plugin scripts (version-independent)"
+   else
+       echo "⚠️  Warning: Hooks may be using old paths"
+   fi
+
+   # Clear any stale markers
+   rm -f ~/.cache/hook-checks/*.mark 2>/dev/null
+   echo "✓ Cleared stale markers"
+   ```
+
+   **IMPORTANT:** Do NOT create test commits - they pollute git history.
+
+   Instead, inform the user they can manually test the hooks with:
+   ```bash
+   # Test with invalid commit message (should show validation error)
+   git commit --allow-empty -m "test: add feature"
+   # Expected: Error about using "add" instead of "adds" (imperative vs present indicative)
    ```
 
 6. **Report results**:
