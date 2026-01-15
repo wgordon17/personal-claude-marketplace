@@ -41,9 +41,40 @@ Diagnose issues, implement minimal fixes, and add regression tests to prevent re
    - Test would have caught the original bug
 
 6. **Verify fix**
-   - Run the specific test
-   - Run related tests
-   - Ensure no regressions
+   - Spawn `test-execution:test-runner` agent for verification
+   - Pass specific test paths (NOT full suite)
+   - If verification fails, iterate with new failure context
+
+## Verification Handoff
+
+After implementing a fix, spawn the test-runner agent for verification:
+
+```python
+Task(
+  subagent_type="test-execution:test-runner",
+  prompt="""Verify fix for test_login_flow.
+
+Run ONLY this test:
+uv run pytest tests/auth/test_login.py::test_login_flow -vv
+
+Return pass/fail result with details."""
+)
+```
+
+**Important:**
+- Always pass **specific test paths**, not "run all tests"
+- Include context about what was fixed
+- If verification fails, use the new failure details to iterate
+
+**Expected response from test-runner:**
+```json
+{
+  "status": "verification_complete",
+  "tests_run": ["tests/auth/test_login.py::test_login_flow"],
+  "result": "passed",
+  "details": "All 1 test passed"
+}
+```
 
 ## Debugging Approach
 

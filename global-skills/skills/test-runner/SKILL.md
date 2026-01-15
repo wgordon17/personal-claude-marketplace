@@ -419,19 +419,22 @@ Need to run pre-commit?
 
 For complex test workflows, consider launching the test-runner agent via Task tool:
 
-```bash
-# Launch agent for complex workflow
+```python
+# Launch agent for test execution and failure reporting
 Task(
   subagent_type="test-execution:test-runner",
-  prompt="Run pre-commit and pytest, fix any failures, and verify all tests pass"
+  prompt="Run pre-commit and pytest, report any failures with specific test paths"
 )
 ```
 
 The agent will:
 - Execute commands sequentially
 - Parse failures intelligently
-- Make targeted re-runs automatically
+- Report failures with specific test paths and error details
 - Track progress with TodoWrite
+- Return verification commands for fixing agents
+
+**Note:** The test-runner agent does NOT fix code. For fixes, spawn `project-dev:bug-fixer` with the failure report, then have bug-fixer spawn test-runner for verification.
 
 ## Summary: Critical Rules
 
