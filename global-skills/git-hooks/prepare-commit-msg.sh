@@ -12,9 +12,10 @@ set -euo pipefail
 # Exit early if not an interactive commit
 # This hook should only validate regular commits, not merges/squashes/rebases
 COMMIT_SOURCE="${2:-}"
-if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]] || [[ "$COMMIT_SOURCE" == "commit" ]] || [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
-    # Skip for: merge commits, squash commits, amend commits, and any rebase operations
+if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]] || [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
+    # Skip for: merge commits, squash commits, and any rebase/cherry-pick/revert operations
     # GIT_REFLOG_ACTION is set during rebase/cherry-pick/revert
+    # NOTE: We DO check amend commits (COMMIT_SOURCE="commit") to catch --no-verify on amends
     exit 0
 fi
 
@@ -41,12 +42,25 @@ fi
 MARKER_DIR="$HOME/.cache/hook-checks"
 MARKER_FILE="$MARKER_DIR/${REPO_HASH}.mark"
 
-# Track if pre-commit was bypassed
-PRE_COMMIT_BYPASSED=false
-if [ ! -f "$MARKER_FILE" ]; then
+# ATOMIC CHECK: Delete marker and check if it existed (prevents reuse across commits)
+# This ensures each commit must have its OWN successful pre-commit run
+if [ -f "$MARKER_FILE" ]; then
+    # Marker exists - pre-commit ran successfully for THIS commit
+    rm -f "$MARKER_FILE"  # Delete immediately to prevent reuse by next commit
+    PRE_COMMIT_BYPASSED=false
+else
+    # No marker - pre-commit was bypassed with --no-verify
     PRE_COMMIT_BYPASSED=true
-    echo -e "${YELLOW}⚠️  Pre-commit hooks were bypassed (--no-verify detected)${NC}" >&2
-    echo -e "${YELLOW}Running critical safety checks...${NC}" >&2
+    echo -e "${RED}❌ BLOCKED: --no-verify flag is FORBIDDEN${NC}" >&2
+    echo "" >&2
+    echo "Pre-commit hooks must run for all commits." >&2
+    echo "This prevents accidental bypass of linting, tests, and security checks." >&2
+    echo "" >&2
+    echo "If you absolutely must commit without pre-commit:" >&2
+    echo "  1. Fix the issue pre-commit is catching" >&2
+    echo "  2. Or temporarily disable this hook:" >&2
+    echo "     mv .git/hooks/prepare-commit-msg .git/hooks/prepare-commit-msg.disabled" >&2
+    exit 1
 fi
 
 # ============================================================================
@@ -111,13 +125,5 @@ if [ "$PRE_COMMIT_BYPASSED" = true ]; then
         exit 1
     fi
 fi
-
-# ============================================================================
-# CLEANUP
-# ============================================================================
-
-# Always delete marker file after checking (one-time use)
-# This ensures next commit will re-check if pre-commit ran
-rm -f "$MARKER_FILE"
 
 exit 0
