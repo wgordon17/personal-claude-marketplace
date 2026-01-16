@@ -1,7 +1,7 @@
 {
   "name": "test-execution",
   "description": "Intelligent test execution patterns and agents for efficient pytest and pre-commit workflows",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": {
     "name": "wgordon17"
   }
