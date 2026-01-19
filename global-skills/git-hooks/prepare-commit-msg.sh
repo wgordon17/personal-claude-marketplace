@@ -12,12 +12,25 @@ set -euo pipefail
 # Exit early if not an interactive commit
 # This hook should only validate regular commits, not merges/squashes/rebases
 COMMIT_SOURCE="${2:-}"
-if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]] || [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
-    # Skip for: merge commits, squash commits, and any rebase/cherry-pick/revert operations
-    # GIT_REFLOG_ACTION is set during rebase/cherry-pick/revert
-    # NOTE: We DO check amend commits (COMMIT_SOURCE="commit") to catch --no-verify on amends
+
+# Detect rebase/cherry-pick/revert by checking for working directories
+# These are the most reliable indicators across all git versions
+if [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] || [ -f ".git/CHERRY_PICK_HEAD" ] || [ -f ".git/REVERT_HEAD" ]; then
+    # Skip during batch operations
     exit 0
 fi
+
+# Also skip for merge and squash commits
+if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]]; then
+    exit 0
+fi
+
+# Additional safety: skip if GIT_REFLOG_ACTION is set
+if [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
+    exit 0
+fi
+
+# NOTE: We DO check amend commits (COMMIT_SOURCE="commit") to catch --no-verify on amends
 
 # Color codes for output
 RED='\033[0;31m'
