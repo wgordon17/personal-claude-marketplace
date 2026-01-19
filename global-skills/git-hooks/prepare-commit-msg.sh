@@ -42,15 +42,45 @@ fi
 MARKER_DIR="$HOME/.cache/hook-checks"
 MARKER_FILE="$MARKER_DIR/${REPO_HASH}.mark"
 
-# ATOMIC CHECK: Delete marker and check if it existed (prevents reuse across commits)
-# This ensures each commit must have its OWN successful pre-commit run
+# Validate marker: check existence, age, and commit SHA
+PRE_COMMIT_BYPASSED=true
+MARKER_VALID=false
+
 if [ -f "$MARKER_FILE" ]; then
-    # Marker exists - pre-commit ran successfully for THIS commit
-    rm -f "$MARKER_FILE"  # Delete immediately to prevent reuse by next commit
-    PRE_COMMIT_BYPASSED=false
-else
-    # No marker - pre-commit was bypassed with --no-verify
-    PRE_COMMIT_BYPASSED=true
+    # Read marker contents (format: timestamp|commit-sha)
+    MARKER_CONTENTS=$(cat "$MARKER_FILE")
+    MARKER_TIMESTAMP=$(echo "$MARKER_CONTENTS" | cut -d'|' -f1)
+    MARKER_SHA=$(echo "$MARKER_CONTENTS" | cut -d'|' -f2)
+    CURRENT_TIME=$(date +%s)
+    MARKER_AGE=$((CURRENT_TIME - MARKER_TIMESTAMP))
+
+    # Validation 1: Check marker age (must be < 30 seconds)
+    if [ "$MARKER_AGE" -gt 30 ]; then
+        echo -e "${YELLOW}⚠️  Stale marker detected (${MARKER_AGE}s old)${NC}" >&2
+        echo -e "${YELLOW}This likely means an earlier commit was interrupted (Ctrl+C) or failed.${NC}" >&2
+        echo "" >&2
+        echo "To clear stale marker:" >&2
+        echo "  rm -f ${MARKER_FILE}" >&2
+        echo "" >&2
+        # Treat as bypassed - run critical checks
+    else
+        # Validation 2: Check if marker SHA is parent of current commit
+        # (Only applicable for amend - for new commits this check doesn't apply)
+        if git merge-base --is-ancestor "$MARKER_SHA" HEAD 2>/dev/null || [ "$MARKER_SHA" = "unknown" ]; then
+            # Marker is valid - pre-commit ran successfully
+            MARKER_VALID=true
+            PRE_COMMIT_BYPASSED=false
+        else
+            echo -e "${YELLOW}⚠️  Marker SHA mismatch (expected ancestor of HEAD)${NC}" >&2
+        fi
+    fi
+
+    # Delete marker regardless of validity (one-time use)
+    rm -f "$MARKER_FILE"
+fi
+
+# If marker was invalid or missing, block the commit
+if [ "$MARKER_VALID" = false ]; then
     echo -e "${RED}❌ BLOCKED: --no-verify flag is FORBIDDEN${NC}" >&2
     echo "" >&2
     echo "Pre-commit hooks must run for all commits." >&2
