@@ -18,13 +18,24 @@ else
     exit 0
 fi
 
+# Skip setting marker during rebase/merge/cherry-pick operations
+# These operations skip prepare-commit-msg, so marker would never be consumed
+if [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
+    # Don't set marker during batch operations (rebase, merge, etc.)
+    exit 0
+fi
+
 # Create marker directory and file
 MARKER_DIR="$HOME/.cache/hook-checks"
 mkdir -p "$MARKER_DIR"
 MARKER_FILE="$MARKER_DIR/${REPO_HASH}.mark"
 
-# Write timestamp to marker file
-# This marker indicates: "Last commit had pre-commit hooks run successfully"
-date +%s > "$MARKER_FILE"
+# Get the SHA of the commit that just succeeded
+COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+
+# Write marker with timestamp and commit SHA
+# Format: timestamp|commit-sha
+# This marker indicates: "Pre-commit hooks ran successfully for THIS specific commit"
+echo "$(date +%s)|${COMMIT_SHA}" > "$MARKER_FILE"
 
 exit 0
