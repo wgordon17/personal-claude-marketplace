@@ -2,6 +2,10 @@
 
 Essential skills for code quality, git operations, LSP navigation, test execution, and Python tooling.
 
+## ⚠️ Development Warning
+
+**DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
+
 ## Skills (7)
 
 | Skill | Description | Type |

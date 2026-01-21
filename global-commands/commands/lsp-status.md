@@ -23,7 +23,7 @@ jq '.env.ENABLE_LSP_TOOL' ~/.claude/settings.json
 List all LSP-related plugins that are enabled:
 
 ```bash
-jq '.enabledPlugins | to_entries | map(select(.value == true)) | map(.key) | map(select(test("lsp|pyright|vtsls|gopls|html"; "i")))' ~/.claude/settings.json
+jq '.enabledPlugins | to_entries | map(select(.value == true)) | map(.key) | map(select(test("lsp|pyright|vtsls|gopls|html|rust"; "i")))' ~/.claude/settings.json
 ```
 
 ### Step 3: Verify Prerequisites
@@ -65,6 +65,15 @@ if command -v npx &> /dev/null; then
     echo "✓ npx available (HTML/CSS LSP will work)"
 else
     echo "✗ npx NOT installed - HTML/CSS LSP unavailable"
+fi
+
+echo ""
+echo "=== Rust LSP (rust-analyzer via rustup) ==="
+if command -v rust-analyzer &> /dev/null; then
+    echo "✓ rust-analyzer available: $(rust-analyzer --version 2>&1 | head -1)"
+else
+    echo "✗ rust-analyzer NOT installed - Rust LSP unavailable"
+    echo "  Install with: rustup component add rust-analyzer"
 fi
 ```
 
@@ -110,6 +119,7 @@ Language Servers:
 │ Python            │ ✓/✗     │ pyright (via uvx)      │
 │ TypeScript/JS     │ ✓/✗     │ vtsls (via npx)        │
 │ Go                │ ✓/✗     │ gopls                  │
+│ Rust              │ ✓/✗     │ rust-analyzer (rustup) │
 │ HTML/CSS          │ ✓/✗     │ vscode-langservers     │
 └───────────────────┴─────────┴────────────────────────┘
 
@@ -155,6 +165,7 @@ If LSP plugins are not installed:
 /plugin install pyright-uvx@private-claude-marketplace
 /plugin install vtsls-npx@private-claude-marketplace
 /plugin install gopls-go@private-claude-marketplace
+/plugin install rust-analyzer-rustup@private-claude-marketplace
 /plugin install vscode-html-css-npx@private-claude-marketplace
 ```
 

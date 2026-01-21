@@ -2,6 +2,10 @@
 
 Project-specific agents for Project development with zero-knowledge encryption patterns.
 
+## ⚠️ Development Warning
+
+**DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
+
 ## Agents
 
 | Agent | Purpose | Model |

@@ -2,6 +2,21 @@
 
 Private Claude Code plugins: LSP servers (uvx/npx) and custom agents.
 
+## ⚠️ Development Warning
+
+**DO NOT edit files in `~/.claude/plugins/marketplaces/` or `~/.claude/plugins/cache/`!**
+
+Those directories contain installed/cached versions of plugins. Always edit the source repository where you cloned this project. Changes made in `~/.claude/plugins/` will be:
+- Lost when plugins are updated or cache is cleared
+- Not committed to git
+- Not pushed to the remote repository
+
+**Development workflow:**
+1. Clone this repo to your projects directory (e.g., `~/Projects/`)
+2. Make all edits in the cloned repository
+3. Commit and push changes from the source repository
+4. Update installed plugins: `claude plugin marketplace update private-claude-marketplace`
+
 ## Plugins
 
 ### LSP Plugins

@@ -118,7 +118,7 @@ When this skill is invoked:
          # Sets marker if all previous pre-commit hooks passed
          - id: set-precommit-marker
            name: Set pre-commit success marker
-           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.6/git-hooks/post-commit.sh
+           entry: $PLUGIN_HOOKS_DIR/post-commit.sh
            language: system
            always_run: true
            pass_filenames: false
@@ -128,7 +128,7 @@ When this skill is invoked:
          # Checks for marker from pre-commit stage above
          - id: defense-in-depth-safety
            name: Defense-in-depth safety checks
-           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.6/git-hooks/prepare-commit-msg.sh
+           entry: $PLUGIN_HOOKS_DIR/prepare-commit-msg.sh
            language: system
            always_run: true
            pass_filenames: true
