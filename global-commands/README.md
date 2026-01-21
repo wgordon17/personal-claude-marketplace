@@ -2,6 +2,10 @@
 
 Session management, project review, commit validation, and LSP status commands.
 
+## ⚠️ Development Warning
+
+**DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
+
 ## Commands (6)
 
 | Command | Description | When to Use |
