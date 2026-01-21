@@ -1,7 +1,7 @@
 {
   "name": "global-commands",
   "description": "Global commands for session management, project review, commit validation, and LSP status",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": {
     "name": "wgordon17"
   }
