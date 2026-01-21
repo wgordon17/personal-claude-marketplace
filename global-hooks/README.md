@@ -2,6 +2,10 @@
 
 Git safety checks, commit message validation, and pre-push review automation.
 
+## ⚠️ Development Warning
+
+**DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
+
 ## Hooks (2 + 1 utility)
 
 ### PreToolUse Hooks
