@@ -3,7 +3,7 @@
   "name": "private-claude-marketplace",
   "metadata": {
     "description": "Private Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "owner": {
     "name": "wgordon"
@@ -49,6 +49,17 @@
       "description": "HTML/CSS language servers (via npx - always latest)",
       "category": "development",
       "tags": ["html", "css", "lsp", "npx"],
+      "author": {
+        "name": "wgordon"
+      }
+    },
+    {
+      "name": "rust-analyzer-rustup",
+      "version": "1.0.0",
+      "source": "./rust-analyzer-rustup",
+      "description": "Rust language server (via rustup - always latest)",
+      "category": "development",
+      "tags": ["rust", "lsp", "rustup"],
       "author": {
         "name": "wgordon"
       }
