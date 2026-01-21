@@ -1,0 +1,22 @@
+{
+  "rust": {
+    "command": "rust-analyzer",
+    "args": [],
+    "extensionToLanguage": {
+      ".rs": "rust"
+    },
+    "transport": "stdio",
+    "initializationOptions": {
+      "cargo": {
+        "buildScripts": {
+          "enable": true
+        }
+      },
+      "procMacro": {
+        "enable": true
+      }
+    },
+    "settings": {},
+    "maxRestarts": 3
+  }
+}
