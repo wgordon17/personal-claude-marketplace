@@ -6,22 +6,22 @@ Session management, project review, commit validation, and LSP status commands.
 
 | Command | Description | When to Use |
 |---------|-------------|-------------|
-| `/session-start` | Load project context or initialize new project | At session start |
-| `/session-end` | Sync project memory before ending | Before ending session |
-| `/review-project` | Comprehensive TODO validation | Before PRs |
-| `/review-commits` | AI-assisted commit review for PR readiness | Before creating PR |
-| `/contributing` | Generate/update CONTRIBUTING.md | Project setup |
-| `/lsp-status` | Check LSP server status | Debugging LSP issues |
+| `/global-commands:session-start` | Load project context or initialize new project | At session start |
+| `/global-commands:session-end` | Sync project memory before ending | Before ending session |
+| `/global-commands:review-project` | Comprehensive TODO validation | Before PRs |
+| `/global-commands:review-commits` | AI-assisted commit review for PR readiness | Before creating PR |
+| `/global-commands:contributing` | Generate/update CONTRIBUTING.md | Project setup |
+| `/global-commands:lsp-status` | Check LSP server status | Debugging LSP issues |
 
 ## Usage
 
 Invoke commands via slash syntax:
 
 ```
-/session-start
-/session-end
-/review-commits
-/lsp-status
+/global-commands:session-start
+/global-commands:session-end
+/global-commands:review-commits
+/global-commands:lsp-status
 ```
 
 ## Workflow Integration
@@ -30,7 +30,7 @@ Invoke commands via slash syntax:
 
 **Start of session:**
 ```
-/session-start
+/global-commands:session-start
 ```
 
 Loads:
@@ -40,7 +40,7 @@ Loads:
 
 **End of session:**
 ```
-/session-end
+/global-commands:session-end
 ```
 
 Updates:
@@ -51,8 +51,8 @@ Updates:
 ### Pre-PR Workflow
 
 ```
-/review-commits   # Review commit history
-/review-project   # Validate TODO items
+/global-commands:review-commits   # Review commit history
+/global-commands:review-project   # Validate TODO items
 # Create PR when ready
 ```
 
