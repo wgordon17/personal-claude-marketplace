@@ -12,11 +12,25 @@ set -euo pipefail
 # Exit early if not an interactive commit
 # This hook should only validate regular commits, not merges/squashes/rebases
 COMMIT_SOURCE="${2:-}"
-if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]] || [[ "$COMMIT_SOURCE" == "commit" ]] || [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
-    # Skip for: merge commits, squash commits, amend commits, and any rebase operations
-    # GIT_REFLOG_ACTION is set during rebase/cherry-pick/revert
+
+# Detect rebase/cherry-pick/revert by checking for working directories
+# These are the most reliable indicators across all git versions
+if [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] || [ -f ".git/CHERRY_PICK_HEAD" ] || [ -f ".git/REVERT_HEAD" ]; then
+    # Skip during batch operations
     exit 0
 fi
+
+# Also skip for merge and squash commits
+if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]]; then
+    exit 0
+fi
+
+# Additional safety: skip if GIT_REFLOG_ACTION is set
+if [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
+    exit 0
+fi
+
+# NOTE: We DO check amend commits (COMMIT_SOURCE="commit") to catch --no-verify on amends
 
 # Color codes for output
 RED='\033[0;31m'
@@ -41,12 +55,55 @@ fi
 MARKER_DIR="$HOME/.cache/hook-checks"
 MARKER_FILE="$MARKER_DIR/${REPO_HASH}.mark"
 
-# Track if pre-commit was bypassed
-PRE_COMMIT_BYPASSED=false
-if [ ! -f "$MARKER_FILE" ]; then
-    PRE_COMMIT_BYPASSED=true
-    echo -e "${YELLOW}⚠️  Pre-commit hooks were bypassed (--no-verify detected)${NC}" >&2
-    echo -e "${YELLOW}Running critical safety checks...${NC}" >&2
+# Validate marker: check existence, age, and commit SHA
+PRE_COMMIT_BYPASSED=true
+MARKER_VALID=false
+
+if [ -f "$MARKER_FILE" ]; then
+    # Read marker contents (format: timestamp|commit-sha)
+    MARKER_CONTENTS=$(cat "$MARKER_FILE")
+    MARKER_TIMESTAMP=$(echo "$MARKER_CONTENTS" | cut -d'|' -f1)
+    MARKER_SHA=$(echo "$MARKER_CONTENTS" | cut -d'|' -f2)
+    CURRENT_TIME=$(date +%s)
+    MARKER_AGE=$((CURRENT_TIME - MARKER_TIMESTAMP))
+
+    # Validation 1: Check marker age (must be < 30 seconds)
+    if [ "$MARKER_AGE" -gt 30 ]; then
+        echo -e "${YELLOW}⚠️  Stale marker detected (${MARKER_AGE}s old)${NC}" >&2
+        echo -e "${YELLOW}This likely means an earlier commit was interrupted (Ctrl+C) or failed.${NC}" >&2
+        echo "" >&2
+        echo "To clear stale marker:" >&2
+        echo "  rm -f ${MARKER_FILE}" >&2
+        echo "" >&2
+        # Treat as bypassed - run critical checks
+    else
+        # Validation 2: Check if marker SHA is parent of current commit
+        # (Only applicable for amend - for new commits this check doesn't apply)
+        if git merge-base --is-ancestor "$MARKER_SHA" HEAD 2>/dev/null || [ "$MARKER_SHA" = "unknown" ]; then
+            # Marker is valid - pre-commit ran successfully
+            MARKER_VALID=true
+            PRE_COMMIT_BYPASSED=false
+        else
+            echo -e "${YELLOW}⚠️  Marker SHA mismatch (expected ancestor of HEAD)${NC}" >&2
+        fi
+    fi
+
+    # Delete marker regardless of validity (one-time use)
+    rm -f "$MARKER_FILE"
+fi
+
+# If marker was invalid or missing, block the commit
+if [ "$MARKER_VALID" = false ]; then
+    echo -e "${RED}❌ BLOCKED: --no-verify flag is FORBIDDEN${NC}" >&2
+    echo "" >&2
+    echo "Pre-commit hooks must run for all commits." >&2
+    echo "This prevents accidental bypass of linting, tests, and security checks." >&2
+    echo "" >&2
+    echo "If you absolutely must commit without pre-commit:" >&2
+    echo "  1. Fix the issue pre-commit is catching" >&2
+    echo "  2. Or temporarily disable this hook:" >&2
+    echo "     mv .git/hooks/prepare-commit-msg .git/hooks/prepare-commit-msg.disabled" >&2
+    exit 1
 fi
 
 # ============================================================================
@@ -111,13 +168,5 @@ if [ "$PRE_COMMIT_BYPASSED" = true ]; then
         exit 1
     fi
 fi
-
-# ============================================================================
-# CLEANUP
-# ============================================================================
-
-# Always delete marker file after checking (one-time use)
-# This ensures next commit will re-check if pre-commit ran
-rm -f "$MARKER_FILE"
 
 exit 0

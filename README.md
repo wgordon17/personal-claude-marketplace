@@ -12,6 +12,7 @@ Private Claude Code plugins: LSP servers (uvx/npx) and custom agents.
 | vtsls-npx | TypeScript/JavaScript language server | `npx` (always latest) |
 | gopls-go | Go language server | system `gopls` |
 | vscode-html-css-npx | HTML/CSS language servers | `npx` (always latest) |
+| rust-analyzer-rustup | Rust language server | `rustup` (always latest) |
 
 ### Agent Plugins
 
@@ -66,6 +67,7 @@ claude plugin install pyright-uvx@private-claude-marketplace
 claude plugin install vtsls-npx@private-claude-marketplace
 claude plugin install gopls-go@private-claude-marketplace
 claude plugin install vscode-html-css-npx@private-claude-marketplace
+claude plugin install rust-analyzer-rustup@private-claude-marketplace
 
 # Install agent plugins
 claude plugin install project-dev@private-claude-marketplace
@@ -84,6 +86,7 @@ claude plugin install global-hooks@private-claude-marketplace
 - **uv**: `brew install uv` or `pip install uv`
 - **Node.js/npm**: For npx-based servers
 - **Go**: `brew install go` (for gopls)
+- **Rust/rustup**: `brew install rustup` (for rust-analyzer)
 
 ### Verification
 
@@ -91,6 +94,8 @@ claude plugin install global-hooks@private-claude-marketplace
 uvx --version          # uv version
 npx --version          # npm version
 go version             # go version
+rustup --version       # rustup version
+rust-analyzer --version # rust-analyzer version
 ```
 
 ## LSP Benefits
@@ -115,6 +120,7 @@ uvx --from pyright pyright-langserver --version
 npx -y @vtsls/language-server --version
 gopls version
 npx -y vscode-langservers-extracted vscode-html-language-server --version
+rust-analyzer --version
 ```
 
 ### Clear Caches

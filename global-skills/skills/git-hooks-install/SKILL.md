@@ -114,33 +114,36 @@ When this skill is invoked:
 
      - repo: local
        hooks:
+         # IMPORTANT: This MUST be the LAST hook in pre-commit stage
+         # Sets marker if all previous pre-commit hooks passed
+         - id: set-precommit-marker
+           name: Set pre-commit success marker
+           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.6/git-hooks/post-commit.sh
+           language: system
+           always_run: true
+           pass_filenames: false
+           stages: [pre-commit]
+
          # Defense-in-depth: prepare-commit-msg (cannot be bypassed with --no-verify)
+         # Checks for marker from pre-commit stage above
          - id: defense-in-depth-safety
            name: Defense-in-depth safety checks
-           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.2/git-hooks/prepare-commit-msg.sh
+           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.6/git-hooks/prepare-commit-msg.sh
            language: system
            always_run: true
            pass_filenames: true
            stages: [prepare-commit-msg]
-
-         # Sets marker after successful commit
-         - id: set-success-marker
-           name: Set commit success marker
-           entry: /Users/wgordon/.claude/plugins/cache/private-claude-marketplace/global-skills/1.0.2/git-hooks/post-commit.sh
-           language: system
-           always_run: true
-           pass_filenames: false
-           stages: [post-commit]
    ```
 
    **IMPORTANT**:
    - Replace the example paths with the actual absolute path from `$PLUGIN_HOOKS_DIR`
-   - Add to the END of the file, after all existing hooks
+   - Add to the END of the file, after all existing hooks (marker MUST be last in pre-commit stage)
    - Use the absolute path (substitute the variable value into the YAML)
+   - The marker-setter runs in PRE-COMMIT stage (not post-commit) to avoid chicken-egg problem
 
 4. **Install hook types**:
    ```bash
-   uv run pre-commit install --install-hooks --hook-type prepare-commit-msg --hook-type post-commit
+   uv run pre-commit install --install-hooks --hook-type prepare-commit-msg
    ```
 
 5. **Verify installation**:
