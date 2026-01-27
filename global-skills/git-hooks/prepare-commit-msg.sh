@@ -13,10 +13,16 @@ set -euo pipefail
 # This hook should only validate regular commits, not merges/squashes/rebases
 COMMIT_SOURCE="${2:-}"
 
-# Detect rebase/cherry-pick/revert by checking for working directories
-# These are the most reliable indicators across all git versions
-if [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] || [ -f ".git/CHERRY_PICK_HEAD" ] || [ -f ".git/REVERT_HEAD" ]; then
-    # Skip during batch operations
+# Skip during ANY batch/rewriting operation
+if [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] || \
+   [ -f ".git/CHERRY_PICK_HEAD" ] || [ -f ".git/REVERT_HEAD" ] || \
+   [ -f ".git/MERGE_HEAD" ] || [ -f ".git/BISECT_LOG" ] || \
+   [ -f ".git/sequencer/todo" ]; then
+    exit 0
+fi
+
+# Skip if ORIG_HEAD exists with rebase artifacts
+if [ -f ".git/ORIG_HEAD" ] && [ -f ".git/rebase-merge/stopped-sha" ]; then
     exit 0
 fi
 
@@ -55,6 +61,13 @@ fi
 MARKER_DIR="$HOME/.cache/hook-checks"
 MARKER_FILE="$MARKER_DIR/${REPO_HASH}.mark"
 
+# Allow explicit cleanup of stale markers
+if [[ "${GIT_HOOK_CLEAN_MARKERS:-}" == "1" ]]; then
+    rm -f "$MARKER_FILE" 2>/dev/null
+    echo "Cleared marker: $MARKER_FILE"
+    exit 0
+fi
+
 # Validate marker: check existence, age, and commit SHA
 PRE_COMMIT_BYPASSED=true
 MARKER_VALID=false
@@ -67,8 +80,9 @@ if [ -f "$MARKER_FILE" ]; then
     CURRENT_TIME=$(date +%s)
     MARKER_AGE=$((CURRENT_TIME - MARKER_TIMESTAMP))
 
-    # Validation 1: Check marker age (must be < 30 seconds)
-    if [ "$MARKER_AGE" -gt 30 ]; then
+    # Validation 1: Check marker age (configurable timeout, default 120s)
+    MARKER_TIMEOUT="${GIT_HOOK_MARKER_TIMEOUT:-120}"
+    if [ "$MARKER_AGE" -gt "$MARKER_TIMEOUT" ]; then
         echo -e "${YELLOW}⚠️  Stale marker detected (${MARKER_AGE}s old)${NC}" >&2
         echo -e "${YELLOW}This likely means an earlier commit was interrupted (Ctrl+C) or failed.${NC}" >&2
         echo "" >&2
