@@ -11,15 +11,22 @@
 #   2 = Error (blocks the commit)
 #
 
-set -euo pipefail
+# Early exit if not in a git repository
+if ! git rev-parse --git-dir &>/dev/null; then
+    exit 0
+fi
 
 # Get commit message (optional SHA argument, defaults to HEAD)
 SHA="${1:-HEAD}"
-COMMIT_MSG=$(git log -1 --pretty=%B "$SHA" 2>/dev/null)
+COMMIT_MSG=$(git log -1 --pretty=%B "$SHA" 2>/dev/null || echo "")
+
+# If we can't get a commit message, this isn't a git commit operation
 if [[ -z "$COMMIT_MSG" ]]; then
-    echo "ERROR: Could not retrieve last commit message"
-    exit 2
+    exit 0
 fi
+
+# Now enable strict error handling for the actual validation
+set -euo pipefail
 
 # Extract subject line (first line)
 SUBJECT=$(echo "$COMMIT_MSG" | head -1)
