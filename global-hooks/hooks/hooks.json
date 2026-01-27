@@ -1,26 +1,26 @@
 {
-  "description": "Global hooks for git safety, commit validation, and pre-push review",
+  "description": "Global hooks for git safety checks, commit validation, and pre-push review",
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-push-review.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/git-safety-check.sh"
           }
-        ],
-        "matcher": "Bash(git push origin*)"
+        ]
       }
     ],
     "PostToolUse": [
       {
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/validate-commit-message.sh"
           }
-        ],
-        "matcher": "Bash(git commit:*)"
+        ]
       }
     ]
   }
