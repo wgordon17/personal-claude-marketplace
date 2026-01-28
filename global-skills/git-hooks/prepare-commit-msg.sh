@@ -3,17 +3,20 @@
 # This hook CANNOT be bypassed with --no-verify
 #
 # Purpose: Detect when pre-commit hooks were bypassed and enforce critical safety checks
-# Location: Should be installed to .git/hooks/prepare-commit-msg in each project
+# Location: Should be installed via pre-commit framework in .pre-commit-config.yaml
 #
-# Args: $1 = commit message file, $2 = commit source, $3 = commit SHA (for amend)
+# NOTE: When run via pre-commit framework, only $1 is provided (commit message file)
+#       Git normally provides $2 (commit source) and $3 (SHA for amends), but pre-commit
+#       framework doesn't forward these. We rely on .git state files instead.
+#
+# Args: $1 = commit message file (.git/COMMIT_EDITMSG)
 
 set -euo pipefail
-
-COMMIT_SOURCE="${2:-}"
 
 # FAST EXIT: Skip batch operations that don't use the marker system
 # These operations (cherry-pick, rebase, merge, revert) don't run pre-commit hooks,
 # so they won't have markers. We allow them through without marker validation.
+# .git/MERGE_HEAD covers both merge and squash commits
 if [[ -f ".git/CHERRY_PICK_HEAD" ]] || \
    [[ -f ".git/REVERT_HEAD" ]] || \
    [[ -f ".git/MERGE_HEAD" ]] || \
@@ -22,9 +25,7 @@ if [[ -f ".git/CHERRY_PICK_HEAD" ]] || \
    [[ -f ".git/BISECT_LOG" ]] || \
    [[ -d ".git/sequencer" ]] || \
    [[ "${GIT_REFLOG_ACTION:-}" =~ "rebase" ]] || \
-   [[ "${GIT_REFLOG_ACTION:-}" =~ "cherry-pick" ]] || \
-   [[ "$COMMIT_SOURCE" == "merge" ]] || \
-   [[ "$COMMIT_SOURCE" == "squash" ]]; then
+   [[ "${GIT_REFLOG_ACTION:-}" =~ "cherry-pick" ]]; then
     exit 0
 fi
 
