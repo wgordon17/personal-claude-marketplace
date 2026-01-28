@@ -3,7 +3,7 @@
   "name": "private-claude-marketplace",
   "metadata": {
     "description": "Private Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "1.0.2"
+    "version": "1.2.0"
   },
   "owner": {
     "name": "wgordon"
@@ -78,7 +78,7 @@
     },
     {
       "name": "global-skills",
-      "version": "1.0.9",
+      "version": "1.2.0",
       "source": "./global-skills",
       "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python",
       "category": "productivity",
@@ -94,7 +94,7 @@
     },
     {
       "name": "global-hooks",
-      "version": "1.0.8",
+      "version": "1.2.0",
       "source": "./global-hooks",
       "description": "Global hooks: git safety checks, commit validation, pre-push review",
       "category": "quality",

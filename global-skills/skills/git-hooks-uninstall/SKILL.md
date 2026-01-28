@@ -20,7 +20,6 @@ Safely remove defense-in-depth git hooks from any project. Removes hook configur
 
 3. **Uninstalls hooks from .git/hooks/**:
    - Removes prepare-commit-msg if it's our script
-   - Removes post-commit if it's our script
    - Preserves hooks from other tools (git-branchless, etc.)
 
 4. **Cleans up markers**:
@@ -64,7 +63,7 @@ When this skill is invoked:
 4. **Reinstall pre-commit hooks** (to update .git/hooks/):
    ```bash
    # This will regenerate hooks without our entries
-   uv run pre-commit install --install-hooks --hook-type prepare-commit-msg --hook-type post-commit
+   uv run pre-commit install --install-hooks --hook-type prepare-commit-msg
    ```
 
 5. **Check .git/hooks/ for our scripts**:
@@ -75,14 +74,6 @@ When this skill is invoked:
    elif [ -L .git/hooks/prepare-commit-msg ] && readlink .git/hooks/prepare-commit-msg | grep -q "claude"; then
        echo "Removing symlink to our script"
        rm .git/hooks/prepare-commit-msg
-   fi
-
-   # Same for post-commit
-   if head -5 .git/hooks/post-commit 2>/dev/null | grep -q "pre-commit"; then
-       echo "✅ post-commit managed by pre-commit (will be regenerated)"
-   elif [ -L .git/hooks/post-commit ] && readlink .git/hooks/post-commit | grep -q "claude"; then
-       echo "Removing symlink to our script"
-       rm .git/hooks/post-commit
    fi
    ```
 
@@ -108,8 +99,8 @@ When this skill is invoked:
    ✅ Defense-in-depth hooks uninstalled successfully
 
    Removed:
-   - prepare-commit-msg hook configuration
-   - post-commit hook configuration
+   - pre-commit marker setter configuration
+   - prepare-commit-msg validator configuration
    - Marker file for this repository
 
    Remaining hooks:

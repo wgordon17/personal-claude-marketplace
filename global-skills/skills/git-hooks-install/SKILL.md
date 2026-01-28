@@ -16,12 +16,12 @@ Automatically install and validate defense-in-depth git hooks in any project usi
 
 2. **Updates .pre-commit-config.yaml**:
    - Adds defense-in-depth hooks to local repo configuration
-   - Configures prepare-commit-msg (unbypassable) and post-commit (marker setter)
+   - Configures pre-commit (marker setter) and prepare-commit-msg (unbypassable validator)
    - Preserves existing hooks and configuration
 
 3. **Installs hooks**:
    - Runs `uv run pre-commit install` with required hook types
-   - Installs prepare-commit-msg and post-commit hooks
+   - Installs prepare-commit-msg git hook
 
 4. **Tests and validates**:
    - Creates test commits to verify hook ordering
@@ -53,7 +53,7 @@ When this skill is invoked:
 
    # Verify hook scripts exist in plugin
    [ -f "$PLUGIN_HOOKS_DIR/prepare-commit-msg.sh" ] || exit 1
-   [ -f "$PLUGIN_HOOKS_DIR/post-commit.sh" ] || exit 1
+   [ -f "$PLUGIN_HOOKS_DIR/pre-commit.sh" ] || exit 1
 
    echo "✓ Found hook scripts at: $PLUGIN_HOOKS_DIR"
    ```
@@ -118,7 +118,7 @@ When this skill is invoked:
          # Sets marker if all previous pre-commit hooks passed
          - id: set-precommit-marker
            name: Set pre-commit success marker
-           entry: $PLUGIN_HOOKS_DIR/post-commit.sh
+           entry: $PLUGIN_HOOKS_DIR/pre-commit.sh
            language: system
            always_run: true
            pass_filenames: false
@@ -150,7 +150,7 @@ When this skill is invoked:
 
    ```bash
    # Check hooks are installed in .git/hooks/
-   if [ -x .git/hooks/prepare-commit-msg ] && [ -x .git/hooks/post-commit ]; then
+   if [ -x .git/hooks/prepare-commit-msg ]; then
        echo "✅ Git hooks installed successfully"
    else
        echo "❌ Git hooks not installed"
@@ -185,8 +185,8 @@ When this skill is invoked:
    ✅ Defense-in-depth hooks installed successfully
 
    Hooks configured:
-   - prepare-commit-msg: Critical safety checks (unbypassable)
-   - post-commit: Success marker setter
+   - pre-commit stage: Marker setter (runs last after all pre-commit checks)
+   - prepare-commit-msg stage: Safety validator (unbypassable with --no-verify)
 
    What's protected:
    - Commits to main/master branches
