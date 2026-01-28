@@ -9,34 +9,24 @@
 
 set -euo pipefail
 
-# Exit early if not an interactive commit
-# This hook should only validate regular commits, not merges/squashes/rebases
 COMMIT_SOURCE="${2:-}"
 
-# Skip during ANY batch/rewriting operation
-if [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] || \
-   [ -f ".git/CHERRY_PICK_HEAD" ] || [ -f ".git/REVERT_HEAD" ] || \
-   [ -f ".git/MERGE_HEAD" ] || [ -f ".git/BISECT_LOG" ] || \
-   [ -f ".git/sequencer/todo" ]; then
+# FAST EXIT: Skip batch operations that don't use the marker system
+# These operations (cherry-pick, rebase, merge, revert) don't run pre-commit hooks,
+# so they won't have markers. We allow them through without marker validation.
+if [[ -f ".git/CHERRY_PICK_HEAD" ]] || \
+   [[ -f ".git/REVERT_HEAD" ]] || \
+   [[ -f ".git/MERGE_HEAD" ]] || \
+   [[ -d ".git/rebase-merge" ]] || \
+   [[ -d ".git/rebase-apply" ]] || \
+   [[ -f ".git/BISECT_LOG" ]] || \
+   [[ -d ".git/sequencer" ]] || \
+   [[ "${GIT_REFLOG_ACTION:-}" =~ "rebase" ]] || \
+   [[ "${GIT_REFLOG_ACTION:-}" =~ "cherry-pick" ]] || \
+   [[ "$COMMIT_SOURCE" == "merge" ]] || \
+   [[ "$COMMIT_SOURCE" == "squash" ]]; then
     exit 0
 fi
-
-# Skip if ORIG_HEAD exists with rebase artifacts
-if [ -f ".git/ORIG_HEAD" ] && [ -f ".git/rebase-merge/stopped-sha" ]; then
-    exit 0
-fi
-
-# Also skip for merge and squash commits
-if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]]; then
-    exit 0
-fi
-
-# Additional safety: skip if GIT_REFLOG_ACTION is set
-if [[ -n "${GIT_REFLOG_ACTION:-}" ]]; then
-    exit 0
-fi
-
-# NOTE: We DO check amend commits (COMMIT_SOURCE="commit") to catch --no-verify on amends
 
 # Color codes for output
 RED='\033[0;31m'
