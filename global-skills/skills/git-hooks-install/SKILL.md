@@ -143,7 +143,7 @@ When this skill is invoked:
            entry: $PLUGIN_HOOKS_DIR/prepare-commit-msg.sh
            language: system
            always_run: true
-           pass_filenames: false
+           pass_filenames: true
            stages: [prepare-commit-msg]
    ```
 
