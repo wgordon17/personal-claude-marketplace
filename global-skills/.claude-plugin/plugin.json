@@ -1,7 +1,7 @@
 {
   "name": "global-skills",
   "description": "Global skills for file auditing, git operations, LSP navigation, test execution, and Python tooling",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": {
     "name": "wgordon17"
   }
