@@ -39,18 +39,10 @@ else
 fi
 
 # EARLY EXIT: If not a git command, allow immediately (no logging, no delay)
-# This is necessary because we use Bash matcher to catch chained commands
 # Match: "git " at start OR after space/operators (prevent false positives like "digital", ".gitignore")
 # Pattern matches: "git ", " git ", "&&git ", "||git ", ";git "
 if [[ ! "$FULL_COMMAND" =~ (^|[[:space:]]|&&|\|\||;)git[[:space:]] ]]; then
     exit 0
-fi
-
-# CRITICAL SAFEGUARD: Block chained commands with git (known Claude Code hook bypass - Issue #13340)
-# We use Bash matcher because Bash(git*) patterns don't work reliably
-# Chained git commands can bypass safety checks, so we block them entirely
-if [[ "$FULL_COMMAND" =~ (&&|\|\||;) ]]; then
-    log_block "Chained git commands (using &&, ||, or ;) are FORBIDDEN - they bypass safety checks. Run commands separately."
 fi
 
 # Helper: Check if command contains --force (not --force-with-lease)
