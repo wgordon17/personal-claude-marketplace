@@ -35,6 +35,19 @@ Those directories contain installed/cached versions of plugins. Always edit the 
 |--------|-------------|--------|
 | project-dev | Project feature development agents | 10 agents |
 | test-execution | Test execution patterns | test-runner |
+| superclaude | SuperClaude specialized agents + research skills | 4 agents, 2 skills |
+
+#### superclaude
+
+**Agents included:**
+- `superclaude:architect` - System architecture specialist (design, technology choices, refactoring)
+- `superclaude:security` - Application security specialist (OWASP, auth, vulnerability detection)
+- `superclaude:qa` - Code quality & QA specialist (test strategy, maintainability, tech debt)
+- `superclaude:performance` - Performance engineering specialist (profiling, optimization, bottlenecks)
+
+**Skills included:**
+- `/deep-research` - 5-hop deep research mode (40+ sources, multi-perspective analysis)
+- `/business-panel` - Multi-stakeholder business impact analysis (CTO, PM, Finance, Security views)
 
 ### Productivity Plugins
 
@@ -87,6 +100,7 @@ claude plugin install rust-analyzer-rustup@private-claude-marketplace
 # Install agent plugins
 claude plugin install project-dev@private-claude-marketplace
 claude plugin install test-execution@private-claude-marketplace
+claude plugin install superclaude@private-claude-marketplace
 
 # Install productivity plugins
 claude plugin install global-skills@private-claude-marketplace
