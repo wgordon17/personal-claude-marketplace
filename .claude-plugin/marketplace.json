@@ -3,7 +3,7 @@
   "name": "private-claude-marketplace",
   "metadata": {
     "description": "Private Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "1.2.4"
+    "version": "1.3.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -99,6 +99,14 @@
       "description": "Global hooks: git safety checks, commit validation, pre-push review",
       "category": "quality",
       "tags": ["hooks", "git", "validation"]
+    },
+    {
+      "name": "superclaude",
+      "version": "1.0.0",
+      "source": "./superclaude",
+      "description": "SuperClaude specialized agents and research skills for architecture, security, QA, performance, and deep research",
+      "category": "agents",
+      "tags": ["agents", "architecture", "security", "qa", "performance", "research"]
     }
   ]
 }
