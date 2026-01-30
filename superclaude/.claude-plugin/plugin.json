@@ -1,0 +1,8 @@
+{
+  "name": "superclaude",
+  "description": "SuperClaude specialized agents and research skills for architecture, security, QA, performance, and deep research",
+  "version": "1.0.0",
+  "author": {
+    "name": "wgordon"
+  }
+}
