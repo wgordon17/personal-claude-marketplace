@@ -1,15 +1,16 @@
 # Global Skills Plugin
 
-Essential skills for code quality, git operations, LSP navigation, test execution, and Python tooling.
+Essential skills for code quality, git operations, LSP navigation, test execution, Python tooling, and bug investigation.
 
 ## ⚠️ Development Warning
 
 **DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
 
-## Skills (7)
+## Skills (8)
 
 | Skill | Description | Type |
 |-------|-------------|------|
+| `/bug-investigation` | Interactive bug hunting with background agents | PROACTIVE |
 | `/file-audit` | Deep code quality audit system | Manual |
 | `/git-history` | Git history manipulation (git-branchless) | Manual |
 | `/git-hooks-install` | Install defense-in-depth git hooks | Manual |
@@ -23,6 +24,7 @@ Essential skills for code quality, git operations, LSP navigation, test executio
 Skills are invoked automatically (PROACTIVE) or manually via slash command:
 
 ```
+/bug-investigation
 /file-audit
 /git-history
 /lsp-navigation
@@ -31,6 +33,11 @@ Skills are invoked automatically (PROACTIVE) or manually via slash command:
 ```
 
 ## Proactive Skills
+
+**bug-investigation** - Automatically activates when:
+- User wants to report bugs/issues for investigation
+- User describes a bug and `hack/BUGS.md` exists
+- User asks to "hunt bugs", "audit the UI", or "investigate issues"
 
 **lsp-navigation** - Automatically activates when:
 - Navigating code
