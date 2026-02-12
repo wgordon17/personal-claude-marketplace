@@ -53,13 +53,14 @@ Those directories contain installed/cached versions of plugins. Always edit the 
 
 | Plugin | Description | Components |
 |--------|-------------|------------|
-| global-skills | Code quality & tooling skills | 7 skills |
+| global-skills | Code quality & tooling skills | 8 skills |
 | global-commands | Session & project management | 6 commands |
 | global-hooks | Git safety & validation | 3 hooks |
 
 #### global-skills
 
 **Skills included:**
+- `/bug-investigation` - PROACTIVE interactive bug hunting with background agents
 - `/file-audit` - Deep code quality audit system
 - `/git-history` - Git history manipulation (git-branchless)
 - `/git-hooks-install` & `/git-hooks-uninstall` - Git hooks utilities
