@@ -193,13 +193,13 @@ RULES = [
     # ── Category D: Encourage simpler patterns ──
     (
         "echo-noop",
-        re.compile(r"""^\s*echo\s+(['"].*['"]|[^|>&;]+)\s*$"""),
+        re.compile(r"""^\s*echo\s+(['"].*['"]|[^|>&;$`]+)\s*$"""),
         None,
         "Output text directly in your response instead of using echo.",
     ),
     (
         "printf-noop",
-        re.compile(r"""^\s*printf\s+(['"].*['"]|[^|>&;]+)\s*$"""),
+        re.compile(r"""^\s*printf\s+(['"].*['"]|[^|>&;$`]+)\s*$"""),
         None,
         "Output text directly in your response instead of using printf.",
     ),
@@ -217,6 +217,48 @@ RULES = [
         "Interactive git add will hang. Use `git add` with specific file paths instead.",
     ),
 ]
+
+
+def strip_env_prefix(cmd):
+    """Strip leading KEY=value pairs from a command.
+
+    Bash allows `FOO=bar CMD args` where FOO is set for CMD's environment.
+    Rules anchor on the command name, so we strip these prefixes first.
+    Also strips variable assignments like `result=...` when followed by a command.
+    """
+    stripped = cmd
+    while True:
+        m = re.match(r"^\s*[A-Za-z_]\w*=\S*\s+", stripped)
+        if m:
+            stripped = stripped[m.end():]
+        else:
+            break
+    return stripped
+
+
+def extract_subshells(cmd):
+    """Extract commands inside $() and `` substitutions for rule checking.
+
+    Returns a list of inner commands found in subshell substitutions.
+    """
+    inner = []
+    # $(...) — handles simple nesting by finding matched parens
+    for m in re.finditer(r"\$\(", cmd):
+        start = m.end()
+        depth = 1
+        pos = start
+        while pos < len(cmd) and depth > 0:
+            if cmd[pos] == "(":
+                depth += 1
+            elif cmd[pos] == ")":
+                depth -= 1
+            pos += 1
+        if depth == 0:
+            inner.append(cmd[start : pos - 1].strip())
+    # `...` backticks (no nesting)
+    for m in re.finditer(r"`([^`]+)`", cmd):
+        inner.append(m.group(1).strip())
+    return inner
 
 
 def split_commands(command):
@@ -294,6 +336,7 @@ def main():
 
     # Andon cord: GUARD_BYPASS=1 prefix skips all rule checks.
     # The settings.json "ask" list ensures this still requires user approval.
+    # Checked on the raw command — if the entire command is prefixed, skip everything.
     if command.startswith("GUARD_BYPASS=1 "):
         sys.exit(0)
 
@@ -301,13 +344,22 @@ def main():
     # This prevents bundling blocked commands into && chains to bypass rules.
     subcmds = split_commands(command)
 
-    for subcmd in subcmds:
+    def check_rules(cmd):
+        """Check a command string against all rules. Exits 2 on first match."""
+        normalized = strip_env_prefix(cmd)
         for _name, pattern, exception, guidance in RULES:
-            if pattern.search(subcmd):
-                if exception and exception.search(subcmd):
+            target = normalized if pattern.pattern.startswith("^") else cmd
+            if pattern.search(target):
+                if exception and exception.search(cmd):
                     continue
                 print(guidance, file=sys.stderr)
                 sys.exit(2)
+
+    for subcmd in subcmds:
+        check_rules(subcmd)
+        # Also check inside $() and `` substitutions
+        for inner in extract_subshells(subcmd):
+            check_rules(inner)
 
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
     if len(subcmds) > 1 and os.path.exists("Makefile"):
