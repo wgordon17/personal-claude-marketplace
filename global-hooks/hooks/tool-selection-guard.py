@@ -185,7 +185,7 @@ RULES = [
     (
         "tmp-path",
         re.compile(r"/tmp/"),
-        re.compile(r"\brm\b|hack/tmp"),
+        re.compile(r"hack/tmp"),
         "Use `hack/tmp/` (gitignored) instead of `/tmp/` for temporary files. "
         "Native tools (Read/Write/Edit) work without Bash permissions on local files. "
         "Clean up when done.",
@@ -234,6 +234,21 @@ def strip_env_prefix(cmd):
         else:
             break
     return stripped
+
+
+def extract_bash_c(cmd):
+    """Extract the inner command from bash -c '...' or sh -c '...' wrappers.
+
+    Returns the inner command string, or None if not a bash -c invocation.
+    """
+    m = re.match(r"""^\s*(?:bash|sh)\s+-c\s+(['"])(.*?)\1\s*$""", cmd, re.DOTALL)
+    if m:
+        return m.group(2).strip()
+    # Unquoted (rare but possible): bash -c command
+    m = re.match(r"""^\s*(?:bash|sh)\s+-c\s+(\S+)""", cmd)
+    if m:
+        return m.group(1).strip()
+    return None
 
 
 def extract_subshells(cmd):
@@ -356,7 +371,13 @@ def main():
                 sys.exit(2)
 
     for subcmd in subcmds:
-        check_rules(subcmd)
+        # Unwrap bash -c '...' / sh -c '...' and check the inner command
+        inner_cmd = extract_bash_c(subcmd)
+        if inner_cmd:
+            for inner_sub in split_commands(inner_cmd):
+                check_rules(inner_sub)
+        else:
+            check_rules(subcmd)
         # Also check inside $() and `` substitutions
         for inner in extract_subshells(subcmd):
             check_rules(inner)
