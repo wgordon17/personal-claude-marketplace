@@ -16,7 +16,7 @@ import sys
 # Pattern: if command matches this, consider blocking
 # Exception: if command ALSO matches this, allow it (skip the block)
 RULES = [
-    # Category A: Use native tools (no Bash permission needed)
+    # ── Category A: Use native tools (no Bash permission needed) ──
     (
         "cat-file",
         re.compile(r"^\s*cat\s+(?!<<)\S"),
@@ -77,7 +77,19 @@ RULES = [
         None,
         "Use the Write tool instead of cat heredoc.",
     ),
-    # Category B: Use right Python tooling (match auto-approve patterns)
+    (
+        "pager",
+        re.compile(r"^\s*(less|more)\b"),
+        None,
+        "Use the Read tool instead. Pagers are interactive and will hang in this environment.",
+    ),
+    (
+        "editor",
+        re.compile(r"^\s*(nano|vim|vi|emacs)\b"),
+        None,
+        "Use the Edit tool instead. Interactive editors will hang in this environment.",
+    ),
+    # ── Category B: Use right Python tooling (match auto-approve patterns) ──
     (
         "python",
         re.compile(r"^\s*python3?\s"),
@@ -86,40 +98,95 @@ RULES = [
     ),
     (
         "pip",
-        re.compile(r"^\s*pip3?\s+install\b"),
+        re.compile(r"^\s*pip3?\s+\w"),
         None,
-        "Use `uv add` instead -- it's auto-approved.",
+        "Use `uv add` (install), `uv remove` (uninstall), or `uv pip` for other pip operations.",
     ),
     (
         "pytest",
         re.compile(r"^\s*pytest\b"),
         re.compile(r"^\s*(uvx|uv\s+run)"),
-        "Use `uvx pytest` instead -- it's auto-approved.",
+        "Check for a `make py-test` or use `uv run pytest` instead -- it's auto-approved.",
     ),
     (
         "black",
         re.compile(r"^\s*black\b"),
-        re.compile(r"^\s*(uvx|uv\s+run)"),
-        "Use `uvx black` instead -- it's auto-approved.",
+        None,
+        "Formatting should be performed with ruff.",
     ),
     (
         "ruff",
         re.compile(r"^\s*ruff\b"),
         re.compile(r"^\s*(uvx|uv\s+run)"),
-        "Use `uvx ruff` instead -- it's auto-approved.",
+        "Check for a `make py-lint` or use `uv run ruff` instead -- it's auto-approved.",
     ),
     (
         "mypy",
         re.compile(r"^\s*mypy\b"),
-        re.compile(r"^\s*(uvx|uv\s+run)"),
-        "Use `uvx mypy` instead -- it's auto-approved.",
+        None,
+        "Type checking should be performed with pyright.",
     ),
-    # Category C: Encourage simpler patterns
+    (
+        "pyright",
+        re.compile(r"^\s*pyright\b"),
+        re.compile(r"^\s*(uvx|uv\s+run)"),
+        "Check for a `make py-lint` or use `uv run pyright` instead -- it's auto-approved.",
+    ),
+    (
+        "pre-commit",
+        re.compile(r"^\s*pre-commit\b"),
+        re.compile(r"^\s*(uvx|uv\s+run)"),
+        "Check for a `make py-lint` or use `uvx pre-commit` instead -- it's auto-approved.",
+    ),
+    (
+        "ipython",
+        re.compile(r"^\s*ipython3?\b"),
+        re.compile(r"^\s*(uvx|uv\s+run)"),
+        "Use `uv run ipython` instead -- it's auto-approved.",
+    ),
+    (
+        "tox",
+        re.compile(r"^\s*tox\b"),
+        re.compile(r"^\s*(uvx|uv\s+run)"),
+        "Use `uvx tox` instead -- it's auto-approved.",
+    ),
+    (
+        "isort",
+        re.compile(r"^\s*isort\b"),
+        None,
+        "Import sorting should be performed with ruff.",
+    ),
+    (
+        "flake8",
+        re.compile(r"^\s*flake8\b"),
+        None,
+        "Linting should be performed with ruff.",
+    ),
+    # ── Category C: Encourage simpler patterns ──
     (
         "echo-noop",
         re.compile(r"""^\s*echo\s+(['"].*['"]|[^|>&;]+)\s*$"""),
         None,
         "Output text directly in your response instead of using echo.",
+    ),
+    (
+        "printf-noop",
+        re.compile(r"""^\s*printf\s+(['"].*['"]|[^|>&;]+)\s*$"""),
+        None,
+        "Output text directly in your response instead of using printf.",
+    ),
+    # ── Category D: Interactive commands that will hang ──
+    (
+        "git-rebase-i",
+        re.compile(r"^\s*git\s+rebase\s+.*(-i\b|--interactive\b)"),
+        None,
+        "Interactive rebase will hang. Use git-branchless: `git reword`, `git branchless move`.",
+    ),
+    (
+        "git-add-interactive",
+        re.compile(r"^\s*git\s+add\s+.*(-[pi]\b|--patch\b|--interactive\b)"),
+        None,
+        "Interactive git add will hang. Use `git add` with specific file paths instead.",
     ),
 ]
 
