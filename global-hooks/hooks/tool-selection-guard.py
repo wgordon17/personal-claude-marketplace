@@ -191,6 +191,44 @@ RULES = [
 ]
 
 
+def split_commands(command):
+    """Split a chained command on &&, ||, ; while respecting quotes.
+
+    This prevents agents from bundling blocked commands into chains
+    to bypass per-command rule checks.
+    """
+    parts = []
+    current = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if c == "'" and not in_double:
+            in_single = not in_single
+            current.append(c)
+        elif c == '"' and not in_single:
+            in_double = not in_double
+            current.append(c)
+        elif not in_single and not in_double:
+            if command[i : i + 2] in ("&&", "||"):
+                parts.append("".join(current).strip())
+                current = []
+                i += 2
+                continue
+            elif c == ";":
+                parts.append("".join(current).strip())
+                current = []
+            else:
+                current.append(c)
+        else:
+            current.append(c)
+        i += 1
+    if current:
+        parts.append("".join(current).strip())
+    return [p for p in parts if p]
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -206,16 +244,20 @@ def main():
     if not command:
         sys.exit(0)
 
-    # Check blocking rules
-    for _name, pattern, exception, guidance in RULES:
-        if pattern.search(command):
-            if exception and exception.search(command):
-                continue
-            print(guidance, file=sys.stderr)
-            sys.exit(2)
+    # Split chained commands and check each subcommand independently.
+    # This prevents bundling blocked commands into && chains to bypass rules.
+    subcmds = split_commands(command)
+
+    for subcmd in subcmds:
+        for _name, pattern, exception, guidance in RULES:
+            if pattern.search(subcmd):
+                if exception and exception.search(subcmd):
+                    continue
+                print(guidance, file=sys.stderr)
+                sys.exit(2)
 
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
-    if ("&&" in command or ";" in command) and os.path.exists("Makefile"):
+    if len(subcmds) > 1 and os.path.exists("Makefile"):
         print(
             "TIP: A Makefile exists in this directory. "
             "Check if there's a `make` target before running raw commands."
