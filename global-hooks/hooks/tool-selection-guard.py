@@ -74,7 +74,7 @@ RULES = [
     (
         "cat-heredoc",
         re.compile(r"^\s*cat\s*<<"),
-        None,
+        re.compile(r"\|"),
         "Use the Write tool instead of cat heredoc.",
     ),
     (
@@ -134,9 +134,16 @@ RULES = [
     ),
     (
         "pre-commit",
-        re.compile(r"^\s*pre-commit\b"),
-        re.compile(r"^\s*(uvx|uv\s+run)"),
-        "Check for a `make py-lint` or use `uvx pre-commit` instead -- it's auto-approved.",
+        re.compile(r"^\s*(uvx\s+|uv\s+run\s+)?pre-commit\b"),
+        None,
+        "Use `prek` instead of `pre-commit`. Check for a `make` target or use `uvx prek run --all-files`.",
+    ),
+    (
+        "prek",
+        re.compile(r"^\s*(uvx\s+)?prek\b"),
+        re.compile(r"^\s*make\b"),
+        "Check for a `make` target (e.g. `make lint`, `make prek`) instead of running prek directly. "
+        "If no make target exists, use `uvx prek run --all-files`.",
     ),
     (
         "ipython",
@@ -162,7 +169,28 @@ RULES = [
         None,
         "Linting should be performed with ruff.",
     ),
-    # ── Category C: Encourage simpler patterns ──
+    # ── Category C: Encourage project conventions ──
+    (
+        "bash-script",
+        re.compile(r"^\s*(bash|sh)\s+\S+\.sh\b"),
+        re.compile(r"^\s*(bash|sh)\s+-"),
+        "Check for a `make` target that wraps this script. If none exists, consider creating one.",
+    ),
+    (
+        "direct-script",
+        re.compile(r"^\s*[\w.~/-]+\.sh\b"),
+        None,
+        "Check for a `make` target that wraps this script. If none exists, consider creating one.",
+    ),
+    (
+        "tmp-path",
+        re.compile(r"/tmp/"),
+        re.compile(r"\brm\b"),
+        "Use `hack/tmp/` (gitignored) instead of `/tmp/` for temporary files. "
+        "Native tools (Read/Write/Edit) work without Bash permissions on local files. "
+        "Clean up when done.",
+    ),
+    # ── Category D: Encourage simpler patterns ──
     (
         "echo-noop",
         re.compile(r"""^\s*echo\s+(['"].*['"]|[^|>&;]+)\s*$"""),
@@ -175,7 +203,7 @@ RULES = [
         None,
         "Output text directly in your response instead of using printf.",
     ),
-    # ── Category D: Interactive commands that will hang ──
+    # ── Category E: Interactive commands that will hang ──
     (
         "git-rebase-i",
         re.compile(r"^\s*git\s+rebase\s+.*(-i\b|--interactive\b)"),
@@ -189,6 +217,52 @@ RULES = [
         "Interactive git add will hang. Use `git add` with specific file paths instead.",
     ),
 ]
+
+
+def split_commands(command):
+    """Split a chained command on &&, ||, ;, and newlines while respecting quotes.
+
+    This prevents agents from bundling blocked commands into chains
+    to bypass per-command rule checks. Newlines are treated as command
+    separators (like bash), but continuation lines (ending with \\) are joined.
+    """
+    parts = []
+    current = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if c == "'" and not in_double:
+            in_single = not in_single
+            current.append(c)
+        elif c == '"' and not in_single:
+            in_double = not in_double
+            current.append(c)
+        elif not in_single and not in_double:
+            if command[i : i + 2] in ("&&", "||"):
+                parts.append("".join(current).strip())
+                current = []
+                i += 2
+                continue
+            elif c == ";":
+                parts.append("".join(current).strip())
+                current = []
+            elif c == "\n":
+                # Continuation line: \ before newline joins lines
+                if current and current[-1] == "\\":
+                    current[-1] = " "
+                else:
+                    parts.append("".join(current).strip())
+                    current = []
+            else:
+                current.append(c)
+        else:
+            current.append(c)
+        i += 1
+    if current:
+        parts.append("".join(current).strip())
+    return [p for p in parts if p]
 
 
 def main():
@@ -206,16 +280,25 @@ def main():
     if not command:
         sys.exit(0)
 
-    # Check blocking rules
-    for _name, pattern, exception, guidance in RULES:
-        if pattern.search(command):
-            if exception and exception.search(command):
-                continue
-            print(guidance, file=sys.stderr)
-            sys.exit(2)
+    # Andon cord: GUARD_BYPASS=1 prefix skips all rule checks.
+    # The settings.json "ask" list ensures this still requires user approval.
+    if command.startswith("GUARD_BYPASS=1 "):
+        sys.exit(0)
+
+    # Split chained commands and check each subcommand independently.
+    # This prevents bundling blocked commands into && chains to bypass rules.
+    subcmds = split_commands(command)
+
+    for subcmd in subcmds:
+        for _name, pattern, exception, guidance in RULES:
+            if pattern.search(subcmd):
+                if exception and exception.search(subcmd):
+                    continue
+                print(guidance, file=sys.stderr)
+                sys.exit(2)
 
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
-    if ("&&" in command or ";" in command) and os.path.exists("Makefile"):
+    if len(subcmds) > 1 and os.path.exists("Makefile"):
         print(
             "TIP: A Makefile exists in this directory. "
             "Check if there's a `make` target before running raw commands."
