@@ -374,8 +374,17 @@ def main():
         # Unwrap bash -c '...' / sh -c '...' and check the inner command
         inner_cmd = extract_bash_c(subcmd)
         if inner_cmd:
+            # First check if inner command breaks any rules (e.g. bash -c 'cat file')
             for inner_sub in split_commands(inner_cmd):
                 check_rules(inner_sub)
+            # If inner command is safe, STILL block — the bash -c wrapper itself
+            # causes a permission prompt. Run the inner command directly instead.
+            print(
+                f"Run the command directly without the `bash -c` wrapper — "
+                f"it causes a permission prompt. Just use: `{inner_cmd}`",
+                file=sys.stderr,
+            )
+            sys.exit(2)
         else:
             check_rules(subcmd)
         # Also check inside $() and `` substitutions
