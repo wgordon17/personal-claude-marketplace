@@ -185,7 +185,7 @@ RULES = [
     (
         "tmp-path",
         re.compile(r"/tmp/"),
-        re.compile(r"\brm\b"),
+        re.compile(r"\brm\b|hack/tmp"),
         "Use `hack/tmp/` (gitignored) instead of `/tmp/` for temporary files. "
         "Native tools (Read/Write/Edit) work without Bash permissions on local files. "
         "Clean up when done.",
