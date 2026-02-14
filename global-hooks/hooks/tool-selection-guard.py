@@ -6,11 +6,16 @@
 
 PreToolUse hook that blocks suboptimal tool usage and provides constructive
 guidance toward native tools, auto-approved commands, and simpler patterns.
+Also enforces git safety rules (consolidated from git-safety-check.sh).
 """
+
 import json
+import logging
 import os
 import re
+import subprocess
 import sys
+from pathlib import Path
 
 # Each rule: (name, pattern, exception_pattern_or_None, guidance_message)
 # Pattern: if command matches this, consider blocking
@@ -75,7 +80,8 @@ RULES = [
         "cat-heredoc",
         re.compile(r"^\s*cat\s*<<"),
         None,
-        "Use the Write tool for file content, or native tools (Grep/Read) for the downstream operation.",
+        "Use the Write tool for file content, or native tools (Grep/Read) "
+        "for the downstream operation.",
     ),
     (
         "pager",
@@ -136,14 +142,15 @@ RULES = [
         "pre-commit",
         re.compile(r"^\s*(uvx\s+|uv\s+run\s+)?pre-commit\b"),
         None,
-        "Use `prek` instead of `pre-commit`. Check for a `make` target or use `uvx prek run --all-files`.",
+        "Use `prek` instead of `pre-commit`. "
+        "Check for a `make` target or use `uvx prek run --all-files`.",
     ),
     (
         "prek",
         re.compile(r"^\s*(uvx\s+)?prek\b"),
         re.compile(r"^\s*make\b"),
-        "Check for a `make` target (e.g. `make lint`, `make prek`) instead of running prek directly. "
-        "If no make target exists, use `uvx prek run --all-files`.",
+        "Check for a `make` target (e.g. `make lint`, `make prek`) instead of "
+        "running prek directly. If no make target, use `uvx prek run --all-files`.",
     ),
     (
         "ipython",
@@ -230,7 +237,7 @@ def strip_env_prefix(cmd):
     while True:
         m = re.match(r"^\s*[A-Za-z_]\w*=\S*\s+", stripped)
         if m:
-            stripped = stripped[m.end():]
+            stripped = stripped[m.end() :]
         else:
             break
     return stripped
@@ -274,6 +281,226 @@ def extract_subshells(cmd):
     for m in re.finditer(r"`([^`]+)`", cmd):
         inner.append(m.group(1).strip())
     return inner
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Git safety rules (consolidated from git-safety-check.sh)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _has_force_flag(cmd):
+    """Check if command contains --force (not --force-with-lease) or -f bundled."""
+    if re.search(r"(^|\s)--force(\s|=|$)", cmd):
+        return True
+    return bool(re.search(r"(^|\s)-[a-zA-Z]*f[a-zA-Z]*(\s|$)", cmd))
+
+
+def _has_force_with_lease(cmd):
+    """Check if command contains --force-with-lease."""
+    return bool(re.search(r"(^|\s)--force-with-lease(=[^\s]+)?(\s|$)", cmd))
+
+
+def _get_push_target(cmd):
+    """Extract (remote, branch) from a git push command."""
+    parts = cmd.split()
+    remote = ""
+    branch = ""
+    found_push = False
+    for part in parts:
+        if part == "push":
+            found_push = True
+            continue
+        if found_push:
+            if part.startswith("-"):
+                continue
+            if not remote:
+                remote = part
+                continue
+            if not branch:
+                branch = part
+                break
+    return remote, branch
+
+
+def _setup_git_log():
+    """Set up logging to ~/.claude/logs/git-safety-blocks.log."""
+    log_dir = Path.home() / ".claude" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("git-safety")
+    if not logger.handlers:
+        handler = logging.FileHandler(log_dir / "git-safety-blocks.log")
+        handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    return logger
+
+
+# Each rule: (name, check_function, message)
+# check_function(cmd) -> bool
+GIT_DENY_RULES = [
+    (
+        "reset-hard",
+        lambda cmd: bool(re.search(r"git\s+reset\s+--hard", cmd)),
+        "git reset --hard is FORBIDDEN. "
+        "Use 'git reset --mixed' or 'git stash' to preserve changes.",
+    ),
+    (
+        "push-force",
+        lambda cmd: bool(re.search(r"git\s+push", cmd)) and _has_force_flag(cmd),
+        "Force push (--force/-f) is FORBIDDEN. Use --force-with-lease for safer force pushing.",
+    ),
+    (
+        "push-upstream",
+        lambda cmd: bool(re.search(r"git\s+push", cmd)) and _get_push_target(cmd)[0] == "upstream",
+        "Pushing to upstream is FORBIDDEN. Push to origin and create a PR instead.",
+    ),
+    (
+        "fwl-main",
+        lambda cmd: (
+            bool(re.search(r"git\s+push", cmd))
+            and _has_force_with_lease(cmd)
+            and _get_push_target(cmd)[1] in ("main", "master")
+        ),
+        "--force-with-lease to main/master is FORBIDDEN. Use feature branches for rebasing.",
+    ),
+    (
+        "branch-D",
+        lambda cmd: (
+            bool(re.search(r"git\s+branch", cmd))
+            and bool(re.search(r"(^|\s)-[a-zA-Z]*D[a-zA-Z]*(\s|$)", cmd))
+        ),
+        "git branch -D is FORBIDDEN. Use 'git branch -d' for safe deletion of merged branches.",
+    ),
+    (
+        "branch-force",
+        lambda cmd: bool(re.search(r"git\s+branch.*--force", cmd)),
+        "git branch --force is FORBIDDEN. Force operations on branches must be done manually.",
+    ),
+    (
+        "push-origin-main",
+        lambda cmd: bool(re.search(r"git\s+push.*origin\s+(main|master)(\s|$)", cmd)),
+        "Pushing directly to origin/main or origin/master is FORBIDDEN. "
+        "Use feature branches and PRs.",
+    ),
+    (
+        "no-verify",
+        lambda cmd: bool(re.search(r"git\s+", cmd)) and "--no-verify" in cmd,
+        "--no-verify flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
+    ),
+    (
+        "add-force",
+        lambda cmd: bool(re.search(r"git\s+add", cmd)) and _has_force_flag(cmd),
+        "git add --force is FORBIDDEN. Files are gitignored for a reason.",
+    ),
+    (
+        "rm-cached-force",
+        lambda cmd: (
+            bool(re.search(r"git\s+rm", cmd))
+            and "--cached" in cmd
+            and (_has_force_flag(cmd) or "--force" in cmd)
+        ),
+        "git rm --cached --force is FORBIDDEN. Use 'git rm --cached' without --force.",
+    ),
+    (
+        "rm-unsafe",
+        lambda cmd: bool(re.search(r"git\s+rm", cmd)) and "--cached" not in cmd,
+        "git rm is FORBIDDEN (deletes files). Use 'git rm --cached' to unstage only.",
+    ),
+    (
+        "clean-ignored",
+        lambda cmd: (
+            bool(re.search(r"git\s+clean", cmd)) and bool(re.search(r"-[a-zA-Z]*[xX]", cmd))
+        ),
+        "git clean with -x or -X is FORBIDDEN. These delete ignored/untracked files irreversibly.",
+    ),
+]
+
+# ASK rules exit 1 (prompt user for confirmation)
+GIT_ASK_RULES = [
+    (
+        "config-global-write",
+        lambda cmd: (
+            bool(re.search(r"git\s+config\s+--global", cmd))
+            and not re.search(r"(--get|--list)(\s|$)", cmd)
+            and not re.search(r"\s-l(\s|$)", cmd)
+        ),
+        "git config --global modifications require permission. "
+        "Read operations (--get, --list) are allowed.",
+    ),
+    (
+        "stash-drop",
+        lambda cmd: bool(re.search(r"git\s+stash\s+drop", cmd)),
+        "git stash drop permanently deletes a stash. Confirm this is intentional.",
+    ),
+    (
+        "checkout-dash-dash",
+        lambda cmd: bool(re.search(r"git\s+checkout\s+--", cmd)),
+        "git checkout -- is destructive and deprecated. Consider using 'git restore' instead.",
+    ),
+    (
+        "filter-branch",
+        lambda cmd: bool(re.search(r"git\s+filter-branch", cmd)),
+        "git filter-branch is dangerous and deprecated. Use git-filter-repo if truly needed.",
+    ),
+    (
+        "reflog-delete-expire",
+        lambda cmd: bool(re.search(r"git\s+reflog\s+(delete|expire)", cmd)),
+        "git reflog delete/expire removes recovery points. Confirm this is intentional.",
+    ),
+    (
+        "remote-remove",
+        lambda cmd: bool(re.search(r"git\s+remote\s+(remove|rm)", cmd)),
+        "Removing a git remote may break workflows. Confirm this is intentional.",
+    ),
+]
+
+_git_logger = None
+
+
+def check_git_safety(cmd):
+    """Check a command against git safety rules. Exits 2 (deny) or 1 (ask) on match."""
+    # Early exit: not a git command
+    if not re.search(r"(^|\s)git\s", cmd):
+        return
+
+    global _git_logger
+    if _git_logger is None:
+        _git_logger = _setup_git_log()
+
+    # DENY rules (exit 2)
+    for name, check_fn, message in GIT_DENY_RULES:
+        if check_fn(cmd):
+            _git_logger.info("BLOCKED: %s | Rule: %s", cmd, name)
+            print(message, file=sys.stderr)
+            sys.exit(2)
+
+    # Special case: commit to main/master (requires git rev-parse)
+    if re.search(r"^\s*git\s+commit", cmd):
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            branch = result.stdout.strip()
+            if branch in ("main", "master"):
+                msg = (
+                    f"Committing directly to {branch} is FORBIDDEN. "
+                    "Create a feature branch: git switch -c feature/name"
+                )
+                _git_logger.info("BLOCKED: %s | Rule: commit-to-main", cmd)
+                print(msg, file=sys.stderr)
+                sys.exit(2)
+        except Exception:
+            pass  # If we can't determine branch, allow (fail open)
+
+    # ASK rules (exit 1)
+    for name, check_fn, message in GIT_ASK_RULES:
+        if check_fn(cmd):
+            _git_logger.info("ASK: %s | Rule: %s", cmd, name)
+            print(message, file=sys.stderr)
+            sys.exit(1)
 
 
 def split_commands(command):
@@ -360,7 +587,10 @@ def main():
     subcmds = split_commands(command)
 
     def check_rules(cmd):
-        """Check a command string against all rules. Exits 2 on first match."""
+        """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match."""
+        # Git safety checks first (DENY exit 2, ASK exit 1)
+        check_git_safety(cmd)
+        # Tool selection rules (exit 2)
         normalized = strip_env_prefix(cmd)
         for _name, pattern, exception, guidance in RULES:
             target = normalized if pattern.pattern.startswith("^") else cmd
