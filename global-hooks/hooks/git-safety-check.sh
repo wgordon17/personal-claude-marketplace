@@ -119,9 +119,10 @@ if [[ "$FULL_COMMAND" =~ git[[:space:]]+push ]] && has_force_flag; then
     log_block "Force push (--force/-f) is FORBIDDEN. Use --force-with-lease for safer force pushing."
 fi
 
-# Block git push upstream main/master (even non-force)
-if [[ "$FULL_COMMAND" =~ git[[:space:]]+push.*[[:space:]]upstream[[:space:]]+(main|master)([[:space:]]|$) ]]; then
-    log_block "Pushing to upstream/main or upstream/master is FORBIDDEN. Push to origin or upstream feature branches."
+# Block ALL git push to upstream (any branch, any flags)
+# upstream is the canonical repo — only maintainers push there directly
+if [[ "$FULL_COMMAND" =~ git[[:space:]]+push ]] && [[ "$(get_push_target)" =~ ^upstream ]]; then
+    log_block "Pushing to upstream is FORBIDDEN. Push to origin and create a PR instead."
 fi
 
 # Block --force-with-lease to main/master branches (any remote)
