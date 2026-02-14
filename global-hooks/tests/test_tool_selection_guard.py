@@ -144,7 +144,7 @@ for args in [
     ("bash -c cat -> blocked",        "bash -c 'cat file.py'",          2, "Read tool"),
     ("bash -c grep -> blocked",       "bash -c 'grep -rn pat src/'",   2, "Grep tool"),
     ("bash -c python -> blocked",     "bash -c 'python script.py'",    2, "uv run"),
-    ("bash -c safe -> allow",         "bash -c 'git status'",          0),
+    ("bash -c safe -> still blocked", "bash -c 'git status'",          2, "directly"),
     ("bash -e flag -> allow",         "bash -e script.sh",             0),
     ("./script.sh -> make",           "./scripts/build.sh",             2, "make"),
     ("scripts/foo.sh -> make",        "scripts/deploy.sh prod",         2, "make"),
