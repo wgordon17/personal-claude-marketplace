@@ -7,10 +7,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/git-safety-check.sh"
-          },
-          {
-            "type": "command",
             "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py"
           }
         ]
