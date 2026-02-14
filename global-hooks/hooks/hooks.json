@@ -1,5 +1,5 @@
 {
-  "description": "Global hooks for git safety checks and pre-push review",
+  "description": "Global hooks: git safety, commit validation, pre-push review, tool selection",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,6 +8,30 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/git-safety-check.sh"
+          },
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(git push origin*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-push-review.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash(git commit:*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/validate-commit-message.sh"
           }
         ]
       }
