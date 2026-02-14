@@ -272,10 +272,22 @@ def main():
         sys.exit(0)
 
     tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+
+    # ── /tmp/ guard for ALL tools (Read, Write, Edit, Grep, Glob, Bash) ──
+    # Fires before the permission layer so the agent gets guidance, not a prompt.
+    file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
+    if file_path and "/tmp/" in file_path and "hack/tmp" not in file_path:
+        print(
+            "Use `hack/tmp/` (gitignored) instead of `/tmp/` for temporary files. "
+            "Native tools (Read/Write/Edit) work on local files without extra permissions.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     if tool_name != "Bash":
         sys.exit(0)
 
-    tool_input = data.get("tool_input", {})
     command = tool_input.get("command", "").strip()
     if not command:
         sys.exit(0)
