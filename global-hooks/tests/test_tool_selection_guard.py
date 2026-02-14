@@ -86,7 +86,7 @@ for args in [
     ("echo > file -> Write",          "echo hello > output.txt",    2, "Write tool"),
     ("echo > /dev/null -> allow",     "echo test > /dev/null",      0),
     ("cat heredoc -> Write",          "cat <<EOF > file.py",        2, "Write tool"),
-    ("cat heredoc pipe -> allow",     "cat <<EOF | grep pattern",   0),
+    ("cat heredoc pipe -> blocked",   "cat <<EOF | grep pattern",   2, "Write tool"),
     ("printf > file -> Write",        "printf '%s' x > out.txt",    2, "Write tool"),
     ("less -> Read",                  "less file.py",               2, "Pagers"),
     ("more -> Read",                  "more file.py",               2, "Pagers"),
