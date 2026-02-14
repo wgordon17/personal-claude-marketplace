@@ -1,0 +1,21 @@
+[project]
+name = "private-claude-marketplace"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["ruff>=0.9", "pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["global-hooks/tests"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
