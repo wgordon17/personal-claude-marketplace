@@ -74,8 +74,8 @@ RULES = [
     (
         "cat-heredoc",
         re.compile(r"^\s*cat\s*<<"),
-        re.compile(r"\|"),
-        "Use the Write tool instead of cat heredoc.",
+        None,
+        "Use the Write tool for file content, or native tools (Grep/Read) for the downstream operation.",
     ),
     (
         "pager",
