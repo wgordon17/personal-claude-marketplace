@@ -11,6 +11,17 @@
 #   2 = Error (blocks the commit)
 #
 
+# --- Hook Input Filtering ---
+# When called as a PostToolUse hook, stdin contains JSON with tool_input.
+# Only proceed for git commit commands; exit 0 for everything else.
+if ! [ -t 0 ]; then
+    INPUT=$(cat)
+    COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
+    if [[ ! "$COMMAND" =~ ^git[[:space:]]+commit ]]; then
+        exit 0
+    fi
+fi
+
 # Early exit if not in a git repository
 if ! git rev-parse --git-dir &>/dev/null; then
     exit 0

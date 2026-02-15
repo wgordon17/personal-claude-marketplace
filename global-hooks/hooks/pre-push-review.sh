@@ -9,6 +9,17 @@
 
 set -uo pipefail
 
+# --- Hook Input Filtering ---
+# When called as a PreToolUse hook, stdin contains JSON with tool_input.
+# Only proceed for git push commands; exit 0 for everything else.
+if ! [ -t 0 ]; then
+    INPUT=$(cat)
+    COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
+    if [[ ! "$COMMAND" =~ ^git[[:space:]]+push[[:space:]] ]]; then
+        exit 0
+    fi
+fi
+
 # Get the current branch
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [[ -z "$CURRENT_BRANCH" ]]; then

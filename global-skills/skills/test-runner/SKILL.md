@@ -1,6 +1,7 @@
 ---
 name: test-runner
 description: Efficient test execution patterns for pytest and pre-commit - sequential execution, targeted re-runs, and smart failure handling
+allowed-tools: [Bash, Read, Grep, Glob]
 ---
 
 # Test Execution Best Practices
