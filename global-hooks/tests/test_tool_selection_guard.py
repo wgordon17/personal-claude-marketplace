@@ -193,6 +193,64 @@ class TestPythonTooling:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Category B2: Rust tooling (3 rules)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestRustTooling:
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # cargo-lint: check, clippy, fmt
+            ("cargo check", 2, "make"),
+            ("cargo clippy --all-targets", 2, "make"),
+            ("cargo fmt --all --check", 2, "make"),
+            ("cargo check 2>&1", 2, "make"),
+            # cargo-test: test, nextest
+            ("cargo test --all-features", 2, "make"),
+            ("cargo nextest run --all-features", 2, "make"),
+            # cargo-build
+            ("cargo build --release", 2, "make"),
+            # chained with cd (real-world pattern)
+            ("cd lib/rust && cargo check 2>&1", 2, "make"),
+            ("cd lib/rust && cargo clippy -- -D warnings", 2, "make"),
+            # env prefix
+            ("RUSTFLAGS=-Dwarnings cargo check", 2, "make"),
+            # passthrough: non-build cargo subcommands
+            ("cargo add serde", 0, None),
+            ("cargo install cargo-nextest", 0, None),
+            ("cargo update", 0, None),
+            ("cargo doc --open", 0, None),
+            ("cargo run --release", 0, None),
+            ("cargo new my-project", 0, None),
+            ("cargo init", 0, None),
+        ],
+        ids=[
+            "cargo-check",
+            "cargo-clippy",
+            "cargo-fmt",
+            "cargo-check-stderr",
+            "cargo-test",
+            "cargo-nextest",
+            "cargo-build",
+            "cd-cargo-check",
+            "cd-cargo-clippy",
+            "env-cargo-check",
+            "cargo-add-allow",
+            "cargo-install-allow",
+            "cargo-update-allow",
+            "cargo-doc-allow",
+            "cargo-run-allow",
+            "cargo-new-allow",
+            "cargo-init-allow",
+        ],
+    )
+    def test_rust_tooling(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Category C: Project conventions (5 rules)
 # ═══════════════════════════════════════════════════════════════════════════════
 
