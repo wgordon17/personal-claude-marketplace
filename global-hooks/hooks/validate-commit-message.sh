@@ -17,7 +17,7 @@
 if ! [ -t 0 ]; then
     INPUT=$(cat)
     COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
-    if [[ ! "$COMMAND" =~ ^git[[:space:]]+commit ]]; then
+    if [[ ! "$COMMAND" =~ git[[:space:]]+commit ]]; then
         exit 0
     fi
 fi
@@ -38,6 +38,9 @@ fi
 
 # Now enable strict error handling for the actual validation
 set -euo pipefail
+
+# Redirect all output to stderr — PostToolUse exit 2 only shows stderr to Claude
+exec 1>&2
 
 # Extract subject line (first line)
 SUBJECT=$(echo "$COMMIT_MSG" | head -1)
