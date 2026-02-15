@@ -23,13 +23,13 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests only exist 
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits.
 3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red.
 4. **Merge** — `gh pr merge <number> --merge`.
-5. **Update local plugin** — After merge:
+5. **Update local plugin** — After merge, run these commands (do not hand them to the user):
    ```bash
    git switch main && git pull origin main
    claude plugin marketplace update private-claude-marketplace
    claude plugin update <plugin-name>@private-claude-marketplace
    ```
-6. **Restart and E2E verify** — User restarts their session. Run real commands (both blocked and allowed) to confirm behavior. Do not rely solely on unit tests.
+6. **Restart and E2E verify** — Tell user to restart their session. E2E verification happens in the new session.
 
 ## Repository Structure
 
