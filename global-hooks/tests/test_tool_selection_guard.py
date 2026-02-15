@@ -4,6 +4,7 @@ Black-box tests: each test invokes the guard script via subprocess,
 feeding it JSON on stdin and asserting exit code + stderr content.
 """
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -723,3 +724,287 @@ class TestGitSafetyCommitToMain:
     def test_commit_to_main(self):
         result = run_bash("git commit -m 'test'")
         assert_guard(result, 2, "FORBIDDEN", "commit-to-main")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Git safety: branch creation enforcement
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestGitBranchEnforcement:
+    """Tests for branch-no-base (DENY), branch-from-local-main (ASK),
+    branch-from-non-upstream (ASK), and branch-needs-fetch (ASK) rules."""
+
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # ── DENY: branch-no-base (exit 2) ──
+            ("git switch -c feat/new", 2, "start-point"),
+            ("git checkout -b feat/new", 2, "start-point"),
+            ("git checkout -B feat/new", 2, "start-point"),
+            ("git worktree add ../wt -b feat/new", 2, "start-point"),
+            ("git switch --create feat/new", 2, "start-point"),
+            ("git switch --create=feat/new", 2, "start-point"),
+            ("git switch --track -c feat/new", 2, "start-point"),
+            ("git checkout --track -b feat/new", 2, "start-point"),
+            # ── ASK: branch-from-local-main (exit 1) ──
+            ("git switch -c feat/new main", 1, "stale"),
+            ("git checkout -b feat/new main", 1, "stale"),
+            ("git switch -c feat/new master", 1, "stale"),
+            ("git worktree add ../wt -b feat/new main", 1, "stale"),
+            # ── ASK: branch-from-non-upstream (exit 1) ──
+            ("git switch -c feat/new feat/other", 1, "stacking"),
+            ("git checkout -b feat/new develop", 1, "stacking"),
+            ("git worktree add ../wt -b feat/new feat/old", 1, "stacking"),
+            ("git switch -c feat/new origin/feat/x", 1, "stacking"),
+            # ── ASK: branch-needs-fetch (exit 1) ──
+            ("git switch -c feat/new upstream/main", 1, "No git fetch"),
+            ("git checkout -b feat/new origin/main", 1, "No git fetch"),
+            # ── PASS: safe with fetch in chain (exit 0) ──
+            (
+                "git fetch upstream main && git switch -c feat/new upstream/main",
+                0,
+                None,
+            ),
+            (
+                "git fetch upstream && git checkout -b feat/new upstream/main",
+                0,
+                None,
+            ),
+            (
+                "git fetch origin && git switch -c feat/new origin/main",
+                0,
+                None,
+            ),
+            # ── PASS: safe start points, non-remote (exit 0, no fetch needed) ──
+            ("git switch -c feat/new HEAD", 0, None),
+            ("git switch -c feat/new HEAD~3", 0, None),
+            ("git switch -c feat/new HEAD^2", 0, None),
+            ("git switch -c feat/new abc1234def", 0, None),
+            ("git switch --create=feat/new HEAD", 0, None),
+            # ── PASS: not branch creation (exit 0) ──
+            ("git switch existing-branch", 0, None),
+            ("git branch -d old-branch", 0, None),
+            ("git checkout main", 0, None),
+            ("git checkout -", 0, None),
+            ("git worktree add ../wt", 0, None),
+            ("git worktree list", 0, None),
+            # ── Chain awareness ──
+            # fetch seen but still no start point → DENY
+            ("git fetch upstream && git switch -c feat/x", 2, "start-point"),
+            # no fetch in chain → ASK
+            (
+                "git status && git switch -c feat/x upstream/main",
+                1,
+                "No git fetch",
+            ),
+            # fetch + safe start → PASS
+            (
+                "git fetch upstream main && git switch -c feat/x upstream/main",
+                0,
+                None,
+            ),
+        ],
+        ids=[
+            # DENY
+            "deny-switch-c-no-start",
+            "deny-checkout-b-no-start",
+            "deny-checkout-B-no-start",
+            "deny-worktree-b-no-start",
+            "deny-switch-create-no-start",
+            "deny-switch-create-eq-no-start",
+            "deny-switch-track-c-no-start",
+            "deny-checkout-track-b-no-start",
+            # ASK: local main
+            "ask-switch-c-main",
+            "ask-checkout-b-main",
+            "ask-switch-c-master",
+            "ask-worktree-b-main",
+            # ASK: non-upstream
+            "ask-switch-c-feature",
+            "ask-checkout-b-develop",
+            "ask-worktree-b-feature",
+            "ask-switch-c-remote-feature",
+            # ASK: needs fetch
+            "ask-upstream-no-fetch",
+            "ask-origin-no-fetch",
+            # PASS: safe with fetch
+            "pass-fetch-then-switch",
+            "pass-fetch-then-checkout",
+            "pass-fetch-origin-then-switch",
+            # PASS: non-remote safe
+            "pass-HEAD",
+            "pass-HEAD-tilde",
+            "pass-HEAD-caret",
+            "pass-sha",
+            "pass-create-eq-HEAD",
+            # PASS: not creation
+            "pass-switch-existing",
+            "pass-branch-delete",
+            "pass-checkout-main",
+            "pass-checkout-dash",
+            "pass-worktree-no-b",
+            "pass-worktree-list",
+            # Chain awareness
+            "chain-fetch-but-no-start",
+            "chain-no-fetch-upstream",
+            "chain-fetch-and-upstream",
+        ],
+    )
+    def test_branch_enforcement(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Unit tests: _parse_branch_creation and _is_safe_start_point
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_spec = importlib.util.spec_from_file_location("tool_selection_guard", SCRIPT)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+_parse_branch_creation = _mod._parse_branch_creation
+_is_safe_start_point = _mod._is_safe_start_point
+
+
+class TestParseBranchCreation:
+    """Unit tests for _parse_branch_creation parser."""
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            # switch -c
+            ("git switch -c feat/x upstream/main", ("feat/x", "upstream/main")),
+            ("git switch -c feat/x", ("feat/x", None)),
+            ("git switch --create feat/x upstream/main", ("feat/x", "upstream/main")),
+            ("git switch --create=feat/x upstream/main", ("feat/x", "upstream/main")),
+            ("git switch --create=feat/x", ("feat/x", None)),
+            # switch -c with interspersed flags
+            (
+                "git switch --track -c feat/x upstream/main",
+                ("feat/x", "upstream/main"),
+            ),
+            (
+                "git switch -c feat/x --no-track upstream/main",
+                ("feat/x", "upstream/main"),
+            ),
+            # checkout -b/-B
+            ("git checkout -b feat/x upstream/main", ("feat/x", "upstream/main")),
+            ("git checkout -B feat/x upstream/main", ("feat/x", "upstream/main")),
+            ("git checkout -b feat/x", ("feat/x", None)),
+            # worktree add -b
+            (
+                "git worktree add ../wt -b feat/x upstream/main",
+                ("feat/x", "upstream/main"),
+            ),
+            ("git worktree add ../wt -b feat/x", ("feat/x", None)),
+            # -- separator skipped
+            (
+                "git checkout -b feat/x -- upstream/main",
+                ("feat/x", "upstream/main"),
+            ),
+            # names with slashes and dots
+            (
+                "git switch -c feat/sub/deep upstream/main",
+                ("feat/sub/deep", "upstream/main"),
+            ),
+            (
+                "git switch -c fix/1.2.3 upstream/main",
+                ("fix/1.2.3", "upstream/main"),
+            ),
+            # not branch creation → None
+            ("git switch existing-branch", None),
+            ("git checkout main", None),
+            ("git branch -d old", None),
+            ("git worktree add ../wt", None),
+            ("git worktree list", None),
+            ("git status", None),
+            ("ls -la", None),
+        ],
+        ids=[
+            "switch-c-with-start",
+            "switch-c-no-start",
+            "switch-create-with-start",
+            "switch-create-eq-with-start",
+            "switch-create-eq-no-start",
+            "switch-track-c-with-start",
+            "switch-c-notrack-with-start",
+            "checkout-b-with-start",
+            "checkout-B-with-start",
+            "checkout-b-no-start",
+            "worktree-b-with-start",
+            "worktree-b-no-start",
+            "checkout-b-dash-dash-start",
+            "slashes-in-name",
+            "dots-in-name",
+            "switch-existing",
+            "checkout-ref",
+            "branch-delete",
+            "worktree-no-b",
+            "worktree-list",
+            "git-status",
+            "non-git",
+        ],
+    )
+    def test_parse(self, cmd, expected):
+        assert _parse_branch_creation(cmd) == expected
+
+
+class TestIsSafeStartPoint:
+    """Unit tests for _is_safe_start_point classifier."""
+
+    @pytest.mark.parametrize(
+        "ref, expected",
+        [
+            # safe remote refs
+            ("upstream/main", True),
+            ("origin/main", True),
+            ("upstream/master", True),
+            ("origin/master", True),
+            # HEAD variants
+            ("HEAD", True),
+            ("HEAD~3", True),
+            ("HEAD^2", True),
+            ("HEAD^^", True),
+            ("HEAD~1^2", True),
+            # SHA-like
+            ("abc1234def", True),
+            ("abcdef1", True),
+            ("abcdef1234567890abcdef1234567890abcdef12", True),
+            # not safe
+            ("main", False),
+            ("master", False),
+            ("develop", False),
+            ("feat/other", False),
+            ("origin/feat/x", False),
+            ("abc123", False),  # 6 chars, below 7-char minimum
+            ("ABCDEF1", False),  # uppercase
+            ("HEAD~abc", False),  # non-numeric after ~
+            ("HEADER", False),  # not HEAD
+        ],
+        ids=[
+            "upstream-main",
+            "origin-main",
+            "upstream-master",
+            "origin-master",
+            "HEAD",
+            "HEAD-tilde",
+            "HEAD-caret",
+            "HEAD-double-caret",
+            "HEAD-combined",
+            "sha-10",
+            "sha-7-min",
+            "sha-40-full",
+            "local-main",
+            "local-master",
+            "develop",
+            "feature-branch",
+            "remote-feature",
+            "sha-too-short",
+            "sha-uppercase",
+            "HEAD-non-numeric",
+            "HEADER-not-HEAD",
+        ],
+    )
+    def test_safe_start_point(self, ref, expected):
+        assert _is_safe_start_point(ref) == expected
