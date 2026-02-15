@@ -78,9 +78,9 @@
     },
     {
       "name": "global-skills",
-      "version": "1.2.3",
+      "version": "1.4.0",
       "source": "./global-skills",
-      "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python",
+      "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python, incremental-planning",
       "category": "productivity",
       "tags": ["skills", "git", "lsp", "python", "testing"]
     },
@@ -94,7 +94,7 @@
     },
     {
       "name": "global-hooks",
-      "version": "1.10.0",
+      "version": "1.11.0",
       "source": "./global-hooks",
       "description": "Global hooks: git safety, commit validation, pre-push review, tool selection",
       "category": "quality",

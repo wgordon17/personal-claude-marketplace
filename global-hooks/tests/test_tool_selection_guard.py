@@ -521,6 +521,27 @@ class TestNonBashPassthrough:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# EnterPlanMode redirect (exit 2)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestEnterPlanModeRedirect:
+    def test_enter_plan_mode_denied(self):
+        result = run_guard("EnterPlanMode", {})
+        assert_guard(result, 2, "incremental-planning")
+
+    def test_enter_plan_mode_message_content(self):
+        result = run_guard("EnterPlanMode", {})
+        assert "Native plan mode" in result.stderr
+        assert "Skill tool" in result.stderr
+
+    def test_exit_plan_mode_passthrough(self):
+        """ExitPlanMode is not intercepted — only EnterPlanMode is."""
+        result = run_guard("ExitPlanMode", {})
+        assert result.returncode == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Non-Bash /tmp/ blocking (all tools)
 # ═══════════════════════════════════════════════════════════════════════════════
 
