@@ -7,6 +7,7 @@ feeding it JSON on stdin and asserting exit code + stderr content.
 import importlib.util
 import json
 import os
+import re
 import subprocess
 
 import pytest
@@ -1094,6 +1095,68 @@ class TestStripShellKeyword:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shell control structure integration tests
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# hooks.json configuration validation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+HOOKS_FILE = os.path.join(os.path.dirname(__file__), os.pardir, "hooks", "hooks.json")
+
+
+class TestHooksJsonConfiguration:
+    """Validate hooks.json matchers are valid regex on tool names."""
+
+    def test_hooks_json_is_valid(self):
+        with open(HOOKS_FILE) as f:
+            data = json.load(f)
+        assert "hooks" in data
+
+    def test_matchers_have_no_parenthesized_patterns(self):
+        """Matchers are regex on tool names only — Bash(command*) is invalid."""
+        with open(HOOKS_FILE) as f:
+            data = json.load(f)
+        for event_name, event_hooks in data["hooks"].items():
+            for hook_group in event_hooks:
+                matcher = hook_group.get("matcher", "")
+                assert "(" not in matcher, (
+                    f"Invalid matcher '{matcher}' in {event_name}: "
+                    f"matchers are regex on tool names, not Bash(command) patterns"
+                )
+
+    def test_matchers_are_valid_regex(self):
+        """All matchers should compile as valid regex."""
+        with open(HOOKS_FILE) as f:
+            data = json.load(f)
+        for event_name, event_hooks in data["hooks"].items():
+            for hook_group in event_hooks:
+                matcher = hook_group.get("matcher", "")
+                if matcher:
+                    try:
+                        re.compile(matcher)
+                    except re.error as e:
+                        pytest.fail(f"Invalid regex '{matcher}' in {event_name}: {e}")
+
+    def test_all_hook_commands_reference_existing_scripts(self):
+        """All command hooks should reference scripts that exist relative to hooks dir."""
+        hooks_dir = os.path.join(os.path.dirname(__file__), os.pardir, "hooks")
+        with open(HOOKS_FILE) as f:
+            data = json.load(f)
+        for event_name, event_hooks in data["hooks"].items():
+            for hook_group in event_hooks:
+                for hook in hook_group.get("hooks", []):
+                    cmd = hook.get("command", "")
+                    # Extract script path from command (after "uv run " or direct)
+                    script = cmd.replace("${CLAUDE_PLUGIN_ROOT}/hooks/", "")
+                    if script.startswith("uv run "):
+                        script = script.replace("uv run ", "")
+                        script = script.replace("${CLAUDE_PLUGIN_ROOT}/hooks/", "")
+                    script_path = os.path.join(hooks_dir, script)
+                    assert os.path.exists(script_path), (
+                        f"Script '{script}' referenced in {event_name} does not exist "
+                        f"at {script_path}"
+                    )
 
 
 class TestShellControlStructures:
