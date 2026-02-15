@@ -15,7 +15,7 @@ set -uo pipefail
 if ! [ -t 0 ]; then
     INPUT=$(cat)
     COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
-    if [[ ! "$COMMAND" =~ ^git[[:space:]]+push[[:space:]] ]]; then
+    if [[ ! "$COMMAND" =~ git[[:space:]]+push[[:space:]] ]]; then
         exit 0
     fi
 fi
