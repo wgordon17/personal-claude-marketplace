@@ -322,6 +322,157 @@ def _get_push_target(cmd):
     return remote, branch
 
 
+def _parse_branch_creation(cmd):
+    """Parse branch creation commands, returning (branch_name, start_point) or None.
+
+    Handles:
+      git switch -c/--create <name> [<start-point>]
+      git checkout -b/-B <name> [<start-point>]
+      git worktree add <path> -b <name> [<start-point>]
+
+    Returns None if not a branch creation command.
+    start_point is None if not specified.
+    """
+    parts = cmd.split()
+    if not parts or parts[0] != "git" or len(parts) < 3:
+        return None
+
+    subcmd = parts[1]
+
+    if subcmd == "switch":
+        # Find -c or --create flag
+        i = 2
+        branch_name = None
+        while i < len(parts):
+            arg = parts[i]
+            if arg == "--":
+                i += 1
+                continue
+            if arg.startswith("--create="):
+                branch_name = arg.split("=", 1)[1]
+                i += 1
+                break
+            if arg in ("-c", "--create"):
+                if i + 1 < len(parts):
+                    branch_name = parts[i + 1]
+                    i += 2
+                    break
+                return None  # malformed: -c with no branch name
+            if arg.startswith("-"):
+                i += 1
+                continue
+            # Non-flag positional before -c/--create: 'git switch <existing>'
+            return None
+        if branch_name is None:
+            return None
+        # Look for start point (next non-flag arg)
+        while i < len(parts):
+            if parts[i] == "--" or parts[i].startswith("-"):
+                i += 1
+                continue
+            return (branch_name, parts[i])
+        return (branch_name, None)
+
+    if subcmd == "checkout":
+        # Find -b or -B flag
+        i = 2
+        branch_name = None
+        while i < len(parts):
+            arg = parts[i]
+            if arg == "--":
+                i += 1
+                continue
+            if arg in ("-b", "-B"):
+                if i + 1 < len(parts):
+                    branch_name = parts[i + 1]
+                    i += 2
+                    break
+                return None  # malformed
+            if arg.startswith("-"):
+                i += 1
+                continue
+            # Non-flag positional before -b/-B: 'git checkout <ref>'
+            return None
+        if branch_name is None:
+            return None
+        while i < len(parts):
+            if parts[i] == "--" or parts[i].startswith("-"):
+                i += 1
+                continue
+            return (branch_name, parts[i])
+        return (branch_name, None)
+
+    if subcmd == "worktree" and len(parts) > 2 and parts[2] == "add":
+        # git worktree add <path> -b <name> [<start-point>]
+        i = 3
+        path_found = False
+        branch_name = None
+        while i < len(parts):
+            arg = parts[i]
+            if arg == "-b":
+                if i + 1 < len(parts):
+                    branch_name = parts[i + 1]
+                    i += 2
+                    break
+                return None  # malformed
+            if arg.startswith("-"):
+                i += 1
+                continue
+            if not path_found:
+                path_found = True
+                i += 1
+                continue
+            # Second positional before -b: ambiguous, bail
+            break
+        if branch_name is None:
+            return None
+        while i < len(parts):
+            if parts[i] == "--" or parts[i].startswith("-"):
+                i += 1
+                continue
+            return (branch_name, parts[i])
+        return (branch_name, None)
+
+    return None
+
+
+# Safe start points for branch creation (no stacking risk)
+_SAFE_REMOTE_REFS = frozenset({"upstream/main", "origin/main", "upstream/master", "origin/master"})
+# NOTE: HEAD is allowed as a safe start-point. While functionally identical to
+# omitting the start-point (both branch from current position), specifying HEAD
+# explicitly signals intentionality. The branch-no-base rule targets the common
+# mistake of forgetting to specify a base, not deliberate use of HEAD.
+_HEAD_PATTERN = re.compile(r"^HEAD([~^]\d*)*$")
+_SHA_PATTERN = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def _is_safe_start_point(ref):
+    """Check if a start-point ref is safe (upstream remote, HEAD variant, or SHA)."""
+    if ref in _SAFE_REMOTE_REFS:
+        return True
+    if _HEAD_PATTERN.match(ref):
+        return True
+    return bool(_SHA_PATTERN.match(ref))
+
+
+def _is_branch_no_base(cmd):
+    """Check if command creates a branch without specifying a start point."""
+    parsed = _parse_branch_creation(cmd)
+    return parsed is not None and parsed[1] is None
+
+
+def _is_branch_from_local_main(cmd):
+    """Check if command branches from local main/master (may be stale)."""
+    parsed = _parse_branch_creation(cmd)
+    return parsed is not None and parsed[1] in ("main", "master")
+
+
+def _is_branch_from_non_upstream(cmd):
+    """Check if command branches from a non-upstream ref (stacking risk)."""
+    parsed = _parse_branch_creation(cmd)
+    return parsed is not None and parsed[1] is not None and not _is_safe_start_point(parsed[1])
+
+
 def _setup_git_log():
     """Set up logging to ~/.claude/logs/git-safety-blocks.log."""
     log_dir = Path.home() / ".claude" / "logs"
@@ -413,6 +564,13 @@ GIT_DENY_RULES = [
         ),
         "git clean with -x or -X is FORBIDDEN. These delete ignored/untracked files irreversibly.",
     ),
+    (
+        "branch-no-base",
+        _is_branch_no_base,
+        "Branch creation without a start-point defaults to HEAD (which may be stale "
+        "or another feature branch). Specify a base: "
+        "git switch -c <name> upstream/main",
+    ),
 ]
 
 # ASK rules exit 1 (prompt user for confirmation)
@@ -452,12 +610,22 @@ GIT_ASK_RULES = [
         lambda cmd: bool(re.search(r"git\s+remote\s+(remove|rm)", cmd)),
         "Removing a git remote may break workflows. Confirm this is intentional.",
     ),
+    (
+        "branch-from-local-main",
+        _is_branch_from_local_main,
+        "Local main may be stale. Prefer upstream/main or run git fetch upstream main first.",
+    ),
+    (
+        "branch-from-non-upstream",
+        _is_branch_from_non_upstream,
+        "Branching from a non-upstream ref risks branch stacking. Use upstream/main instead.",
+    ),
 ]
 
 _git_logger = None
 
 
-def check_git_safety(cmd):
+def check_git_safety(cmd, fetch_seen=False):
     """Check a command against git safety rules. Exits 2 (deny) or 1 (ask) on match."""
     # Early exit: not a git command
     if not re.search(r"(^|\s)git\s", cmd):
@@ -494,6 +662,23 @@ def check_git_safety(cmd):
                 sys.exit(2)
         except Exception:
             pass  # If we can't determine branch, allow (fail open)
+
+    # Special: branch from upstream without a preceding fetch in the command chain
+    parsed = _parse_branch_creation(cmd)
+    if (
+        parsed is not None
+        and parsed[1] is not None
+        and parsed[1] in _SAFE_REMOTE_REFS
+        and not fetch_seen
+    ):
+        _git_logger.info("ASK: %s | Rule: branch-needs-fetch", cmd)
+        print(
+            "No git fetch detected in this command chain. "
+            "Fetch first: git fetch upstream main && "
+            "git switch -c <name> upstream/main",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # ASK rules (exit 1)
     for name, check_fn, message in GIT_ASK_RULES:
@@ -586,10 +771,14 @@ def main():
     # This prevents bundling blocked commands into && chains to bypass rules.
     subcmds = split_commands(command)
 
+    # Track git fetch upstream/origin across subcommands (order-aware).
+    # The closure reads this; main() writes it before each check_rules call.
+    fetch_seen = False
+
     def check_rules(cmd):
         """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match."""
         # Git safety checks first (DENY exit 2, ASK exit 1)
-        check_git_safety(cmd)
+        check_git_safety(cmd, fetch_seen=fetch_seen)
         # Tool selection rules (exit 2)
         normalized = strip_env_prefix(cmd)
         for _name, pattern, exception, guidance in RULES:
@@ -601,11 +790,17 @@ def main():
                 sys.exit(2)
 
     for subcmd in subcmds:
+        # Track git fetch before checking rules (order-aware: fetch must precede branch)
+        if re.search(r"git\s+fetch\s+(upstream|origin)\b", subcmd):
+            fetch_seen = True
+
         # Unwrap bash -c '...' / sh -c '...' and check the inner command
         inner_cmd = extract_bash_c(subcmd)
         if inner_cmd:
             # First check if inner command breaks any rules (e.g. bash -c 'cat file')
             for inner_sub in split_commands(inner_cmd):
+                if re.search(r"git\s+fetch\s+(upstream|origin)\b", inner_sub):
+                    fetch_seen = True
                 check_rules(inner_sub)
             # If inner command is safe, STILL block — the bash -c wrapper itself
             # causes a permission prompt. Run the inner command directly instead.
@@ -619,6 +814,8 @@ def main():
             check_rules(subcmd)
         # Also check inside $() and `` substitutions
         for inner in extract_subshells(subcmd):
+            if re.search(r"git\s+fetch\s+(upstream|origin)\b", inner):
+                fetch_seen = True
             check_rules(inner)
 
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
