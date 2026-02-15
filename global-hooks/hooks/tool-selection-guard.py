@@ -183,6 +183,28 @@ RULES = [
         None,
         "Linting should be performed with ruff.",
     ),
+    # ── Rust tooling ──
+    (
+        "cargo-lint",
+        re.compile(r"^\s*cargo\s+(check|clippy|fmt)\b"),
+        None,
+        "Check for a `make` target (e.g. `make rust-lint`, `make lint`) instead of "
+        "running cargo directly. Makefile targets handle working directory and standard flags.",
+    ),
+    (
+        "cargo-test",
+        re.compile(r"^\s*cargo\s+(test|nextest)\b"),
+        None,
+        "Check for a `make` target (e.g. `make rust-test`, `make test`) instead of "
+        "running cargo test directly.",
+    ),
+    (
+        "cargo-build",
+        re.compile(r"^\s*cargo\s+build\b"),
+        None,
+        "Check for a `make` target (e.g. `make rust-build`, `make build`) instead of "
+        "running cargo build directly.",
+    ),
     # ── Category C: Encourage project conventions ──
     (
         "bash-script",
