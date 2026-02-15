@@ -784,6 +784,19 @@ def main():
         )
         sys.exit(2)
 
+    # ── EnterPlanMode redirect: use incremental-planning skill instead ──
+    if tool_name == "EnterPlanMode":
+        print(
+            "Native plan mode writes and displays the full plan at once.\n"
+            "Use the incremental-planning skill instead:\n"
+            "  Invoke Skill tool with 'global-skills:incremental-planning'\n\n"
+            "This skill asks clarifying questions first, writes the plan\n"
+            "incrementally to a file, and provides research context in chat\n"
+            "for informed feedback.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     if tool_name != "Bash":
         sys.exit(0)
 
