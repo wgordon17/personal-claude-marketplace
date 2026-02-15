@@ -66,7 +66,7 @@
         ]
       },
       {
-        "matcher": "Bash(git push origin*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -77,7 +77,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash(git commit:*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
