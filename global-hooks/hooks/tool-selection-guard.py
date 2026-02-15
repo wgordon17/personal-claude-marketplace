@@ -59,6 +59,13 @@ RULES = [
         "Use the Glob tool -- it's auto-approved and supports patterns like '**/*.py'.",
     ),
     (
+        "ls-dir",
+        re.compile(r"^\s*ls\s"),
+        re.compile(r"\|"),
+        "Use the Glob tool for file listings -- it's auto-approved and supports patterns "
+        "like '**/*.py'. Use `ls` via Bash only when you need permissions/metadata.",
+    ),
+    (
         "sed-i",
         re.compile(r"^\s*sed\b.*\s-i"),
         None,
@@ -224,6 +231,29 @@ RULES = [
         "Interactive git add will hang. Use `git add` with specific file paths instead.",
     ),
 ]
+
+
+_SHELL_KEYWORD_PREFIX = re.compile(r"^\s*(do|then|else|elif|if|while|until)\s+")
+
+
+def strip_shell_keyword(cmd):
+    """Strip leading shell control keywords from a command fragment.
+
+    When split_commands splits on ';', shell control structures like
+    for/do/done and if/then/fi produce fragments with keyword prefixes:
+      'do echo hi'   → 'echo hi'
+      'then cat file' → 'cat file'
+      'do if git reset --hard' → 'git reset --hard' (recursive)
+    Keywords that don't prefix commands (for, case, done, fi, esac) are
+    left alone — they pass through rule checks harmlessly.
+    """
+    while True:
+        m = _SHELL_KEYWORD_PREFIX.match(cmd)
+        if m:
+            cmd = cmd[m.end() :]
+        else:
+            break
+    return cmd
 
 
 def strip_env_prefix(cmd):
@@ -777,6 +807,9 @@ def main():
 
     def check_rules(cmd):
         """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match."""
+        # Strip shell control keywords (do, then, else, etc.) so rules can
+        # match commands inside for/while/if blocks split on ';'.
+        cmd = strip_shell_keyword(cmd)
         # Git safety checks first (DENY exit 2, ASK exit 1)
         check_git_safety(cmd, fetch_seen=fetch_seen)
         # Tool selection rules (exit 2)

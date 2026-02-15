@@ -44,7 +44,7 @@ def assert_guard(result, expected_exit, expected_msg=None, test_id=""):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Category A: Native tool redirections (12 rules)
+# Category A: Native tool redirections (13 rules)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -75,6 +75,8 @@ class TestNativeToolRedirections:
             ("vim file.py", 2, "Interactive editors"),
             ("vi file.py", 2, "Interactive editors"),
             ("emacs file.py", 2, "Interactive editors"),
+            ("ls -la /path", 2, "Glob tool"),
+            ("ls /path | grep pattern", 0, None),
         ],
         ids=[
             "cat-file",
@@ -100,6 +102,8 @@ class TestNativeToolRedirections:
             "vim-blocked",
             "vi-blocked",
             "emacs-blocked",
+            "ls-dir-blocked",
+            "ls-pipe-allow",
         ],
     )
     def test_redirections(self, command, expected_exit, expected_msg):
@@ -306,7 +310,7 @@ class TestPassthrough:
         "command",
         [
             "git status",
-            "ls -la",
+            "ls",
             "make build",
             "uv sync",
             "docker ps",
@@ -392,9 +396,9 @@ class TestNewlineSeparation:
         "command, expected_exit, expected_msg",
         [
             ("git status\ncat file.py", 2, "Read tool"),
-            ("git status\nls -la\ngrep pattern src/", 2, "Grep tool"),
+            ("git status\npwd\ngrep pattern src/", 2, "Grep tool"),
             ("docker run \\\n  -v /app:/app \\\n  image", 0, None),
-            ("git status\nls -la\nmake build", 0, None),
+            ("git status\npwd\nmake build", 0, None),
             ('git log\necho "done"', 2, "directly"),
             ("# comment\ncat file.py", 2, "Read tool"),
         ],
@@ -865,6 +869,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 _parse_branch_creation = _mod._parse_branch_creation
 _is_safe_start_point = _mod._is_safe_start_point
+_strip_shell_keyword = _mod.strip_shell_keyword
 
 
 class TestParseBranchCreation:
@@ -1008,3 +1013,105 @@ class TestIsSafeStartPoint:
     )
     def test_safe_start_point(self, ref, expected):
         assert _is_safe_start_point(ref) == expected
+
+
+class TestStripShellKeyword:
+    """Unit tests for strip_shell_keyword helper."""
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            ("do echo hi", "echo hi"),
+            ("then cat file", "cat file"),
+            ("else git status", "git status"),
+            ("elif test -f x", "test -f x"),
+            ("if true", "true"),
+            ("while true", "true"),
+            ("until false", "false"),
+            # recursive stripping
+            ("do if git reset --hard", "git reset --hard"),
+            ("do then echo hi", "echo hi"),
+            # keywords that don't prefix commands — left alone
+            ("done", "done"),
+            ("fi", "fi"),
+            ("for x in a b", "for x in a b"),
+            ("case x in", "case x in"),
+            ("esac", "esac"),
+            # 'do' inside 'docker' — not a keyword prefix
+            ("docker run image", "docker run image"),
+            # 'do' not at start
+            ("echo do something", "echo do something"),
+            # leading whitespace
+            ("  do echo hi", "echo hi"),
+            ("\tdo echo hi", "echo hi"),
+        ],
+        ids=[
+            "do-echo",
+            "then-cat",
+            "else-git",
+            "elif-test",
+            "if-true",
+            "while-true",
+            "until-false",
+            "recursive-do-if",
+            "recursive-do-then",
+            "done-passthrough",
+            "fi-passthrough",
+            "for-passthrough",
+            "case-passthrough",
+            "esac-passthrough",
+            "docker-not-keyword",
+            "do-not-at-start",
+            "leading-spaces",
+            "leading-tab",
+        ],
+    )
+    def test_strip(self, cmd, expected):
+        assert _strip_shell_keyword(cmd) == expected
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Shell control structure integration tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestShellControlStructures:
+    """Integration tests: commands inside for/while/if blocks are caught."""
+
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # for loop with cat
+            ("for x in a b c; do cat file.txt; done", 2, "Read tool"),
+            # if/then with cat
+            ("if true; then cat file.py; fi", 2, "Read tool"),
+            # while/do with grep
+            ("while true; do grep pattern src/; done", 2, "Grep tool"),
+            # for loop with ls (the original motivating example)
+            (
+                'for dir in /path/*; do ls -la "$dir"; done',
+                2,
+                "Glob tool",
+            ),
+            # nested: if inside do
+            ("for x in a; do if true; then cat f.py; fi; done", 2, "Read tool"),
+            # git safety inside control structure
+            ("if true; then git reset --hard; fi", 2, "FORBIDDEN"),
+            # safe command inside control structure — passes
+            ("for x in a b; do git status; done", 0, None),
+            ("if true; then make build; fi", 0, None),
+        ],
+        ids=[
+            "for-do-cat",
+            "if-then-cat",
+            "while-do-grep",
+            "for-do-ls",
+            "nested-if-in-do",
+            "git-deny-in-if",
+            "safe-in-for",
+            "safe-in-if",
+        ],
+    )
+    def test_control_structures(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
