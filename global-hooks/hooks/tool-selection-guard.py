@@ -106,6 +106,14 @@ RULES = [
     ),
     # ── Category B: Use right Python tooling (match auto-approve patterns) ──
     (
+        "python-json",
+        re.compile(r"^\s*python3?\s+-c\s+.*\bjson\b"),
+        re.compile(r"^\s*uv\s+run"),
+        "Use `jq` for JSON processing instead of python. "
+        "Example: `jq '.key'`, `jq -r '.[]'`, `jq -r '.items[] | .name'`. "
+        "If jq can't handle the logic, use `uv run python -c '...'`.",
+    ),
+    (
         "python",
         re.compile(r"^\s*python3?\s"),
         re.compile(r"^\s*uv\s+run"),
@@ -256,6 +264,30 @@ RULES = [
     ),
 ]
 
+# Rules to skip when checking pipe segments — these redirect to native tools
+# (Read, Grep, Glob, Edit, Write) that can't process piped command output.
+# When grep/cat/head/etc. appear after |, they're filtering command output,
+# not doing standalone file operations that native tools could replace.
+_PIPE_SEGMENT_SKIP = frozenset(
+    {
+        # Category A: native tool redirections
+        "cat-file",
+        "head-file",
+        "tail-file",
+        "grep",
+        "rg",
+        "find-name",
+        "ls-dir",
+        "sed-i",
+        "awk-redir",
+        "echo-redir",
+        "cat-heredoc",
+        # Category D: echo/printf after a pipe feed downstream, not the user
+        "echo-noop",
+        "printf-noop",
+    }
+)
+
 
 _SHELL_KEYWORD_PREFIX = re.compile(r"^\s*(do|then|else|elif|if|while|until)\s+")
 
@@ -335,6 +367,40 @@ def extract_subshells(cmd):
     for m in re.finditer(r"`([^`]+)`", cmd):
         inner.append(m.group(1).strip())
     return inner
+
+
+def split_pipes(command):
+    """Split a command on unquoted | while respecting quotes.
+
+    Handles both | and |& as pipe separators. Since split_commands has
+    already split on ||, any unquoted | in a subcmd is a pipe operator.
+    """
+    parts = []
+    current = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if c == "'" and not in_double:
+            in_single = not in_single
+            current.append(c)
+        elif c == '"' and not in_single:
+            in_double = not in_double
+            current.append(c)
+        elif c == "|" and not in_single and not in_double:
+            parts.append("".join(current).strip())
+            current = []
+            # Skip & in |&
+            if i + 1 < len(command) and command[i + 1] == "&":
+                i += 2
+                continue
+        else:
+            current.append(c)
+        i += 1
+    if current:
+        parts.append("".join(current).strip())
+    return [p for p in parts if p]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -842,8 +908,12 @@ def main():
     # The closure reads this; main() writes it before each check_rules call.
     fetch_seen = False
 
-    def check_rules(cmd):
-        """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match."""
+    def check_rules(cmd, skip_rules=None):
+        """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match.
+
+        skip_rules: frozenset of rule names to skip (used for pipe segments
+        where native-tool alternatives don't apply to piped output).
+        """
         # Strip shell control keywords (do, then, else, etc.) so rules can
         # match commands inside for/while/if blocks split on ';'.
         cmd = strip_shell_keyword(cmd)
@@ -851,7 +921,9 @@ def main():
         check_git_safety(cmd, fetch_seen=fetch_seen)
         # Tool selection rules (exit 2)
         normalized = strip_env_prefix(cmd)
-        for _name, pattern, exception, guidance in RULES:
+        for name, pattern, exception, guidance in RULES:
+            if skip_rules and name in skip_rules:
+                continue
             target = normalized if pattern.pattern.startswith("^") else cmd
             if pattern.search(target):
                 if exception and exception.search(cmd):
@@ -882,11 +954,24 @@ def main():
             sys.exit(2)
         else:
             check_rules(subcmd)
+            # Check pipe segments to catch guarded commands mid-pipeline.
+            # The full-command check above handles the first segment and pipe
+            # exceptions. This catches commands in later segments (e.g.,
+            # `oc get ... | python3 -c ...` catches the python3 usage).
+            pipe_segments = split_pipes(subcmd)
+            if len(pipe_segments) > 1:
+                for segment in pipe_segments[1:]:
+                    check_rules(segment, skip_rules=_PIPE_SEGMENT_SKIP)
         # Also check inside $() and `` substitutions
         for inner in extract_subshells(subcmd):
             if re.search(r"git\s+fetch\s+(upstream|origin)\b", inner):
                 fetch_seen = True
             check_rules(inner)
+            # Pipe-split subshell content too
+            inner_pipes = split_pipes(inner)
+            if len(inner_pipes) > 1:
+                for segment in inner_pipes[1:]:
+                    check_rules(segment, skip_rules=_PIPE_SEGMENT_SKIP)
 
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
     if len(subcmds) > 1 and os.path.exists("Makefile"):

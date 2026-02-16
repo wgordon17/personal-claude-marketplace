@@ -129,6 +129,9 @@ class TestPythonTooling:
         [
             ("python script.py", 2, "uv run"),
             ("python3 -c 'print(1)'", 2, "uv run"),
+            ("python3 -c 'import json; print(json.dumps({}))'", 2, "jq"),
+            ("python -c 'import sys,json; json.loads(x)'", 2, "jq"),
+            ("uv run python -c 'import json; ...'", 0, None),
             ("uv run script.py", 0, None),
             ("uv run python -c 'x=1'", 0, None),
             ("pip install requests", 2, "uv add"),
@@ -162,6 +165,9 @@ class TestPythonTooling:
         ids=[
             "python",
             "python3",
+            "python-json-standalone",
+            "python-json-sys",
+            "uv-run-python-json-allow",
             "uv-run-allow",
             "uv-run-python-allow",
             "pip-install",
@@ -447,6 +453,105 @@ class TestChainedCommands:
         ],
     )
     def test_chains(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pipe segment checking
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPipeSegments:
+    """Commands after | are checked for guarded tools."""
+
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # python-json in pipe → suggest jq
+            (
+                "oc get deploy -o json | python3 -c "
+                "'\"import sys,json; [print(a) for a in json.loads(sys.stdin.read())]\"'",
+                2,
+                "jq",
+            ),
+            (
+                "curl -s https://api.example.com | python -c "
+                "'\"import json,sys; print(json.load(sys.stdin))\"'",
+                2,
+                "jq",
+            ),
+            # plain python in pipe → suggest uv run
+            ("oc get deploy | python3 -c 'print(1)'", 2, "uv run"),
+            # multi-pipe: python in last segment
+            ("cmd1 | cmd2 | python3 -c 'print(1)'", 2, "uv run"),
+            # pager in pipe → still caught (interactive)
+            ("git log | less", 2, "Pagers"),
+            # editor in pipe → still caught (interactive)
+            ("cat file | vim -", 2, "Interactive editors"),
+            # pipe-exception rules skipped: these are legitimate pipeline usage
+            ("cat file | wc -l", 0, None),  # existing behavior preserved
+            ("git log | head -5", 0, None),  # existing behavior preserved
+            ("ps aux | tail -5", 0, None),  # existing behavior preserved
+            ("ls /path | sort", 0, None),  # existing behavior preserved
+            ("git log | grep fix", 0, None),  # grep after pipe filters output
+            ("oc get pods | grep Running", 0, None),  # grep after pipe filters output
+            # safe passthrough
+            ("oc get deploy | jq '.items[]'", 0, None),
+            ("curl -s url | jq '.data'", 0, None),
+            ("echo hello | wc -c", 0, None),
+            # python tooling rules still fire in pipe segments
+            ("cmd | pytest tests/", 2, "make py-test"),
+            # git safety in pipe segment
+            ("echo y | git reset --hard", 2, "FORBIDDEN"),
+            # chain + pipe combo
+            (
+                "cd /app && oc get deploy -o json | python3 -c "
+                "'\"import json,sys; print(json.load(sys.stdin))\"'",
+                2,
+                "jq",
+            ),
+            # env prefix in pipe segment
+            ("cmd | FOO=bar python3 -c 'import json; x'", 2, "jq"),
+            # subshell with pipe
+            ("echo $(cmd | python3 -c 'import json; x')", 2, "jq"),
+            ("result=$(oc get pods | python3 -c 'print(1)')", 2, "uv run"),
+            # |& variant
+            ("oc get pods |& python3 -c 'import json; x'", 2, "jq"),
+            # pipe in for loop
+            (
+                "for ns in a b; do oc get pods -n $ns | python3 -c 'print(1)'; done",
+                2,
+                "uv run",
+            ),
+        ],
+        ids=[
+            "python-json-oc-pipe",
+            "python-json-curl-pipe",
+            "python-plain-pipe",
+            "python-multi-pipe",
+            "less-in-pipe",
+            "vim-in-pipe",
+            "cat-pipe-wc-allow",
+            "head-pipe-allow",
+            "tail-pipe-allow",
+            "ls-pipe-sort-allow",
+            "grep-after-pipe-allow",
+            "grep-after-pipe-oc-allow",
+            "jq-pipe-allow",
+            "jq-curl-allow",
+            "echo-pipe-wc-allow",
+            "pytest-in-pipe",
+            "git-deny-in-pipe",
+            "chain-then-pipe",
+            "env-prefix-in-pipe",
+            "subshell-with-pipe-json",
+            "subshell-with-pipe-plain",
+            "pipe-and-variant",
+            "pipe-in-for-loop",
+        ],
+    )
+    def test_pipe_segments(self, command, expected_exit, expected_msg):
         result = run_bash(command)
         assert_guard(result, expected_exit, expected_msg)
 
@@ -956,6 +1061,7 @@ _spec.loader.exec_module(_mod)
 _parse_branch_creation = _mod._parse_branch_creation
 _is_safe_start_point = _mod._is_safe_start_point
 _strip_shell_keyword = _mod.strip_shell_keyword
+_split_pipes = _mod.split_pipes
 
 
 class TestParseBranchCreation:
@@ -1099,6 +1205,43 @@ class TestIsSafeStartPoint:
     )
     def test_safe_start_point(self, ref, expected):
         assert _is_safe_start_point(ref) == expected
+
+
+class TestSplitPipes:
+    """Unit tests for split_pipes parser."""
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            ("a | b", ["a", "b"]),
+            ("a", ["a"]),
+            ("a | b | c", ["a", "b", "c"]),
+            ("echo 'a | b'", ["echo 'a | b'"]),
+            ('echo "a | b"', ['echo "a | b"']),
+            ("a |& b", ["a", "b"]),
+            ("a | b |& c", ["a", "b", "c"]),
+            ("", []),
+            ("  a  |  b  ", ["a", "b"]),
+            (
+                "oc get deploy -o json 2>&1 | python3 -c 'import json'",
+                ["oc get deploy -o json 2>&1", "python3 -c 'import json'"],
+            ),
+        ],
+        ids=[
+            "simple-pipe",
+            "no-pipe",
+            "multi-pipe",
+            "single-quoted-pipe",
+            "double-quoted-pipe",
+            "pipe-and",
+            "mixed-pipes",
+            "empty",
+            "whitespace",
+            "real-world",
+        ],
+    )
+    def test_split(self, cmd, expected):
+        assert _split_pipes(cmd) == expected
 
 
 class TestStripShellKeyword:
