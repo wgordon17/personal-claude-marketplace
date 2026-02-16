@@ -43,14 +43,16 @@ RULES = [
     (
         "grep",
         re.compile(r"^\s*grep\b"),
-        re.compile(r"\|"),
-        "Use the Grep tool instead -- it's auto-approved with optimized access.",
+        None,
+        "Use the Grep tool instead of `grep`. For `| wc -l` use `output_mode: 'count'`. "
+        "For `| head` use `head_limit`.",
     ),
     (
         "rg",
         re.compile(r"^\s*rg\b"),
-        re.compile(r"\|"),
-        "Use the Grep tool instead -- it's auto-approved with optimized access.",
+        None,
+        "Use the Grep tool instead of `rg`. For `| wc -l` use `output_mode: 'count'`. "
+        "For `| head` use `head_limit`.",
     ),
     (
         "find-name",
