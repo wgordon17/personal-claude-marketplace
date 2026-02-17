@@ -712,7 +712,8 @@ class TestEnterPlanModeRedirect:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Non-Bash /tmp/ blocking (all tools)
+# Non-Bash /tmp/ blocking (write-oriented tools only)
+# Read/Grep/Glob are allowed — Claude Code stores task output files in /tmp/.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -720,21 +721,29 @@ class TestNonBashTmpBlocking:
     @pytest.mark.parametrize(
         "tool_name, file_path, expected_exit, expected_msg, path_key",
         [
-            ("Read", "/tmp/scratch.py", 2, "hack/tmp/", "file_path"),
+            # Write-oriented tools are blocked on /tmp/
             ("Write", "/tmp/output.json", 2, "hack/tmp/", "file_path"),
             ("Edit", "/tmp/config.yaml", 2, "hack/tmp/", "file_path"),
-            ("Grep", "/tmp/logs/", 2, "hack/tmp/", "path"),
-            ("Glob", "/tmp/scratch/", 2, "hack/tmp/", "path"),
+            ("NotebookEdit", "/tmp/notebook.ipynb", 2, "hack/tmp/", "file_path"),
+            # Read-oriented tools are allowed on /tmp/ (task output files live there)
+            ("Read", "/tmp/scratch.py", 0, None, "file_path"),
+            ("Grep", "/tmp/logs/", 0, None, "path"),
+            ("Glob", "/tmp/scratch/", 0, None, "path"),
+            ("Read", "/private/tmp/claude-501/tasks/abc.output", 0, None, "file_path"),
+            # hack/tmp/ always allowed
             ("Read", "hack/tmp/test.py", 0, None, "file_path"),
             ("Write", "hack/tmp/out.json", 0, None, "file_path"),
+            # Normal paths always allowed
             ("Read", "src/main.py", 0, None, "file_path"),
         ],
         ids=[
-            "read-tmp",
-            "write-tmp",
-            "edit-tmp",
-            "grep-tmp",
-            "glob-tmp",
+            "write-tmp-blocked",
+            "edit-tmp-blocked",
+            "notebook-tmp-blocked",
+            "read-tmp-allowed",
+            "grep-tmp-allowed",
+            "glob-tmp-allowed",
+            "read-task-output-allowed",
             "read-hack-tmp-allow",
             "write-hack-tmp-allow",
             "read-normal-allow",
