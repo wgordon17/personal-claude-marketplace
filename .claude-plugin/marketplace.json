@@ -94,7 +94,7 @@
     },
     {
       "name": "global-hooks",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "source": "./global-hooks",
       "description": "Global hooks: git safety, commit validation, pre-push review, tool selection",
       "category": "quality",
