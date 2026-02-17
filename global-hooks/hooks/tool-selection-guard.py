@@ -863,10 +863,15 @@ def main():
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
 
-    # ── /tmp/ guard for ALL tools (Read, Write, Edit, Grep, Glob, Bash) ──
-    # Fires before the permission layer so the agent gets guidance, not a prompt.
+    # ── /tmp/ guard for write-oriented tools (Write, Edit, NotebookEdit) ──
+    # Read/Grep/Glob are allowed — Claude Code stores task output files in /tmp/.
     file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
-    if file_path and "/tmp/" in file_path and "hack/tmp" not in file_path:
+    if (
+        file_path
+        and "/tmp/" in file_path
+        and "hack/tmp" not in file_path
+        and tool_name in ("Write", "Edit", "NotebookEdit")
+    ):
         print(
             "Use `hack/tmp/` (gitignored) instead of `/tmp/` for temporary files. "
             "Native tools (Read/Write/Edit) work on local files without extra permissions.",

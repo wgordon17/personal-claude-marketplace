@@ -1,7 +1,7 @@
 {
   "name": "global-hooks",
   "description": "Global hooks for git safety checks, commit message validation, pre-push review, and tool selection",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "author": {
     "name": "wgordon"
   }
