@@ -40,7 +40,7 @@ languages=()
 
 #### Knip — Dead Code & Unused Dependencies
 - **Detects:** Unused files, exports, dependencies, dev dependencies, unlisted binaries
-- **Detection:** `npx knip --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `npx knip --version 2>/dev/null ` (check exit code)
 - **Run:** `npx knip --reporter json 2>/dev/null`
 - **JSON output shape:**
 ```json
@@ -64,7 +64,7 @@ languages=()
 
 #### jscpd — Code Duplication
 - **Detects:** Exact and near-exact code duplicates across files
-- **Detection:** `npx jscpd --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `npx jscpd --version 2>/dev/null ` (check exit code)
 - **Run:** `npx jscpd --reporters json --output {run_dir}/discovery/ --min-lines 5 --min-tokens 50 . 2>/dev/null`
 - **JSON output shape ({run_dir}/discovery/jscpd-report.json):**
 ```json
@@ -104,7 +104,7 @@ languages=()
 
 #### dependency-cruiser — Architecture & Circular Dependencies
 - **Detects:** Circular dependencies, layer violations, orphan modules
-- **Detection:** `npx depcruise --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `npx depcruise --version 2>/dev/null ` (check exit code)
 - **Run:** `npx depcruise --output-type json --config .dependency-cruiser.cjs src/ 2>/dev/null || npx depcruise --output-type json src/ 2>/dev/null`
 - **JSON output shape:**
 ```json
@@ -134,14 +134,14 @@ languages=()
 
 #### Madge — Circular Dependencies (simpler alternative)
 - **Detects:** Circular dependencies specifically
-- **Detection:** `npx madge --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `npx madge --version 2>/dev/null ` (check exit code)
 - **Run:** `npx madge --json --circular . 2>/dev/null`
 - **JSON output:** Array of circular dependency chains: `[["a.ts", "b.ts", "a.ts"]]`
 - **Fallback:** Same as dependency-cruiser fallback.
 
 #### ESLint — Code Quality & Complexity
 - **Detects:** Code quality issues, complexity, style violations
-- **Detection:** `npx eslint --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `npx eslint --version 2>/dev/null ` (check exit code)
 - **Run:** `npx eslint --format json . 2>/dev/null` (respects project .eslintrc)
 - **Note:** Only useful if the project already has ESLint configured. Don't run with default config.
 - **Fallback:** Agent manual analysis.
@@ -152,7 +152,7 @@ languages=()
 
 #### Vulture — Dead Code
 - **Detects:** Unused functions, classes, variables, imports, unreachable code
-- **Detection:** `uvx vulture --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `uvx vulture --version 2>/dev/null ` (check exit code)
 - **Run:** `uvx vulture . --min-confidence 80 2>/dev/null`
 - **Output format (stdout, not JSON):**
 ```
@@ -165,14 +165,14 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
 
 #### deadcode — Dead Code (with auto-fix capability)
 - **Detects:** Similar to Vulture but with more detection rules and auto-fix
-- **Detection:** `uvx deadcode --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `uvx deadcode --version 2>/dev/null ` (check exit code)
 - **Run:** `uvx deadcode . 2>/dev/null` (report only, no auto-fix during discovery)
 - **Output format:** Similar to Vulture (stdout)
 - **Fallback:** Vulture or agent analysis.
 
 #### radon — Cyclomatic Complexity
 - **Detects:** Functions/methods with high cyclomatic complexity
-- **Detection:** `uvx radon --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `uvx radon --version 2>/dev/null ` (check exit code)
 - **Run:** `uvx radon cc -j . -n C 2>/dev/null` (`-n C` = only report grade C or worse, `-j` = JSON)
 - **JSON output shape:**
 ```json
@@ -196,7 +196,7 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
 
 #### Bandit — Security
 - **Detects:** Common security issues in Python code (OWASP-aligned)
-- **Detection:** `uvx bandit --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `uvx bandit --version 2>/dev/null ` (check exit code)
 - **Run:** `uvx bandit -r . -f json -ll 2>/dev/null` (`-ll` = medium severity and above)
 - **JSON output shape:**
 ```json
@@ -220,7 +220,7 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
 
 #### ruff — Code Quality & Imports
 - **Detects:** Lint issues, unused imports, code style violations
-- **Detection:** `uvx ruff --version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `uvx ruff --version 2>/dev/null ` (check exit code)
 - **Run:** `uvx ruff check --output-format json . 2>/dev/null`
 - **JSON output shape:**
 ```json
@@ -243,9 +243,9 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
 
 #### Semgrep — Security Patterns
 - **Detects:** Security vulnerabilities, code patterns matching known bad practices
-- **Detection:** `env -u HTTPS_PROXY -u HTTP_PROXY uvx semgrep --version 2>/dev/null && echo "available" || echo "unavailable"`
-- **Run:** `env -u HTTPS_PROXY -u HTTP_PROXY uvx semgrep --config auto --json --quiet . 2>/dev/null`
-- **Note:** Semgrep crashes if `HTTPS_PROXY` or `HTTP_PROXY` are set to empty strings (common in Claude Code environments). The `env -u` prefix unsets them for the subprocess.
+- **Detection:** `unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --version 2>/dev/null` (check exit code)
+- **Run:** `unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --config auto --json --quiet . 2>/dev/null`
+- **Note:** Semgrep crashes if ANY proxy variables (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, and their lowercase variants) are set to empty strings — common in Claude Code environments. ALL six proxy variables must be unset before running semgrep. The `unset` prefix handles this reliably.
 - **JSON output shape:**
 ```json
 {
@@ -267,13 +267,13 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
   ]
 }
 ```
-- **Auto-fix support:** `env -u HTTPS_PROXY -u HTTP_PROXY uvx semgrep --config auto --autofix` (used in Phase 3, not Phase 1)
+- **Auto-fix support:** `unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --config auto --autofix` (used in Phase 3, not Phase 1)
 - **Extraction:** Each result -> one security finding.
 - **Fallback:** Agent OWASP walkthrough with pattern matching via Grep.
 
 #### gitleaks — Secret Detection
 - **Detects:** Hardcoded secrets, API keys, passwords, tokens in code and git history
-- **Detection:** `go run github.com/gitleaks/gitleaks/v8@latest version 2>/dev/null && echo "available" || echo "unavailable"`
+- **Detection:** `go run github.com/gitleaks/gitleaks/v8@latest version 2>/dev/null ` (check exit code)
 - **Run:** `go run github.com/gitleaks/gitleaks/v8@latest detect --report-format json --report-path {run_dir}/discovery/gitleaks.json --no-banner 2>/dev/null`
 - **Note:** Uses `go run` to compile and run without permanent installation, like `uvx` for Python and `npx` for JS. Requires Go to be installed.
 - **JSON output shape ({run_dir}/discovery/gitleaks.json):**
@@ -301,84 +301,60 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
 
 ---
 
-## Phase 0 Detection Script
+## Phase 0 Detection Strategy
 
-The orchestrator runs this during Phase 0 to detect languages and available tools.
-Results are written to `{run_dir}/available-tools.json`.
+The orchestrator detects tools during Phase 0 using **individual Bash version checks** (not a monolithic script). Each tool is checked with a simple version command — if exit code is 0, the tool is available.
 
-```bash
-#!/bin/bash
-# Tool detection script for /unfuck Phase 0
-# Outputs JSON to {run_dir}/available-tools.json
+**Do NOT use `|| echo` or `&& echo` patterns** — these are blocked by the tool-selection-guard hook. Instead, run each version command independently and check its exit code.
 
-PROJECT_ROOT="$(pwd)"
-OUTPUT_FILE="{run_dir}/available-tools.json"
+**Do NOT use `env -u` for proxy workarounds** — this does not reliably fix semgrep proxy issues. If a tool fails, mark it as unavailable and fall back to agent analysis.
 
-# Detect languages
-languages="["
-[ -f package.json ] || [ -f tsconfig.json ] && languages+="\"javascript\","
-[ -f pyproject.toml ] || [ -f setup.py ] || [ -f requirements.txt ] && languages+="\"python\","
-[ -f go.mod ] && languages+="\"go\","
-[ -f Cargo.toml ] && languages+="\"rust\","
-[ -f pom.xml ] || [ -f build.gradle ] && languages+="\"java\","
-[ -f Gemfile ] && languages+="\"ruby\","
-[ -f composer.json ] && languages+="\"php\","
-languages="${languages%,}]"  # Remove trailing comma
+### Detection approach
 
-# Detect tools
-detect_tool() {
-  local name="$1"
-  local cmd="$2"
-  if eval "$cmd" > /dev/null 2>&1; then
-    local version
-    version=$(eval "$cmd" 2>/dev/null | head -1)
-    echo "\"$name\": {\"available\": true, \"version\": \"$version\"}"
-  else
-    echo "\"$name\": {\"available\": false, \"fallback\": \"agent-analysis\"}"
-  fi
-}
+Run version checks as individual Bash commands. Group compatible tools into parallel calls:
 
-tools="{"
-tools+=$(detect_tool "knip" "npx knip --version")","
-tools+=$(detect_tool "jscpd" "npx jscpd --version")","
-tools+=$(detect_tool "dependency-cruiser" "npx depcruise --version")","
-tools+=$(detect_tool "madge" "npx madge --version")","
-tools+=$(detect_tool "eslint" "npx eslint --version")","
-tools+=$(detect_tool "vulture" "uvx vulture --version")","
-tools+=$(detect_tool "deadcode" "uvx deadcode --version")","
-tools+=$(detect_tool "radon" "uvx radon --version")","
-tools+=$(detect_tool "bandit" "uvx bandit --version")","
-tools+=$(detect_tool "ruff" "uvx ruff --version")","
-tools+=$(detect_tool "semgrep" "env -u HTTPS_PROXY -u HTTP_PROXY uvx semgrep --version")","
-tools+=$(detect_tool "gitleaks" "go run github.com/gitleaks/gitleaks/v8@latest version")
-tools+="}"
+```
+# Python tools — run in a single Bash call, semicolons between commands
+uvx vulture --version 2>/dev/null; uvx ruff --version 2>/dev/null; uvx radon --version 2>/dev/null; uvx bandit --version 2>/dev/null
 
-# Detect test runner
-test_runner="unknown"
-[ -f Makefile ] && grep -q "^test:" Makefile && test_runner="make test"
-[ -f pytest.ini ] || [ -f pyproject.toml ] && grep -q "pytest" pyproject.toml 2>/dev/null && test_runner="uv run pytest"
-[ -f package.json ] && grep -q "\"test\"" package.json && test_runner="npm test"
-[ -f go.mod ] && test_runner="go test ./..."
-[ -f Cargo.toml ] && test_runner="cargo test"
+# JS/TS tools — run in a single Bash call
+npx knip --version 2>/dev/null; npx jscpd --version 2>/dev/null
 
-# Detect formatter
-formatter="unknown"
-[ -f Makefile ] && grep -q "^format:" Makefile && formatter="make format"
-[ -f pyproject.toml ] && grep -q "ruff" pyproject.toml 2>/dev/null && formatter="uvx ruff format . && uvx ruff check --fix ."
-[ -f .prettierrc ] || [ -f .prettierrc.json ] && formatter="npx prettier --write ."
+# Language-agnostic tools (unset proxy vars to avoid semgrep crash)
+unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --version 2>/dev/null
+```
 
-# Write output
-cat > "$OUTPUT_FILE" << JSONEOF
+Parse stdout for version strings. If a command exits non-zero or produces no output, mark the tool as unavailable in `{run_dir}/available-tools.json`.
+
+### Language detection
+
+Use Glob to check for indicator files (not shell scripts):
+```
+Glob("pyproject.toml")     # Python
+Glob("package.json")       # JavaScript/TypeScript
+Glob("go.mod")             # Go
+Glob("Cargo.toml")         # Rust
+```
+
+### Test runner and formatter detection
+
+Read `Makefile`, `pyproject.toml`, or `package.json` with the Read tool to determine the test and format commands. Do not use `grep -q` in Bash — use the Grep tool instead.
+
+### Output format
+
+Write `{run_dir}/available-tools.json` using the Write tool:
+```json
 {
-  "project_root": "$PROJECT_ROOT",
-  "languages": $languages,
-  "tools": $tools,
-  "test_runner": "$test_runner",
-  "formatter": "$formatter"
+  "project_root": "/absolute/path",
+  "languages": ["python"],
+  "tools": {
+    "vulture": {"available": true, "version": "2.14"},
+    "semgrep": {"available": false, "fallback": "agent-analysis"},
+    "ruff": {"available": true, "version": "0.15.1"}
+  },
+  "test_runner": "make test",
+  "formatter": "make format"
 }
-JSONEOF
-
-echo "Tool detection complete. Results written to $OUTPUT_FILE"
 ```
 
 ## Fallback Strategy Summary
