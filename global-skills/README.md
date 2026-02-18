@@ -6,7 +6,7 @@ Essential skills for code quality, git operations, LSP navigation, test executio
 
 **DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
 
-## Skills (8)
+## Skills (11)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -15,8 +15,10 @@ Essential skills for code quality, git operations, LSP navigation, test executio
 | `/git-history` | Git history manipulation (git-branchless) | Manual |
 | `/git-hooks-install` | Install defense-in-depth git hooks | Manual |
 | `/git-hooks-uninstall` | Remove git hooks from project | Manual |
+| `/incremental-planning` | Incremental planning workflow (replaces native plan mode) | Manual |
 | `/lsp-navigation` | Semantic code navigation | PROACTIVE |
 | `/test-runner` | Efficient test execution patterns | Manual |
+| `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
 | `/uv-python` | Python tooling enforcement (uv over pip) | PROACTIVE |
 
 ## Usage
