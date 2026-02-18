@@ -240,74 +240,6 @@ Before running ANY test command, verify:
 - [ ] **Targeted re-run** - If fixing failures, only re-running what failed
 - [ ] **Correct flags** - Using appropriate pytest/pre-commit flags for the situation
 
-## Common Anti-Patterns to Avoid
-
-### ❌ Anti-Pattern 1: Parallel Execution
-
-```bash
-# WRONG: Running multiple test commands in parallel
-uv run pre-commit run --all-files & uv run pytest &
-```
-
-**Why wrong**: Can't observe failures immediately, wastes time.
-
-**Correct approach**:
-```bash
-uv run pre-commit run --all-files 2>&1
-# [observe output]
-uv run pytest --tb=short -v 2>&1
-# [observe output]
-```
-
-### ❌ Anti-Pattern 2: Full Suite Re-runs
-
-```bash
-# WRONG: Re-running entire suite after fixing one test
-# (You fixed test_auth.py::test_login_flow)
-uv run pytest  # runs ALL tests again
-```
-
-**Why wrong**: Wastes minutes re-running tests that already passed.
-
-**Correct approach**:
-```bash
-# Run only what failed
-uv run pytest tests/auth/test_login.py::test_login_flow -vv
-```
-
-### ❌ Anti-Pattern 3: Not Observing Output
-
-```bash
-# WRONG: Chaining commands without checking results
-uv run pytest && uv run pre-commit run --all-files && echo "Done"
-```
-
-**Why wrong**: If pytest fails, you still run pre-commit unnecessarily.
-
-**Correct approach**:
-```bash
-# Run, observe, decide next step
-uv run pytest --tb=short -v 2>&1
-# [read output, see what failed]
-# [fix issues]
-# [re-run specific failures]
-```
-
-### ❌ Anti-Pattern 4: Ignoring Smart Flags
-
-```bash
-# WRONG: Not using --lf after fixing failures
-uv run pytest  # runs everything
-```
-
-**Why wrong**: Misses opportunity for fast targeted re-run.
-
-**Correct approach**:
-```bash
-# Use --lf to re-run only what failed before
-uv run pytest --lf -vv
-```
-
 ## Advanced Techniques
 
 ### Pytest: Running Related Tests
@@ -437,13 +369,3 @@ The agent will:
 
 **Note:** The test-runner agent does NOT fix code. For fixes, spawn `project-dev:bug-fixer` with the failure report, then have bug-fixer spawn test-runner for verification.
 
-## Summary: Critical Rules
-
-1. **Sequential execution** - Run commands one at a time, observe output fully
-2. **Targeted re-runs** - Only re-run what failed, never full suite
-3. **Smart flags** - Use `--lf`, `-k`, specific test paths for efficiency
-4. **Parse failures** - Extract specific test/file names from output
-5. **Correct order** - Pre-commit before pytest when both needed
-6. **UV integration** - Always use `uv run` for test commands
-
-Follow these patterns to save **minutes** on every test iteration.

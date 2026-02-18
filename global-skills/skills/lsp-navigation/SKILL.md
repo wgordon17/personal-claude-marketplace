@@ -260,11 +260,3 @@ Current configuration (installed from `private-claude-marketplace`):
 | gopls-go | Go | `gopls serve` |
 | vscode-html-css-npx | HTML/CSS | `npx -y vscode-langservers-extracted vscode-html-language-server --stdio` |
 
-## Best Practices
-
-1. **Start with `hover`** to verify LSP sees the symbol correctly
-2. **Use `documentSymbol`** to explore unfamiliar files
-3. **Use `goToDefinition`** to trace imports and dependencies
-4. **Use `findReferences`** to understand impact of changes
-5. **Use `incomingCalls`/`outgoingCalls`** for refactoring analysis
-6. **Fall back to Grep** only for text patterns, not symbols
