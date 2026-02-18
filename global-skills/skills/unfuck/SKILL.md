@@ -39,12 +39,11 @@ Phase 4 verifies everything passes and generates a report.
 ## Workflow Phases
 
 ### Phase 0: Index & Setup
-1. Run `sc:index-repo` to create PROJECT_INDEX.md (~3K token project reference)
-2. Detect project languages from config files (package.json, pyproject.toml, go.mod, etc.)
-3. Detect available external tools (Knip, Semgrep, radon, gitleaks, etc.) — see `references/external-tools.md`
-4. Create feature branch: `cleanup/unfuck-YYYY-MM-DD`
-5. Create `hack/unfuck/YYYY-MM-DD/discovery/` directory for agent output (date-scoped per run)
-6. Create TeamCreate swarm: `unfuck-cleanup`
+1. Create TeamCreate swarm: `cleanup-swarm`
+2. Spawn parallel setup teammates for: repo indexing (`sc:index-repo`), language detection, tool detection
+3. Create feature branch: `cleanup/comprehensive-YYYY-MM-DD` (from `origin/main`)
+4. Create `hack/unfuck/YYYY-MM-DD/discovery/` directory for agent output (date-scoped per run)
+5. Collect setup results and build context bundle for discovery agents
 
 ### Phase 1: Discovery (7 parallel agents)
 
@@ -69,41 +68,37 @@ manually using LSP, Grep, and file reading. See `references/external-tools.md` f
 
 ### Phase 2: Synthesis & Planning
 
-The orchestrator (not a subagent) directly:
+A dedicated **opus synthesis teammate** (not the orchestrator) performs synthesis to avoid filling the lead agent's context:
 1. Reads all 7 discovery JSON files
 2. Deduplicates overlapping findings across agents
 3. Cross-references compound patterns (dead + divergent = safe to remove)
 4. Prioritizes: security → dead code → duplicates → AI slop → complexity → architecture → docs
 5. Writes `hack/unfuck/YYYY-MM-DD/cleanup-plan.md` with per-finding detail
 6. Creates TaskList with one task per category
-7. **AskUserQuestion** if: public API deletions, 5+ file architectural changes, ambiguous findings,
-   security policy decisions, or >100 total findings
+7. Sends summary to orchestrator; orchestrator **AskUserQuestion** if: public API deletions,
+   5+ file architectural changes, ambiguous findings, security policy decisions, or >100 total findings
 
-### Phase 3: Implementation (sequential per category)
+### Phase 3: Implementation (persistent collaborative team)
 
-For each category in priority order, spawn an implementation agent with its full prompt from
-`references/implementation-agents.md`. Each agent:
-- Receives filtered findings for its category
-- Uses paired existing skills for execution (sc:cleanup, project-dev:refactor, code-simplifier, etc.)
-- Applies custom fix strategies from its prompt
-- After EACH category: run tests → run formatter → commit or rollback (git stash on failure)
+A single persistent team of 4 specialists works through all categories sequentially together:
 
-| Agent | Category | Paired Skills | Model | Commit Format |
-|-------|----------|---------------|-------|---------------|
-| fix-security | Security fixes | `security-review` | sonnet | `fix(security): <vuln>` |
-| fix-dead-code | Dead code removal | `sc:cleanup --aggressive` | sonnet | `refactor: removes dead code` |
-| fix-duplicates | Duplicate consolidation | `project-dev:refactor` | sonnet | `refactor: consolidates duplicates` |
-| fix-ai-slop | AI slop simplification | `code-simplifier`, `sc:improve` | opus | `refactor: simplifies over-engineered code` |
-| fix-complexity | Complexity reduction | `sc:improve --type maintainability` | sonnet | `refactor: reduces complexity` |
-| fix-architecture | Architecture unification | `project-dev:refactor`, `superclaude:architect` | sonnet | `refactor: unifies <pattern>` |
-| fix-documentation | Documentation sync | `docs-sync` | sonnet | `docs: syncs documentation` |
+| Teammate | Role | Model | Responsibility |
+|----------|------|-------|----------------|
+| impl-writer | Implementer | sonnet | Applies fixes from cleanup plan per category |
+| impl-qa | Reviewer | opus | Reviews changes for correctness, verifies with LSP |
+| impl-tester | Tester | sonnet | Runs test suite and formatters after each category |
+| impl-docs | Documenter | sonnet | Updates documentation affected by code changes |
+
+**Workflow per category:** writer implements → QA reviews → tester verifies → docs updates → commit or rollback.
+The orchestrator assigns categories in priority order (security → dead code → duplicates → AI slop → complexity → architecture → docs). The team commits after each category passes.
 
 ### Phase 4: Verification & Report
 
 1. Run full test suite via `test-execution:test-runner`
 2. Run `project-dev:code-quality` on all modified files
 3. Apply `superpowers:verification-before-completion` patterns
-4. Generate `hack/unfuck/YYYY-MM-DD/cleanup-report.md` with:
+4. Invoke `sc:reflect` to verify completeness against the original cleanup plan
+5. Generate `hack/unfuck/YYYY-MM-DD/cleanup-report.md` with:
    - Summary stats (files modified, lines added/removed, net delta, issues fixed by category)
    - Per-category breakdown with specific changes and commit SHAs
    - Blocked items (test failures, needs-review) with stash names and manual fix guidance
@@ -114,7 +109,7 @@ For each category in priority order, spawn an implementation agent with its full
 
 ## Git Workflow
 
-- Creates feature branch: `cleanup/unfuck-YYYY-MM-DD`
+- Creates feature branch: `cleanup/comprehensive-YYYY-MM-DD` (from `origin/main`)
 - One commit per cleanup category (security, dead-code, duplicates, ai-slop, complexity, architecture, docs)
 - Conventional commit messages
 - Blocked categories are stashed with descriptive names for manual recovery
