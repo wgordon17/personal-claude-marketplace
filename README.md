@@ -53,9 +53,9 @@ Those directories contain installed/cached versions of plugins. Always edit the 
 
 | Plugin | Description | Components |
 |--------|-------------|------------|
-| global-skills | Code quality & tooling skills | 8 skills |
+| global-skills | Code quality & tooling skills | 11 skills |
 | global-commands | Session & project management | 6 commands |
-| global-hooks | Git safety & validation | 3 hooks |
+| global-hooks | Git safety & validation | 2 hooks + 1 utility |
 
 #### global-skills
 
@@ -64,8 +64,10 @@ Those directories contain installed/cached versions of plugins. Always edit the 
 - `/file-audit` - Deep code quality audit system
 - `/git-history` - Git history manipulation (git-branchless)
 - `/git-hooks-install` & `/git-hooks-uninstall` - Git hooks utilities
+- `/incremental-planning` - Incremental planning workflow (replaces native plan mode)
 - `/lsp-navigation` - PROACTIVE semantic code navigation
 - `/test-runner` - Efficient test execution patterns
+- `/unfuck` - Comprehensive one-shot repo cleanup
 - `/uv-python` - PROACTIVE Python tooling enforcement
 
 #### global-commands
