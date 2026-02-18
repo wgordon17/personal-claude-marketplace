@@ -9,6 +9,7 @@ guidance toward native tools, auto-approved commands, and simpler patterns.
 Also enforces git safety rules (consolidated from git-safety-check.sh).
 """
 
+import datetime
 import functools
 import json
 import logging
@@ -264,6 +265,240 @@ RULES = [
         "Interactive git add will hang. Use `git add` with specific file paths instead.",
     ),
 ]
+
+# ── Category F: Authenticated URL fetch guard ──
+# Each rule: (name, url_pattern, guidance_message)
+# url_pattern: regex matched against the full URL
+AUTH_URL_RULES = [
+    # GitHub
+    (
+        "github-api",
+        re.compile(r"api\.github\.com"),
+        "This URL targets the GitHub API which requires authentication. "
+        "Use the `gh` CLI instead. Example: `gh api repos/OWNER/REPO`.",
+    ),
+    (
+        "github-auth-content",
+        re.compile(r"github\.com/[^/]+/[^/]+/(settings|pulls|issues|actions|security)"),
+        "This GitHub URL requires authentication to return useful content. "
+        "Use the `gh` CLI instead. Example: `gh pr list`, `gh issue list`, `gh run list`.",
+    ),
+    # GitLab (public)
+    (
+        "gitlab-api",
+        re.compile(r"gitlab\.com/api/"),
+        "This URL targets the GitLab API which requires authentication. "
+        "Use `glab api` instead. Example: `glab api projects/:id/issues`.",
+    ),
+    (
+        "gitlab-raw",
+        re.compile(r"gitlab\.com/.+/(-/raw/|-/blob/)"),
+        "This GitLab URL points to raw/blob content which may require authentication. "
+        "Use `glab` CLI or clone the repo locally.",
+    ),
+    # GitLab (internal — entire domain)
+    (
+        "gitlab-internal",
+        re.compile(r"gitlab\.internal\.example\.com"),
+        "This URL is on internal GitLab (SSO-gated). "
+        "Use `glab` CLI with the appropriate remote, or clone the repo locally.",
+    ),
+    # Google
+    (
+        "google-docs",
+        re.compile(r"docs\.google\.com/document/"),
+        "Google Docs requires authentication. "
+        "Use a Google MCP tool or `gcloud` CLI to access document content.",
+    ),
+    (
+        "google-drive",
+        re.compile(r"drive\.google\.com/(file|drive)/"),
+        "Google Drive requires authentication. "
+        "Use a Google MCP tool or `gcloud` CLI to access files.",
+    ),
+    (
+        "google-sheets",
+        re.compile(r"sheets\.google\.com/"),
+        "Google Sheets requires authentication. "
+        "Use a Google MCP tool or `gcloud` CLI to access spreadsheet data.",
+    ),
+    # Atlassian / Jira
+    (
+        "atlassian-api",
+        re.compile(r"[a-z0-9-]+\.atlassian\.net/(rest/api|wiki)/"),
+        "This Atlassian URL requires authentication. Use the Atlassian MCP tools instead.",
+    ),
+    (
+        "jira-server",
+        re.compile(r"jira\.[a-z0-9-]+\.(com|org|net)/"),
+        "This Jira server URL requires authentication. "
+        "Use the `jira` CLI or Atlassian MCP tools instead.",
+    ),
+    # Slack
+    (
+        "slack-api",
+        re.compile(r"(api|hooks)\.slack\.com/"),
+        "This Slack URL requires authentication. "
+        "Use the Slack MCP tools or access Slack via Playwright MCP.",
+    ),
+]
+
+
+_URL_LOG_DIR = os.environ.get("URL_GUARD_LOG_DIR", str(Path.home() / ".claude" / "logs"))
+
+
+def _log_url_event(url, rule_name, action, tool, phase="pre", **extra):
+    """Append a JSONL entry to the URL guard audit log."""
+    try:
+        log_dir = Path(_URL_LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "phase": phase,
+            "url": url,
+            "rule": rule_name,
+            "action": action,
+            "tool": tool,
+            **extra,
+        }
+        with open(log_dir / "url-guard.log", "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass  # Fail silently — logging should never block the guard
+
+
+def _extract_urls(text):
+    """Extract URLs from a string (command line or text)."""
+    return re.findall(r"https?://[^\s\"'<>]+", text)
+
+
+def _check_url_rules(url):
+    """Check a URL against AUTH_URL_RULES. Returns (name, guidance) or None."""
+    for name, pattern, guidance in AUTH_URL_RULES:
+        if pattern.search(url):
+            return (name, guidance)
+    return None
+
+
+def _check_fetch_command(cmd):
+    """Check curl/wget commands for authenticated URLs. Exits 2 on match.
+
+    Returns True if the command was a curl/wget (so caller knows to log),
+    or False if not a fetch command.
+    """
+    normalized = strip_env_prefix(cmd)
+    if not re.match(r"^\s*(curl|wget)\b", normalized):
+        return False
+
+    # ALLOW_FETCH=1 bypass — agent has considered alternatives
+    if re.match(r"^\s*ALLOW_FETCH=1\s", cmd):
+        urls = _extract_urls(cmd)
+        for url in urls:
+            _log_url_event(url, None, "bypassed", "Bash")
+        return True
+
+    urls = _extract_urls(cmd)
+    for url in urls:
+        result = _check_url_rules(url)
+        if result:
+            rule_name, guidance = result
+            _log_url_event(url, rule_name, "blocked", "Bash")
+            print(
+                f"{guidance}\n"
+                "If you've confirmed raw fetch is appropriate, "
+                "prefix with `ALLOW_FETCH=1`.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        else:
+            _log_url_event(url, None, "allowed", "Bash")
+    return True
+
+
+# Patterns indicating authentication failure in HTTP responses
+_AUTH_FAIL_PATTERNS = [
+    re.compile(r"HTTP/[\d.]+ 401\b"),
+    re.compile(r"HTTP/[\d.]+ 403\b"),
+    re.compile(r"HTTP/[\d.]+ 407\b"),
+    re.compile(r"curl: \(22\).*40[1379]"),
+    re.compile(r"Unauthorized", re.IGNORECASE),
+    re.compile(r"Access Denied", re.IGNORECASE),
+    re.compile(r"Login Required", re.IGNORECASE),
+    re.compile(r"sign.?in", re.IGNORECASE),
+    re.compile(r"SSO.*redirect", re.IGNORECASE),
+]
+
+_HTTP_STATUS_RE = re.compile(r"HTTP/[\d.]+ (\d{3})\b")
+
+
+def _detect_auth_failure(text):
+    """Check response text for auth failure indicators.
+
+    Returns (auth_failed: bool, status_code: int | None).
+    """
+    if not text:
+        return False, None
+
+    status_match = _HTTP_STATUS_RE.search(text)
+    status_code = int(status_match.group(1)) if status_match else None
+
+    for pattern in _AUTH_FAIL_PATTERNS:
+        if pattern.search(text):
+            return True, status_code
+
+    return False, status_code
+
+
+def _handle_post_tool_use(data):
+    """Handle PostToolUse events: log response codes for fetch commands."""
+    tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+    tool_response = data.get("tool_response", {})
+
+    if tool_name == "Bash":
+        command = tool_input.get("command", "")
+        normalized = strip_env_prefix(command)
+        if not re.match(r"^\s*(curl|wget)\b", normalized):
+            return
+        urls = _extract_urls(command)
+        response_text = ""
+        if isinstance(tool_response, dict):
+            response_text = str(tool_response.get("stdout", "")) + str(
+                tool_response.get("stderr", "")
+            )
+        elif isinstance(tool_response, str):
+            response_text = tool_response
+        auth_failed, status_code = _detect_auth_failure(response_text)
+        for url in urls:
+            _log_url_event(
+                url,
+                None,
+                "auth_failed" if auth_failed else "success",
+                "Bash",
+                phase="post",
+                response_code=status_code,
+                auth_failed=auth_failed,
+            )
+    elif tool_name == "WebFetch":
+        url = tool_input.get("url", "")
+        if not url:
+            return
+        response_text = ""
+        if isinstance(tool_response, dict):
+            response_text = str(tool_response)
+        elif isinstance(tool_response, str):
+            response_text = tool_response
+        auth_failed, status_code = _detect_auth_failure(response_text)
+        _log_url_event(
+            url,
+            None,
+            "auth_failed" if auth_failed else "success",
+            "WebFetch",
+            phase="post",
+            response_code=status_code,
+            auth_failed=auth_failed,
+        )
+
 
 # Rules to skip when checking pipe segments — these redirect to native tools
 # (Read, Grep, Glob, Edit, Write) that can't process piped command output.
@@ -928,11 +1163,31 @@ def main():
         )
         sys.exit(0)
 
+    # PostToolUse: observational logging only (no blocking)
+    hook_event = data.get("hook_event_name", "PreToolUse")
+    if hook_event == "PostToolUse":
+        _handle_post_tool_use(data)
+        sys.exit(0)
+
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
 
     _guard_tmp_path(tool_name, tool_input)
     _guard_plan_mode(tool_name)
+
+    # WebFetch: check URL against auth rules
+    if tool_name == "WebFetch":
+        url = tool_input.get("url", "")
+        if url:
+            result = _check_url_rules(url)
+            if result:
+                rule_name, guidance = result
+                _log_url_event(url, rule_name, "blocked", "WebFetch")
+                print(guidance, file=sys.stderr)
+                sys.exit(2)
+            else:
+                _log_url_event(url, None, "allowed", "WebFetch")
+        sys.exit(0)
 
     if tool_name != "Bash":
         sys.exit(0)
@@ -944,6 +1199,9 @@ def main():
     # Andon cord: GUARD_BYPASS=1 prefix skips all rule checks.
     if command.startswith("GUARD_BYPASS=1 "):
         sys.exit(0)
+
+    # Check curl/wget commands for authenticated URLs (before rule checks)
+    _check_fetch_command(command)
 
     subcmds = split_commands(command)
     fetch_seen = False

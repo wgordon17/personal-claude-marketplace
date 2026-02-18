@@ -407,6 +407,169 @@ class TestPassthrough:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Category F: URL fetch guard (curl/wget + WebFetch)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def run_webfetch(url: str) -> subprocess.CompletedProcess:
+    """Shorthand: invoke guard as WebFetch tool."""
+    return run_guard("WebFetch", {"url": url, "prompt": "test"})
+
+
+class TestURLFetchGuard:
+    """Bash curl/wget commands against authenticated service URLs."""
+
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # BLOCKED: GitHub API
+            ("curl https://api.github.com/repos/org/repo", 2, "gh"),
+            ("curl -s https://api.github.com/repos/org/repo/pulls", 2, "gh"),
+            ("wget https://api.github.com/user", 2, "gh"),
+            # BLOCKED: GitHub auth-gated content
+            ("curl https://github.com/org/repo/settings", 2, "gh"),
+            ("curl https://github.com/org/repo/pulls", 2, "gh"),
+            ("curl https://github.com/org/repo/issues", 2, "gh"),
+            ("curl https://github.com/org/repo/actions", 2, "gh"),
+            ("curl https://github.com/org/repo/security", 2, "gh"),
+            # BLOCKED: GitLab internal (entire domain)
+            (
+                "wget https://gitlab.internal.example.com/service/foo/-/raw/main/file.go",
+                2,
+                "glab",
+            ),
+            ("curl https://gitlab.internal.example.com/some/project", 2, "glab"),
+            # BLOCKED: GitLab public API/raw
+            ("curl https://gitlab.com/api/v4/projects", 2, "glab"),
+            ("curl https://gitlab.com/org/repo/-/raw/main/f.py", 2, "glab"),
+            ("curl https://gitlab.com/org/repo/-/blob/main/f.py", 2, "glab"),
+            # BLOCKED: Google
+            ("curl https://docs.google.com/document/d/abc123/edit", 2, "Google"),
+            ("curl https://drive.google.com/file/d/abc/view", 2, "Google"),
+            ("curl https://sheets.google.com/spreadsheets/d/abc", 2, "Google"),
+            # BLOCKED: Atlassian/Jira
+            (
+                "curl https://myorg.atlassian.net/rest/api/3/issue/PROJ-123",
+                2,
+                "Atlassian",
+            ),
+            ("curl https://myorg.atlassian.net/wiki/spaces/TEAM", 2, "Atlassian"),
+            ("curl https://jira.example.com/rest/api/latest", 2, "jira"),
+            # BLOCKED: Slack
+            ("curl https://hooks.slack.com/services/T00/B00/xxx", 2, "Slack"),
+            ("curl https://api.slack.com/api/chat.postMessage", 2, "Slack"),
+            # ALLOWED: public pages / non-guarded domains
+            ("curl https://example.com/api/data", 0, None),
+            ("curl https://github.com/org/repo", 0, None),
+            ("curl https://raw.githubusercontent.com/org/repo/main/README.md", 0, None),
+            ("curl https://httpbin.org/get", 0, None),
+            ("curl -s https://jsonplaceholder.typicode.com/posts", 0, None),
+            ("curl https://gitlab.com/org/repo", 0, None),
+            ("curl https://pypi.org/simple/requests", 0, None),
+            # ALLOWED: non-curl/wget commands with URLs pass through
+            ("git clone https://github.com/org/repo.git", 0, None),
+            # BYPASS: ALLOW_FETCH=1
+            ("ALLOW_FETCH=1 curl https://api.github.com/repos/org/repo", 0, None),
+            ("ALLOW_FETCH=1 wget https://gitlab.internal.example.com/foo", 0, None),
+            # BLOCKED in pipe (curl is first segment)
+            (
+                "curl https://api.github.com/repos/org/repo | jq .",
+                2,
+                "gh",
+            ),
+        ],
+        ids=[
+            # Blocked
+            "github-api",
+            "github-api-pulls",
+            "github-api-wget",
+            "github-settings",
+            "github-pulls",
+            "github-issues",
+            "github-actions",
+            "github-security",
+            "gitlab-internal-raw",
+            "gitlab-internal-project",
+            "gitlab-api",
+            "gitlab-raw",
+            "gitlab-blob",
+            "google-docs",
+            "google-drive",
+            "google-sheets",
+            "atlassian-api",
+            "atlassian-wiki",
+            "jira-server",
+            "slack-hooks",
+            "slack-api",
+            # Allowed
+            "example-com",
+            "github-public-repo",
+            "github-raw-content",
+            "httpbin",
+            "jsonplaceholder",
+            "gitlab-public-page",
+            "pypi",
+            "git-clone-not-curl",
+            # Bypass
+            "bypass-github-api",
+            "bypass-gitlab-internal",
+            # Pipe
+            "curl-pipe-jq",
+        ],
+    )
+    def test_url_fetch_guard(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
+
+class TestWebFetchGuard:
+    """WebFetch tool calls against authenticated service URLs."""
+
+    @pytest.mark.parametrize(
+        "url, expected_exit, expected_msg",
+        [
+            # BLOCKED
+            ("https://api.github.com/repos/org/repo", 2, "gh"),
+            ("https://gitlab.internal.example.com/anything", 2, "glab"),
+            ("https://docs.google.com/document/d/abc/edit", 2, "Google"),
+            ("https://myorg.atlassian.net/rest/api/3/issue/KEY-1", 2, "Atlassian"),
+            ("https://myorg.atlassian.net/wiki/spaces/TEAM/page", 2, "Atlassian"),
+            ("https://hooks.slack.com/services/T00/B00/xxx", 2, "Slack"),
+            ("https://api.slack.com/api/test", 2, "Slack"),
+            ("https://github.com/org/repo/settings", 2, "gh"),
+            ("https://gitlab.com/api/v4/projects/123", 2, "glab"),
+            ("https://drive.google.com/file/d/abc/view", 2, "Google"),
+            # ALLOWED
+            ("https://example.com", 0, None),
+            ("https://github.com/org/repo", 0, None),
+            ("https://docs.python.org/3/library/json.html", 0, None),
+            ("https://gitlab.com/org/repo", 0, None),
+            ("https://httpbin.org/get", 0, None),
+        ],
+        ids=[
+            "github-api",
+            "gitlab-internal",
+            "google-docs",
+            "atlassian-api",
+            "atlassian-wiki",
+            "slack-hooks",
+            "slack-api",
+            "github-settings",
+            "gitlab-api",
+            "google-drive",
+            "example-com",
+            "github-public",
+            "python-docs",
+            "gitlab-public",
+            "httpbin",
+        ],
+    )
+    def test_webfetch_guard(self, url, expected_exit, expected_msg):
+        result = run_webfetch(url)
+        assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Chained command splitting
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1415,3 +1578,255 @@ class TestShellControlStructures:
     def test_control_structures(self, command, expected_exit, expected_msg):
         result = run_bash(command)
         assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Audit logging: URL guard events logged to JSONL file
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestURLGuardAuditLog:
+    """Verify URL guard events are logged to JSONL file."""
+
+    def _run_with_log_dir(self, tool_name, tool_input, tmp_path):
+        """Run the guard with a custom log directory."""
+        payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+        env = os.environ.copy()
+        env["URL_GUARD_LOG_DIR"] = str(tmp_path)
+        return subprocess.run(
+            ["uv", "run", SCRIPT],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def _read_log(self, tmp_path):
+        """Read and parse all JSONL entries from the log file."""
+        log_file = tmp_path / "url-guard.log"
+        if not log_file.exists():
+            return []
+        lines = log_file.read_text().strip().splitlines()
+        return [json.loads(line) for line in lines]
+
+    def test_blocked_url_logged(self, tmp_path):
+        self._run_with_log_dir(
+            "Bash",
+            {"command": "curl https://api.github.com/repos/org/repo"},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry["action"] == "blocked"
+        assert entry["rule"] == "github-api"
+        assert entry["tool"] == "Bash"
+        assert entry["phase"] == "pre"
+        assert "api.github.com" in entry["url"]
+        assert "timestamp" in entry
+
+    def test_allowed_url_logged(self, tmp_path):
+        self._run_with_log_dir(
+            "Bash",
+            {"command": "curl https://example.com/data"},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["action"] == "allowed"
+        assert entries[0]["rule"] is None
+
+    def test_bypassed_url_logged(self, tmp_path):
+        self._run_with_log_dir(
+            "Bash",
+            {"command": "ALLOW_FETCH=1 curl https://api.github.com/repos/org/repo"},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["action"] == "bypassed"
+
+    def test_webfetch_blocked_logged(self, tmp_path):
+        self._run_with_log_dir(
+            "WebFetch",
+            {"url": "https://api.github.com/repos/org/repo", "prompt": "test"},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["action"] == "blocked"
+        assert entries[0]["tool"] == "WebFetch"
+
+    def test_webfetch_allowed_logged(self, tmp_path):
+        self._run_with_log_dir(
+            "WebFetch",
+            {"url": "https://example.com", "prompt": "test"},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["action"] == "allowed"
+        assert entries[0]["tool"] == "WebFetch"
+
+    def test_non_fetch_command_not_logged(self, tmp_path):
+        """Non-curl/wget bash commands should not produce log entries."""
+        self._run_with_log_dir("Bash", {"command": "git status"}, tmp_path)
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 0
+
+    def test_jsonl_format(self, tmp_path):
+        """Each line is valid JSON."""
+        self._run_with_log_dir(
+            "Bash",
+            {"command": "curl https://api.github.com/repos/o/r"},
+            tmp_path,
+        )
+        self._run_with_log_dir(
+            "WebFetch",
+            {"url": "https://example.com", "prompt": "t"},
+            tmp_path,
+        )
+        log_file = tmp_path / "url-guard.log"
+        lines = log_file.read_text().strip().splitlines()
+        assert len(lines) == 2
+        for line in lines:
+            entry = json.loads(line)
+            assert "timestamp" in entry
+            assert "url" in entry
+            assert "action" in entry
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PostToolUse: response code logging
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPostToolUseResponseLogging:
+    """PostToolUse hooks log HTTP response codes for fetch commands."""
+
+    def _run_post_hook(self, tool_name, tool_input, tool_response, tmp_path):
+        """Simulate a PostToolUse hook invocation."""
+        payload = json.dumps(
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": tool_name,
+                "tool_input": tool_input,
+                "tool_response": tool_response,
+            }
+        )
+        env = os.environ.copy()
+        env["URL_GUARD_LOG_DIR"] = str(tmp_path)
+        return subprocess.run(
+            ["uv", "run", SCRIPT],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def _read_log(self, tmp_path):
+        log_file = tmp_path / "url-guard.log"
+        if not log_file.exists():
+            return []
+        return [json.loads(line) for line in log_file.read_text().strip().splitlines()]
+
+    def test_bash_curl_403_logged(self, tmp_path):
+        """HTTP 403 from curl is logged as auth_failed."""
+        self._run_post_hook(
+            "Bash",
+            {"command": "curl https://example.com/api/data"},
+            {"stdout": "HTTP/1.1 403 Forbidden\n<html>Access Denied</html>", "stderr": ""},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["phase"] == "post"
+        assert entries[0]["auth_failed"] is True
+        assert entries[0]["response_code"] == 403
+        assert entries[0]["action"] == "auth_failed"
+
+    def test_bash_curl_401_logged(self, tmp_path):
+        """HTTP 401 from curl is logged as auth_failed."""
+        self._run_post_hook(
+            "Bash",
+            {"command": "curl https://example.com/api"},
+            {"stdout": "HTTP/2 401 Unauthorized", "stderr": ""},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["auth_failed"] is True
+        assert entries[0]["response_code"] == 401
+
+    def test_bash_curl_200_logged(self, tmp_path):
+        """HTTP 200 from curl is logged as success."""
+        self._run_post_hook(
+            "Bash",
+            {"command": "curl https://example.com/data"},
+            {"stdout": 'HTTP/1.1 200 OK\n{"data": 1}', "stderr": ""},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["auth_failed"] is False
+        assert entries[0]["response_code"] == 200
+        assert entries[0]["action"] == "success"
+
+    def test_webfetch_auth_failed(self, tmp_path):
+        """WebFetch response with auth failure patterns is detected."""
+        self._run_post_hook(
+            "WebFetch",
+            {"url": "https://example.com/page", "prompt": "test"},
+            "Login Required - Please sign in to continue",
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["tool"] == "WebFetch"
+        assert entries[0]["auth_failed"] is True
+
+    def test_webfetch_success(self, tmp_path):
+        """WebFetch response without auth failure is logged as success."""
+        self._run_post_hook(
+            "WebFetch",
+            {"url": "https://example.com", "prompt": "test"},
+            "Welcome to Example.com! Here is the page content.",
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["auth_failed"] is False
+        assert entries[0]["action"] == "success"
+
+    def test_non_fetch_bash_not_logged(self, tmp_path):
+        """Non-curl/wget bash commands produce no PostToolUse log entries."""
+        self._run_post_hook(
+            "Bash",
+            {"command": "git status"},
+            {"stdout": "On branch main", "stderr": ""},
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 0
+
+    def test_post_hook_always_exits_0(self, tmp_path):
+        """PostToolUse hooks are observational — always exit 0."""
+        result = self._run_post_hook(
+            "Bash",
+            {"command": "curl https://api.github.com/repos/org/repo"},
+            {"stdout": "HTTP/1.1 403 Forbidden", "stderr": ""},
+            tmp_path,
+        )
+        assert result.returncode == 0
+
+    def test_sso_redirect_detected(self, tmp_path):
+        """SSO redirect pattern is detected as auth failure."""
+        self._run_post_hook(
+            "WebFetch",
+            {"url": "https://internal.example.com/page", "prompt": "test"},
+            "Redirecting to SSO... SSO redirect detected for authentication",
+            tmp_path,
+        )
+        entries = self._read_log(tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["auth_failed"] is True
