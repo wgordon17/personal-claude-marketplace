@@ -369,38 +369,59 @@ def extract_subshells(cmd):
     return inner
 
 
-def split_pipes(command):
-    """Split a command on unquoted | while respecting quotes.
+def _split_respecting_quotes(text, is_delimiter):
+    """Split text on unquoted delimiters while respecting single/double quotes.
 
-    Handles both | and |& as pipe separators. Since split_commands has
-    already split on ||, any unquoted | in a subcmd is a pipe operator.
+    is_delimiter(text, i, current) -> int or None:
+        Return the number of chars to skip (the delimiter width) if position i
+        is a delimiter, or None if it is not. ``current`` is the accumulated
+        characters for the segment being built (mutable list), allowing
+        callers to implement backslash-continuation by inspecting/modifying it.
     """
     parts = []
     current = []
     in_single = False
     in_double = False
     i = 0
-    while i < len(command):
-        c = command[i]
+    while i < len(text):
+        c = text[i]
         if c == "'" and not in_double:
             in_single = not in_single
             current.append(c)
         elif c == '"' and not in_single:
             in_double = not in_double
             current.append(c)
-        elif c == "|" and not in_single and not in_double:
-            parts.append("".join(current).strip())
-            current = []
-            # Skip & in |&
-            if i + 1 < len(command) and command[i + 1] == "&":
-                i += 2
+        elif not in_single and not in_double:
+            skip = is_delimiter(text, i, current)
+            if skip is not None:
+                parts.append("".join(current).strip())
+                current = []
+                i += skip
                 continue
+            else:
+                current.append(c)
         else:
             current.append(c)
         i += 1
     if current:
         parts.append("".join(current).strip())
     return [p for p in parts if p]
+
+
+def _is_pipe_delimiter(text, i, _current):
+    if text[i] == "|":
+        # Skip & in |&
+        return 2 if i + 1 < len(text) and text[i + 1] == "&" else 1
+    return None
+
+
+def split_pipes(command):
+    """Split a command on unquoted | while respecting quotes.
+
+    Handles both | and |& as pipe separators. Since split_commands has
+    already split on ||, any unquoted | in a subcmd is a pipe operator.
+    """
+    return _split_respecting_quotes(command, _is_pipe_delimiter)
 
 
 # ── Git safety rules (consolidated from git-safety-check.sh) ──
@@ -802,6 +823,22 @@ def check_git_safety(cmd, fetch_seen=False):
             sys.exit(1)
 
 
+def _is_command_delimiter(text, i, current):
+    two = text[i : i + 2]
+    if two in ("&&", "||"):
+        return 2
+    c = text[i]
+    if c == ";":
+        return 1
+    if c == "\n":
+        # Continuation line: \ before newline joins lines
+        if current and current[-1] == "\\":
+            current[-1] = " "
+            return 1
+        return 1
+    return None
+
+
 def split_commands(command):
     """Split a chained command on &&, ||, ;, and newlines while respecting quotes.
 
@@ -809,43 +846,7 @@ def split_commands(command):
     to bypass per-command rule checks. Newlines are treated as command
     separators (like bash), but continuation lines (ending with \\) are joined.
     """
-    parts = []
-    current = []
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        c = command[i]
-        if c == "'" and not in_double:
-            in_single = not in_single
-            current.append(c)
-        elif c == '"' and not in_single:
-            in_double = not in_double
-            current.append(c)
-        elif not in_single and not in_double:
-            if command[i : i + 2] in ("&&", "||"):
-                parts.append("".join(current).strip())
-                current = []
-                i += 2
-                continue
-            elif c == ";":
-                parts.append("".join(current).strip())
-                current = []
-            elif c == "\n":
-                # Continuation line: \ before newline joins lines
-                if current and current[-1] == "\\":
-                    current[-1] = " "
-                else:
-                    parts.append("".join(current).strip())
-                    current = []
-            else:
-                current.append(c)
-        else:
-            current.append(c)
-        i += 1
-    if current:
-        parts.append("".join(current).strip())
-    return [p for p in parts if p]
+    return _split_respecting_quotes(command, _is_command_delimiter)
 
 
 def main():
