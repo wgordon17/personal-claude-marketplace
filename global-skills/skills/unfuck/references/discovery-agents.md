@@ -353,10 +353,10 @@ Run each tool and parse its output. If a tool is unavailable, skip silently.
 
 **Semgrep (multi-language):**
 ```bash
-env -u HTTPS_PROXY -u HTTP_PROXY uvx semgrep --config auto --json --quiet . 2>/dev/null
+unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --config auto --json --quiet . 2>/dev/null
 ```
 Parse the JSON output. Semgrep rules are high-quality — trust its findings but verify severity.
-**Note:** The `env -u` prefix unsets empty proxy variables that cause semgrep to crash in Claude Code environments.
+**Note:** The `unset` prefix clears ALL proxy variables (including `ALL_PROXY`/`all_proxy`) that cause semgrep to crash when set to empty strings — common in Claude Code environments.
 
 **Gitleaks (secrets detection):**
 ```bash
@@ -1509,4 +1509,6 @@ All seven agents write JSON files conforming to this schema. The orchestrator me
    ```
    Always run this before writing your output file.
 
-9. **Send a completion summary.** After writing your JSON output, send a summary to the team lead via `SendMessage` (see orchestration-playbook.md Communication Protocol). Include finding counts, key highlights, and any coverage gaps.
+9. **Reflect before finishing.** Before writing your final JSON output, invoke `Skill(skill="sc:reflect")` to verify your analysis is comprehensive. This catches missed areas, incomplete scans, and false positives. If reflection identifies gaps, investigate them before finalizing output.
+
+10. **Send a completion summary.** After writing your JSON output, send a summary to the team lead via `SendMessage` (see orchestration-playbook.md Communication Protocol). Include finding counts, key highlights, and any coverage gaps.

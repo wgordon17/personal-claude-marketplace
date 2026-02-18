@@ -30,15 +30,25 @@ Use today's actual date (e.g., `hack/unfuck/2026-02-18`). If the directory alrea
 
 All paths in this playbook use `{run_dir}` to refer to this directory. The orchestrator resolves it once and passes the resolved path to all agents via the context bundle.
 
+### Parallel Setup
+
+Phase 0 has several independent tasks that SHOULD run in parallel using TeamCreate:
+
+1. **Create team immediately:** `TeamCreate(team_name="cleanup-swarm")` — needed before spawning any teammates
+2. **Launch parallel setup teammates** — spawn these as background teammates in a single message:
+   - `setup-indexer`: Runs `sc:index-repo` to create PROJECT_INDEX.md
+   - `setup-tools`: Detects available external tools (version checks)
+   - `setup-languages`: Detects project languages from config files
+3. **While teammates work**, the orchestrator creates the run directory, feature branch, and output directories (Steps 0.4-0.5)
+4. **Collect results** from setup teammates (they send summaries via SendMessage)
+5. **Build context bundle** (Step 0.7) using collected results
+6. **Shut down setup teammates** before spawning Phase 1 agents
+
+This parallelism saves time since `sc:index-repo` and tool detection are the slowest setup steps.
+
 ### Step 0.1: Generate repo index
 
-Invoke the `sc:index-repo` skill via the Skill tool. This creates `PROJECT_INDEX.md` at the project root, giving every agent a ~3K-token project reference instead of reading the full codebase.
-
-```
-Skill(skill="sc:index-repo")
-```
-
-Wait for completion. Read the generated `PROJECT_INDEX.md`.
+Spawn a `setup-indexer` teammate to invoke the `sc:index-repo` skill. This creates `PROJECT_INDEX.md` at the project root, giving every agent a ~3K-token project reference instead of reading the full codebase.
 
 ### Step 0.2: Detect project languages
 
@@ -59,29 +69,28 @@ Multiple languages are common. Store the list of detected languages.
 
 ### Step 0.3: Detect available external tools
 
-For each tool relevant to the detected languages (see `references/external-tools.md`), check availability using Bash:
+For each tool relevant to the detected languages (see `references/external-tools.md`), check availability by running version commands and checking exit codes. **Do NOT use `|| echo` or `&& echo` patterns** — these are blocked by the tool-selection-guard hook.
+
+Run version checks as individual or semicolon-separated Bash calls:
 
 ```bash
-command -v knip 2>/dev/null && knip --version || echo "NOT_AVAILABLE"
-command -v semgrep 2>/dev/null && semgrep --version || echo "NOT_AVAILABLE"
-# ... repeat for each tool from external-tools.md
+# Python tools (semicolons, not && or ||)
+uvx vulture --version 2>/dev/null; uvx ruff --version 2>/dev/null; uvx radon --version 2>/dev/null; uvx bandit --version 2>/dev/null
+
+# Semgrep (must unset ALL proxy vars to avoid crash)
+unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --version 2>/dev/null
 ```
 
-Also check npx-based tools:
-```bash
-npx knip --version 2>/dev/null || echo "NOT_AVAILABLE"
-```
+Parse stdout for version strings. Non-zero exit or empty output = unavailable.
 
-Write results to `{run_dir}/available-tools.json`:
+Write results to `{run_dir}/available-tools.json` using the Write tool:
 ```json
 {
   "languages": ["python", "typescript"],
   "tools": {
-    "knip": {"available": true, "version": "5.1.0"},
+    "ruff": {"available": true, "version": "0.15.1"},
     "semgrep": {"available": false, "fallback": "agent-analysis"},
-    "ruff": {"available": true, "version": "0.8.0"},
-    "vulture": {"available": false, "fallback": "agent-analysis"},
-    "ts-prune": {"available": false, "fallback": "knip"}
+    "vulture": {"available": true, "version": "2.14"}
   }
 }
 ```
@@ -91,10 +100,12 @@ If a tool is unavailable, record its fallback from `references/external-tools.md
 ### Step 0.4: Create feature branch
 
 ```bash
-git switch -c cleanup/unfuck-YYYY-MM-DD
+git switch -c cleanup/comprehensive-YYYY-MM-DD origin/main
 ```
 
-Use today's actual date. If the branch already exists (re-run scenario), append a sequence number: `cleanup/unfuck-YYYY-MM-DD-2`.
+Use today's actual date. Always branch from `origin/main` (fetch first if needed). If the branch already exists (re-run scenario), append a sequence number: `cleanup/comprehensive-YYYY-MM-DD-2`.
+
+**IMPORTANT:** Do NOT use "unfuck" in the branch name — use professional naming like `cleanup/comprehensive-YYYY-MM-DD`.
 
 ### Step 0.5: Create output directories
 
@@ -103,13 +114,13 @@ mkdir -p {run_dir}/discovery
 ```
 
 This creates:
-- `{run_dir}/` -- root for all unfuck artifacts for this run
+- `{run_dir}/` -- root for all cleanup artifacts for this run
 - `{run_dir}/discovery/` -- Phase 1 agent outputs
 
 ### Step 0.6: Create team
 
 ```
-TeamCreate(team_name="unfuck-cleanup", description="Comprehensive repo cleanup swarm")
+TeamCreate(team_name="cleanup-swarm", description="Comprehensive repo cleanup swarm")
 ```
 
 ### Step 0.7: Prepare agent context bundle
@@ -117,7 +128,7 @@ TeamCreate(team_name="unfuck-cleanup", description="Comprehensive repo cleanup s
 Build a context string that will be prepended to every discovery agent prompt. The context bundle contains:
 
 ```
-=== UNFUCK CLEANUP CONTEXT ===
+=== CLEANUP CONTEXT ===
 Project path: /absolute/path/to/project
 Languages: python, typescript
 Run directory: {run_dir}
@@ -143,9 +154,13 @@ Store this context string for use in Phase 1.
 
 ## Phase 1: Discovery (7 Parallel Teammates)
 
-Spawn all 7 agents as **TeamCreate teammates** in a single message. Each teammate runs in its own independent context window, writes its JSON findings to disk, and sends a brief summary to the team lead via `SendMessage`. This avoids context pressure on the orchestrator — the orchestrator never calls `TaskOutput` or reads full agent transcripts.
+Spawn **ALL 7 agents** as TeamCreate teammates in a **single message** (7 parallel Task calls). Every agent MUST be spawned — do not skip agents based on earlier runs or existing discovery files. If previous results exist from an earlier run, the orchestrator should mention them in the agent prompt as prior context, but the agent must still perform its own fresh analysis.
+
+Each teammate runs in its own independent context window, writes its JSON findings to disk, and sends a brief summary to the team lead via `SendMessage`. This avoids context pressure on the orchestrator — the orchestrator never calls `TaskOutput` or reads full agent transcripts.
 
 **Why teammates, not background Tasks:** Background `Task(run_in_background=true)` agents dump their full output into the orchestrator's context when checked via `TaskOutput`. With 7 agents producing detailed findings, this causes context overflow. TeamCreate teammates have independent context windows and communicate via short `SendMessage` summaries.
+
+**CRITICAL:** All 7 agents MUST be launched in the SAME message. Do not conditionally skip agents. The orchestrator should wait for all 7 completion summaries before proceeding to Phase 2.
 
 ### Agent Roster
 
@@ -167,31 +182,31 @@ In a single message, issue 7 parallel Task calls with `team_name` to spawn as te
 
 ```
 Task(name="dead-code-hunter", subagent_type="general-purpose", model="sonnet",
-     team_name="unfuck-cleanup", mode="bypassPermissions",
+     team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 1 prompt from discovery-agents.md]")
 
 Task(name="duplicate-detector", subagent_type="general-purpose", model="sonnet",
-     team_name="unfuck-cleanup", mode="bypassPermissions",
+     team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 2 prompt from discovery-agents.md]")
 
 Task(name="security-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="unfuck-cleanup", mode="bypassPermissions",
+     team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 3 prompt from discovery-agents.md]")
 
 Task(name="architecture-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="unfuck-cleanup", mode="bypassPermissions",
+     team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 4 prompt from discovery-agents.md]")
 
 Task(name="ai-slop-detector", subagent_type="general-purpose", model="opus",
-     team_name="unfuck-cleanup", mode="bypassPermissions",
+     team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 5 prompt from discovery-agents.md]")
 
 Task(name="complexity-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="unfuck-cleanup", mode="bypassPermissions",
+     team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 6 prompt from discovery-agents.md]")
 
 Task(name="documentation-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="unfuck-cleanup", mode="bypassPermissions",
+     team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 7 prompt from discovery-agents.md]")
 ```
 
@@ -239,11 +254,25 @@ This frees resources before Phase 3 implementation agents are spawned.
 
 ## Phase 2: Synthesis & Planning
 
-The orchestrator performs this phase directly. No subagents.
+**IMPORTANT:** Do NOT perform synthesis directly in the orchestrator — this fills the lead agent's context with all 7 discovery files (~35K+ tokens). Instead, delegate to a **dedicated opus synthesis teammate** that has its own independent context window.
+
+### Step 2.0: Spawn synthesis teammate
+
+Spawn a single `synthesis-planner` teammate using opus:
+
+```
+Task(name="synthesis-planner", subagent_type="general-purpose", model="opus",
+     team_name="cleanup-swarm", mode="bypassPermissions",
+     prompt="[context bundle]\n\n[Full synthesis instructions below]\n\nRun directory: {run_dir}")
+```
+
+The synthesis teammate performs Steps 2.1-2.6 independently and writes the cleanup plan to disk. When done, it sends a brief summary to the team lead via SendMessage (total findings, by-severity breakdown, categories with findings, any items needing user review).
+
+The orchestrator then handles Step 2.7 (user checkpoint) based on the summary.
 
 ### Step 2.1: Read all discovery files
 
-Read all 7 discovery output files in parallel:
+The synthesis teammate reads all 7 discovery output files in parallel:
 
 ```
 Read {run_dir}/discovery/dead-code.json
@@ -408,72 +437,61 @@ If none of the checkpoint conditions are met, proceed directly to Phase 3 withou
 
 ## Phase 3: Implementation
 
-Execute implementation categories sequentially in priority order. Within each category, a single implementation agent works autonomously.
+Spawn a **single persistent collaborative team** that works through all categories sequentially. The team stays alive for the entire implementation phase, maintaining context as categories build on each other.
+
+### Step 3.0: Spawn implementation team
+
+Spawn 4 persistent teammates in a single message. They collaborate on each category together:
+
+```
+Task(name="impl-writer", subagent_type="general-purpose", model="sonnet",
+     team_name="cleanup-swarm", mode="bypassPermissions",
+     prompt="[context bundle]\n\nYou are the WRITER on the implementation team. You implement fixes from the cleanup plan.\nYour teammates are: impl-qa (reviews your changes), impl-tester (runs tests), impl-docs (updates docs).\n\nWait for the team lead to assign you a category. For each category:\n1. Read the category's findings from {run_dir}/cleanup-plan.md\n2. Apply fixes using the strategies from references/implementation-agents.md\n3. When done with a category, message impl-qa to review your changes\n4. After QA approval and tests pass, commit the category\n5. Message the team lead that the category is complete\n\n[Full implementation agent shared rules from references/implementation-agents.md]")
+
+Task(name="impl-qa", subagent_type="general-purpose", model="opus",
+     team_name="cleanup-swarm", mode="bypassPermissions",
+     prompt="[context bundle]\n\nYou are QA on the implementation team. You review changes made by impl-writer.\n\nWhen impl-writer messages you that a category is ready for review:\n1. Read the modified files (git diff)\n2. Verify changes match the cleanup plan findings\n3. Check for regressions, broken imports, missing error handling\n4. Use LSP findReferences to verify no callers are broken\n5. If issues found, message impl-writer with specific feedback\n6. If clean, message impl-tester to run the test suite\n\nApply code-review rigor: no assumptions, verify everything.")
+
+Task(name="impl-tester", subagent_type="general-purpose", model="sonnet",
+     team_name="cleanup-swarm", mode="bypassPermissions",
+     prompt="[context bundle]\n\nYou are the TESTER on the implementation team. You run tests and formatters.\n\nWhen impl-qa messages you that changes are reviewed:\n1. Run the project's test suite (auto-detect: make test / uv run pytest / npm test / etc.)\n2. Run the formatter (make format / uvx ruff format / etc.)\n3. If tests pass: message impl-writer to commit\n4. If tests fail: message impl-writer with the failure details for rollback\n\nAuto-detect test commands from Makefile, pyproject.toml, or package.json.")
+
+Task(name="impl-docs", subagent_type="general-purpose", model="sonnet",
+     team_name="cleanup-swarm", mode="bypassPermissions",
+     prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Follow docs-sync patterns: match existing style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nDo NOT create new documentation files. Only update existing ones.")
+```
+
+**Model selection:** `impl-qa` uses opus (reviewing requires stronger judgment). Others use sonnet.
 
 ### Execution Loop
 
-For each category (in priority order from Step 2.4):
-
-#### 3a. Extract findings
-
-Read the category's findings from `{run_dir}/cleanup-plan.md`. Convert them into a structured prompt section.
-
-#### 3b. Spawn implementation agent
+The orchestrator assigns categories to the team in priority order by messaging `impl-writer`:
 
 ```
-Task(name="fix-<category>", subagent_type="general-purpose",
-     mode="bypassPermissions",
-     prompt="[context bundle]\n\n[Implementation agent prompt from references/implementation-agents.md for this category]\n\nFindings to fix:\n[filtered findings from cleanup-plan.md as JSON]")
+SendMessage(type="message", recipient="impl-writer",
+  content="Begin Category 1: Security. Findings:\n[filtered findings from cleanup-plan.md]\n\nUse the security fixer strategy from implementation-agents.md.",
+  summary="Assign security category")
 ```
 
-**Model selection for implementation agents:**
-- `fix-ai-slop` uses `model="opus"` (requires judgment to simplify without losing functionality)
-- All other implementation agents use default model (sonnet)
+The team works through the write → QA → test → docs → commit cycle for each category. The orchestrator waits for the `impl-writer` completion message before assigning the next category.
 
-Do NOT run implementation agents in background -- they must complete sequentially to avoid file conflicts.
+#### Category workflow (team-internal)
 
-#### 3c. Verify results
-
-After each agent completes:
-
-**Run tests:**
 ```
-Task(name="verify-<category>", subagent_type="test-execution:test-runner",
-     prompt="Run the full test suite and report pass/fail")
+impl-writer: implements fixes → messages impl-qa
+impl-qa: reviews changes → messages impl-tester (or impl-writer if issues)
+impl-tester: runs tests → messages impl-writer (pass: commit, fail: rollback)
+impl-docs: updates docs in parallel with QA/test, messages impl-writer when ready
+impl-writer: commits changes → messages team lead
 ```
 
-If no test-runner agent type is available, run tests directly via Bash. Auto-detect the test command:
-
-| Check | Command |
-|-------|---------|
-| `Makefile` with `test` target | `make test` |
-| `pyproject.toml` exists | `uv run pytest` |
-| `package.json` with `test` script | `npm test` |
-| `package.json` without `test` script + jest | `npx jest` |
-| `package.json` without `test` script + vitest | `npx vitest run` |
-| `go.mod` exists | `go test ./...` |
-| `Cargo.toml` exists | `cargo test` |
-
-**Run linter/formatter (if available):**
-
-| Check | Command |
-|-------|---------|
-| `pyproject.toml` with ruff | `uv run ruff check . && uv run ruff format --check .` |
-| `Makefile` with `lint` target | `make lint` |
-| `package.json` with `lint` script | `npm run lint` |
-| `.eslintrc*` exists | `npx eslint .` |
-| `Makefile` with `format` target | `make format` (auto-fix) |
-
-#### 3d. Commit or rollback
+#### Commit or rollback
 
 **If tests pass:**
 ```bash
-# Stage only the files this agent modified
+# Stage only the files modified for this category
 git add <list of modified files>
-git commit -m "$(cat <<'EOF'
-<category-specific commit message>
-EOF
-)"
+git commit -m "<category-specific commit message>"
 ```
 
 Mark the category's task as completed:
@@ -483,13 +501,13 @@ TaskUpdate(task_id=<id>, status="completed")
 
 **If tests fail -- rollback:**
 ```bash
-git stash push -m "unfuck-<category>-blocked"
+git stash push -m "cleanup-<category>-blocked"
 ```
 
 Create a blocked task:
 ```
 TaskCreate("BLOCKED: <category> -- <failure summary>",
-  "Implementation of <category> caused test failure:\n<test output snippet>\n\nStashed changes: unfuck-<category>-blocked\nManual review needed.\n\nFailed tests:\n<list of failing test names>")
+  "Implementation of <category> caused test failure:\n<test output snippet>\n\nStashed changes: cleanup-<category>-blocked\nManual review needed.\n\nFailed tests:\n<list of failing test names>")
 ```
 
 Continue to the next category. Do not retry.
@@ -507,6 +525,8 @@ Continue to the next category. Do not retry.
 | Documentation | `docs: syncs documentation with code changes` |
 
 If a category has many findings, summarize in the commit message rather than listing each one. Keep commit messages under 72 characters for the subject line; use the body for details.
+
+**IMPORTANT:** Never use "unfuck" in commit messages, branch names, PR titles, or any user-facing output. Use professional terminology: "cleanup", "comprehensive", "refactor", "simplifies", etc.
 
 ### Sequential Execution Rationale
 
@@ -533,7 +553,7 @@ Or via Bash using the auto-detected test command from Phase 3.
 
 If final tests fail, identify which commit introduced the regression:
 ```bash
-git log --oneline cleanup/unfuck-YYYY-MM-DD~N..HEAD
+git log --oneline cleanup/comprehensive-YYYY-MM-DD~N..HEAD
 ```
 Then bisect or check each commit's changes against the failing tests.
 
@@ -557,7 +577,7 @@ Task(name="quality-review", subagent_type="general-purpose",
 Apply `superpowers:verification-before-completion` patterns:
 - Every commit compiles/parses cleanly
 - Test suite passes on HEAD
-- No uncommitted changes remain (except `hack/unfuck/` artifacts)
+- No uncommitted changes remain (except `hack/` artifacts)
 - No untracked source files created accidentally
 - Linter passes (if available)
 
@@ -570,7 +590,7 @@ Write `{run_dir}/cleanup-report.md`:
 
 Generated: YYYY-MM-DD HH:MM
 Project: <project name>
-Branch: cleanup/unfuck-YYYY-MM-DD
+Branch: cleanup/comprehensive-YYYY-MM-DD
 
 ## Summary
 - **Files modified:** N
@@ -615,7 +635,7 @@ Commit: `stu5678` -- `docs: syncs documentation with code changes`
 ## Blocked Items (need manual review)
 
 ### BLOCKED: <category> -- <failure summary>
-- **Stash:** `unfuck-<category>-blocked`
+- **Stash:** `cleanup-<category>-blocked`
 - **Reason:** <why tests failed>
 - **Failing tests:** <list>
 - **Suggested manual fix:** <guidance>
@@ -664,12 +684,28 @@ Keep these files for user reference:
 - `{run_dir}/cleanup-plan.md` -- what was planned
 - `{run_dir}/cleanup-report.md` -- what was done
 
-### Step 4.6: Announce completion
+### Step 4.6: Reflect on completeness
+
+Invoke `sc:reflect` to verify the cleanup is comprehensive and nothing was missed:
+
+```
+Skill(skill="sc:reflect")
+```
+
+This performs a final cross-check against the original cleanup plan, verifying:
+- All planned categories were addressed (or documented as blocked/deferred)
+- No regression was introduced
+- The cleanup report accurately reflects what was done
+- Version bumps were applied where needed
+
+If reflection identifies gaps, address them before announcing completion.
+
+### Step 4.7: Announce completion
 
 Report to the user:
 
 ```
-Cleanup complete. Branch: cleanup/unfuck-YYYY-MM-DD
+Cleanup complete. Branch: cleanup/comprehensive-YYYY-MM-DD
 
 Summary: N files modified, -N lines net, N issues fixed across M categories.
 N items blocked (need manual review).
@@ -678,7 +714,7 @@ Full report: {run_dir}/cleanup-report.md
 Cleanup plan: {run_dir}/cleanup-plan.md
 
 Next steps:
-- Review the branch diff: git diff main..cleanup/unfuck-YYYY-MM-DD
+- Review the branch diff: git diff main..cleanup/comprehensive-YYYY-MM-DD
 - Check blocked items in the report (if any)
 - Create a PR when satisfied: gh pr create
 ```
@@ -768,9 +804,23 @@ All 7 discovery agents MUST write their output using this schema. The orchestrat
 
 ```
 TeamCreate:
-  team_name: "unfuck-cleanup"
-  description: "Comprehensive repo cleanup -- discovery and implementation swarm"
+  team_name: "cleanup-swarm"
+  description: "Comprehensive repo cleanup -- setup, discovery, synthesis, and implementation swarm"
 ```
+
+### Setup Members (Phase 0 -- spawned in parallel for initialization)
+
+| Name | Type | Model | Purpose |
+|------|------|-------|---------|
+| setup-indexer | general-purpose | sonnet | Runs sc:index-repo to create PROJECT_INDEX.md |
+| setup-tools | general-purpose | sonnet | Detects available external tools via version checks |
+| setup-languages | general-purpose | sonnet | Detects project languages from config files |
+
+### Synthesis Member (Phase 2 -- single agent for dedup and planning)
+
+| Name | Type | Model | Purpose |
+|------|------|-------|---------|
+| synthesis-planner | general-purpose | opus | Reads all discovery files, deduplicates, cross-references, writes cleanup plan |
 
 ### Discovery Members (Phase 1 -- all spawned in parallel)
 
@@ -784,17 +834,16 @@ TeamCreate:
 | complexity-auditor | general-purpose | sonnet | Finds overly complex functions, deep nesting, god objects |
 | documentation-auditor | general-purpose | sonnet | Finds stale docs, missing docs, doc/code drift |
 
-### Implementation Members (Phase 3 -- spawned sequentially as needed)
+### Implementation Members (Phase 3 -- single persistent collaborative team)
 
-| Name | Type | Mode | Model | Purpose |
-|------|------|------|-------|---------|
-| fix-security | general-purpose | bypassPermissions | sonnet | Applies security fixes |
-| fix-dead-code | general-purpose | bypassPermissions | sonnet | Removes dead code |
-| fix-duplicates | general-purpose | bypassPermissions | sonnet | Consolidates duplicates |
-| fix-ai-slop | general-purpose | bypassPermissions | opus | Simplifies over-engineered code |
-| fix-complexity | general-purpose | bypassPermissions | sonnet | Refactors complex code |
-| fix-architecture | general-purpose | bypassPermissions | sonnet | Unifies architectural patterns |
-| fix-documentation | general-purpose | bypassPermissions | sonnet | Updates documentation |
+| Name | Type | Mode | Model | Role |
+|------|------|------|-------|------|
+| impl-writer | general-purpose | bypassPermissions | sonnet | Implements fixes from cleanup plan |
+| impl-qa | general-purpose | bypassPermissions | opus | Reviews changes for correctness |
+| impl-tester | general-purpose | bypassPermissions | sonnet | Runs tests and formatters |
+| impl-docs | general-purpose | bypassPermissions | sonnet | Updates documentation |
+
+All 4 teammates are spawned once and persist through all categories. The orchestrator assigns categories sequentially via SendMessage to `impl-writer`. The team collaborates: write → QA → test → docs → commit per category.
 
 ---
 
