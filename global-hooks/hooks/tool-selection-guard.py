@@ -780,7 +780,7 @@ def check_git_safety(cmd, fetch_seen=False):
                 _git_logger.info("BLOCKED: %s | Rule: commit-to-main", cmd)
                 print(msg, file=sys.stderr)
                 sys.exit(2)
-        except Exception:
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass  # If we can't determine branch, allow (fail open)
 
     # Special: branch from upstream without a preceding fetch in the command chain
@@ -858,6 +858,9 @@ def main():
     try:
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
+        logging.getLogger("git-safety").warning(
+            "Hook received malformed/empty JSON input — failing open"
+        )
         sys.exit(0)
 
     tool_name = data.get("tool_name", "")
@@ -865,7 +868,11 @@ def main():
 
     # ── /tmp/ guard for write-oriented tools (Write, Edit, NotebookEdit) ──
     # Read/Grep/Glob are allowed — Claude Code stores task output files in /tmp/.
-    file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
+    file_path = (
+        tool_input.get("file_path", "")
+        or tool_input.get("path", "")
+        or tool_input.get("notebook_path", "")
+    )
     if (
         file_path
         and "/tmp/" in file_path
