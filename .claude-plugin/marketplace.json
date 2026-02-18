@@ -78,9 +78,9 @@
     },
     {
       "name": "global-skills",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "source": "./global-skills",
-      "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python, incremental-planning",
+      "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python, incremental-planning, unfuck (comprehensive repo cleanup)",
       "category": "productivity",
       "tags": ["skills", "git", "lsp", "python", "testing"]
     },
