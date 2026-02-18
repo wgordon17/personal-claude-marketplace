@@ -459,6 +459,46 @@ def _get_push_target(cmd):
     return remote, branch
 
 
+def _next_positional(parts, start):
+    """Return the first non-flag argument at or after *start*, or None."""
+    i = start
+    while i < len(parts):
+        if parts[i] == "--" or parts[i].startswith("-"):
+            i += 1
+            continue
+        return parts[i]
+    return None
+
+
+def _find_flag_branch(parts, start, flags, equals_prefix=None):
+    """Scan *parts* from *start* for a branch-creation flag.
+
+    *flags* is a set of short/long flags (e.g. {"-c", "--create"}).
+    *equals_prefix* is an optional ``--flag=`` prefix (e.g. "--create=").
+
+    Returns ``(branch_name, next_index)`` on success, or ``None`` if the
+    flag is absent or malformed.  A bare positional before the flag means
+    this is not a creation command — returns ``None``.
+    """
+    i = start
+    while i < len(parts):
+        arg = parts[i]
+        if arg == "--":
+            i += 1
+            continue
+        if equals_prefix and arg.startswith(equals_prefix):
+            return arg.split("=", 1)[1], i + 1
+        if arg in flags:
+            if i + 1 < len(parts):
+                return parts[i + 1], i + 2
+            return None  # malformed: flag with no branch name
+        if arg.startswith("-"):
+            i += 1
+            continue
+        return None  # positional before flag → not a creation command
+    return None
+
+
 def _parse_branch_creation(cmd):
     """Parse branch creation commands, returning (branch_name, start_point) or None.
 
@@ -477,80 +517,30 @@ def _parse_branch_creation(cmd):
     subcmd = parts[1]
 
     if subcmd == "switch":
-        # Find -c or --create flag
-        i = 2
-        branch_name = None
-        while i < len(parts):
-            arg = parts[i]
-            if arg == "--":
-                i += 1
-                continue
-            if arg.startswith("--create="):
-                branch_name = arg.split("=", 1)[1]
-                i += 1
-                break
-            if arg in ("-c", "--create"):
-                if i + 1 < len(parts):
-                    branch_name = parts[i + 1]
-                    i += 2
-                    break
-                return None  # malformed: -c with no branch name
-            if arg.startswith("-"):
-                i += 1
-                continue
-            # Non-flag positional before -c/--create: 'git switch <existing>'
+        result = _find_flag_branch(parts, 2, {"-c", "--create"}, "--create=")
+        if result is None:
             return None
-        if branch_name is None:
-            return None
-        # Look for start point (next non-flag arg)
-        while i < len(parts):
-            if parts[i] == "--" or parts[i].startswith("-"):
-                i += 1
-                continue
-            return (branch_name, parts[i])
-        return (branch_name, None)
+        branch_name, i = result
+        return (branch_name, _next_positional(parts, i))
 
     if subcmd == "checkout":
-        # Find -b or -B flag
-        i = 2
-        branch_name = None
-        while i < len(parts):
-            arg = parts[i]
-            if arg == "--":
-                i += 1
-                continue
-            if arg in ("-b", "-B"):
-                if i + 1 < len(parts):
-                    branch_name = parts[i + 1]
-                    i += 2
-                    break
-                return None  # malformed
-            if arg.startswith("-"):
-                i += 1
-                continue
-            # Non-flag positional before -b/-B: 'git checkout <ref>'
+        result = _find_flag_branch(parts, 2, {"-b", "-B"})
+        if result is None:
             return None
-        if branch_name is None:
-            return None
-        while i < len(parts):
-            if parts[i] == "--" or parts[i].startswith("-"):
-                i += 1
-                continue
-            return (branch_name, parts[i])
-        return (branch_name, None)
+        branch_name, i = result
+        return (branch_name, _next_positional(parts, i))
 
     if subcmd == "worktree" and len(parts) > 2 and parts[2] == "add":
         # git worktree add <path> -b <name> [<start-point>]
+        # Skip the path positional before looking for -b
         i = 3
         path_found = False
-        branch_name = None
         while i < len(parts):
             arg = parts[i]
             if arg == "-b":
                 if i + 1 < len(parts):
                     branch_name = parts[i + 1]
-                    i += 2
-                    break
+                    return (branch_name, _next_positional(parts, i + 2))
                 return None  # malformed
             if arg.startswith("-"):
                 i += 1
@@ -559,16 +549,8 @@ def _parse_branch_creation(cmd):
                 path_found = True
                 i += 1
                 continue
-            # Second positional before -b: ambiguous, bail
-            break
-        if branch_name is None:
-            return None
-        while i < len(parts):
-            if parts[i] == "--" or parts[i].startswith("-"):
-                i += 1
-                continue
-            return (branch_name, parts[i])
-        return (branch_name, None)
+            break  # second positional before -b: ambiguous
+        return None
 
     return None
 
