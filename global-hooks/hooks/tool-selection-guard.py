@@ -403,9 +403,7 @@ def split_pipes(command):
     return [p for p in parts if p]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Git safety rules (consolidated from git-safety-check.sh)
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── Git safety rules (consolidated from git-safety-check.sh) ──
 
 
 def _has_force_flag(cmd):
@@ -416,12 +414,10 @@ def _has_force_flag(cmd):
 
 
 def _has_force_with_lease(cmd):
-    """Check if command contains --force-with-lease."""
     return bool(re.search(r"(^|\s)--force-with-lease(=[^\s]+)?(\s|$)", cmd))
 
 
 def _get_push_target(cmd):
-    """Extract (remote, branch) from a git push command."""
     parts = cmd.split()
     remote = ""
     branch = ""
@@ -556,6 +552,8 @@ def _parse_branch_creation(cmd):
     return None
 
 
+_PROTECTED_BRANCHES = frozenset({"main", "master"})
+
 # Safe start points for branch creation (no stacking risk)
 _SAFE_REMOTE_REFS = frozenset({"upstream/main", "origin/main", "upstream/master", "origin/master"})
 # NOTE: HEAD is allowed as a safe start-point. While functionally identical to
@@ -576,25 +574,21 @@ def _is_safe_start_point(ref):
 
 
 def _is_branch_no_base(cmd):
-    """Check if command creates a branch without specifying a start point."""
     parsed = _parse_branch_creation(cmd)
     return parsed is not None and parsed[1] is None
 
 
 def _is_branch_from_local_main(cmd):
-    """Check if command branches from local main/master (may be stale)."""
     parsed = _parse_branch_creation(cmd)
-    return parsed is not None and parsed[1] in ("main", "master")
+    return parsed is not None and parsed[1] in _PROTECTED_BRANCHES
 
 
 def _is_branch_from_non_upstream(cmd):
-    """Check if command branches from a non-upstream ref (stacking risk)."""
     parsed = _parse_branch_creation(cmd)
     return parsed is not None and parsed[1] is not None and not _is_safe_start_point(parsed[1])
 
 
 def _setup_git_log():
-    """Set up logging to ~/.claude/logs/git-safety-blocks.log."""
     log_dir = Path.home() / ".claude" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("git-safety")
@@ -630,7 +624,7 @@ GIT_DENY_RULES = [
         lambda cmd: (
             bool(re.search(r"git\s+push", cmd))
             and _has_force_with_lease(cmd)
-            and _get_push_target(cmd)[1] in ("main", "master")
+            and _get_push_target(cmd)[1] in _PROTECTED_BRANCHES
         ),
         "--force-with-lease to main/master is FORBIDDEN. Use feature branches for rebasing.",
     ),
@@ -772,7 +766,7 @@ def check_git_safety(cmd, fetch_seen=False):
                 timeout=5,
             )
             branch = result.stdout.strip()
-            if branch in ("main", "master"):
+            if branch in _PROTECTED_BRANCHES:
                 msg = (
                     f"Committing directly to {branch} is FORBIDDEN. "
                     "Create a feature branch: git switch -c feature/name"
