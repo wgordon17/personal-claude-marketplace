@@ -9,6 +9,7 @@ guidance toward native tools, auto-approved commands, and simpler patterns.
 Also enforces git safety rules (consolidated from git-safety-check.sh).
 """
 
+import functools
 import json
 import logging
 import os
@@ -409,19 +410,13 @@ def _split_respecting_quotes(text, is_delimiter):
 
 
 def _is_pipe_delimiter(text, i, _current):
+    """Pipe delimiter: | and |& (split_commands already handled ||)."""
     if text[i] == "|":
-        # Skip & in |&
         return 2 if i + 1 < len(text) and text[i + 1] == "&" else 1
     return None
 
 
-def split_pipes(command):
-    """Split a command on unquoted | while respecting quotes.
-
-    Handles both | and |& as pipe separators. Since split_commands has
-    already split on ||, any unquoted | in a subcmd is a pipe operator.
-    """
-    return _split_respecting_quotes(command, _is_pipe_delimiter)
+split_pipes = functools.partial(_split_respecting_quotes, is_delimiter=_is_pipe_delimiter)
 
 
 # ── Git safety rules (consolidated from git-safety-check.sh) ──
@@ -806,6 +801,7 @@ def check_git_safety(cmd, fetch_seen=False):
 
 
 def _is_command_delimiter(text, i, current):
+    """Command delimiter: &&, ||, ;, newline (with backslash continuation)."""
     two = text[i : i + 2]
     if two in ("&&", "||"):
         return 2
@@ -813,38 +809,17 @@ def _is_command_delimiter(text, i, current):
     if c == ";":
         return 1
     if c == "\n":
-        # Continuation line: \ before newline joins lines
         if current and current[-1] == "\\":
             current[-1] = " "
-            return 1
         return 1
     return None
 
 
-def split_commands(command):
-    """Split a chained command on &&, ||, ;, and newlines while respecting quotes.
-
-    This prevents agents from bundling blocked commands into chains
-    to bypass per-command rule checks. Newlines are treated as command
-    separators (like bash), but continuation lines (ending with \\) are joined.
-    """
-    return _split_respecting_quotes(command, _is_command_delimiter)
+split_commands = functools.partial(_split_respecting_quotes, is_delimiter=_is_command_delimiter)
 
 
-def main():
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
-        logging.getLogger("git-safety").warning(
-            "Hook received malformed/empty JSON input — failing open"
-        )
-        sys.exit(0)
-
-    tool_name = data.get("tool_name", "")
-    tool_input = data.get("tool_input", {})
-
-    # ── /tmp/ guard for write-oriented tools (Write, Edit, NotebookEdit) ──
-    # Read/Grep/Glob are allowed — Claude Code stores task output files in /tmp/.
+def _guard_tmp_path(tool_name, tool_input):
+    """Block write-oriented tools targeting /tmp/ paths (exit 2), or return."""
     file_path = (
         tool_input.get("file_path", "")
         or tool_input.get("path", "")
@@ -863,7 +838,9 @@ def main():
         )
         sys.exit(2)
 
-    # ── EnterPlanMode redirect: use incremental-planning skill instead ──
+
+def _guard_plan_mode(tool_name):
+    """Block EnterPlanMode, redirecting to incremental-planning skill."""
     if tool_name == "EnterPlanMode":
         print(
             "Native plan mode writes and displays the full plan at once.\n"
@@ -876,6 +853,87 @@ def main():
         )
         sys.exit(2)
 
+
+_FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
+
+
+def _check_rules(cmd, fetch_seen, skip_rules=None):
+    """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match.
+
+    skip_rules: frozenset of rule names to skip (used for pipe segments
+    where native-tool alternatives don't apply to piped output).
+    """
+    cmd = strip_shell_keyword(cmd)
+    check_git_safety(cmd, fetch_seen=fetch_seen)
+    normalized = strip_env_prefix(cmd)
+    for name, pattern, exception, guidance in RULES:
+        if skip_rules and name in skip_rules:
+            continue
+        target = normalized if pattern.pattern.startswith("^") else cmd
+        if pattern.search(target):
+            if exception and exception.search(cmd):
+                continue
+            print(guidance, file=sys.stderr)
+            sys.exit(2)
+
+
+def _check_pipes(cmd, fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP):
+    """Check later pipe segments of a command for guarded patterns."""
+    pipe_segments = split_pipes(cmd)
+    if len(pipe_segments) > 1:
+        for segment in pipe_segments[1:]:
+            _check_rules(segment, fetch_seen, skip_rules=skip_rules)
+
+
+def _check_subcmd(subcmd, fetch_seen):
+    """Analyze one subcommand: unwrap bash -c, check pipes, check subshells.
+
+    Returns updated fetch_seen.
+    """
+    if _FETCH_PATTERN.search(subcmd):
+        fetch_seen = True
+
+    inner_cmd = extract_bash_c(subcmd)
+    if inner_cmd:
+        for inner_sub in split_commands(inner_cmd):
+            if _FETCH_PATTERN.search(inner_sub):
+                fetch_seen = True
+            _check_rules(inner_sub, fetch_seen)
+        # bash -c wrapper itself causes a permission prompt — block it
+        print(
+            f"Run the command directly without the `bash -c` wrapper — "
+            f"it causes a permission prompt. Just use: `{inner_cmd}`",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    _check_rules(subcmd, fetch_seen)
+    _check_pipes(subcmd, fetch_seen)
+
+    for inner in extract_subshells(subcmd):
+        if _FETCH_PATTERN.search(inner):
+            fetch_seen = True
+        _check_rules(inner, fetch_seen)
+        _check_pipes(inner, fetch_seen)
+
+    return fetch_seen
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except (json.JSONDecodeError, EOFError):
+        logging.getLogger("git-safety").warning(
+            "Hook received malformed/empty JSON input — failing open"
+        )
+        sys.exit(0)
+
+    tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+
+    _guard_tmp_path(tool_name, tool_input)
+    _guard_plan_mode(tool_name)
+
     if tool_name != "Bash":
         sys.exit(0)
 
@@ -884,83 +942,13 @@ def main():
         sys.exit(0)
 
     # Andon cord: GUARD_BYPASS=1 prefix skips all rule checks.
-    # The settings.json "ask" list ensures this still requires user approval.
-    # Checked on the raw command — if the entire command is prefixed, skip everything.
     if command.startswith("GUARD_BYPASS=1 "):
         sys.exit(0)
 
-    # Split chained commands and check each subcommand independently.
-    # This prevents bundling blocked commands into && chains to bypass rules.
     subcmds = split_commands(command)
-
-    # Track git fetch upstream/origin across subcommands (order-aware).
-    # The closure reads this; main() writes it before each check_rules call.
     fetch_seen = False
-
-    def check_rules(cmd, skip_rules=None):
-        """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match.
-
-        skip_rules: frozenset of rule names to skip (used for pipe segments
-        where native-tool alternatives don't apply to piped output).
-        """
-        # Strip shell control keywords (do, then, else, etc.) so rules can
-        # match commands inside for/while/if blocks split on ';'.
-        cmd = strip_shell_keyword(cmd)
-        # Git safety checks first (DENY exit 2, ASK exit 1)
-        check_git_safety(cmd, fetch_seen=fetch_seen)
-        # Tool selection rules (exit 2)
-        normalized = strip_env_prefix(cmd)
-        for name, pattern, exception, guidance in RULES:
-            if skip_rules and name in skip_rules:
-                continue
-            target = normalized if pattern.pattern.startswith("^") else cmd
-            if pattern.search(target):
-                if exception and exception.search(cmd):
-                    continue
-                print(guidance, file=sys.stderr)
-                sys.exit(2)
-
     for subcmd in subcmds:
-        # Track git fetch before checking rules (order-aware: fetch must precede branch)
-        if re.search(r"git\s+fetch\s+(upstream|origin)\b", subcmd):
-            fetch_seen = True
-
-        # Unwrap bash -c '...' / sh -c '...' and check the inner command
-        inner_cmd = extract_bash_c(subcmd)
-        if inner_cmd:
-            # First check if inner command breaks any rules (e.g. bash -c 'cat file')
-            for inner_sub in split_commands(inner_cmd):
-                if re.search(r"git\s+fetch\s+(upstream|origin)\b", inner_sub):
-                    fetch_seen = True
-                check_rules(inner_sub)
-            # If inner command is safe, STILL block — the bash -c wrapper itself
-            # causes a permission prompt. Run the inner command directly instead.
-            print(
-                f"Run the command directly without the `bash -c` wrapper — "
-                f"it causes a permission prompt. Just use: `{inner_cmd}`",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        else:
-            check_rules(subcmd)
-            # Check pipe segments to catch guarded commands mid-pipeline.
-            # The full-command check above handles the first segment and pipe
-            # exceptions. This catches commands in later segments (e.g.,
-            # `oc get ... | python3 -c ...` catches the python3 usage).
-            pipe_segments = split_pipes(subcmd)
-            if len(pipe_segments) > 1:
-                for segment in pipe_segments[1:]:
-                    check_rules(segment, skip_rules=_PIPE_SEGMENT_SKIP)
-        # Also check inside $() and `` substitutions
-        for inner in extract_subshells(subcmd):
-            if re.search(r"git\s+fetch\s+(upstream|origin)\b", inner):
-                fetch_seen = True
-            check_rules(inner)
-            # Pipe-split subshell content too
-            inner_pipes = split_pipes(inner)
-            if len(inner_pipes) > 1:
-                for segment in inner_pipes[1:]:
-                    check_rules(segment, skip_rules=_PIPE_SEGMENT_SKIP)
+        fetch_seen = _check_subcmd(subcmd, fetch_seen)
 
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
     if len(subcmds) > 1 and os.path.exists("Makefile"):
