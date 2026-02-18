@@ -1,6 +1,6 @@
 # Implementation Agent Prompts
 
-Seven self-contained agent prompts for Phase 3 of the `/unfuck` cleanup workflow. Each agent receives filtered findings for its category and has full file-modification capabilities (`mode: bypassPermissions`). Agents operate in parallel where possible, each committing its own changes independently.
+Seven category-specific strategy guides for Phase 3 of the cleanup workflow. The persistent implementation team (`impl-writer`, `impl-qa`, `impl-tester`, `impl-docs`) uses these strategies as they work through each category sequentially. The `impl-writer` receives the relevant strategy section when assigned a category by the orchestrator.
 
 ---
 
@@ -373,7 +373,7 @@ For each finding, apply the appropriate fix pattern:
 
 If Semgrep is installed and findings include Semgrep rule IDs:
 ```bash
-semgrep --config auto --autofix --include=<specific_file>
+unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --config auto --autofix --include=<specific_file>
 ```
 Review the auto-fix before accepting it. Semgrep auto-fixes are mechanical — verify they are semantically correct.
 
