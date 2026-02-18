@@ -27,11 +27,12 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests only exist 
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits. Show the PR link to the user.
 3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. CI only triggers on `*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, and `.github/workflows/ci.yml` changes. If no checks appear (JSON-only, markdown-only, or skill-only PRs), merge after local `make all` passes.
 4. **Merge** — `gh pr merge <number> --merge`.
-5. **Update local plugin** — After merge, run these commands (do not hand them to the user):
+5. **Update local plugin** — After merge, run these commands (do not hand them to the user).
+   Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:
    ```bash
    git switch main && git pull origin main
-   claude plugin marketplace update private-claude-marketplace
-   claude plugin update <plugin-name>@private-claude-marketplace
+   CLAUDECODE="" claude plugin marketplace update private-claude-marketplace
+   CLAUDECODE="" claude plugin update <plugin-name>@private-claude-marketplace
    ```
 6. **Restart and E2E verify** — Tell user to restart their session. E2E verification happens in the new session.
 

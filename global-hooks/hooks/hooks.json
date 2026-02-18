@@ -12,15 +12,6 @@
         ]
       },
       {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py"
-          }
-        ]
-      },
-      {
         "matcher": "Write",
         "hooks": [
           {
@@ -39,16 +30,7 @@
         ]
       },
       {
-        "matcher": "Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py"
-          }
-        ]
-      },
-      {
-        "matcher": "Glob",
+        "matcher": "NotebookEdit",
         "hooks": [
           {
             "type": "command",

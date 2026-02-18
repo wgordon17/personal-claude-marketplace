@@ -9,6 +9,7 @@ guidance toward native tools, auto-approved commands, and simpler patterns.
 Also enforces git safety rules (consolidated from git-safety-check.sh).
 """
 
+import functools
 import json
 import logging
 import os
@@ -369,32 +370,37 @@ def extract_subshells(cmd):
     return inner
 
 
-def split_pipes(command):
-    """Split a command on unquoted | while respecting quotes.
+def _split_respecting_quotes(text, is_delimiter):
+    """Split text on unquoted delimiters while respecting single/double quotes.
 
-    Handles both | and |& as pipe separators. Since split_commands has
-    already split on ||, any unquoted | in a subcmd is a pipe operator.
+    is_delimiter(text, i, current) -> int or None:
+        Return the number of chars to skip (the delimiter width) if position i
+        is a delimiter, or None if it is not. ``current`` is the accumulated
+        characters for the segment being built (mutable list), allowing
+        callers to implement backslash-continuation by inspecting/modifying it.
     """
     parts = []
     current = []
     in_single = False
     in_double = False
     i = 0
-    while i < len(command):
-        c = command[i]
+    while i < len(text):
+        c = text[i]
         if c == "'" and not in_double:
             in_single = not in_single
             current.append(c)
         elif c == '"' and not in_single:
             in_double = not in_double
             current.append(c)
-        elif c == "|" and not in_single and not in_double:
-            parts.append("".join(current).strip())
-            current = []
-            # Skip & in |&
-            if i + 1 < len(command) and command[i + 1] == "&":
-                i += 2
+        elif not in_single and not in_double:
+            skip = is_delimiter(text, i, current)
+            if skip is not None:
+                parts.append("".join(current).strip())
+                current = []
+                i += skip
                 continue
+            else:
+                current.append(c)
         else:
             current.append(c)
         i += 1
@@ -403,9 +409,17 @@ def split_pipes(command):
     return [p for p in parts if p]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Git safety rules (consolidated from git-safety-check.sh)
-# ═══════════════════════════════════════════════════════════════════════════════
+def _is_pipe_delimiter(text, i, _current):
+    """Pipe delimiter: | and |& (split_commands already handled ||)."""
+    if text[i] == "|":
+        return 2 if i + 1 < len(text) and text[i + 1] == "&" else 1
+    return None
+
+
+split_pipes = functools.partial(_split_respecting_quotes, is_delimiter=_is_pipe_delimiter)
+
+
+# ── Git safety rules (consolidated from git-safety-check.sh) ──
 
 
 def _has_force_flag(cmd):
@@ -416,12 +430,10 @@ def _has_force_flag(cmd):
 
 
 def _has_force_with_lease(cmd):
-    """Check if command contains --force-with-lease."""
     return bool(re.search(r"(^|\s)--force-with-lease(=[^\s]+)?(\s|$)", cmd))
 
 
 def _get_push_target(cmd):
-    """Extract (remote, branch) from a git push command."""
     parts = cmd.split()
     remote = ""
     branch = ""
@@ -442,6 +454,46 @@ def _get_push_target(cmd):
     return remote, branch
 
 
+def _next_positional(parts, start):
+    """Return the first non-flag argument at or after *start*, or None."""
+    i = start
+    while i < len(parts):
+        if parts[i] == "--" or parts[i].startswith("-"):
+            i += 1
+            continue
+        return parts[i]
+    return None
+
+
+def _find_flag_branch(parts, start, flags, equals_prefix=None):
+    """Scan *parts* from *start* for a branch-creation flag.
+
+    *flags* is a set of short/long flags (e.g. {"-c", "--create"}).
+    *equals_prefix* is an optional ``--flag=`` prefix (e.g. "--create=").
+
+    Returns ``(branch_name, next_index)`` on success, or ``None`` if the
+    flag is absent or malformed.  A bare positional before the flag means
+    this is not a creation command — returns ``None``.
+    """
+    i = start
+    while i < len(parts):
+        arg = parts[i]
+        if arg == "--":
+            i += 1
+            continue
+        if equals_prefix and arg.startswith(equals_prefix):
+            return arg.split("=", 1)[1], i + 1
+        if arg in flags:
+            if i + 1 < len(parts):
+                return parts[i + 1], i + 2
+            return None  # malformed: flag with no branch name
+        if arg.startswith("-"):
+            i += 1
+            continue
+        return None  # positional before flag → not a creation command
+    return None
+
+
 def _parse_branch_creation(cmd):
     """Parse branch creation commands, returning (branch_name, start_point) or None.
 
@@ -460,80 +512,30 @@ def _parse_branch_creation(cmd):
     subcmd = parts[1]
 
     if subcmd == "switch":
-        # Find -c or --create flag
-        i = 2
-        branch_name = None
-        while i < len(parts):
-            arg = parts[i]
-            if arg == "--":
-                i += 1
-                continue
-            if arg.startswith("--create="):
-                branch_name = arg.split("=", 1)[1]
-                i += 1
-                break
-            if arg in ("-c", "--create"):
-                if i + 1 < len(parts):
-                    branch_name = parts[i + 1]
-                    i += 2
-                    break
-                return None  # malformed: -c with no branch name
-            if arg.startswith("-"):
-                i += 1
-                continue
-            # Non-flag positional before -c/--create: 'git switch <existing>'
+        result = _find_flag_branch(parts, 2, {"-c", "--create"}, "--create=")
+        if result is None:
             return None
-        if branch_name is None:
-            return None
-        # Look for start point (next non-flag arg)
-        while i < len(parts):
-            if parts[i] == "--" or parts[i].startswith("-"):
-                i += 1
-                continue
-            return (branch_name, parts[i])
-        return (branch_name, None)
+        branch_name, i = result
+        return (branch_name, _next_positional(parts, i))
 
     if subcmd == "checkout":
-        # Find -b or -B flag
-        i = 2
-        branch_name = None
-        while i < len(parts):
-            arg = parts[i]
-            if arg == "--":
-                i += 1
-                continue
-            if arg in ("-b", "-B"):
-                if i + 1 < len(parts):
-                    branch_name = parts[i + 1]
-                    i += 2
-                    break
-                return None  # malformed
-            if arg.startswith("-"):
-                i += 1
-                continue
-            # Non-flag positional before -b/-B: 'git checkout <ref>'
+        result = _find_flag_branch(parts, 2, {"-b", "-B"})
+        if result is None:
             return None
-        if branch_name is None:
-            return None
-        while i < len(parts):
-            if parts[i] == "--" or parts[i].startswith("-"):
-                i += 1
-                continue
-            return (branch_name, parts[i])
-        return (branch_name, None)
+        branch_name, i = result
+        return (branch_name, _next_positional(parts, i))
 
     if subcmd == "worktree" and len(parts) > 2 and parts[2] == "add":
         # git worktree add <path> -b <name> [<start-point>]
+        # Skip the path positional before looking for -b
         i = 3
         path_found = False
-        branch_name = None
         while i < len(parts):
             arg = parts[i]
             if arg == "-b":
                 if i + 1 < len(parts):
                     branch_name = parts[i + 1]
-                    i += 2
-                    break
+                    return (branch_name, _next_positional(parts, i + 2))
                 return None  # malformed
             if arg.startswith("-"):
                 i += 1
@@ -542,19 +544,13 @@ def _parse_branch_creation(cmd):
                 path_found = True
                 i += 1
                 continue
-            # Second positional before -b: ambiguous, bail
-            break
-        if branch_name is None:
-            return None
-        while i < len(parts):
-            if parts[i] == "--" or parts[i].startswith("-"):
-                i += 1
-                continue
-            return (branch_name, parts[i])
-        return (branch_name, None)
+            break  # second positional before -b: ambiguous
+        return None
 
     return None
 
+
+_PROTECTED_BRANCHES = frozenset({"main", "master"})
 
 # Safe start points for branch creation (no stacking risk)
 _SAFE_REMOTE_REFS = frozenset({"upstream/main", "origin/main", "upstream/master", "origin/master"})
@@ -576,25 +572,21 @@ def _is_safe_start_point(ref):
 
 
 def _is_branch_no_base(cmd):
-    """Check if command creates a branch without specifying a start point."""
     parsed = _parse_branch_creation(cmd)
     return parsed is not None and parsed[1] is None
 
 
 def _is_branch_from_local_main(cmd):
-    """Check if command branches from local main/master (may be stale)."""
     parsed = _parse_branch_creation(cmd)
-    return parsed is not None and parsed[1] in ("main", "master")
+    return parsed is not None and parsed[1] in _PROTECTED_BRANCHES
 
 
 def _is_branch_from_non_upstream(cmd):
-    """Check if command branches from a non-upstream ref (stacking risk)."""
     parsed = _parse_branch_creation(cmd)
     return parsed is not None and parsed[1] is not None and not _is_safe_start_point(parsed[1])
 
 
 def _setup_git_log():
-    """Set up logging to ~/.claude/logs/git-safety-blocks.log."""
     log_dir = Path.home() / ".claude" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("git-safety")
@@ -630,7 +622,7 @@ GIT_DENY_RULES = [
         lambda cmd: (
             bool(re.search(r"git\s+push", cmd))
             and _has_force_with_lease(cmd)
-            and _get_push_target(cmd)[1] in ("main", "master")
+            and _get_push_target(cmd)[1] in _PROTECTED_BRANCHES
         ),
         "--force-with-lease to main/master is FORBIDDEN. Use feature branches for rebasing.",
     ),
@@ -772,7 +764,7 @@ def check_git_safety(cmd, fetch_seen=False):
                 timeout=5,
             )
             branch = result.stdout.strip()
-            if branch in ("main", "master"):
+            if branch in _PROTECTED_BRANCHES:
                 msg = (
                     f"Committing directly to {branch} is FORBIDDEN. "
                     "Create a feature branch: git switch -c feature/name"
@@ -780,7 +772,7 @@ def check_git_safety(cmd, fetch_seen=False):
                 _git_logger.info("BLOCKED: %s | Rule: commit-to-main", cmd)
                 print(msg, file=sys.stderr)
                 sys.exit(2)
-        except Exception:
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass  # If we can't determine branch, allow (fail open)
 
     # Special: branch from upstream without a preceding fetch in the command chain
@@ -808,64 +800,31 @@ def check_git_safety(cmd, fetch_seen=False):
             sys.exit(1)
 
 
-def split_commands(command):
-    """Split a chained command on &&, ||, ;, and newlines while respecting quotes.
-
-    This prevents agents from bundling blocked commands into chains
-    to bypass per-command rule checks. Newlines are treated as command
-    separators (like bash), but continuation lines (ending with \\) are joined.
-    """
-    parts = []
-    current = []
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        c = command[i]
-        if c == "'" and not in_double:
-            in_single = not in_single
-            current.append(c)
-        elif c == '"' and not in_single:
-            in_double = not in_double
-            current.append(c)
-        elif not in_single and not in_double:
-            if command[i : i + 2] in ("&&", "||"):
-                parts.append("".join(current).strip())
-                current = []
-                i += 2
-                continue
-            elif c == ";":
-                parts.append("".join(current).strip())
-                current = []
-            elif c == "\n":
-                # Continuation line: \ before newline joins lines
-                if current and current[-1] == "\\":
-                    current[-1] = " "
-                else:
-                    parts.append("".join(current).strip())
-                    current = []
-            else:
-                current.append(c)
-        else:
-            current.append(c)
-        i += 1
-    if current:
-        parts.append("".join(current).strip())
-    return [p for p in parts if p]
+def _is_command_delimiter(text, i, current):
+    """Command delimiter: &&, ||, ;, newline (with backslash continuation)."""
+    two = text[i : i + 2]
+    if two in ("&&", "||"):
+        return 2
+    c = text[i]
+    if c == ";":
+        return 1
+    if c == "\n":
+        if current and current[-1] == "\\":
+            current[-1] = " "
+        return 1
+    return None
 
 
-def main():
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
-        sys.exit(0)
+split_commands = functools.partial(_split_respecting_quotes, is_delimiter=_is_command_delimiter)
 
-    tool_name = data.get("tool_name", "")
-    tool_input = data.get("tool_input", {})
 
-    # ── /tmp/ guard for write-oriented tools (Write, Edit, NotebookEdit) ──
-    # Read/Grep/Glob are allowed — Claude Code stores task output files in /tmp/.
-    file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
+def _guard_tmp_path(tool_name, tool_input):
+    """Block write-oriented tools targeting /tmp/ paths (exit 2), or return."""
+    file_path = (
+        tool_input.get("file_path", "")
+        or tool_input.get("path", "")
+        or tool_input.get("notebook_path", "")
+    )
     if (
         file_path
         and "/tmp/" in file_path
@@ -879,7 +838,9 @@ def main():
         )
         sys.exit(2)
 
-    # ── EnterPlanMode redirect: use incremental-planning skill instead ──
+
+def _guard_plan_mode(tool_name):
+    """Block EnterPlanMode, redirecting to incremental-planning skill."""
     if tool_name == "EnterPlanMode":
         print(
             "Native plan mode writes and displays the full plan at once.\n"
@@ -892,6 +853,87 @@ def main():
         )
         sys.exit(2)
 
+
+_FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
+
+
+def _check_rules(cmd, fetch_seen, skip_rules=None):
+    """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match.
+
+    skip_rules: frozenset of rule names to skip (used for pipe segments
+    where native-tool alternatives don't apply to piped output).
+    """
+    cmd = strip_shell_keyword(cmd)
+    check_git_safety(cmd, fetch_seen=fetch_seen)
+    normalized = strip_env_prefix(cmd)
+    for name, pattern, exception, guidance in RULES:
+        if skip_rules and name in skip_rules:
+            continue
+        target = normalized if pattern.pattern.startswith("^") else cmd
+        if pattern.search(target):
+            if exception and exception.search(cmd):
+                continue
+            print(guidance, file=sys.stderr)
+            sys.exit(2)
+
+
+def _check_pipes(cmd, fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP):
+    """Check later pipe segments of a command for guarded patterns."""
+    pipe_segments = split_pipes(cmd)
+    if len(pipe_segments) > 1:
+        for segment in pipe_segments[1:]:
+            _check_rules(segment, fetch_seen, skip_rules=skip_rules)
+
+
+def _check_subcmd(subcmd, fetch_seen):
+    """Analyze one subcommand: unwrap bash -c, check pipes, check subshells.
+
+    Returns updated fetch_seen.
+    """
+    if _FETCH_PATTERN.search(subcmd):
+        fetch_seen = True
+
+    inner_cmd = extract_bash_c(subcmd)
+    if inner_cmd:
+        for inner_sub in split_commands(inner_cmd):
+            if _FETCH_PATTERN.search(inner_sub):
+                fetch_seen = True
+            _check_rules(inner_sub, fetch_seen)
+        # bash -c wrapper itself causes a permission prompt — block it
+        print(
+            f"Run the command directly without the `bash -c` wrapper — "
+            f"it causes a permission prompt. Just use: `{inner_cmd}`",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    _check_rules(subcmd, fetch_seen)
+    _check_pipes(subcmd, fetch_seen)
+
+    for inner in extract_subshells(subcmd):
+        if _FETCH_PATTERN.search(inner):
+            fetch_seen = True
+        _check_rules(inner, fetch_seen)
+        _check_pipes(inner, fetch_seen)
+
+    return fetch_seen
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except (json.JSONDecodeError, EOFError):
+        logging.getLogger("git-safety").warning(
+            "Hook received malformed/empty JSON input — failing open"
+        )
+        sys.exit(0)
+
+    tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+
+    _guard_tmp_path(tool_name, tool_input)
+    _guard_plan_mode(tool_name)
+
     if tool_name != "Bash":
         sys.exit(0)
 
@@ -900,83 +942,13 @@ def main():
         sys.exit(0)
 
     # Andon cord: GUARD_BYPASS=1 prefix skips all rule checks.
-    # The settings.json "ask" list ensures this still requires user approval.
-    # Checked on the raw command — if the entire command is prefixed, skip everything.
     if command.startswith("GUARD_BYPASS=1 "):
         sys.exit(0)
 
-    # Split chained commands and check each subcommand independently.
-    # This prevents bundling blocked commands into && chains to bypass rules.
     subcmds = split_commands(command)
-
-    # Track git fetch upstream/origin across subcommands (order-aware).
-    # The closure reads this; main() writes it before each check_rules call.
     fetch_seen = False
-
-    def check_rules(cmd, skip_rules=None):
-        """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match.
-
-        skip_rules: frozenset of rule names to skip (used for pipe segments
-        where native-tool alternatives don't apply to piped output).
-        """
-        # Strip shell control keywords (do, then, else, etc.) so rules can
-        # match commands inside for/while/if blocks split on ';'.
-        cmd = strip_shell_keyword(cmd)
-        # Git safety checks first (DENY exit 2, ASK exit 1)
-        check_git_safety(cmd, fetch_seen=fetch_seen)
-        # Tool selection rules (exit 2)
-        normalized = strip_env_prefix(cmd)
-        for name, pattern, exception, guidance in RULES:
-            if skip_rules and name in skip_rules:
-                continue
-            target = normalized if pattern.pattern.startswith("^") else cmd
-            if pattern.search(target):
-                if exception and exception.search(cmd):
-                    continue
-                print(guidance, file=sys.stderr)
-                sys.exit(2)
-
     for subcmd in subcmds:
-        # Track git fetch before checking rules (order-aware: fetch must precede branch)
-        if re.search(r"git\s+fetch\s+(upstream|origin)\b", subcmd):
-            fetch_seen = True
-
-        # Unwrap bash -c '...' / sh -c '...' and check the inner command
-        inner_cmd = extract_bash_c(subcmd)
-        if inner_cmd:
-            # First check if inner command breaks any rules (e.g. bash -c 'cat file')
-            for inner_sub in split_commands(inner_cmd):
-                if re.search(r"git\s+fetch\s+(upstream|origin)\b", inner_sub):
-                    fetch_seen = True
-                check_rules(inner_sub)
-            # If inner command is safe, STILL block — the bash -c wrapper itself
-            # causes a permission prompt. Run the inner command directly instead.
-            print(
-                f"Run the command directly without the `bash -c` wrapper — "
-                f"it causes a permission prompt. Just use: `{inner_cmd}`",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        else:
-            check_rules(subcmd)
-            # Check pipe segments to catch guarded commands mid-pipeline.
-            # The full-command check above handles the first segment and pipe
-            # exceptions. This catches commands in later segments (e.g.,
-            # `oc get ... | python3 -c ...` catches the python3 usage).
-            pipe_segments = split_pipes(subcmd)
-            if len(pipe_segments) > 1:
-                for segment in pipe_segments[1:]:
-                    check_rules(segment, skip_rules=_PIPE_SEGMENT_SKIP)
-        # Also check inside $() and `` substitutions
-        for inner in extract_subshells(subcmd):
-            if re.search(r"git\s+fetch\s+(upstream|origin)\b", inner):
-                fetch_seen = True
-            check_rules(inner)
-            # Pipe-split subshell content too
-            inner_pipes = split_pipes(inner)
-            if len(inner_pipes) > 1:
-                for segment in inner_pipes[1:]:
-                    check_rules(segment, skip_rules=_PIPE_SEGMENT_SKIP)
+        fetch_seen = _check_subcmd(subcmd, fetch_seen)
 
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
     if len(subcmds) > 1 and os.path.exists("Makefile"):
