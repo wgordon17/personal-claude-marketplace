@@ -296,13 +296,6 @@ AUTH_URL_RULES = [
         "This GitLab URL points to raw/blob content which may require authentication. "
         "Use `glab` CLI or clone the repo locally.",
     ),
-    # GitLab (internal — entire domain)
-    (
-        "gitlab-internal",
-        re.compile(r"gitlab\.internal\.example\.com"),
-        "This URL is on internal GitLab (SSO-gated). "
-        "Use `glab` CLI with the appropriate remote, or clone the repo locally.",
-    ),
     # Google
     (
         "google-docs",
@@ -342,6 +335,45 @@ AUTH_URL_RULES = [
         "Use the Slack MCP tools or access Slack via Playwright MCP.",
     ),
 ]
+
+
+def _load_extra_url_rules():
+    """Load additional URL guard rules from a JSON file.
+
+    Set URL_GUARD_EXTRA_RULES to the path of a JSON file containing
+    an array of rule objects with keys: name, pattern, message.
+
+    Example JSON:
+    [
+        {
+            "name": "internal-gitlab",
+            "pattern": "gitlab\\\\.internal\\\\.example\\\\.com",
+            "message": "This URL is on internal GitLab. Use glab CLI instead."
+        }
+    ]
+    """
+    rules_path = os.environ.get("URL_GUARD_EXTRA_RULES")
+    if not rules_path:
+        return []
+    try:
+        with open(rules_path) as f:
+            raw = json.load(f)
+        extra = []
+        for entry in raw:
+            extra.append(
+                (
+                    entry["name"],
+                    re.compile(entry["pattern"]),
+                    entry["message"],
+                )
+            )
+        return extra
+    except (OSError, json.JSONDecodeError, KeyError, re.error):
+        return []  # Fail silently — bad config should not break the guard
+
+
+# Merge built-in rules with any user-defined extra rules
+AUTH_URL_RULES.extend(_load_extra_url_rules())
 
 
 _URL_LOG_DIR = os.environ.get("URL_GUARD_LOG_DIR", str(Path.home() / ".claude" / "logs"))

@@ -432,13 +432,6 @@ class TestURLFetchGuard:
             ("curl https://github.com/org/repo/issues", 2, "gh"),
             ("curl https://github.com/org/repo/actions", 2, "gh"),
             ("curl https://github.com/org/repo/security", 2, "gh"),
-            # BLOCKED: GitLab internal (entire domain)
-            (
-                "wget https://gitlab.internal.example.com/service/foo/-/raw/main/file.go",
-                2,
-                "glab",
-            ),
-            ("curl https://gitlab.internal.example.com/some/project", 2, "glab"),
             # BLOCKED: GitLab public API/raw
             ("curl https://gitlab.com/api/v4/projects", 2, "glab"),
             ("curl https://gitlab.com/org/repo/-/raw/main/f.py", 2, "glab"),
@@ -470,7 +463,6 @@ class TestURLFetchGuard:
             ("git clone https://github.com/org/repo.git", 0, None),
             # BYPASS: ALLOW_FETCH=1
             ("ALLOW_FETCH=1 curl https://api.github.com/repos/org/repo", 0, None),
-            ("ALLOW_FETCH=1 wget https://gitlab.internal.example.com/foo", 0, None),
             # BLOCKED in pipe (curl is first segment)
             (
                 "curl https://api.github.com/repos/org/repo | jq .",
@@ -488,8 +480,6 @@ class TestURLFetchGuard:
             "github-issues",
             "github-actions",
             "github-security",
-            "gitlab-internal-raw",
-            "gitlab-internal-project",
             "gitlab-api",
             "gitlab-raw",
             "gitlab-blob",
@@ -512,7 +502,6 @@ class TestURLFetchGuard:
             "git-clone-not-curl",
             # Bypass
             "bypass-github-api",
-            "bypass-gitlab-internal",
             # Pipe
             "curl-pipe-jq",
         ],
@@ -530,7 +519,6 @@ class TestWebFetchGuard:
         [
             # BLOCKED
             ("https://api.github.com/repos/org/repo", 2, "gh"),
-            ("https://gitlab.internal.example.com/anything", 2, "glab"),
             ("https://docs.google.com/document/d/abc/edit", 2, "Google"),
             ("https://myorg.atlassian.net/rest/api/3/issue/KEY-1", 2, "Atlassian"),
             ("https://myorg.atlassian.net/wiki/spaces/TEAM/page", 2, "Atlassian"),
@@ -548,7 +536,6 @@ class TestWebFetchGuard:
         ],
         ids=[
             "github-api",
-            "gitlab-internal",
             "google-docs",
             "atlassian-api",
             "atlassian-wiki",
@@ -1830,3 +1817,112 @@ class TestPostToolUseResponseLogging:
         entries = self._read_log(tmp_path)
         assert len(entries) == 1
         assert entries[0]["auth_failed"] is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Custom URL guard rules: URL_GUARD_EXTRA_RULES env var
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestExtraURLRules:
+    """URL_GUARD_EXTRA_RULES env var loads custom rules from a JSON file."""
+
+    def _run_with_extra_rules(self, tool_name, tool_input, rules_file):
+        """Run the guard with a custom extra rules file."""
+        payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+        env = os.environ.copy()
+        env["URL_GUARD_EXTRA_RULES"] = str(rules_file)
+        return subprocess.run(
+            ["uv", "run", SCRIPT],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_extra_rule_blocks_custom_domain(self, tmp_path):
+        """Custom rules loaded from JSON file block matching URLs."""
+        rules = [
+            {
+                "name": "custom-internal",
+                "pattern": r"internal\.example\.corp",
+                "message": "This is an internal URL. Use the CLI instead.",
+            }
+        ]
+        rules_file = tmp_path / "extra-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules(
+            "Bash",
+            {"command": "curl https://internal.example.corp/api/data"},
+            rules_file,
+        )
+        assert result.returncode == 2
+        assert "internal URL" in result.stderr
+
+    def test_extra_rule_allows_non_matching(self, tmp_path):
+        """Custom rules do not block URLs that don't match."""
+        rules = [
+            {
+                "name": "custom-internal",
+                "pattern": r"internal\.example\.corp",
+                "message": "Blocked.",
+            }
+        ]
+        rules_file = tmp_path / "extra-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules(
+            "Bash",
+            {"command": "curl https://example.com/api/data"},
+            rules_file,
+        )
+        assert result.returncode == 0
+
+    def test_extra_rule_webfetch(self, tmp_path):
+        """Custom rules also apply to WebFetch tool."""
+        rules = [
+            {
+                "name": "custom-internal",
+                "pattern": r"internal\.example\.corp",
+                "message": "Blocked internal URL.",
+            }
+        ]
+        rules_file = tmp_path / "extra-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules(
+            "WebFetch",
+            {"url": "https://internal.example.corp/page", "prompt": "test"},
+            rules_file,
+        )
+        assert result.returncode == 2
+
+    def test_missing_file_does_not_break(self, tmp_path):
+        """Non-existent rules file is silently ignored."""
+        result = self._run_with_extra_rules(
+            "Bash",
+            {"command": "curl https://example.com/data"},
+            tmp_path / "nonexistent.json",
+        )
+        assert result.returncode == 0
+
+    def test_invalid_json_does_not_break(self, tmp_path):
+        """Malformed JSON rules file is silently ignored."""
+        rules_file = tmp_path / "bad-rules.json"
+        rules_file.write_text("not valid json {{{")
+        result = self._run_with_extra_rules(
+            "Bash",
+            {"command": "curl https://example.com/data"},
+            rules_file,
+        )
+        assert result.returncode == 0
+
+    def test_invalid_regex_does_not_break(self, tmp_path):
+        """Invalid regex in rules file is silently ignored."""
+        rules = [{"name": "bad", "pattern": "[invalid(", "message": "msg"}]
+        rules_file = tmp_path / "bad-regex.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules(
+            "Bash",
+            {"command": "curl https://example.com/data"},
+            rules_file,
+        )
+        assert result.returncode == 0
