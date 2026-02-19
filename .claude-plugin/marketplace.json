@@ -3,7 +3,7 @@
   "name": "private-claude-marketplace",
   "metadata": {
     "description": "Private Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -78,9 +78,9 @@
     },
     {
       "name": "global-skills",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "source": "./global-skills",
-      "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python, incremental-planning, unfuck (comprehensive repo cleanup)",
+      "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python, incremental-planning, unfuck (comprehensive repo cleanup), swarm (full agent team implementation)",
       "category": "productivity",
       "tags": ["skills", "git", "lsp", "python", "testing"]
     },
@@ -94,7 +94,7 @@
     },
     {
       "name": "global-hooks",
-      "version": "1.19.0",
+      "version": "1.20.0",
       "source": "./global-hooks",
       "description": "Global hooks: git safety, commit validation, pre-push review, tool selection",
       "category": "quality",
