@@ -44,6 +44,32 @@ def assert_guard(result, expected_exit, expected_msg=None, test_id=""):
         )
 
 
+def assert_ask_decision(result, expected_reason_fragment=None, test_id=""):
+    """Assert that the hook returned a permissionDecision: ask JSON response.
+
+    Ask decisions exit 0 and output hookSpecificOutput JSON to stdout.
+    """
+    assert result.returncode == 0, (
+        f"[{test_id}] Expected exit 0 for ask decision, got {result.returncode}. "
+        f"stderr: {result.stderr.strip()!r}"
+    )
+    try:
+        output = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(
+            f"[{test_id}] Expected JSON stdout for ask decision, got: {result.stdout.strip()!r}"
+        ) from exc
+    hook_output = output.get("hookSpecificOutput", {})
+    assert hook_output.get("permissionDecision") == "ask", (
+        f"[{test_id}] Expected permissionDecision 'ask', got: {hook_output}"
+    )
+    if expected_reason_fragment:
+        reason = hook_output.get("permissionDecisionReason", "")
+        assert expected_reason_fragment in reason, (
+            f"[{test_id}] Expected '{expected_reason_fragment}' in reason, got: {reason!r}"
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Category A: Native tool redirections (13 rules)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1021,24 +1047,24 @@ class TestGitSafetyDeny:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Git safety: ASK rules (exit 1)
+# Git safety: ASK rules (permissionDecision: ask via JSON)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TestGitSafetyAsk:
     @pytest.mark.parametrize(
-        "command, expected_exit, expected_msg",
+        "command, expected_ask, expected_msg",
         [
-            ("git stash drop", 1, "permanently deletes"),
-            ("git checkout -- file.py", 1, "destructive"),
-            ("git filter-branch --tree-filter 'rm -f x'", 1, "deprecated"),
-            ("git reflog delete HEAD@{2}", 1, "recovery points"),
-            ("git reflog expire --expire=now", 1, "recovery points"),
-            ("git remote remove upstream", 1, "break workflows"),
-            ("git remote rm upstream", 1, "break workflows"),
-            ("git config --global user.name foo", 1, "permission"),
-            ("git config --global --get user.name", 0, None),
-            ("git config --global --list", 0, None),
+            ("git stash drop", True, "permanently deletes"),
+            ("git checkout -- file.py", True, "destructive"),
+            ("git filter-branch --tree-filter 'rm -f x'", True, "deprecated"),
+            ("git reflog delete HEAD@{2}", True, "recovery points"),
+            ("git reflog expire --expire=now", True, "recovery points"),
+            ("git remote remove upstream", True, "break workflows"),
+            ("git remote rm upstream", True, "break workflows"),
+            ("git config --global user.name foo", True, "permission"),
+            ("git config --global --get user.name", False, None),
+            ("git config --global --list", False, None),
         ],
         ids=[
             "stash-drop",
@@ -1053,9 +1079,12 @@ class TestGitSafetyAsk:
             "config-global-list-allow",
         ],
     )
-    def test_git_ask(self, command, expected_exit, expected_msg):
+    def test_git_ask(self, command, expected_ask, expected_msg):
         result = run_bash(command)
-        assert_guard(result, expected_exit, expected_msg)
+        if expected_ask:
+            assert_ask_decision(result, expected_msg)
+        else:
+            assert_guard(result, 0, expected_msg)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1101,19 +1130,19 @@ class TestGitBranchEnforcement:
             ("git switch --create=feat/new", 2, "start-point"),
             ("git switch --track -c feat/new", 2, "start-point"),
             ("git checkout --track -b feat/new", 2, "start-point"),
-            # ── ASK: branch-from-local-main (exit 1) ──
-            ("git switch -c feat/new main", 1, "stale"),
-            ("git checkout -b feat/new main", 1, "stale"),
-            ("git switch -c feat/new master", 1, "stale"),
-            ("git worktree add ../wt -b feat/new main", 1, "stale"),
-            # ── ASK: branch-from-non-upstream (exit 1) ──
-            ("git switch -c feat/new feat/other", 1, "stacking"),
-            ("git checkout -b feat/new develop", 1, "stacking"),
-            ("git worktree add ../wt -b feat/new feat/old", 1, "stacking"),
-            ("git switch -c feat/new origin/feat/x", 1, "stacking"),
-            # ── ASK: branch-needs-fetch (exit 1) ──
-            ("git switch -c feat/new upstream/main", 1, "No git fetch"),
-            ("git checkout -b feat/new origin/main", 1, "No git fetch"),
+            # ── ASK: branch-from-local-main (JSON ask) ──
+            ("git switch -c feat/new main", "ask", "stale"),
+            ("git checkout -b feat/new main", "ask", "stale"),
+            ("git switch -c feat/new master", "ask", "stale"),
+            ("git worktree add ../wt -b feat/new main", "ask", "stale"),
+            # ── ASK: branch-from-non-upstream (JSON ask) ──
+            ("git switch -c feat/new feat/other", "ask", "stacking"),
+            ("git checkout -b feat/new develop", "ask", "stacking"),
+            ("git worktree add ../wt -b feat/new feat/old", "ask", "stacking"),
+            ("git switch -c feat/new origin/feat/x", "ask", "stacking"),
+            # ── ASK: branch-needs-fetch (JSON ask) ──
+            ("git switch -c feat/new upstream/main", "ask", "No git fetch"),
+            ("git checkout -b feat/new origin/main", "ask", "No git fetch"),
             # ── PASS: safe with fetch in chain (exit 0) ──
             (
                 "git fetch upstream main && git switch -c feat/new upstream/main",
@@ -1149,7 +1178,7 @@ class TestGitBranchEnforcement:
             # no fetch in chain → ASK
             (
                 "git status && git switch -c feat/x upstream/main",
-                1,
+                "ask",
                 "No git fetch",
             ),
             # fetch + safe start → PASS
@@ -1207,7 +1236,10 @@ class TestGitBranchEnforcement:
     )
     def test_branch_enforcement(self, command, expected_exit, expected_msg):
         result = run_bash(command)
-        assert_guard(result, expected_exit, expected_msg)
+        if expected_exit == "ask":
+            assert_ask_decision(result, expected_msg)
+        else:
+            assert_guard(result, expected_exit, expected_msg)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2123,8 +2155,8 @@ class TestExtraCommandRules:
         result = self._run_with_extra_rules("oc get pods", rules_file)
         assert result.returncode == 0
 
-    def test_action_ask_exits_1(self, tmp_path):
-        """action: ask causes exit 1 (confirmation prompt) instead of exit 2."""
+    def test_action_ask_prompts_user(self, tmp_path):
+        """action: ask outputs JSON permissionDecision instead of blocking."""
         rules = [
             {
                 "name": "oc-scale-zero",
@@ -2136,8 +2168,7 @@ class TestExtraCommandRules:
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
         result = self._run_with_extra_rules("oc scale deployment/app --replicas=0", rules_file)
-        assert result.returncode == 1
-        assert "confirm" in result.stderr.lower()
+        assert_ask_decision(result, "confirm")
 
     def test_action_block_exits_2(self, tmp_path):
         """action: block (explicit) causes exit 2."""
@@ -2181,10 +2212,10 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        # Without exception → ask (exit 1)
+        # Without exception → ask (JSON decision)
         result = self._run_with_extra_rules("oc scale deployment/app --replicas=0", rules_file)
-        assert result.returncode == 1
-        # With exception → allowed (exit 0)
+        assert_ask_decision(result, "confirm")
+        # With exception → allowed (exit 0, no JSON)
         result = self._run_with_extra_rules(
             "oc scale deployment/app --replicas=0 --dry-run", rules_file
         )
@@ -2211,9 +2242,9 @@ class TestExtraCommandRules:
         # Block rule → exit 2
         result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
-        # Ask rule → exit 1
+        # Ask rule → JSON decision
         result = self._run_with_extra_rules("oc scale deployment/app --replicas=0", rules_file)
-        assert result.returncode == 1
+        assert_ask_decision(result, "confirm")
         # Neither → exit 0
         result = self._run_with_extra_rules("oc get pods", rules_file)
         assert result.returncode == 0
@@ -2255,8 +2286,8 @@ class TestExtraURLRulesAction:
             env=env,
         )
 
-    def test_url_action_ask_exits_1(self, tmp_path):
-        """URL rule with action: ask causes exit 1."""
+    def test_url_action_ask_prompts_user(self, tmp_path):
+        """URL rule with action: ask outputs JSON permissionDecision."""
         rules = [
             {
                 "name": "staging-api",
@@ -2272,7 +2303,7 @@ class TestExtraURLRulesAction:
             {"url": "https://staging.api.example.com/data", "prompt": "test"},
             rules_file,
         )
-        assert result.returncode == 1
+        assert_ask_decision(result, "confirm")
 
     def test_url_action_block_exits_2(self, tmp_path):
         """URL rule with action: block (explicit) causes exit 2."""
@@ -2328,7 +2359,7 @@ class TestExtraURLRulesAction:
             {"command": "curl https://staging.api.example.com/data"},
             rules_file,
         )
-        assert result.returncode == 1
+        assert_ask_decision(result, "confirm")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2373,7 +2404,7 @@ class TestValidateMode:
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(URL_GUARD_EXTRA_RULES=str(rules_file))
         assert result.returncode == 0
-        assert "1 rule(s)" in result.stderr
+        assert "1 rule(s)" in result.stdout
 
     def test_valid_command_rules(self, tmp_path):
         """Valid command rules file → exit 0, success message."""
@@ -2393,82 +2424,82 @@ class TestValidateMode:
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
         assert result.returncode == 0
-        assert "2 rule(s)" in result.stderr
+        assert "2 rule(s)" in result.stdout
 
     def test_missing_file(self, tmp_path):
-        """Missing file → exit 1, error message."""
+        """Missing file → exit 2, error fed to Claude."""
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(tmp_path / "nonexistent.json"))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "file not found" in result.stderr
 
     def test_invalid_json(self, tmp_path):
-        """Invalid JSON → exit 1, error message."""
+        """Invalid JSON → exit 2, error fed to Claude."""
         rules_file = tmp_path / "bad.json"
         rules_file.write_text("not json {{{")
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "invalid JSON" in result.stderr
 
     def test_not_array(self, tmp_path):
-        """JSON object instead of array → exit 1, error message."""
+        """JSON object instead of array → exit 2, error fed to Claude."""
         rules_file = tmp_path / "obj.json"
         rules_file.write_text('{"name": "x"}')
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "expected JSON array" in result.stderr
 
     def test_empty_array(self, tmp_path):
-        """Empty array → exit 1, warning."""
+        """Empty array → exit 2, warning fed to Claude."""
         rules_file = tmp_path / "empty.json"
         rules_file.write_text("[]")
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "empty array" in result.stderr
 
     def test_missing_required_fields(self, tmp_path):
-        """Missing name/pattern/message → exit 1, lists missing fields."""
+        """Missing name/pattern/message → exit 2, lists missing fields."""
         rules = [{"name": "x"}]
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "missing required field 'pattern'" in result.stderr
         assert "missing required field 'message'" in result.stderr
 
     def test_non_string_pattern(self, tmp_path):
-        """Non-string pattern → exit 1, type error."""
+        """Non-string pattern → exit 2, type error."""
         rules = [{"name": "x", "pattern": 123, "message": "msg"}]
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "must be a string" in result.stderr
 
     def test_invalid_regex_pattern(self, tmp_path):
-        """Invalid regex → exit 1, regex error."""
+        """Invalid regex → exit 2, error fed to Claude."""
         rules = [{"name": "x", "pattern": "[invalid(", "message": "msg"}]
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "invalid regex" in result.stderr
 
     def test_empty_pattern_warning(self, tmp_path):
-        """Empty pattern string → exit 1, warns about matching everything."""
+        """Empty pattern string → exit 2, warns about matching everything."""
         rules = [{"name": "x", "pattern": "", "message": "msg"}]
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "match ALL" in result.stderr
 
     def test_empty_exception_warning(self, tmp_path):
-        """Empty exception string → exit 1, warns about disabling rule."""
+        """Empty exception string → exit 2, warns about disabling rule."""
         rules = [{"name": "x", "pattern": r"^\s*oc\b", "message": "msg", "exception": ""}]
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "disabling this rule" in result.stderr
 
     def test_invalid_exception_regex(self, tmp_path):
@@ -2484,33 +2515,33 @@ class TestValidateMode:
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "invalid regex in 'exception'" in result.stderr
 
     def test_invalid_action_value(self, tmp_path):
-        """Unknown action value → exit 1."""
+        """Unknown action value → exit 2."""
         rules = [{"name": "x", "pattern": r"oc", "message": "msg", "action": "warn"}]
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "'block' or 'ask'" in result.stderr
 
     def test_non_string_action(self, tmp_path):
-        """Non-string action → exit 1."""
+        """Non-string action → exit 2."""
         rules = [{"name": "x", "pattern": r"oc", "message": "msg", "action": 1}]
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "'action' must be a string" in result.stderr
 
     def test_entry_not_object(self, tmp_path):
-        """Array entry that isn't an object → exit 1."""
+        """Array entry that isn't an object → exit 2."""
         rules_file = tmp_path / "rules.json"
         rules_file.write_text('["not an object"]')
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "expected object" in result.stderr
 
     def test_valid_with_action_ask(self, tmp_path):
@@ -2539,7 +2570,7 @@ class TestValidateMode:
             URL_GUARD_EXTRA_RULES=str(url_file),
             COMMAND_GUARD_EXTRA_RULES=str(cmd_file),
         )
-        assert result.returncode == 1
+        assert result.returncode == 2
         # URL rules valid
         assert "1 rule(s)" in result.stderr
         # Command rules invalid
@@ -2554,6 +2585,6 @@ class TestValidateMode:
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
-        assert result.returncode == 1
+        assert result.returncode == 2
         assert "invalid regex" in result.stderr
         assert "'block' or 'ask'" in result.stderr
