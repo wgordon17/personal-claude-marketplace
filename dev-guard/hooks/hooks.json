@@ -1,6 +1,17 @@
 {
   "description": "Global hooks: git safety, commit validation, pre-push review, tool selection",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --validate"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
