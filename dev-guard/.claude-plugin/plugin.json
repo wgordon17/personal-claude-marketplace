@@ -2,7 +2,5 @@
   "name": "dev-guard",
   "description": "Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard",
   "version": "1.20.0",
-  "category": "quality",
-  "tags": ["hooks", "git", "validation", "policies"],
   "author": { "name": "wgordon17" }
 }
