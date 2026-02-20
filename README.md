@@ -6,19 +6,19 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 ### LSP Plugins
 
-| Plugin | Description | Execution |
-|--------|-------------|-----------|
-| pyright-uvx | Python language server | `uvx` (always latest) |
-| vtsls-npx | TypeScript/JavaScript language server | `npx` (always latest) |
-| gopls-go | Go language server | system `gopls` |
-| vscode-html-css-npx | HTML/CSS language servers | `npx` (always latest) |
-| rust-analyzer-rustup | Rust language server | `rustup` (always latest) |
+| Plugin | Description | Execution | Docs |
+|--------|-------------|-----------|------|
+| pyright-uvx | Python language server | `uvx` (always latest) | [README](pyright-uvx/README.md) |
+| vtsls-npx | TypeScript/JavaScript language server | `npx` (always latest) | [README](vtsls-npx/README.md) |
+| gopls-go | Go language server | system `gopls` | [README](gopls-go/README.md) |
+| vscode-html-css-npx | HTML/CSS language servers | `npx` (always latest) | [README](vscode-html-css-npx/README.md) |
+| rust-analyzer-rustup | Rust language server | `rustup` (always latest) | [README](rust-analyzer-rustup/README.md) |
 
 ### Code Quality
 
-| Plugin | Description | Components |
-|--------|-------------|------------|
-| code-quality | Architecture, security, QA, and performance agents with audit and orchestration skills | 4 agents, 6 skills |
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| code-quality | Architecture, security, QA, and performance agents with audit and orchestration skills | 4 agents, 6 skills | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -36,9 +36,9 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 ### Development Essentials
 
-| Plugin | Description | Components |
-|--------|-------------|------------|
-| dev-essentials | LSP navigation, Python tooling, test execution, planning, and session management | 1 agent, 4 skills, 4 commands |
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| dev-essentials | LSP navigation, Python tooling, test execution, planning, and session management | 1 agent, 4 skills, 4 commands | [README](dev-essentials/README.md) |
 
 **Agent:** `dev-essentials:test-runner` - Efficient test execution specialist
 
@@ -56,9 +56,9 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 ### Git Tools
 
-| Plugin | Description | Components |
-|--------|-------------|------------|
-| git-tools | Git history, hooks, commit review, and contributing guide generation | 3 skills, 2 commands |
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| git-tools | Git history, hooks, commit review, and contributing guide generation | 3 skills, 2 commands | [README](git-tools/README.md) |
 
 **Skills:**
 - `/git-history` - Git history manipulation (git-branchless)
@@ -70,9 +70,11 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 ### Development Guard
 
-| Plugin | Description | Components |
-|--------|-------------|------------|
-| dev-guard | Tool selection policies, commit validation, and pre-push review | 3 hooks |
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| dev-guard | Tool selection policies, commit validation, and pre-push review | 3 hooks | [README](dev-guard/README.md) |
+
+> **⚠️ Important:** Dev-guard's `"ask"` action uses Claude Code's JSON `hookSpecificOutput` protocol. This correctly overrides `permissions.allow` auto-approve rules in the CLI but is [not supported in VS Code](https://github.com/anthropics/claude-code/issues/13339). See the [dev-guard README](dev-guard/README.md#action-field) for details.
 
 **Hooks:**
 - **PreToolUse: Tool Selection Guard** - Enforces native tool usage, Python/Rust tooling, git safety, URL fetch guard

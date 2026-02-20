@@ -149,10 +149,26 @@ Custom command rules inherit all built-in processing:
 
 Both URL and command rules support an optional `action` field:
 
-| Value | Exit code | Behavior | Default |
+| Value | Mechanism | Behavior | Default |
 |-------|-----------|----------|---------|
-| `"block"` | 2 | Hard deny — Claude cannot proceed | Yes |
-| `"ask"` | 1 | Prompts the user for confirmation | No |
+| `"block"` | Exit 2 + stderr | Hard deny — Claude cannot proceed | Yes |
+| `"ask"` | JSON `hookSpecificOutput` + exit 0 | Prompts the user for confirmation | No |
+
+The `"ask"` action outputs `permissionDecision: "ask"` via Claude Code's [PreToolUse hook JSON protocol](https://code.claude.com/docs/en/hooks#pretooluse-decision-control). Claude Code displays a permission prompt with the rule's `message` as the reason. This overrides `permissions.allow` auto-approve rules — even commands matching `Bash(git:*)` or `Bash(oc:*)` will prompt when a hook returns `"ask"`.
+
+> **⚠️ Important: `"ask"` requires the JSON `hookSpecificOutput` protocol**
+>
+> The `"ask"` action uses `permissionDecision: "ask"` in a JSON object on stdout with exit code 0.
+> It does **not** use `sys.exit(1)` — exit code 1 is a non-blocking error in Claude Code and the
+> command will proceed silently. If you're writing custom hooks, use the JSON protocol:
+>
+> ```json
+> {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": "reason"}}
+> ```
+>
+> **Known issue (VS Code):** The VS Code extension ignores `permissionDecision: "ask"` and falls back
+> to permission rules ([#13339](https://github.com/anthropics/claude-code/issues/13339)). The CLI
+> works correctly. Use `"block"` as a workaround if VS Code support is needed.
 
 ### Config Validation
 
