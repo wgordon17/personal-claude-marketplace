@@ -5,14 +5,14 @@
 ```bash
 make all          # Lint + test (CI runs this)
 make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
-make test         # uv run pytest (runs global-hooks/tests/)
+make test         # uv run pytest (runs dev-guard/tests/)
 ```
 
-Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests only exist in `global-hooks/tests/`.
+Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests only exist in `dev-guard/tests/`.
 
 ## Critical Rules
 
-- **Never edit `~/.claude/plugins/`** — always edit this source repository.
+- **Never edit `~/.claude/plugins/` or `~/.claude/plugins/cache/`** — those directories contain installed/cached versions. Always edit this source repository. Changes in `~/.claude/plugins/` will be lost on update and are never committed.
 - **Always bump versions in both files** when modifying a plugin:
   - `<plugin>/.claude-plugin/plugin.json`
   - `.claude-plugin/marketplace.json`
@@ -31,18 +31,20 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests only exist 
    Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:
    ```bash
    git switch main && git pull origin main
-   CLAUDECODE="" claude plugin marketplace update private-claude-marketplace
-   CLAUDECODE="" claude plugin update <plugin-name>@private-claude-marketplace
+   CLAUDECODE="" claude plugin marketplace update personal-claude-marketplace
+   CLAUDECODE="" claude plugin update <plugin-name>@personal-claude-marketplace
    ```
 6. **Restart and E2E verify** — Tell user to restart their session. E2E verification happens in the new session.
 
 ## Repository Structure
 
-Private Claude Code plugin marketplace with 11 plugins. Master registry: `.claude-plugin/marketplace.json`.
+Personal Claude Code plugin marketplace with 8 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
-- **Agent plugins (3):** `project-dev/`, `test-execution/`, `superclaude/`
-- **Productivity plugins (3):** `global-hooks/` (only plugin with tests), `global-skills/`, `global-commands/`
+- **dev-guard/** — Tool selection guard, commit validation, pre-push review (only plugin with tests)
+- **code-quality/** — Architecture, security, QA, performance agents + audit and orchestration skills
+- **dev-essentials/** — LSP navigation, uv-python, test execution, planning, session management
+- **git-tools/** — Git history, hooks, commit review, contributing guide
 
 Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 

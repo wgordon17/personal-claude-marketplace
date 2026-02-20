@@ -1,0 +1,8 @@
+{
+  "name": "git-tools",
+  "description": "Git workflow tools: history manipulation, defense-in-depth hooks, commit review, and CONTRIBUTING.md generation",
+  "version": "1.0.0",
+  "category": "productivity",
+  "tags": ["git", "hooks", "commits", "history"],
+  "author": { "name": "wgordon17" }
+}

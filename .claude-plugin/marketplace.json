@@ -1,9 +1,9 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "private-claude-marketplace",
+  "name": "personal-claude-marketplace",
   "metadata": {
-    "description": "Private Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "1.4.0"
+    "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
+    "version": "2.0.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -35,7 +35,7 @@
       "name": "gopls-go",
       "version": "1.0.0",
       "source": "./gopls-go",
-      "description": "Go language server (via go install - always latest)",
+      "description": "Go language server (requires gopls on PATH)",
       "category": "development",
       "tags": ["go", "lsp"],
       "author": {
@@ -57,7 +57,7 @@
       "name": "rust-analyzer-rustup",
       "version": "1.0.0",
       "source": "./rust-analyzer-rustup",
-      "description": "Rust language server (via rustup - always latest)",
+      "description": "Rust language server (requires rust-analyzer via rustup)",
       "category": "development",
       "tags": ["rust", "lsp", "rustup"],
       "author": {
@@ -65,48 +65,48 @@
       }
     },
     {
-      "name": "project-dev",
-      "version": "1.0.2",
-      "source": "./project-dev",
-      "description": "Project development agents (10) and skills (6) for feature development, security review, and quality assurance"
-    },
-    {
-      "name": "test-execution",
-      "version": "1.0.2",
-      "source": "./test-execution",
-      "description": "Intelligent test execution patterns for pytest and pre-commit"
-    },
-    {
-      "name": "global-skills",
-      "version": "1.8.0",
-      "source": "./global-skills",
-      "description": "Global skills: file-audit, git-history, lsp-navigation, test-runner, uv-python, incremental-planning, unfuck (comprehensive repo cleanup), swarm (full agent team implementation)",
-      "category": "productivity",
-      "tags": ["skills", "git", "lsp", "python", "testing"]
-    },
-    {
-      "name": "global-commands",
-      "version": "1.0.2",
-      "source": "./global-commands",
-      "description": "Global commands: session management, project review, commit validation, LSP status",
-      "category": "productivity",
-      "tags": ["commands", "session", "git", "lsp"]
-    },
-    {
-      "name": "global-hooks",
+      "name": "dev-guard",
       "version": "1.20.0",
-      "source": "./global-hooks",
-      "description": "Global hooks: git safety, commit validation, pre-push review, tool selection",
+      "source": "./dev-guard",
+      "description": "Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard",
       "category": "quality",
-      "tags": ["hooks", "git", "validation"]
+      "tags": ["hooks", "git", "validation", "policies"],
+      "author": {
+        "name": "wgordon17"
+      }
     },
     {
-      "name": "superclaude",
+      "name": "code-quality",
       "version": "1.0.0",
-      "source": "./superclaude",
-      "description": "SuperClaude specialized agents and research skills for architecture, security, QA, performance, and deep research",
-      "category": "agents",
-      "tags": ["agents", "architecture", "security", "qa", "performance", "research"]
+      "source": "./code-quality",
+      "description": "Code quality agents and skills: architecture, security, QA, performance review plus file-audit, bug-investigation, unfuck, and swarm orchestration",
+      "category": "quality",
+      "tags": ["agents", "architecture", "security", "qa", "performance", "audit"],
+      "author": {
+        "name": "wgordon17"
+      }
+    },
+    {
+      "name": "dev-essentials",
+      "version": "1.0.0",
+      "source": "./dev-essentials",
+      "description": "Essential development utilities: LSP navigation, uv-python enforcement, test execution, incremental planning, and session management",
+      "category": "productivity",
+      "tags": ["skills", "lsp", "python", "testing", "session"],
+      "author": {
+        "name": "wgordon17"
+      }
+    },
+    {
+      "name": "git-tools",
+      "version": "1.0.0",
+      "source": "./git-tools",
+      "description": "Git workflow tools: history manipulation, defense-in-depth hooks, commit review, and CONTRIBUTING.md generation",
+      "category": "productivity",
+      "tags": ["git", "hooks", "commits", "history"],
+      "author": {
+        "name": "wgordon17"
+      }
     }
   ]
 }

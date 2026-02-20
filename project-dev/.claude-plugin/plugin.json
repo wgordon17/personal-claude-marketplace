@@ -1,8 +1,0 @@
-{
-  "name": "project-dev",
-  "description": "Project development agents (10) and skills (6) for feature development, security review, and quality assurance",
-  "version": "1.0.2",
-  "author": {
-    "name": "wgordon17"
-  }
-}

@@ -1,21 +1,6 @@
-# Private Claude Marketplace
+# Personal Claude Marketplace
 
-Private Claude Code plugins: LSP servers (uvx/npx) and custom agents.
-
-## ⚠️ Development Warning
-
-**DO NOT edit files in `~/.claude/plugins/marketplaces/` or `~/.claude/plugins/cache/`!**
-
-Those directories contain installed/cached versions of plugins. Always edit the source repository where you cloned this project. Changes made in `~/.claude/plugins/` will be:
-- Lost when plugins are updated or cache is cleared
-- Not committed to git
-- Not pushed to the remote repository
-
-**Development workflow:**
-1. Clone this repo to your projects directory (e.g., `~/Projects/`)
-2. Make all edits in the cloned repository
-3. Commit and push changes from the source repository
-4. Update installed plugins: `claude plugin marketplace update private-claude-marketplace`
+Personal Claude Code plugins: LSP servers, code quality agents, development utilities, and git tools.
 
 ## Plugins
 
@@ -29,86 +14,89 @@ Those directories contain installed/cached versions of plugins. Always edit the 
 | vscode-html-css-npx | HTML/CSS language servers | `npx` (always latest) |
 | rust-analyzer-rustup | Rust language server | `rustup` (always latest) |
 
-### Agent Plugins
-
-| Plugin | Description | Agents |
-|--------|-------------|--------|
-| project-dev | Project feature development agents | 10 agents |
-| test-execution | Test execution patterns | test-runner |
-| superclaude | SuperClaude specialized agents + research skills | 4 agents, 2 skills |
-
-#### superclaude
-
-**Agents included:**
-- `superclaude:architect` - System architecture specialist (design, technology choices, refactoring)
-- `superclaude:security` - Application security specialist (OWASP, auth, vulnerability detection)
-- `superclaude:qa` - Code quality & QA specialist (test strategy, maintainability, tech debt)
-- `superclaude:performance` - Performance engineering specialist (profiling, optimization, bottlenecks)
-
-**Skills included:**
-- `/deep-research` - 5-hop deep research mode (40+ sources, multi-perspective analysis)
-- `/business-panel` - Multi-stakeholder business impact analysis (CTO, PM, Finance, Security views)
-
-### Productivity Plugins
+### Code Quality
 
 | Plugin | Description | Components |
 |--------|-------------|------------|
-| global-skills | Code quality & tooling skills | 11 skills |
-| global-commands | Session & project management | 6 commands |
-| global-hooks | Git safety & validation | 2 hooks + 1 utility |
+| code-quality | Architecture, security, QA, and performance agents with audit and orchestration skills | 4 agents, 6 skills |
 
-#### global-skills
+**Agents:**
+- `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
+- `code-quality:security` - Application security specialist (OWASP, auth, vulnerability detection)
+- `code-quality:qa` - Code quality & QA specialist (test strategy, maintainability, tech debt)
+- `code-quality:performance` - Performance engineering specialist (profiling, optimization, bottlenecks)
 
-**Skills included:**
-- `/bug-investigation` - PROACTIVE interactive bug hunting with background agents
+**Skills:**
+- `/deep-research` - Multi-hop research (40+ sources, multi-perspective analysis)
+- `/business-panel` - Multi-stakeholder business impact analysis
 - `/file-audit` - Deep code quality audit system
-- `/git-history` - Git history manipulation (git-branchless)
-- `/git-hooks-install` & `/git-hooks-uninstall` - Git hooks utilities
-- `/incremental-planning` - Incremental planning workflow (replaces native plan mode)
-- `/lsp-navigation` - PROACTIVE semantic code navigation
-- `/test-runner` - Efficient test execution patterns
+- `/bug-investigation` - PROACTIVE interactive bug hunting with background agents
 - `/unfuck` - Comprehensive one-shot repo cleanup
-- `/uv-python` - PROACTIVE Python tooling enforcement
+- `/swarm` - Full agent team implementation via TeamCreate
 
-#### global-commands
+### Development Essentials
 
-**Commands included:**
-- `/contributing` - Generate/update CONTRIBUTING.md
-- `/lsp-status` - Check LSP server status
-- `/review-commits` - AI-assisted commit review for PRs
-- `/review-project` - Comprehensive TODO validation
-- `/session-end` - Sync project memory before ending
-- `/session-start` - Load project context or initialize
+| Plugin | Description | Components |
+|--------|-------------|------------|
+| dev-essentials | LSP navigation, Python tooling, test execution, planning, and session management | 1 agent, 4 skills, 4 commands |
 
-#### global-hooks
+**Agent:** `dev-essentials:test-runner` - Efficient test execution specialist
 
-**Hooks included:**
-- **PreToolUse**: Pre-push review validation
-- **PostToolUse**: Commit message validation (Conventional Commits)
-- Git safety checks for destructive operations
+**Skills:**
+- `/lsp-navigation` - PROACTIVE semantic code navigation
+- `/uv-python` - PROACTIVE Python tooling enforcement (uv over pip)
+- `/test-runner` - Efficient test execution patterns
+- `/incremental-planning` - Incremental planning workflow (replaces native plan mode)
+
+**Commands:**
+- `/dev-essentials:session-start` - Load project context or initialize
+- `/dev-essentials:session-end` - Sync project memory before ending
+- `/dev-essentials:review-project` - Comprehensive TODO validation
+- `/dev-essentials:lsp-status` - Check LSP server status
+
+### Git Tools
+
+| Plugin | Description | Components |
+|--------|-------------|------------|
+| git-tools | Git history, hooks, commit review, and contributing guide generation | 3 skills, 2 commands |
+
+**Skills:**
+- `/git-history` - Git history manipulation (git-branchless)
+- `/git-hooks-install` & `/git-hooks-uninstall` - Defense-in-depth git hooks
+
+**Commands:**
+- `/git-tools:review-commits` - AI-assisted commit review for PRs
+- `/git-tools:contributing` - Generate/update CONTRIBUTING.md
+
+### Development Guard
+
+| Plugin | Description | Components |
+|--------|-------------|------------|
+| dev-guard | Tool selection policies, commit validation, and pre-push review | 3 hooks |
+
+**Hooks:**
+- **PreToolUse: Tool Selection Guard** - Enforces native tool usage, Python/Rust tooling, git safety, URL fetch guard
+- **PreToolUse: Pre-push Review** - Commit summary and suggestions when pushing 3+ commits
+- **PostToolUse: Commit Validation** - Conventional Commits format enforcement
 
 ## Installation
 
 ```bash
-# Add marketplace (GitHub)
-claude plugin marketplace add wgordon17/private-claude-marketplace
+# Add marketplace
+claude plugin marketplace add wgordon17/personal-claude-marketplace
 
-# Install LSP plugins
-claude plugin install pyright-uvx@private-claude-marketplace
-claude plugin install vtsls-npx@private-claude-marketplace
-claude plugin install gopls-go@private-claude-marketplace
-claude plugin install vscode-html-css-npx@private-claude-marketplace
-claude plugin install rust-analyzer-rustup@private-claude-marketplace
+# Install non-LSP plugins
+claude plugin install dev-guard@personal-claude-marketplace
+claude plugin install code-quality@personal-claude-marketplace
+claude plugin install dev-essentials@personal-claude-marketplace
+claude plugin install git-tools@personal-claude-marketplace
 
-# Install agent plugins
-claude plugin install project-dev@private-claude-marketplace
-claude plugin install test-execution@private-claude-marketplace
-claude plugin install superclaude@private-claude-marketplace
-
-# Install productivity plugins
-claude plugin install global-skills@private-claude-marketplace
-claude plugin install global-commands@private-claude-marketplace
-claude plugin install global-hooks@private-claude-marketplace
+# Install LSP plugins (pick what you need)
+claude plugin install pyright-uvx@personal-claude-marketplace
+claude plugin install vtsls-npx@personal-claude-marketplace
+claude plugin install gopls-go@personal-claude-marketplace
+claude plugin install vscode-html-css-npx@personal-claude-marketplace
+claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 ```
 
 ## Prerequisites
@@ -165,6 +153,6 @@ uv cache clean
 rm -rf ~/.npm/_npx
 ```
 
-## Author
+## License
 
-wgordon17 - January 2026
+MIT
