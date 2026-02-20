@@ -1926,3 +1926,177 @@ class TestExtraURLRules:
             rules_file,
         )
         assert result.returncode == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Custom command guard rules: COMMAND_GUARD_EXTRA_RULES env var
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestExtraCommandRules:
+    """COMMAND_GUARD_EXTRA_RULES env var loads custom command rules from a JSON file."""
+
+    def _run_with_extra_rules(self, command, rules_file):
+        """Run the guard with a custom extra command rules file."""
+        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+        env = os.environ.copy()
+        env["COMMAND_GUARD_EXTRA_RULES"] = str(rules_file)
+        return subprocess.run(
+            ["uv", "run", SCRIPT],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_extra_rule_blocks_matching_command(self, tmp_path):
+        """Custom rules loaded from JSON file block matching commands."""
+        rules = [
+            {
+                "name": "oc-delete",
+                "pattern": r"^\s*oc\s+delete\b",
+                "message": "oc delete is blocked. Use the OpenShift console instead.",
+            }
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        assert result.returncode == 2
+        assert "OpenShift console" in result.stderr
+
+    def test_extra_rule_allows_non_matching(self, tmp_path):
+        """Custom rules do not block commands that don't match."""
+        rules = [
+            {
+                "name": "oc-delete",
+                "pattern": r"^\s*oc\s+delete\b",
+                "message": "Blocked.",
+            }
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules("oc get pods", rules_file)
+        assert result.returncode == 0
+
+    def test_extra_rule_with_exception(self, tmp_path):
+        """Custom rules with exception pattern allow exception matches."""
+        rules = [
+            {
+                "name": "oc-delete",
+                "pattern": r"^\s*oc\s+delete\b",
+                "message": "oc delete is blocked.",
+                "exception": "--dry-run",
+            }
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        # Without exception → blocked
+        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        assert result.returncode == 2
+        # With exception → allowed
+        result = self._run_with_extra_rules("oc delete pod my-pod --dry-run", rules_file)
+        assert result.returncode == 0
+
+    def test_extra_rule_in_chained_commands(self, tmp_path):
+        """Custom rules are checked in chained commands (&&, ||, ;)."""
+        rules = [
+            {
+                "name": "gh-repo-delete",
+                "pattern": r"^\s*gh\s+repo\s+delete\b",
+                "message": "gh repo delete is blocked.",
+            }
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules("git status && gh repo delete my-repo", rules_file)
+        assert result.returncode == 2
+
+    def test_extra_rule_in_pipe_segment(self, tmp_path):
+        """Custom rules are checked in pipe segments."""
+        rules = [
+            {
+                "name": "dangerous-cmd",
+                "pattern": r"^\s*dangerous\b",
+                "message": "dangerous command blocked.",
+            }
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules("echo data | dangerous --flag", rules_file)
+        assert result.returncode == 2
+
+    def test_extra_rule_with_env_prefix(self, tmp_path):
+        """Custom rules work with environment variable prefixes."""
+        rules = [
+            {
+                "name": "oc-delete",
+                "pattern": r"^\s*oc\s+delete\b",
+                "message": "oc delete blocked.",
+            }
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules("KUBECONFIG=x oc delete pod p", rules_file)
+        assert result.returncode == 2
+
+    def test_guard_bypass_overrides_extra_rules(self, tmp_path):
+        """GUARD_BYPASS=1 andon cord overrides custom command rules."""
+        rules = [
+            {
+                "name": "oc-delete",
+                "pattern": r"^\s*oc\s+delete\b",
+                "message": "Blocked.",
+            }
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules("GUARD_BYPASS=1 oc delete pod my-pod", rules_file)
+        assert result.returncode == 0
+
+    def test_missing_file_does_not_break(self, tmp_path):
+        """Non-existent rules file is silently ignored."""
+        result = self._run_with_extra_rules("oc delete pod my-pod", tmp_path / "nonexistent.json")
+        assert result.returncode == 0
+
+    def test_invalid_json_does_not_break(self, tmp_path):
+        """Malformed JSON rules file is silently ignored."""
+        rules_file = tmp_path / "bad-rules.json"
+        rules_file.write_text("not valid json {{{")
+        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        assert result.returncode == 0
+
+    def test_invalid_regex_does_not_break(self, tmp_path):
+        """Invalid regex in rules file is silently ignored."""
+        rules = [{"name": "bad", "pattern": "[invalid(", "message": "msg"}]
+        rules_file = tmp_path / "bad-regex.json"
+        rules_file.write_text(json.dumps(rules))
+        result = self._run_with_extra_rules("some command", rules_file)
+        assert result.returncode == 0
+
+    def test_multiple_extra_rules(self, tmp_path):
+        """Multiple custom rules are all checked."""
+        rules = [
+            {
+                "name": "oc-delete",
+                "pattern": r"^\s*oc\s+delete\b",
+                "message": "oc delete blocked.",
+            },
+            {
+                "name": "gh-repo-delete",
+                "pattern": r"^\s*gh\s+repo\s+delete\b",
+                "message": "gh repo delete blocked.",
+            },
+        ]
+        rules_file = tmp_path / "extra-cmd-rules.json"
+        rules_file.write_text(json.dumps(rules))
+        # First rule matches
+        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        assert result.returncode == 2
+        assert "oc delete" in result.stderr
+        # Second rule matches
+        result = self._run_with_extra_rules("gh repo delete my-repo", rules_file)
+        assert result.returncode == 2
+        assert "gh repo delete" in result.stderr
+        # Neither rule matches
+        result = self._run_with_extra_rules("oc get pods", rules_file)
+        assert result.returncode == 0

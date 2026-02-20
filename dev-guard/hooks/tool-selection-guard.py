@@ -376,6 +376,57 @@ def _load_extra_url_rules():
 AUTH_URL_RULES.extend(_load_extra_url_rules())
 
 
+# ── Category G: User-defined command guard rules ──
+# Loaded from COMMAND_GUARD_EXTRA_RULES env var (JSON file path).
+# Rules are appended to the RULES list and checked by the same pipeline
+# (chains, pipes, subshells, env prefix stripping, shell keyword stripping).
+
+
+def _load_extra_command_rules():
+    """Load additional command guard rules from a JSON file.
+
+    Set COMMAND_GUARD_EXTRA_RULES to the path of a JSON file containing
+    an array of rule objects with keys: name, pattern, message.
+    Optionally include "exception" for an exception regex pattern.
+
+    Example JSON:
+    [
+        {
+            "name": "oc-delete",
+            "pattern": "^\\\\s*oc\\\\s+delete\\\\b",
+            "message": "oc delete is blocked. Use the OpenShift console instead.",
+            "exception": "--dry-run"
+        }
+    ]
+    """
+    rules_path = os.environ.get("COMMAND_GUARD_EXTRA_RULES")
+    if not rules_path:
+        return []
+    try:
+        with open(rules_path) as f:
+            raw = json.load(f)
+        extra = []
+        for entry in raw:
+            exception = None
+            if entry.get("exception"):
+                exception = re.compile(entry["exception"])
+            extra.append(
+                (
+                    entry["name"],
+                    re.compile(entry["pattern"]),
+                    exception,
+                    entry["message"],
+                )
+            )
+        return extra
+    except (OSError, json.JSONDecodeError, KeyError, re.error):
+        return []  # Fail silently — bad config should not break the guard
+
+
+# Merge built-in rules with any user-defined extra command rules
+RULES.extend(_load_extra_command_rules())
+
+
 _URL_LOG_DIR = os.environ.get("URL_GUARD_LOG_DIR", str(Path.home() / ".claude" / "logs"))
 
 
