@@ -2,34 +2,34 @@
 
 Git safety checks, commit message validation, and pre-push review automation.
 
-## ⚠️ Development Warning
+## Hooks
 
-**DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
+### PreToolUse: Tool Selection Guard
 
-## Hooks (2 + 1 utility)
+**tool-selection-guard.py** — Enforces tool and command best practices:
+- **Native tool redirections** — Redirects `grep`/`find`/`cat`/`sed` to Grep/Glob/Read/Edit tools
+- **Python tooling** — Enforces `uv run`/`uvx` over bare `python`/`pip`
+- **Git safety** — Blocks force pushes, branch deletions, commits to main, and other destructive operations
+- **URL fetch guard** — Blocks WebFetch/WebSearch for authenticated services (configurable via `URL_GUARD_EXTRA_RULES`)
+- **Interactive command blocking** — Prevents `git rebase -i`, `git add -p`, and other interactive commands
+- **Plan mode redirect** — Redirects `EnterPlanMode` to incremental-planning skill
 
-### PreToolUse Hooks
+### PreToolUse: Pre-push Review
 
-**Pre-push Review** - `Bash(git push origin*)`
+**pre-push-review.sh** — `Bash(git push origin*)`
 - Triggers when pushing 3+ commits
 - Shows commit summary and suggestions
 - Warns about WIP commits or duplicate scopes
-- Suggests squashing related commits
-- **Non-blocking** - push proceeds after review
+- **Non-blocking** — push proceeds after review
 
-### PostToolUse Hooks
+### PostToolUse: Commit Message Validation
 
-**Commit Message Validation** - `Bash(git commit:*)`
+**validate-commit-message.sh** — `Bash(git commit:*)`
 - Validates Conventional Commits format
 - Enforces present indicative tense ("adds" not "add")
 - Checks subject line length (<72 chars, warn >50)
 - Blocks emoji and meta-commentary
-- Warns about body quality issues
 - **Exit 2** shows errors but commit already completed (PostToolUse limitation)
-
-### Utility Scripts
-
-**git-safety-check.sh** - Shared safety validation logic
 
 ## How Hooks Work
 
@@ -62,7 +62,7 @@ docs: updates API documentation
 ## Installation
 
 ```bash
-claude plugin install global-hooks@private-claude-marketplace
+claude plugin install global-hooks@personal-claude-marketplace
 ```
 
 ## Requirements
@@ -73,6 +73,16 @@ claude plugin install global-hooks@private-claude-marketplace
 ## Customization
 
 Hooks use plugin-relative paths (`${CLAUDE_PLUGIN_ROOT}`) and work in any project without modification.
+
+### Custom URL Guard Rules
+
+Set `URL_GUARD_EXTRA_RULES` to a JSON file path to add organization-specific URL blocking rules:
+
+```bash
+export URL_GUARD_EXTRA_RULES="/path/to/rules.json"
+```
+
+See `examples/url-guard-extra-rules.example.json` for the format.
 
 ## Author
 

@@ -1,3 +1,7 @@
+---
+description: Sync project memory and update hack/ files before ending session
+---
+
 # Session End — Sync Project Memory
 
 Before ending this session, update the project's persistent memory in `hack/` (or equivalent directory).

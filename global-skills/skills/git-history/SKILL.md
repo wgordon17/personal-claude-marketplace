@@ -1,7 +1,7 @@
 ---
 name: git-history
 description: Non-interactive git history manipulation using git-branchless. Use when rewording commits, squashing, splitting, reordering, or recovering from mistakes. Provides reliable commands that AI agents can execute without interactive prompts. ALWAYS prefer these commands over git rebase -i, git add -p, or sed-based workarounds.
-allowed-tools: Bash(git:*)
+allowed-tools: [Bash]
 ---
 
 # Non-Interactive Git History Commands (git-branchless)

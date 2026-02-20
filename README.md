@@ -1,21 +1,6 @@
-# Private Claude Marketplace
+# Personal Claude Marketplace
 
-Private Claude Code plugins: LSP servers (uvx/npx) and custom agents.
-
-## ⚠️ Development Warning
-
-**DO NOT edit files in `~/.claude/plugins/marketplaces/` or `~/.claude/plugins/cache/`!**
-
-Those directories contain installed/cached versions of plugins. Always edit the source repository where you cloned this project. Changes made in `~/.claude/plugins/` will be:
-- Lost when plugins are updated or cache is cleared
-- Not committed to git
-- Not pushed to the remote repository
-
-**Development workflow:**
-1. Clone this repo to your projects directory (e.g., `~/Projects/`)
-2. Make all edits in the cloned repository
-3. Commit and push changes from the source repository
-4. Update installed plugins: `claude plugin marketplace update private-claude-marketplace`
+Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents.
 
 ## Plugins
 
@@ -67,6 +52,7 @@ Those directories contain installed/cached versions of plugins. Always edit the 
 - `/incremental-planning` - Incremental planning workflow (replaces native plan mode)
 - `/lsp-navigation` - PROACTIVE semantic code navigation
 - `/test-runner` - Efficient test execution patterns
+- `/swarm` - Full agent team implementation via TeamCreate
 - `/unfuck` - Comprehensive one-shot repo cleanup
 - `/uv-python` - PROACTIVE Python tooling enforcement
 
@@ -91,24 +77,24 @@ Those directories contain installed/cached versions of plugins. Always edit the 
 
 ```bash
 # Add marketplace (GitHub)
-claude plugin marketplace add wgordon17/private-claude-marketplace
+claude plugin marketplace add wgordon17/personal-claude-marketplace
 
 # Install LSP plugins
-claude plugin install pyright-uvx@private-claude-marketplace
-claude plugin install vtsls-npx@private-claude-marketplace
-claude plugin install gopls-go@private-claude-marketplace
-claude plugin install vscode-html-css-npx@private-claude-marketplace
-claude plugin install rust-analyzer-rustup@private-claude-marketplace
+claude plugin install pyright-uvx@personal-claude-marketplace
+claude plugin install vtsls-npx@personal-claude-marketplace
+claude plugin install gopls-go@personal-claude-marketplace
+claude plugin install vscode-html-css-npx@personal-claude-marketplace
+claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 # Install agent plugins
-claude plugin install project-dev@private-claude-marketplace
-claude plugin install test-execution@private-claude-marketplace
-claude plugin install superclaude@private-claude-marketplace
+claude plugin install project-dev@personal-claude-marketplace
+claude plugin install test-execution@personal-claude-marketplace
+claude plugin install superclaude@personal-claude-marketplace
 
 # Install productivity plugins
-claude plugin install global-skills@private-claude-marketplace
-claude plugin install global-commands@private-claude-marketplace
-claude plugin install global-hooks@private-claude-marketplace
+claude plugin install global-skills@personal-claude-marketplace
+claude plugin install global-commands@personal-claude-marketplace
+claude plugin install global-hooks@personal-claude-marketplace
 ```
 
 ## Prerequisites

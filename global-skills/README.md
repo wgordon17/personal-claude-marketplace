@@ -2,10 +2,6 @@
 
 Essential skills for code quality, git operations, LSP navigation, test execution, Python tooling, and bug investigation.
 
-## ⚠️ Development Warning
-
-**DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
-
 ## Skills (11)
 
 | Skill | Description | Type |
@@ -19,6 +15,7 @@ Essential skills for code quality, git operations, LSP navigation, test executio
 | `/lsp-navigation` | Semantic code navigation | PROACTIVE |
 | `/test-runner` | Efficient test execution patterns | Manual |
 | `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
+| `/swarm` | Full agent team implementation via TeamCreate | Manual |
 | `/uv-python` | Python tooling enforcement (uv over pip) | PROACTIVE |
 
 ## Usage
@@ -56,7 +53,7 @@ Skills are invoked automatically (PROACTIVE) or manually via slash command:
 ## Installation
 
 ```bash
-claude plugin install global-skills@private-claude-marketplace
+claude plugin install global-skills@personal-claude-marketplace
 ```
 
 ## Dependencies

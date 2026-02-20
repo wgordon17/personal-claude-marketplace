@@ -2,10 +2,6 @@
 
 Intelligent test execution patterns for pytest and pre-commit with sequential runs and targeted re-runs.
 
-## ⚠️ Development Warning
-
-**DO NOT edit files in `~/.claude/plugins/`!** Always edit the source repository. See marketplace README for details.
-
 ## Agent
 
 **test-runner** - Efficient test execution specialist
@@ -57,7 +53,7 @@ Haiku - Fast and efficient for test execution workflows
 ## Installation
 
 ```bash
-claude plugin install test-execution@private-claude-marketplace
+claude plugin install test-execution@personal-claude-marketplace
 ```
 
 ## Compatible Test Frameworks

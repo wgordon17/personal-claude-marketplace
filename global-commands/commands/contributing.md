@@ -1,3 +1,7 @@
+---
+description: Generate or update CONTRIBUTING.md with Conventional Commits standards
+---
+
 # Generate or Update CONTRIBUTING.md
 
 Create or update a CONTRIBUTING.md file with consistent Conventional Commits standards.

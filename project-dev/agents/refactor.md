@@ -3,7 +3,7 @@ name: refactor
 description: Improves code structure through extraction, consolidation, and cleanup while preserving behavior
 tools: Read, Write, Edit, Glob, Grep, LSP
 model: sonnet
-color: indigo
+color: blue
 ---
 
 # project-dev:refactor — Refactoring Specialist Agent

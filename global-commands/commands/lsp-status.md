@@ -158,15 +158,15 @@ Available Operations:
 If LSP plugins are not installed:
 
 ```bash
-# LSP plugins should be installed from private-claude-marketplace
+# LSP plugins should be installed from personal-claude-marketplace
 # If you don't have access to this marketplace, check with the maintainer
 
 # Install individual plugins
-/plugin install pyright-uvx@private-claude-marketplace
-/plugin install vtsls-npx@private-claude-marketplace
-/plugin install gopls-go@private-claude-marketplace
-/plugin install rust-analyzer-rustup@private-claude-marketplace
-/plugin install vscode-html-css-npx@private-claude-marketplace
+/plugin install pyright-uvx@personal-claude-marketplace
+/plugin install vtsls-npx@personal-claude-marketplace
+/plugin install gopls-go@personal-claude-marketplace
+/plugin install rust-analyzer-rustup@personal-claude-marketplace
+/plugin install vscode-html-css-npx@personal-claude-marketplace
 ```
 
 ## Documentation

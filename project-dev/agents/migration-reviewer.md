@@ -3,7 +3,7 @@ name: migration-reviewer
 description: Reviews Django migrations for safety, correctness, and zero-downtime compatibility
 tools: Read, Grep, Glob, Bash
 model: haiku
-color: teal
+color: cyan
 ---
 
 # project-dev:migration-reviewer — Migration Safety Agent

@@ -3,7 +3,7 @@ name: orchestrator
 description: Meta-orchestrator that coordinates complex workflows by launching subagents and preventing context explosion
 tools: Task, Read, TodoWrite, Skill, AskUserQuestion
 model: opus
-color: purple
+color: magenta
 ---
 
 # project-dev:orchestrator — Meta-Orchestrator Agent

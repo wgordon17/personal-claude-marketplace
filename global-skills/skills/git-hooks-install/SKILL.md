@@ -1,6 +1,7 @@
 ---
 name: git-hooks-install
 description: Install defense-in-depth git hooks using pre-commit framework
+allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 ---
 
 # Install Defense-in-Depth Git Hooks
@@ -48,7 +49,7 @@ When this skill is invoked:
    PLUGIN_HOOKS_DIR="$(find ~/.claude/plugins/cache -path "*/global-skills/*/git-hooks" -type d | sort -V | tail -1)"
    if [ -z "$PLUGIN_HOOKS_DIR" ]; then
        echo "Error: global-skills plugin not found. Install with:"
-       echo "  claude plugin install global-skills@private-claude-marketplace"
+       echo "  claude plugin install global-skills@personal-claude-marketplace"
        exit 1
    fi
 

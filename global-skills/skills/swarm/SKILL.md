@@ -1,6 +1,7 @@
 ---
 name: swarm
 description: Force full TeamCreate agent swarm for any implementation task. Launches Architect, Implementer, Tester, Security, QA, Docs, and Verifier agents in a coordinated pipeline. Use when asked to "swarm this", "full team", "agent team", or when you want maximum rigor on an implementation.
+allowed-tools: [Task, Read, Write, Edit, Grep, Glob, Bash, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet]
 ---
 
 # /swarm — Full Agent Swarm Implementation

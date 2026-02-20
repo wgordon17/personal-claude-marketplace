@@ -1,6 +1,7 @@
 ---
 name: git-hooks-uninstall
 description: Safely remove defense-in-depth git hooks from project
+allowed-tools: [Bash, Read, Edit, Grep, Glob]
 ---
 
 # Uninstall Defense-in-Depth Git Hooks

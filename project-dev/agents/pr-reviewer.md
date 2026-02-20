@@ -3,7 +3,7 @@ name: pr-reviewer
 description: Comprehensive PR review with security, documentation, tests, and convention checks
 tools: Bash, Grep, Read, LSP
 model: sonnet
-color: orange
+color: yellow
 ---
 
 # project-dev:pr-reviewer — Pull Request Review Agent

@@ -251,7 +251,7 @@ The pyright language server runs via `uvx`, using the same infrastructure as oth
 
 ## Available Language Servers
 
-Current configuration (installed from `private-claude-marketplace`):
+Current configuration (installed from `personal-claude-marketplace`):
 
 | Plugin | Language | Command |
 |--------|----------|---------|

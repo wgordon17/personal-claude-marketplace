@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "private-claude-marketplace",
+  "name": "personal-claude-marketplace",
   "metadata": {
-    "description": "Private Claude Code plugins: LSP servers (uvx/npx) and custom agents",
+    "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
     "version": "1.4.0"
   },
   "owner": {
@@ -35,7 +35,7 @@
       "name": "gopls-go",
       "version": "1.0.0",
       "source": "./gopls-go",
-      "description": "Go language server (via go install - always latest)",
+      "description": "Go language server (requires gopls on PATH)",
       "category": "development",
       "tags": ["go", "lsp"],
       "author": {
@@ -57,7 +57,7 @@
       "name": "rust-analyzer-rustup",
       "version": "1.0.0",
       "source": "./rust-analyzer-rustup",
-      "description": "Rust language server (via rustup - always latest)",
+      "description": "Rust language server (requires rust-analyzer via rustup)",
       "category": "development",
       "tags": ["rust", "lsp", "rustup"],
       "author": {
@@ -68,13 +68,17 @@
       "name": "project-dev",
       "version": "1.0.2",
       "source": "./project-dev",
-      "description": "Project development agents (10) and skills (6) for feature development, security review, and quality assurance"
+      "description": "Project development agents (10) and skills (6) for feature development, security review, and quality assurance",
+      "category": "agents",
+      "tags": ["agents", "django", "development", "testing"]
     },
     {
       "name": "test-execution",
       "version": "1.0.2",
       "source": "./test-execution",
-      "description": "Intelligent test execution patterns for pytest and pre-commit"
+      "description": "Intelligent test execution patterns for pytest and pre-commit",
+      "category": "agents",
+      "tags": ["agents", "testing", "pytest"]
     },
     {
       "name": "global-skills",

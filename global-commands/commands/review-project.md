@@ -1,3 +1,7 @@
+---
+description: Comprehensive project review with TODO validation and claim verification
+---
+
 # Review Project - Comprehensive TODO Validation
 
 Perform comprehensive project review and TODO validation with **actual testing and execution**.

@@ -3,7 +3,7 @@ name: performance
 description: Use when investigating performance issues, optimizing slow code, analyzing bottlenecks, or when user mentions "slow", "performance", "latency", "memory", "CPU", "optimization", "bottleneck"
 tools: Read, Glob, Grep, LSP, Bash, WebSearch
 model: sonnet
-color: orange
+color: yellow
 ---
 
 # superclaude:performance — Performance Engineering Specialist
