@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dev = ["ruff>=0.9", "pytest>=8"]
 
 [tool.pytest.ini_options]
-testpaths = ["global-hooks/tests"]
+testpaths = ["dev-guard/tests"]
 addopts = "-v --tb=short"
 
 [tool.ruff]

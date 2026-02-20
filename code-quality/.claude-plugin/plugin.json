@@ -1,0 +1,8 @@
+{
+  "name": "code-quality",
+  "description": "Code quality agents and skills: architecture, security, QA, performance review plus file-audit, bug-investigation, unfuck, and swarm orchestration",
+  "version": "1.0.0",
+  "category": "quality",
+  "tags": ["agents", "architecture", "security", "qa", "performance", "audit"],
+  "author": { "name": "wgordon17" }
+}
