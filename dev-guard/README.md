@@ -87,7 +87,7 @@ Set `URL_GUARD_EXTRA_RULES` to a JSON file path:
 export URL_GUARD_EXTRA_RULES="$HOME/.config/claude/url-guard-rules.json"
 ```
 
-JSON format — array of rule objects with `name`, `pattern` (regex matched against the full URL), and `message`:
+JSON format — array of rule objects with `name`, `pattern` (regex matched against the full URL), `message`, and optional `action` (`"block"` or `"ask"`, defaults to `"block"`):
 
 ```json
 [
@@ -97,9 +97,10 @@ JSON format — array of rule objects with `name`, `pattern` (regex matched agai
         "message": "This URL is on internal GitLab. Use glab CLI instead."
     },
     {
-        "name": "internal-jira",
-        "pattern": "jira\\.mycompany\\.com",
-        "message": "Internal Jira requires auth. Use the jira CLI or MCP tools."
+        "name": "staging-api",
+        "pattern": "staging\\.api\\.example\\.com",
+        "message": "Staging API — confirm this is intentional.",
+        "action": "ask"
     }
 ]
 ```
@@ -114,7 +115,7 @@ Set `COMMAND_GUARD_EXTRA_RULES` to a JSON file path:
 export COMMAND_GUARD_EXTRA_RULES="$HOME/.config/claude/command-guard-rules.json"
 ```
 
-JSON format — array of rule objects with `name`, `pattern` (regex matched against the command), `message`, and optional `exception` (regex — if the command also matches this, it is allowed):
+JSON format — array of rule objects with `name`, `pattern` (regex matched against the command), `message`, optional `exception` (regex — if the command also matches this, it is allowed), and optional `action` (`"block"` or `"ask"`, defaults to `"block"`):
 
 ```json
 [
@@ -125,14 +126,15 @@ JSON format — array of rule objects with `name`, `pattern` (regex matched agai
         "exception": "--dry-run"
     },
     {
+        "name": "oc-scale-zero",
+        "pattern": "^\\s*oc\\s+scale\\b.*--replicas=0",
+        "message": "Scaling to zero — confirm this is intentional.",
+        "action": "ask"
+    },
+    {
         "name": "gh-repo-delete",
         "pattern": "^\\s*gh\\s+repo\\s+delete\\b",
         "message": "gh repo delete is blocked. Delete repositories via the GitHub UI."
-    },
-    {
-        "name": "kubectl-delete-namespace",
-        "pattern": "^\\s*kubectl\\s+delete\\s+namespace\\b",
-        "message": "Namespace deletion is blocked. Coordinate with the platform team."
     }
 ]
 ```
@@ -142,6 +144,32 @@ Custom command rules inherit all built-in processing:
 - Checked in pipe segments and subshells (`$()`, backticks)
 - Environment variable prefixes are stripped before matching (`KUBECONFIG=x oc delete` matches `oc delete`)
 - `GUARD_BYPASS=1` prefix overrides all rules (built-in and custom)
+
+### Action Field
+
+Both URL and command rules support an optional `action` field:
+
+| Value | Exit code | Behavior | Default |
+|-------|-----------|----------|---------|
+| `"block"` | 2 | Hard deny — Claude cannot proceed | Yes |
+| `"ask"` | 1 | Prompts the user for confirmation | No |
+
+### Config Validation
+
+Run `--validate` to check your config files for issues:
+
+```bash
+uv run dev-guard/hooks/tool-selection-guard.py --validate
+```
+
+This checks both `URL_GUARD_EXTRA_RULES` and `COMMAND_GUARD_EXTRA_RULES` files for:
+- Missing files, invalid JSON, wrong types
+- Missing required fields (`name`, `pattern`, `message`)
+- Invalid regex patterns and exceptions
+- Empty patterns (matches everything) or empty exceptions (disables rule)
+- Invalid `action` values
+
+Validation runs automatically on **session start** via the SessionStart hook. If your config has issues, you'll see them immediately when a new session begins. Built-in rules are always enforced regardless of config file state.
 
 ### Bypass Mechanisms
 

@@ -266,6 +266,9 @@ RULES = [
     ),
 ]
 
+# Action field for user-defined rules: "block" (exit 2) or "ask" (exit 1).
+_ACTION_EXIT_CODE = {"block": 2, "ask": 1}
+
 # ── Category F: Authenticated URL fetch guard ──
 # Each rule: (name, url_pattern, guidance_message)
 # url_pattern: regex matched against the full URL
@@ -342,6 +345,8 @@ def _load_extra_url_rules():
 
     Set URL_GUARD_EXTRA_RULES to the path of a JSON file containing
     an array of rule objects with keys: name, pattern, message.
+    Optionally include "action": "ask" to prompt for confirmation
+    instead of blocking (default: "block").
 
     Example JSON:
     [
@@ -349,6 +354,12 @@ def _load_extra_url_rules():
             "name": "internal-gitlab",
             "pattern": "gitlab\\\\.internal\\\\.example\\\\.com",
             "message": "This URL is on internal GitLab. Use glab CLI instead."
+        },
+        {
+            "name": "staging-api",
+            "pattern": "staging\\\\.api\\\\.example\\\\.com",
+            "message": "Staging API — confirm this is intentional.",
+            "action": "ask"
         }
     ]
     """
@@ -360,15 +371,17 @@ def _load_extra_url_rules():
             raw = json.load(f)
         extra = []
         for entry in raw:
+            exit_code = _ACTION_EXIT_CODE.get(entry.get("action", "block"), 2)
             extra.append(
                 (
                     entry["name"],
                     re.compile(entry["pattern"]),
                     entry["message"],
+                    exit_code,
                 )
             )
         return extra
-    except (OSError, json.JSONDecodeError, KeyError, re.error):
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, re.error):
         return []  # Fail silently — bad config should not break the guard
 
 
@@ -387,7 +400,9 @@ def _load_extra_command_rules():
 
     Set COMMAND_GUARD_EXTRA_RULES to the path of a JSON file containing
     an array of rule objects with keys: name, pattern, message.
-    Optionally include "exception" for an exception regex pattern.
+    Optionally include "exception" for an exception regex pattern and
+    "action" set to "ask" to prompt for confirmation instead of
+    blocking (default: "block").
 
     Example JSON:
     [
@@ -396,6 +411,12 @@ def _load_extra_command_rules():
             "pattern": "^\\\\s*oc\\\\s+delete\\\\b",
             "message": "oc delete is blocked. Use the OpenShift console instead.",
             "exception": "--dry-run"
+        },
+        {
+            "name": "oc-scale-zero",
+            "pattern": "^\\\\s*oc\\\\s+scale\\\\b.*--replicas=0",
+            "message": "Scaling to zero — confirm this is intentional.",
+            "action": "ask"
         }
     ]
     """
@@ -410,16 +431,18 @@ def _load_extra_command_rules():
             exception = None
             if entry.get("exception"):
                 exception = re.compile(entry["exception"])
+            exit_code = _ACTION_EXIT_CODE.get(entry.get("action", "block"), 2)
             extra.append(
                 (
                     entry["name"],
                     re.compile(entry["pattern"]),
                     exception,
                     entry["message"],
+                    exit_code,
                 )
             )
         return extra
-    except (OSError, json.JSONDecodeError, KeyError, re.error):
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError, re.error):
         return []  # Fail silently — bad config should not break the guard
 
 
@@ -456,15 +479,17 @@ def _extract_urls(text):
 
 
 def _check_url_rules(url):
-    """Check a URL against AUTH_URL_RULES. Returns (name, guidance) or None."""
-    for name, pattern, guidance in AUTH_URL_RULES:
+    """Check a URL against AUTH_URL_RULES. Returns (name, guidance, exit_code) or None."""
+    for rule in AUTH_URL_RULES:
+        name, pattern, guidance = rule[:3]
+        exit_code = rule[3] if len(rule) > 3 else 2
         if pattern.search(url):
-            return (name, guidance)
+            return (name, guidance, exit_code)
     return None
 
 
 def _check_fetch_command(cmd):
-    """Check curl/wget commands for authenticated URLs. Exits 2 on match.
+    """Check curl/wget commands for authenticated URLs. Exits 2 (block) or 1 (ask) on match.
 
     Returns True if the command was a curl/wget (so caller knows to log),
     or False if not a fetch command.
@@ -484,7 +509,7 @@ def _check_fetch_command(cmd):
     for url in urls:
         result = _check_url_rules(url)
         if result:
-            rule_name, guidance = result
+            rule_name, guidance, exit_code = result
             _log_url_event(url, rule_name, "blocked", "Bash")
             print(
                 f"{guidance}\n"
@@ -492,7 +517,7 @@ def _check_fetch_command(cmd):
                 "prefix with `ALLOW_FETCH=1`.",
                 file=sys.stderr,
             )
-            sys.exit(2)
+            sys.exit(exit_code)
         else:
             _log_url_event(url, None, "allowed", "Bash")
     return True
@@ -1184,7 +1209,9 @@ def _check_rules(cmd, fetch_seen, skip_rules=None):
     cmd = strip_shell_keyword(cmd)
     check_git_safety(cmd, fetch_seen=fetch_seen)
     normalized = strip_env_prefix(cmd)
-    for name, pattern, exception, guidance in RULES:
+    for rule in RULES:
+        name, pattern, exception, guidance = rule[:4]
+        exit_code = rule[4] if len(rule) > 4 else 2
         if skip_rules and name in skip_rules:
             continue
         target = normalized if pattern.pattern.startswith("^") else cmd
@@ -1192,7 +1219,7 @@ def _check_rules(cmd, fetch_seen, skip_rules=None):
             if exception and exception.search(cmd):
                 continue
             print(guidance, file=sys.stderr)
-            sys.exit(2)
+            sys.exit(exit_code)
 
 
 def _check_pipes(cmd, fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP):
@@ -1237,7 +1264,119 @@ def _check_subcmd(subcmd, fetch_seen):
     return fetch_seen
 
 
+def _validate_rules_file(path, env_var, is_url=False):
+    """Validate a rules JSON file. Returns list of issue strings."""
+    issues = []
+    if not os.path.exists(path):
+        issues.append(f"{env_var}: file not found: {path}")
+        return issues
+    try:
+        with open(path) as f:
+            raw = json.load(f)
+    except json.JSONDecodeError as e:
+        issues.append(f"{env_var}: invalid JSON: {e}")
+        return issues
+    except OSError as e:
+        issues.append(f"{env_var}: cannot read file: {e}")
+        return issues
+    if not isinstance(raw, list):
+        issues.append(f"{env_var}: expected JSON array, got {type(raw).__name__}")
+        return issues
+    if not raw:
+        issues.append(f"{env_var}: file contains empty array (no rules)")
+        return issues
+
+    required = {"name", "pattern", "message"}
+    valid_actions = {"block", "ask"}
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            issues.append(f"{env_var}[{i}]: expected object, got {type(entry).__name__}")
+            continue
+        name = entry.get("name", f"entry {i}")
+        pfx = f"{env_var}[{i}] ({name!r})"
+        for field in required:
+            if field not in entry:
+                issues.append(f"{pfx}: missing required field '{field}'")
+            elif not isinstance(entry[field], str):
+                issues.append(
+                    f"{pfx}: '{field}' must be a string, got {type(entry[field]).__name__}"
+                )
+        if "pattern" in entry and isinstance(entry["pattern"], str):
+            if not entry["pattern"]:
+                issues.append(f"{pfx}: 'pattern' is empty (will match ALL commands/URLs)")
+            else:
+                try:
+                    re.compile(entry["pattern"])
+                except re.error as e:
+                    issues.append(f"{pfx}: invalid regex in 'pattern': {e}")
+        if not is_url and "exception" in entry:
+            exc = entry["exception"]
+            if exc is not None and not isinstance(exc, str):
+                issues.append(
+                    f"{pfx}: 'exception' must be a string or null, got {type(exc).__name__}"
+                )
+            elif isinstance(exc, str):
+                if not exc:
+                    issues.append(
+                        f"{pfx}: 'exception' is empty (matches everything, disabling this rule)"
+                    )
+                else:
+                    try:
+                        re.compile(exc)
+                    except re.error as e:
+                        issues.append(f"{pfx}: invalid regex in 'exception': {e}")
+        if "action" in entry:
+            action = entry["action"]
+            if not isinstance(action, str):
+                issues.append(f"{pfx}: 'action' must be a string, got {type(action).__name__}")
+            elif action not in valid_actions:
+                issues.append(f"{pfx}: 'action' must be 'block' or 'ask', got {action!r}")
+    return issues
+
+
+def _validate_config():
+    """Validate extra rules config files. Prints results to stderr."""
+    url_path = os.environ.get("URL_GUARD_EXTRA_RULES")
+    cmd_path = os.environ.get("COMMAND_GUARD_EXTRA_RULES")
+    if not url_path and not cmd_path:
+        return 0  # Nothing configured, nothing to validate
+
+    all_issues = []
+    loaded = []
+    if url_path:
+        issues = _validate_rules_file(url_path, "URL_GUARD_EXTRA_RULES", is_url=True)
+        if issues:
+            all_issues.extend(issues)
+        else:
+            with open(url_path) as f:
+                count = len(json.load(f))
+            loaded.append(f"URL rules: {count} rule(s) from {url_path}")
+    if cmd_path:
+        issues = _validate_rules_file(cmd_path, "COMMAND_GUARD_EXTRA_RULES", is_url=False)
+        if issues:
+            all_issues.extend(issues)
+        else:
+            with open(cmd_path) as f:
+                count = len(json.load(f))
+            loaded.append(f"Command rules: {count} rule(s) from {cmd_path}")
+
+    if all_issues:
+        print("Custom guard rules — validation failed:", file=sys.stderr)
+        for issue in all_issues:
+            print(f"  ✗ {issue}", file=sys.stderr)
+        if loaded:
+            for msg in loaded:
+                print(f"  ✓ {msg}", file=sys.stderr)
+        return 1
+    for msg in loaded:
+        print(f"Custom guard rules — {msg}", file=sys.stderr)
+    return 0
+
+
 def main():
+    if "--validate" in sys.argv:
+        sys.exit(_validate_config())
+
     try:
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
@@ -1264,10 +1403,10 @@ def main():
         if url:
             result = _check_url_rules(url)
             if result:
-                rule_name, guidance = result
+                rule_name, guidance, exit_code = result
                 _log_url_event(url, rule_name, "blocked", "WebFetch")
                 print(guidance, file=sys.stderr)
-                sys.exit(2)
+                sys.exit(exit_code)
             else:
                 _log_url_event(url, None, "allowed", "WebFetch")
         sys.exit(0)
