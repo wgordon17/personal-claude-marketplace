@@ -266,8 +266,34 @@ RULES = [
     ),
 ]
 
-# Action field for user-defined rules: "block" (exit 2) or "ask" (exit 1).
+# Action field for user-defined rules: "block" (exit 2) or "ask" (JSON decision).
 _ACTION_EXIT_CODE = {"block": 2, "ask": 1}
+
+
+def _exit_with_decision(guidance, exit_code):
+    """Exit with guidance, using the correct mechanism for the action type.
+
+    For "block" (exit 2): prints guidance to stderr and exits 2.
+    For "ask" (exit 1): outputs hookSpecificOutput JSON to stdout with
+    permissionDecision "ask" and exits 0, prompting the user for confirmation.
+    """
+    if exit_code == 1:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "ask",
+                        "permissionDecisionReason": guidance,
+                    }
+                }
+            )
+        )
+        sys.exit(0)
+    else:
+        print(guidance, file=sys.stderr)
+        sys.exit(2)
+
 
 # ── Category F: Authenticated URL fetch guard ──
 # Each rule: (name, url_pattern, guidance_message)
@@ -511,13 +537,12 @@ def _check_fetch_command(cmd):
         if result:
             rule_name, guidance, exit_code = result
             _log_url_event(url, rule_name, "blocked", "Bash")
-            print(
+            full_guidance = (
                 f"{guidance}\n"
                 "If you've confirmed raw fetch is appropriate, "
-                "prefix with `ALLOW_FETCH=1`.",
-                file=sys.stderr,
+                "prefix with `ALLOW_FETCH=1`."
             )
-            sys.exit(exit_code)
+            _exit_with_decision(full_guidance, exit_code)
         else:
             _log_url_event(url, None, "allowed", "Bash")
     return True
@@ -1127,20 +1152,18 @@ def check_git_safety(cmd, fetch_seen=False):
         and not fetch_seen
     ):
         _git_logger.info("ASK: %s | Rule: branch-needs-fetch", cmd)
-        print(
+        _exit_with_decision(
             "No git fetch detected in this command chain. "
             "Fetch first: git fetch upstream main && "
             "git switch -c <name> upstream/main",
-            file=sys.stderr,
+            1,
         )
-        sys.exit(1)
 
-    # ASK rules (exit 1)
+    # ASK rules — prompt user for confirmation
     for name, check_fn, message in GIT_ASK_RULES:
         if check_fn(cmd):
             _git_logger.info("ASK: %s | Rule: %s", cmd, name)
-            print(message, file=sys.stderr)
-            sys.exit(1)
+            _exit_with_decision(message, 1)
 
 
 def _is_command_delimiter(text, i, current):
@@ -1201,7 +1224,10 @@ _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
 
 
 def _check_rules(cmd, fetch_seen, skip_rules=None):
-    """Check a command against all rules. Exits 2 (deny) or 1 (ask) on match.
+    """Check a command against all rules. Exits on match.
+
+    Block rules: stderr + exit 2.
+    Ask rules: hookSpecificOutput JSON + exit 0 (prompts user).
 
     skip_rules: frozenset of rule names to skip (used for pipe segments
     where native-tool alternatives don't apply to piped output).
@@ -1218,8 +1244,7 @@ def _check_rules(cmd, fetch_seen, skip_rules=None):
         if pattern.search(target):
             if exception and exception.search(cmd):
                 continue
-            print(guidance, file=sys.stderr)
-            sys.exit(exit_code)
+            _exit_with_decision(guidance, exit_code)
 
 
 def _check_pipes(cmd, fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP):
@@ -1335,7 +1360,12 @@ def _validate_rules_file(path, env_var, is_url=False):
 
 
 def _validate_config():
-    """Validate extra rules config files. Prints results to stderr."""
+    """Validate extra rules config files.
+
+    Output channels follow hook conventions:
+      - Success (exit 0): stdout (shown in transcript)
+      - Failure (exit 2): stderr (fed back to Claude)
+    """
     url_path = os.environ.get("URL_GUARD_EXTRA_RULES")
     cmd_path = os.environ.get("COMMAND_GUARD_EXTRA_RULES")
     if not url_path and not cmd_path:
@@ -1361,15 +1391,17 @@ def _validate_config():
             loaded.append(f"Command rules: {count} rule(s) from {cmd_path}")
 
     if all_issues:
+        # stderr + exit 2: fed back to Claude for explanation
         print("Custom guard rules — validation failed:", file=sys.stderr)
         for issue in all_issues:
             print(f"  ✗ {issue}", file=sys.stderr)
         if loaded:
             for msg in loaded:
                 print(f"  ✓ {msg}", file=sys.stderr)
-        return 1
+        return 2
+    # stdout + exit 0: shown in transcript
     for msg in loaded:
-        print(f"Custom guard rules — {msg}", file=sys.stderr)
+        print(f"Custom guard rules — {msg}")
     return 0
 
 
@@ -1405,8 +1437,7 @@ def main():
             if result:
                 rule_name, guidance, exit_code = result
                 _log_url_event(url, rule_name, "blocked", "WebFetch")
-                print(guidance, file=sys.stderr)
-                sys.exit(exit_code)
+                _exit_with_decision(guidance, exit_code)
             else:
                 _log_url_event(url, None, "allowed", "WebFetch")
         sys.exit(0)
