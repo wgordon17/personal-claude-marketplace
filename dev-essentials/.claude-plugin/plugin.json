@@ -2,7 +2,5 @@
   "name": "dev-essentials",
   "description": "Essential development utilities: LSP navigation, uv-python enforcement, test execution, incremental planning, and session management",
   "version": "1.0.0",
-  "category": "productivity",
-  "tags": ["skills", "lsp", "python", "testing", "session"],
   "author": { "name": "wgordon17" }
 }
