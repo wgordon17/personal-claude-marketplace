@@ -9,14 +9,16 @@ guidance toward native tools, auto-approved commands, and simpler patterns.
 Also enforces git safety rules (consolidated from git-safety-check.sh).
 """
 
+import contextlib
 import datetime
 import functools
 import json
-import logging
 import os
 import re
+import sqlite3
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 # Each rule: (name, pattern, exception_pattern_or_None, guidance_message)
@@ -266,32 +268,203 @@ RULES = [
     ),
 ]
 
-# Action field for user-defined rules: "block" (exit 2) or "ask" (JSON decision).
-_ACTION_EXIT_CODE = {"block": 2, "ask": 1}
+# Action field for user-defined rules: "block" (exit 2), "ask" (exit 1), or "allow" (exit 0).
+_ACTION_EXIT_CODE = {"block": 2, "ask": 1, "allow": 0}
+
+_db_conn = None
 
 
-def _exit_with_decision(guidance, exit_code):
+def _validate_user_path(p, default):
+    """Ensure path is within user's home or temp directory. Falls back to default."""
+    try:
+        resolved = Path(p).resolve()
+        home = Path.home().resolve()
+        tmp = Path(tempfile.gettempdir()).resolve()
+        if str(resolved).startswith(str(home)) or str(resolved).startswith(str(tmp)):
+            return resolved
+    except (OSError, ValueError):
+        pass
+    return default
+
+
+_DEFAULT_DB_PATH = Path.home() / ".claude" / "logs" / "dev-guard.db"
+_DB_PATH = _validate_user_path(
+    os.environ.get("GUARD_DB_PATH", str(_DEFAULT_DB_PATH)),
+    _DEFAULT_DB_PATH,
+)
+_GUARD_LOG_LEVEL = os.environ.get("GUARD_LOG_LEVEL", "actions").lower()
+_session_id = None
+_tool_use_id = None
+
+
+def _init_db():
+    """Create/open the SQLite audit database with WAL mode.
+
+    Creates all tables upfront. Caches connection in _db_conn.
+    Returns connection or None on error.
+    """
+    global _db_conn
+    if _db_conn is not None:
+        return _db_conn
+    try:
+        _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Restrict parent dir if we just created it
+        with contextlib.suppress(OSError):
+            os.chmod(str(_DB_PATH.parent), 0o700)
+        # Set umask so WAL/SHM files are also owner-only
+        old_umask = os.umask(0o177)
+        try:
+            conn = sqlite3.connect(str(_DB_PATH), timeout=5)
+        finally:
+            os.umask(old_umask)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=1000")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                session_id TEXT,
+                tool_use_id TEXT,
+                category TEXT NOT NULL,
+                rule TEXT,
+                action TEXT NOT NULL,
+                command TEXT,
+                detail TEXT
+            );
+            CREATE TABLE IF NOT EXISTS trusted_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_name TEXT NOT NULL,
+                match_pattern TEXT,
+                scope TEXT NOT NULL,
+                session_id TEXT,
+                created_ts TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS session_state (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_ts TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
+            CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_trust_rule_match_scope
+                ON trusted_rules(rule_name, COALESCE(match_pattern, ''), scope);
+        """)
+        conn.commit()
+        os.chmod(str(_DB_PATH), 0o600)  # Owner-only file access
+        _db_conn = conn
+        return _db_conn
+    except (OSError, sqlite3.Error):
+        return None
+
+
+def _log_event(category, action, *, rule=None, command=None, detail=None):
+    """Log an event to the SQLite audit database.
+
+    Respects _GUARD_LOG_LEVEL: "off" = no logging, "actions" = skip allowed,
+    "all" = log everything.
+    """
+    if _GUARD_LOG_LEVEL == "off":
+        return
+    if _GUARD_LOG_LEVEL == "actions" and action == "allowed":
+        return
+    try:
+        conn = _init_db()
+        if conn is None:
+            return
+        detail_str = json.dumps(detail) if detail is not None else None
+        conn.execute(
+            "INSERT INTO events "
+            "(ts, session_id, tool_use_id, category, rule, action, command, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                _session_id,
+                _tool_use_id,
+                category,
+                rule,
+                action,
+                command,
+                detail_str,
+            ),
+        )
+        conn.commit()
+    except (sqlite3.Error, OSError):
+        pass
+
+
+def _exit_with_decision(guidance, exit_code, *, rule_name=None, matched_segment=None):
     """Exit with guidance, using the correct mechanism for the action type.
 
-    For "block" (exit 2): prints guidance to stderr and exits 2.
-    For "ask" (exit 1): outputs hookSpecificOutput JSON to stdout with
+    For "allow" (exit 0): outputs hookSpecificOutput JSON with permissionDecision "allow".
+    For "ask" (exit 1): checks trust first, then outputs hookSpecificOutput JSON with
     permissionDecision "ask" and exits 0, prompting the user for confirmation.
+    For "block" (exit 2): prints guidance to stderr and exits 2.
     """
-    if exit_code == 1:
+    if exit_code == 0:
+        # Allow: log and output allow decision
+        _log_event("guard", "allowed", rule=rule_name, command=matched_segment)
         print(
             json.dumps(
                 {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
-                        "permissionDecision": "ask",
+                        "permissionDecision": "allow",
                         "permissionDecisionReason": guidance,
                     }
                 }
             )
         )
         sys.exit(0)
+    elif exit_code == 1:
+        # Ask: check trust first
+        if rule_name and _check_trust(rule_name, matched_segment, _session_id):
+            _log_event("guard", "trusted", rule=rule_name, command=matched_segment)
+            reason = f"[trusted] [{rule_name}] {guidance}" if rule_name else f"[trusted] {guidance}"
+            print(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "allow",
+                            "permissionDecisionReason": reason,
+                        }
+                    }
+                )
+            )
+            sys.exit(0)
+
+        # Build enhanced reason with trust hint
+        parts = []
+        if rule_name:
+            parts.append(f"[{rule_name}] {guidance}")
+        else:
+            parts.append(guidance)
+        if matched_segment:
+            parts.append(f"Matched: {matched_segment}")
+        if rule_name:
+            parts.append(
+                f"To trust: /dev-guard trust {rule_name} [--match <pattern>] [--session|--always]"
+            )
+        enhanced_reason = "\n".join(parts)
+
+        _log_event("guard", "ask", rule=rule_name, command=matched_segment)
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "ask",
+                        "permissionDecisionReason": enhanced_reason,
+                    }
+                }
+            )
+        )
+        sys.exit(0)
     else:
-        print(guidance, file=sys.stderr)
+        # Block
+        msg = f"[{rule_name}] {guidance}" if rule_name else guidance
+        _log_event("guard", "blocked", rule=rule_name, command=matched_segment)
+        print(msg, file=sys.stderr)
         sys.exit(2)
 
 
@@ -476,27 +649,12 @@ def _load_extra_command_rules():
 RULES.extend(_load_extra_command_rules())
 
 
-_URL_LOG_DIR = os.environ.get("URL_GUARD_LOG_DIR", str(Path.home() / ".claude" / "logs"))
-
-
 def _log_url_event(url, rule_name, action, tool, phase="pre", **extra):
-    """Append a JSONL entry to the URL guard audit log."""
-    try:
-        log_dir = Path(_URL_LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        entry = {
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "phase": phase,
-            "url": url,
-            "rule": rule_name,
-            "action": action,
-            "tool": tool,
-            **extra,
-        }
-        with open(log_dir / "url-guard.log", "a") as f:
-            f.write(json.dumps(entry) + "\n")
-    except OSError:
-        pass  # Fail silently — logging should never block the guard
+    """Log a URL guard event to the unified SQLite audit log."""
+    detail = {"tool": tool, "phase": phase}
+    if extra:
+        detail.update(extra)
+    _log_event("url", action, rule=rule_name, command=url, detail=detail)
 
 
 def _extract_urls(text):
@@ -536,13 +694,13 @@ def _check_fetch_command(cmd):
         result = _check_url_rules(url)
         if result:
             rule_name, guidance, exit_code = result
-            _log_url_event(url, rule_name, "blocked", "Bash")
+            _log_url_event(url, rule_name, "asked" if exit_code == 1 else "blocked", "Bash")
             full_guidance = (
                 f"{guidance}\n"
                 "If you've confirmed raw fetch is appropriate, "
                 "prefix with `ALLOW_FETCH=1`."
             )
-            _exit_with_decision(full_guidance, exit_code)
+            _exit_with_decision(full_guidance, exit_code, rule_name=rule_name, matched_segment=cmd)
         else:
             _log_url_event(url, None, "allowed", "Bash")
     return True
@@ -699,9 +857,14 @@ def strip_env_prefix(cmd):
 
 
 def extract_bash_c(cmd):
-    """Extract the inner command from bash -c '...' or sh -c '...' wrappers.
+    """Extract the inner command from `bash -c '...'` or `sh -c '...'`.
 
     Returns the inner command string, or None if not a bash -c invocation.
+
+    Limitation: Uses simple quote matching that may truncate inner commands
+    containing the same quote character (e.g., bash -c 'echo "it's fine"').
+    When truncation occurs, the outer command is still checked as a whole,
+    maintaining safety.
     """
     m = re.match(r"""^\s*(?:bash|sh)\s+-c\s+(['"])(.*?)\1\s*$""", cmd, re.DOTALL)
     if m:
@@ -954,18 +1117,6 @@ def _is_branch_from_non_upstream(cmd):
     return parsed is not None and parsed[1] is not None and not _is_safe_start_point(parsed[1])
 
 
-def _setup_git_log():
-    log_dir = Path.home() / ".claude" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("git-safety")
-    if not logger.handlers:
-        handler = logging.FileHandler(log_dir / "git-safety-blocks.log")
-        handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-    return logger
-
-
 # Each rule: (name, check_function, message)
 # check_function(cmd) -> bool
 GIT_DENY_RULES = [
@@ -1102,8 +1253,6 @@ GIT_ASK_RULES = [
     ),
 ]
 
-_git_logger = None
-
 
 def check_git_safety(cmd, fetch_seen=False):
     """Check a command against git safety rules. Exits 2 (deny) or 1 (ask) on match."""
@@ -1111,35 +1260,31 @@ def check_git_safety(cmd, fetch_seen=False):
     if not re.search(r"(^|\s)git\s", cmd):
         return
 
-    global _git_logger
-    if _git_logger is None:
-        _git_logger = _setup_git_log()
-
     # DENY rules (exit 2)
     for name, check_fn, message in GIT_DENY_RULES:
         if check_fn(cmd):
-            _git_logger.info("BLOCKED: %s | Rule: %s", cmd, name)
-            print(message, file=sys.stderr)
-            sys.exit(2)
+            _log_event("git", "blocked", rule=name, command=cmd)
+            _exit_with_decision(message, 2, rule_name=name, matched_segment=cmd)
 
     # Special case: commit to main/master (requires git rev-parse)
     if re.search(r"^\s*git\s+commit", cmd):
         try:
-            result = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            branch = (
+                os.environ.get("_GUARD_TEST_BRANCH")
+                or subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                ).stdout.strip()
             )
-            branch = result.stdout.strip()
             if branch in _PROTECTED_BRANCHES:
                 msg = (
                     f"Committing directly to {branch} is FORBIDDEN. "
                     "Create a feature branch: git switch -c feature/name"
                 )
-                _git_logger.info("BLOCKED: %s | Rule: commit-to-main", cmd)
-                print(msg, file=sys.stderr)
-                sys.exit(2)
+                _log_event("git", "blocked", rule="commit-to-main", command=cmd)
+                _exit_with_decision(msg, 2, rule_name="commit-to-main", matched_segment=cmd)
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass  # If we can't determine branch, allow (fail open)
 
@@ -1151,19 +1296,21 @@ def check_git_safety(cmd, fetch_seen=False):
         and parsed[1] in _SAFE_REMOTE_REFS
         and not fetch_seen
     ):
-        _git_logger.info("ASK: %s | Rule: branch-needs-fetch", cmd)
+        _log_event("git", "ask", rule="branch-needs-fetch", command=cmd)
         _exit_with_decision(
             "No git fetch detected in this command chain. "
             "Fetch first: git fetch upstream main && "
             "git switch -c <name> upstream/main",
             1,
+            rule_name="branch-needs-fetch",
+            matched_segment=cmd,
         )
 
     # ASK rules — prompt user for confirmation
     for name, check_fn, message in GIT_ASK_RULES:
         if check_fn(cmd):
-            _git_logger.info("ASK: %s | Rule: %s", cmd, name)
-            _exit_with_decision(message, 1)
+            _log_event("git", "ask", rule=name, command=cmd)
+            _exit_with_decision(message, 1, rule_name=name, matched_segment=cmd)
 
 
 def _is_command_delimiter(text, i, current):
@@ -1197,27 +1344,29 @@ def _guard_tmp_path(tool_name, tool_input):
         and "hack/tmp" not in file_path
         and tool_name in ("Write", "Edit", "NotebookEdit")
     ):
-        print(
+        _exit_with_decision(
             "Use `hack/tmp/` (gitignored) instead of `/tmp/` for temporary files. "
             "Native tools (Read/Write/Edit) work on local files without extra permissions.",
-            file=sys.stderr,
+            2,
+            rule_name="tmp-path-write",
+            matched_segment=file_path,
         )
-        sys.exit(2)
 
 
 def _guard_plan_mode(tool_name):
     """Block EnterPlanMode, redirecting to incremental-planning skill."""
     if tool_name == "EnterPlanMode":
-        print(
+        _exit_with_decision(
             "Native plan mode writes and displays the full plan at once.\n"
             "Use the incremental-planning skill instead:\n"
             "  Invoke Skill tool with 'dev-essentials:incremental-planning'\n\n"
             "This skill asks clarifying questions first, writes the plan\n"
             "incrementally to a file, and provides research context in chat\n"
             "for informed feedback.",
-            file=sys.stderr,
+            2,
+            rule_name="plan-mode-blocked",
+            matched_segment="EnterPlanMode",
         )
-        sys.exit(2)
 
 
 _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
@@ -1244,11 +1393,16 @@ def _check_rules(cmd, fetch_seen, skip_rules=None):
         if pattern.search(target):
             if exception and exception.search(cmd):
                 continue
-            _exit_with_decision(guidance, exit_code)
+            _exit_with_decision(guidance, exit_code, rule_name=name, matched_segment=cmd)
 
 
 def _check_pipes(cmd, fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP):
-    """Check later pipe segments of a command for guarded patterns."""
+    """Check later pipe segments of a command for guarded patterns.
+
+    NOTE: _check_oc_introspection is NOT called on individual pipe segments.
+    oc introspection runs on full subcommands in _check_subcmd. Pipe segments
+    like "cat file | oc apply -f -" are checked by _check_rules only.
+    """
     pipe_segments = split_pipes(cmd)
     if len(pipe_segments) > 1:
         for segment in pipe_segments[1:]:
@@ -1277,7 +1431,8 @@ def _check_subcmd(subcmd, fetch_seen):
         )
         sys.exit(2)
 
-    _check_rules(subcmd, fetch_seen)
+    # Check pipe segments and subshells FIRST — deny/ask on dangerous segments
+    # must happen before any "allow" rule on the full command can short-circuit.
     _check_pipes(subcmd, fetch_seen)
 
     for inner in extract_subshells(subcmd):
@@ -1286,33 +1441,752 @@ def _check_subcmd(subcmd, fetch_seen):
         _check_rules(inner, fetch_seen)
         _check_pipes(inner, fetch_seen)
 
+    # Now check the full subcommand (including allow rules that exit 0)
+    _check_rules(subcmd, fetch_seen)
+
+    # oc/kubectl introspection — after user-defined rules (which take priority)
+    normalized = strip_env_prefix(strip_shell_keyword(subcmd))
+    if re.match(r"^\s*(oc|kubectl)\b", normalized):
+        _check_oc_introspection(subcmd)
+
     return fetch_seen
 
 
+# ── Trust management ──
+
+
+def _check_trust(rule_name, command, session_id):
+    """Check if a rule is trusted. Returns True if trusted, False otherwise."""
+    try:
+        conn = _init_db()
+        if conn is None:
+            return False
+        cursor = conn.execute(
+            "SELECT match_pattern, scope, session_id FROM trusted_rules WHERE rule_name = ?",
+            (rule_name,),
+        )
+        for match_pattern, scope, trust_session_id in cursor.fetchall():
+            # Session-scoped: check session matches
+            if scope == "session" and trust_session_id != session_id:
+                continue
+            # Match pattern: case-insensitive substring check
+            if match_pattern and command and match_pattern.lower() not in command.lower():
+                continue
+            return True
+        return False
+    except (sqlite3.Error, OSError):
+        return False
+
+
+def _add_trust(rule_name, match_pattern, scope, session_id):
+    """Add a trust rule. Returns (success: bool, message: str)."""
+    try:
+        conn = _init_db()
+        if conn is None:
+            return False, "Failed to open database"
+        conn.execute(
+            "INSERT OR REPLACE INTO trusted_rules "
+            "(rule_name, match_pattern, scope, session_id, created_ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                rule_name,
+                match_pattern,
+                scope,
+                session_id if scope == "session" else None,
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+        desc = f"rule={rule_name!r}"
+        if match_pattern:
+            desc += f" match={match_pattern!r}"
+        desc += f" scope={scope}"
+        return True, f"Trusted: {desc}"
+    except (sqlite3.Error, OSError) as e:
+        return False, f"Failed to add trust: {e}"
+
+
+def _remove_trust(rule_name, match_pattern=None):
+    """Remove trust rule(s). Returns (success: bool, count: int)."""
+    try:
+        conn = _init_db()
+        if conn is None:
+            return False, 0
+        if match_pattern is not None:
+            cursor = conn.execute(
+                "DELETE FROM trusted_rules WHERE rule_name = ? AND COALESCE(match_pattern, '') = ?",
+                (rule_name, match_pattern),
+            )
+        else:
+            cursor = conn.execute(
+                "DELETE FROM trusted_rules WHERE rule_name = ?",
+                (rule_name,),
+            )
+        conn.commit()
+        return True, cursor.rowcount
+    except (sqlite3.Error, OSError):
+        return False, 0
+
+
+def _list_trust():
+    """List all trust rules. Returns list of dicts."""
+    try:
+        conn = _init_db()
+        if conn is None:
+            return []
+        cursor = conn.execute(
+            "SELECT rule_name, match_pattern, scope, session_id, created_ts "
+            "FROM trusted_rules ORDER BY created_ts"
+        )
+        return [
+            {
+                "rule_name": row[0],
+                "match_pattern": row[1],
+                "scope": row[2],
+                "session_id": row[3],
+                "created_ts": row[4],
+            }
+            for row in cursor.fetchall()
+        ]
+    except (sqlite3.Error, OSError):
+        return []
+
+
+# ── oc/kubectl introspection ──
+
+_OC_RISK_LEVELS = {
+    "critical": {
+        "namespace",
+        "project",
+        "clusterrole",
+        "clusterrolebinding",
+        "node",
+        "persistentvolume",
+        "customresourcedefinition",
+        "crd",
+        "apiservice",
+        "mutatingwebhookconfiguration",
+        "validatingwebhookconfiguration",
+    },
+    "high": {
+        "deployment",
+        "statefulset",
+        "daemonset",
+        "replicaset",
+        "service",
+        "ingress",
+        "route",
+        "configmap",
+        "secret",
+        "serviceaccount",
+        "role",
+        "rolebinding",
+        "networkpolicy",
+        "persistentvolumeclaim",
+        "pvc",
+        "job",
+        "cronjob",
+    },
+    "medium": {
+        "pod",
+        "replicationcontroller",
+        "endpoints",
+        "event",
+        "horizontalpodautoscaler",
+        "hpa",
+        "poddisruptionbudget",
+        "pdb",
+        "limitrange",
+        "resourcequota",
+    },
+    "low": {
+        "build",
+        "buildconfig",
+        "imagestream",
+        "imagestreamtag",
+        "template",
+        "catalog",
+        "packagemanifest",
+    },
+}
+
+_OC_MUTATING_VERBS = {
+    "create",
+    "apply",
+    "delete",
+    "patch",
+    "replace",
+    "set",
+    "edit",
+    "scale",
+    "rollout",
+    "expose",
+    "label",
+    "annotate",
+    "taint",
+    "adm",
+    "policy",
+}
+
+_OC_EXEC_VERBS = {"exec", "rsh", "debug", "attach", "port-forward", "cp"}
+
+_SECURITY_FIELDS = {
+    "privileged",
+    "hostNetwork",
+    "hostPID",
+    "hostIPC",
+    "hostPath",
+    "runAsRoot",
+    "allowPrivilegeEscalation",
+    "capabilities",
+    "securityContext",
+    "serviceAccountName",
+    "automountServiceAccountToken",
+}
+
+
+def _parse_oc_command(cmd):
+    """Parse an oc/kubectl command string into structured components.
+
+    Returns dict with: tool, verb, resource_type, namespace, filename, flags.
+    """
+    parts = cmd.split()
+    if not parts:
+        return None
+
+    # Find the tool (oc or kubectl)
+    tool = None
+    tool_idx = -1
+    for i, p in enumerate(parts):
+        if p in ("oc", "kubectl"):
+            tool = p
+            tool_idx = i
+            break
+    if tool is None:
+        return None
+
+    result = {
+        "tool": tool,
+        "verb": None,
+        "resource_type": None,
+        "namespace": None,
+        "filename": None,
+        "flags": [],
+    }
+
+    remaining = parts[tool_idx + 1 :]
+    if not remaining:
+        return result
+
+    # Extract verb
+    for part in remaining:
+        if not part.startswith("-"):
+            result["verb"] = part.lower()
+            break
+
+    # Extract flags, namespace, filename, resource type
+    i = 0
+    verb_seen = False
+    while i < len(remaining):
+        arg = remaining[i]
+        if arg in ("-n", "--namespace") and i + 1 < len(remaining):
+            result["namespace"] = remaining[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--namespace="):
+            result["namespace"] = arg.split("=", 1)[1]
+            i += 1
+            continue
+        if arg in ("-f", "--filename") and i + 1 < len(remaining):
+            result["filename"] = remaining[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--filename="):
+            result["filename"] = arg.split("=", 1)[1]
+            i += 1
+            continue
+        if arg.startswith("-"):
+            result["flags"].append(arg)
+            i += 1
+            continue
+        if not verb_seen:
+            verb_seen = True
+            i += 1
+            continue
+        # First positional after verb is resource type
+        if result["resource_type"] is None:
+            result["resource_type"] = arg.lower().split("/")[0]
+        i += 1
+
+    return result
+
+
+def _classify_oc_risk(parsed):
+    """Classify the risk level of a parsed oc/kubectl command.
+
+    Returns (risk_level, reason) where risk_level is one of:
+    "critical", "high", "medium", "low", "safe".
+    """
+    if parsed is None or parsed["verb"] is None:
+        return "safe", None
+
+    verb = parsed["verb"]
+    resource = parsed["resource_type"]
+    flags = parsed["flags"]
+
+    # Exec/debug commands are always high risk
+    if verb in _OC_EXEC_VERBS:
+        return "high", f"{verb} provides direct container access"
+
+    # Read-only verbs are safe
+    if verb in ("get", "describe", "logs", "status", "explain", "api-resources", "api-versions"):
+        return "safe", None
+
+    # Dry-run flag makes commands safe
+    if any(f.startswith("--dry-run") for f in flags):
+        return "safe", "dry-run mode"
+
+    # Delete is always at least high
+    if verb == "delete":
+        if resource and resource in _OC_RISK_LEVELS.get("critical", set()):
+            return "critical", f"deleting critical resource type: {resource}"
+        return "high", f"deleting resource{f': {resource}' if resource else ''}"
+
+    # Check resource risk level for mutating verbs
+    if verb in _OC_MUTATING_VERBS and resource:
+        for level in ("critical", "high", "medium", "low"):
+            if resource in _OC_RISK_LEVELS.get(level, set()):
+                return level, f"{verb} on {level}-risk resource: {resource}"
+
+    # Mutating verb with no recognized resource — medium risk
+    if verb in _OC_MUTATING_VERBS:
+        return "medium", f"mutating verb: {verb}"
+
+    return "safe", None
+
+
+def _inspect_manifest(file_path):
+    """Inspect a YAML/JSON manifest file. Returns list of resource info dicts.
+
+    Bail on missing, oversized (>1MB), or binary files.
+    """
+    try:
+        path = Path(file_path).resolve()
+        # Restrict to cwd, home, or temp directory
+        cwd = Path.cwd().resolve()
+        home = Path.home().resolve()
+        tmp = Path(tempfile.gettempdir()).resolve()
+        if not (
+            str(path).startswith(str(cwd))
+            or str(path).startswith(str(home))
+            or str(path).startswith(str(tmp))
+        ):
+            return [{"error": "path outside allowed directories", "path": str(path)}]
+        if not path.exists():
+            return []
+        if path.stat().st_size > 1_048_576:  # 1MB limit
+            return [{"error": "file too large", "path": str(path)}]
+        text = path.read_text(errors="replace")
+        # Check for binary content
+        if "\x00" in text[:1024]:
+            return [{"error": "binary file", "path": str(path)}]
+    except OSError:
+        return []
+
+    if file_path.endswith(".json"):
+        return _parse_json_manifest(text)
+    return _parse_yaml_manifests(text)
+
+
+def _parse_json_manifest(text):
+    """Parse a JSON manifest. Returns list of resource info dicts."""
+    try:
+        obj = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if isinstance(obj, dict):
+        # Could be a List kind
+        if obj.get("kind") == "List" and isinstance(obj.get("items"), list):
+            return [_extract_manifest_info(item) for item in obj["items"] if isinstance(item, dict)]
+        return [_extract_manifest_info(obj)]
+    if isinstance(obj, list):
+        return [_extract_manifest_info(item) for item in obj if isinstance(item, dict)]
+    return []
+
+
+def _extract_manifest_info(obj):
+    """Extract key fields from a manifest object."""
+    info = {
+        "kind": obj.get("kind", "Unknown"),
+        "name": None,
+        "namespace": None,
+        "security_fields": [],
+    }
+    metadata = obj.get("metadata", {})
+    if isinstance(metadata, dict):
+        info["name"] = metadata.get("name")
+        info["namespace"] = metadata.get("namespace")
+
+    found = set()
+    _collect_security_fields(obj, found, depth=0)
+    info["security_fields"] = sorted(found)
+    return info
+
+
+def _collect_security_fields(obj, found, depth):
+    """Recursively collect security-relevant field names from a manifest."""
+    if depth > 10:
+        return
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in _SECURITY_FIELDS:
+                found.add(key)
+            _collect_security_fields(value, found, depth + 1)
+    elif isinstance(obj, list):
+        for item in obj:
+            _collect_security_fields(item, found, depth + 1)
+
+
+def _parse_yaml_manifests(text):
+    """Parse YAML manifests using line-based regex parser.
+
+    Handles multi-document YAML with --- separators.
+    """
+    docs = text.split("\n---")
+    results = []
+    for doc in docs:
+        doc = doc.strip()
+        if not doc or doc == "---":
+            continue
+        info = _parse_yaml_doc(doc)
+        if info:
+            results.append(info)
+    return results
+
+
+def _parse_yaml_doc(text):
+    """Parse a single YAML document using line-based regex.
+
+    Extracts kind, metadata.name, metadata.namespace, and security fields.
+    """
+    info = {
+        "kind": "Unknown",
+        "name": None,
+        "namespace": None,
+        "security_fields": [],
+    }
+    found_security = set()
+    in_metadata = False
+
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        # Top-level fields (no indentation)
+        indent = len(line) - len(line.lstrip())
+
+        if indent == 0:
+            in_metadata = False
+            m = re.match(r"^kind:\s*(.+)", stripped)
+            if m:
+                info["kind"] = m.group(1).strip().strip("'\"")
+                continue
+            if stripped.startswith("metadata:"):
+                in_metadata = True
+                continue
+
+        if in_metadata and indent > 0:
+            m = re.match(r"^name:\s*(.+)", stripped)
+            if m:
+                info["name"] = m.group(1).strip().strip("'\"")
+                continue
+            m = re.match(r"^namespace:\s*(.+)", stripped)
+            if m:
+                info["namespace"] = m.group(1).strip().strip("'\"")
+                continue
+
+        # Strip inline comments before security scan
+        content_part = stripped.split(" #")[0] if " #" in stripped else stripped
+        # Flag YAML anchors/aliases as potentially hiding security fields
+        if re.search(r"[&*]\w+", content_part):
+            found_security.add("_yaml_anchor_alias")
+        # Check for security fields anywhere
+        for field in _SECURITY_FIELDS:
+            if re.search(rf"\b{field}\b", content_part):
+                found_security.add(field)
+
+    info["security_fields"] = sorted(found_security)
+    return info
+
+
+def _inspect_pipe_source(cmd):
+    """Extract filename from pipe source patterns like `cat file | ...` or `< file ...`."""
+    # cat file | ...
+    m = re.match(r"^\s*cat\s+([^\s|]+)\s*\|", cmd)
+    if m:
+        return m.group(1)
+    # < file ...
+    m = re.search(r"<\s*([^\s<>|]+)", cmd)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _check_oc_introspection(cmd):
+    """Orchestrate oc/kubectl command introspection.
+
+    Returns None to let normal flow continue, or exits with ask/allow decision.
+    """
+    parsed = _parse_oc_command(cmd)
+    if parsed is None:
+        return None
+
+    risk_level, reason = _classify_oc_risk(parsed)
+
+    # Inspect manifest file if present
+    manifest_info = []
+    manifest_risk = "safe"
+    manifest_reason = None
+
+    file_path = parsed.get("filename")
+    if not file_path:
+        file_path = _inspect_pipe_source(cmd)
+
+    if file_path:
+        manifest_info = _inspect_manifest(file_path)
+        # Determine manifest risk from resource kinds and security fields
+        for info in manifest_info:
+            kind = info.get("kind", "").lower()
+            sec_fields = info.get("security_fields", [])
+
+            if sec_fields and manifest_risk in ("safe", "low", "medium"):
+                manifest_risk = "high"
+                manifest_reason = f"manifest contains security fields: {', '.join(sec_fields)}"
+
+            for level in ("critical", "high", "medium", "low"):
+                if kind in _OC_RISK_LEVELS.get(level, set()):
+                    if _risk_order(level) > _risk_order(manifest_risk):
+                        manifest_risk = level
+                        if not manifest_reason:
+                            manifest_reason = f"manifest defines {level}-risk resource: {kind}"
+                    break
+
+    # Combine: highest risk wins
+    if _risk_order(risk_level) >= _risk_order(manifest_risk):
+        combined_risk = risk_level
+    else:
+        combined_risk = manifest_risk
+    combined_reason = reason or manifest_reason
+
+    # Dry-run: allow immediately
+    if combined_risk == "safe":
+        return None
+
+    # Build detailed reason
+    parts = [combined_reason or f"{combined_risk}-risk operation"]
+    if manifest_info:
+        resources = [
+            f"{info.get('kind', '?')}/{info.get('name', '?')}"
+            for info in manifest_info
+            if not info.get("error")
+        ]
+        if resources:
+            parts.append(f"Resources: {', '.join(resources[:5])}")
+        errors = [info["error"] for info in manifest_info if info.get("error")]
+        if errors:
+            parts.append(f"Warnings: {', '.join(errors)}")
+
+    detail = "; ".join(parts)
+
+    if combined_risk in ("critical", "high"):
+        _exit_with_decision(
+            f"oc/kubectl {combined_risk}-risk: {detail}",
+            1,
+            rule_name=f"oc-{combined_risk}",
+            matched_segment=cmd,
+        )
+    elif combined_risk == "medium":
+        _exit_with_decision(
+            f"oc/kubectl medium-risk: {detail}",
+            1,
+            rule_name="oc-medium",
+            matched_segment=cmd,
+        )
+
+    # low risk: allow (return None)
+    return None
+
+
+def _risk_order(level):
+    """Return numeric order for risk levels (higher = more risky)."""
+    return {"safe": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}.get(level, 0)
+
+
+# ── Trust CLI handler ──
+
+
+def _get_askable_rule_names():
+    """Return set of rule names that are ask-type (eligible for trust)."""
+    names = set()
+    # Built-in git ask rules
+    names.update(name for name, _, _ in GIT_ASK_RULES)
+    # User-defined rules with action=ask
+    for rule in RULES:
+        if len(rule) > 4 and rule[4] == 1:  # exit_code 1 = ask
+            names.add(rule[0])
+    # User-defined URL rules with action=ask
+    for rule in AUTH_URL_RULES:
+        if len(rule) > 3 and rule[3] == 1:
+            names.add(rule[0])
+    # oc introspection rules (dynamic)
+    names.update(["oc-critical", "oc-high", "oc-medium"])
+    # Branch-needs-fetch (dynamic git ask)
+    names.add("branch-needs-fetch")
+    return names
+
+
+def _handle_trust_command(argv):
+    """Handle --trust CLI commands. Returns exit code."""
+    # Parse: --trust add|remove|list [rule_name] [--match pat] [--scope session|always]
+    trust_idx = argv.index("--trust")
+    args = argv[trust_idx + 1 :]
+
+    if not args:
+        print(
+            "Usage: --trust add|remove|list [rule_name] "
+            "[--match <pattern>] [--scope session|always]",
+            file=sys.stderr,
+        )
+        return 2
+
+    action = args[0]
+
+    if action == "list":
+        rules = _list_trust()
+        if not rules:
+            print("No trusted rules configured.")
+            return 0
+        print(f"{'Rule':<30} {'Pattern':<20} {'Scope':<10} {'Created'}")
+        print("-" * 80)
+        for r in rules:
+            pat = r["match_pattern"] or "(any)"
+            print(f"{r['rule_name']:<30} {pat:<20} {r['scope']:<10} {r['created_ts']}")
+        return 0
+
+    if action == "add":
+        if len(args) < 2:
+            print(
+                "Usage: --trust add <rule_name> [--match <pattern>] [--scope session|always]",
+                file=sys.stderr,
+            )
+            return 2
+        rule_name = args[1]
+        askable = _get_askable_rule_names()
+        if rule_name not in askable:
+            print(
+                f"Rule {rule_name!r} is not a known ask-type rule. "
+                f"Trustable rules: {', '.join(sorted(askable))}",
+                file=sys.stderr,
+            )
+            return 2
+        match_pattern = None
+        scope = "always"
+
+        i = 2
+        while i < len(args):
+            if args[i] == "--match" and i + 1 < len(args):
+                match_pattern = args[i + 1]
+                i += 2
+            elif args[i] == "--scope" and i + 1 < len(args):
+                scope = args[i + 1]
+                i += 2
+            elif args[i] == "--session":
+                scope = "session"
+                i += 1
+            elif args[i] == "--always":
+                scope = "always"
+                i += 1
+            else:
+                i += 1
+
+        if scope not in ("session", "always"):
+            print(f"Invalid scope: {scope!r}. Use 'session' or 'always'.", file=sys.stderr)
+            return 2
+
+        sid = None
+        if scope == "session":
+            # Read last_session_id from session_state
+            try:
+                conn = _init_db()
+                if conn:
+                    cursor = conn.execute(
+                        "SELECT value FROM session_state WHERE key = 'last_session_id'"
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        sid = row[0]
+            except (sqlite3.Error, OSError):
+                pass
+            if not sid:
+                print(
+                    "No session ID found. Run a guard check first, or use --scope always.",
+                    file=sys.stderr,
+                )
+                return 2
+
+        ok, msg = _add_trust(rule_name, match_pattern, scope, sid)
+        print(msg)
+        return 0 if ok else 1
+
+    if action == "remove":
+        if len(args) < 2:
+            print("Usage: --trust remove <rule_name> [--match <pattern>]", file=sys.stderr)
+            return 2
+        rule_name = args[1]
+        match_pattern = None
+        i = 2
+        while i < len(args):
+            if args[i] == "--match" and i + 1 < len(args):
+                match_pattern = args[i + 1]
+                i += 2
+            else:
+                i += 1
+        ok, count = _remove_trust(rule_name, match_pattern)
+        if ok:
+            print(f"Removed {count} trust rule(s) for {rule_name!r}.")
+        else:
+            print(f"Failed to remove trust rules for {rule_name!r}.", file=sys.stderr)
+        return 0 if ok else 1
+
+    print(f"Unknown trust action: {action!r}. Use add, remove, or list.", file=sys.stderr)
+    return 2
+
+
 def _validate_rules_file(path, env_var, is_url=False):
-    """Validate a rules JSON file. Returns list of issue strings."""
+    """Validate a rules JSON file. Returns (issues, count) tuple."""
     issues = []
     if not os.path.exists(path):
         issues.append(f"{env_var}: file not found: {path}")
-        return issues
+        return issues, 0
     try:
         with open(path) as f:
             raw = json.load(f)
     except json.JSONDecodeError as e:
         issues.append(f"{env_var}: invalid JSON: {e}")
-        return issues
+        return issues, 0
     except OSError as e:
         issues.append(f"{env_var}: cannot read file: {e}")
-        return issues
+        return issues, 0
     if not isinstance(raw, list):
         issues.append(f"{env_var}: expected JSON array, got {type(raw).__name__}")
-        return issues
+        return issues, 0
     if not raw:
         issues.append(f"{env_var}: file contains empty array (no rules)")
-        return issues
+        return issues, 0
 
     required = {"name", "pattern", "message"}
-    valid_actions = {"block", "ask"}
+    valid_actions = {"block", "ask", "allow"}
     for i, entry in enumerate(raw):
         if not isinstance(entry, dict):
             issues.append(f"{env_var}[{i}]: expected object, got {type(entry).__name__}")
@@ -1355,8 +2229,8 @@ def _validate_rules_file(path, env_var, is_url=False):
             if not isinstance(action, str):
                 issues.append(f"{pfx}: 'action' must be a string, got {type(action).__name__}")
             elif action not in valid_actions:
-                issues.append(f"{pfx}: 'action' must be 'block' or 'ask', got {action!r}")
-    return issues
+                issues.append(f"{pfx}: 'action' must be 'block', 'ask', or 'allow', got {action!r}")
+    return issues, len(raw)
 
 
 def _validate_config():
@@ -1374,20 +2248,16 @@ def _validate_config():
     all_issues = []
     loaded = []
     if url_path:
-        issues = _validate_rules_file(url_path, "URL_GUARD_EXTRA_RULES", is_url=True)
+        issues, count = _validate_rules_file(url_path, "URL_GUARD_EXTRA_RULES", is_url=True)
         if issues:
             all_issues.extend(issues)
         else:
-            with open(url_path) as f:
-                count = len(json.load(f))
             loaded.append(f"URL rules: {count} rule(s) from {url_path}")
     if cmd_path:
-        issues = _validate_rules_file(cmd_path, "COMMAND_GUARD_EXTRA_RULES", is_url=False)
+        issues, count = _validate_rules_file(cmd_path, "COMMAND_GUARD_EXTRA_RULES", is_url=False)
         if issues:
             all_issues.extend(issues)
         else:
-            with open(cmd_path) as f:
-                count = len(json.load(f))
             loaded.append(f"Command rules: {count} rule(s) from {cmd_path}")
 
     if all_issues:
@@ -1406,16 +2276,42 @@ def _validate_config():
 
 
 def main():
+    global _session_id, _tool_use_id
+
+    if "--trust" in sys.argv:
+        sys.exit(_handle_trust_command(sys.argv))
+
     if "--validate" in sys.argv:
         sys.exit(_validate_config())
 
     try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
-        logging.getLogger("git-safety").warning(
-            "Hook received malformed/empty JSON input — failing open"
-        )
+        raw_input = sys.stdin.buffer.read(10 * 1024 * 1024 + 1)  # 10MB + 1
+        if len(raw_input) > 10 * 1024 * 1024:
+            sys.exit(0)  # Fail open — oversized input is anomalous
+        data = json.loads(raw_input)
+    except (json.JSONDecodeError, EOFError, ValueError):
+        print("Hook received malformed/empty JSON input — failing open", file=sys.stderr)
         sys.exit(0)
+
+    # Extract session/tool context for logging
+    _session_id = data.get("session_id")
+    _tool_use_id = data.get("tool_use_id")
+    if _session_id:
+        try:
+            conn = _init_db()
+            if conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO session_state (key, value, updated_ts) "
+                    "VALUES (?, ?, ?)",
+                    (
+                        "last_session_id",
+                        _session_id,
+                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    ),
+                )
+                conn.commit()
+        except (sqlite3.Error, OSError):
+            pass
 
     # PostToolUse: observational logging only (no blocking)
     hook_event = data.get("hook_event_name", "PreToolUse")
@@ -1436,8 +2332,8 @@ def main():
             result = _check_url_rules(url)
             if result:
                 rule_name, guidance, exit_code = result
-                _log_url_event(url, rule_name, "blocked", "WebFetch")
-                _exit_with_decision(guidance, exit_code)
+                _log_url_event(url, rule_name, "asked" if exit_code == 1 else "blocked", "WebFetch")
+                _exit_with_decision(guidance, exit_code, rule_name=rule_name, matched_segment=url)
             else:
                 _log_url_event(url, None, "allowed", "WebFetch")
         sys.exit(0)
@@ -1449,8 +2345,25 @@ def main():
     if not command:
         sys.exit(0)
 
-    # Andon cord: GUARD_BYPASS=1 prefix skips all rule checks.
+    MAX_COMMAND_LEN = 100_000  # 100KB — generous for any real command
+    if len(command) > MAX_COMMAND_LEN:
+        _log_event("guard", "oversized", command=command[:500])
+        print("Command too large for guard analysis.", file=sys.stderr)
+        sys.exit(2)
+
+    # Andon cord: GUARD_BYPASS=1 prefix skips tool-selection and ask rules,
+    # but still enforces hard deny rules (git safety).
     if command.startswith("GUARD_BYPASS=1 "):
+        _log_event("bypass", "bypassed", command=command)
+        # Still enforce hard denials even in bypass mode
+        real_cmd = command[len("GUARD_BYPASS=1 ") :]
+        subcmds = split_commands(real_cmd)
+        for subcmd in subcmds:
+            stripped = strip_env_prefix(strip_shell_keyword(subcmd))
+            for name, check_fn, message in GIT_DENY_RULES:
+                if check_fn(stripped):
+                    _log_event("git", "blocked", rule=name, command=stripped)
+                    _exit_with_decision(message, 2, rule_name=name, matched_segment=stripped)
         sys.exit(0)
 
     # Check curl/wget commands for authenticated URLs (before rule checks)
@@ -1467,6 +2380,10 @@ def main():
             "TIP: A Makefile exists in this directory. "
             "Check if there's a `make` target before running raw commands."
         )
+
+    # Pass-through logging when log level is "all"
+    if _GUARD_LOG_LEVEL == "all":
+        _log_event("guard", "allowed", command=command)
 
     sys.exit(0)
 
