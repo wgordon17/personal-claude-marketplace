@@ -153,20 +153,25 @@ Both URL and command rules support an optional `action` field:
 |-------|-----------|----------|---------|
 | `"block"` | Exit 2 + stderr | Hard deny — Claude cannot proceed | Yes |
 | `"ask"` | JSON `hookSpecificOutput` + exit 0 | Prompts the user for confirmation | No |
+| `"allow"` | JSON `hookSpecificOutput` + exit 0 | Explicitly allows the command via the hook, bypassing Claude's permission system. Exit code 0 with `permissionDecision: "allow"` JSON. | No |
+
+Rules are matched in order of specificity: `"allow"` rules first, then `"ask"`, then `"block"`. The first matching rule wins.
 
 The `"ask"` action outputs `permissionDecision: "ask"` via Claude Code's [PreToolUse hook JSON protocol](https://code.claude.com/docs/en/hooks#pretooluse-decision-control). Claude Code displays a permission prompt with the rule's `message` as the reason. This overrides `permissions.allow` auto-approve rules — even commands matching `Bash(git:*)` or `Bash(oc:*)` will prompt when a hook returns `"ask"`.
 
-> **⚠️ Important: `"ask"` requires the JSON `hookSpecificOutput` protocol**
+The `"allow"` action explicitly permits the command via `permissionDecision: "allow"` in the JSON response, bypassing Claude's default permission system. This is useful for commands that would normally be blocked but are safe in specific contexts.
+
+> **⚠️ Important: `"ask"` and `"allow"` require the JSON `hookSpecificOutput` protocol**
 >
-> The `"ask"` action uses `permissionDecision: "ask"` in a JSON object on stdout with exit code 0.
-> It does **not** use `sys.exit(1)` — exit code 1 is a non-blocking error in Claude Code and the
+> Both actions use `permissionDecision: "ask"` or `permissionDecision: "allow"` in a JSON object on stdout with exit code 0.
+> They do **not** use `sys.exit(1)` — exit code 1 is a non-blocking error in Claude Code and the
 > command will proceed silently. If you're writing custom hooks, use the JSON protocol:
 >
 > ```json
 > {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": "reason"}}
 > ```
 >
-> **Known issue (VS Code):** The VS Code extension ignores `permissionDecision: "ask"` and falls back
+> **Known issue (VS Code):** The VS Code extension ignores `permissionDecision: "ask"` and `permissionDecision: "allow"` and falls back
 > to permission rules ([#13339](https://github.com/anthropics/claude-code/issues/13339)). The CLI
 > works correctly. Use `"block"` as a workaround if VS Code support is needed.
 
@@ -186,6 +191,88 @@ This checks both `URL_GUARD_EXTRA_RULES` and `COMMAND_GUARD_EXTRA_RULES` files f
 - Invalid `action` values
 
 Validation runs automatically on **session start** via the SessionStart hook. If your config has issues, you'll see them immediately when a new session begins. Built-in rules are always enforced regardless of config file state.
+
+## Unified Audit Log
+
+All hook decisions (blocked, asked, allowed, trusted) are logged to a SQLite database at `~/.claude/logs/dev-guard.db` with Write-Ahead Logging (WAL) for concurrent multi-session access.
+
+**Database location:** `~/.claude/logs/dev-guard.db` (override with `GUARD_DB_PATH` environment variable)
+
+**Logging verbosity** is controlled via the `GUARD_LOG_LEVEL` environment variable:
+- `off` — No logging
+- `actions` — Log only blocked, asked, trusted, and allowed decisions (default)
+- `all` — Log all hook invocations including skipped rules and non-matching patterns
+
+**Schema overview:** The audit log stores category, action, rule name, matched command, and timestamp for each entry.
+
+**Security note:** The audit log database file is created with `0o600` permissions (owner read/write only) because it may contain sensitive command-line data, including credentials, file paths, or API tokens passed on the command line.
+
+## Trust Management
+
+Users can trust ask rules to auto-approve them without manual confirmation:
+
+```bash
+/dev-guard trust <rule-name>                    # Add to session trust list
+/dev-guard trust <rule-name> --always           # Add to persistent trust (all sessions)
+/dev-guard trust <rule-name> --match <pattern>  # Trust only commands matching substring
+/dev-guard untrust <rule-name>                  # Remove from trust
+/dev-guard trust list                           # Show trusted rules for this session
+```
+
+**Important:**
+- Block rules are never trustable (only ask rules can be trusted)
+- Trust entries are stored in SQLite alongside the audit log
+- Session-scoped trust requires a prior hook invocation (reads `session_id` from the database)
+- Users receive a trust hint when prompted: "To trust this rule for future sessions, run: `/dev-guard trust <rule> --always`"
+
+**Workflow example:**
+1. Run a command that triggers an ask rule
+2. Receive permission prompt with trust hint
+3. Approve the command
+4. Run `/dev-guard trust git-stash-drop --always` to auto-approve in the future
+5. Next session: same command auto-approves without prompting
+
+## oc/kubectl Introspection
+
+Mutating `oc` and `kubectl` commands receive automatic risk assessment based on the resource types being modified, with enhanced prompts showing detected security risks.
+
+**Risk tiers and resource types:**
+
+| Risk Level | Resource Types |
+|------------|----------------|
+| **Critical** | secret, clusterrole, clusterrolebinding, webhookconfigurations |
+| **High** | namespace, project, node, persistentvolume, CRD, serviceaccount, networkpolicy |
+| **Medium** | deployment, statefulset, daemonset, service, ingress, route, configmap, role, rolebinding, cronjob, job |
+| **Low** | pod, event, resourcequota, limitrange, HPA, PDB |
+
+**YAML manifest inspection:**
+- Parses YAML files passed via stdin or files to detect resource kinds and security fields
+- Uses regex-based parsing (no external dependencies)
+- Detects security risk fields: `privileged`, `hostNetwork`, `hostPID`, `hostPath`, `runAsRoot`
+- Handles pipe patterns: `cat file.yaml | oc apply -f -`
+
+**Automatic allowances:**
+- Commands with `--dry-run` are always allowed without prompting (safe preview mode)
+- User-defined command rules take priority over built-in introspection
+
+## Trustable Rule Names
+
+Users can trust these built-in rules with `/dev-guard trust <rule-name>`:
+
+**Git safety rules (ask actions):**
+- `config-global-write` — Global git config modifications
+- `stash-drop` — Destructive stash operations
+- `branch-delete` — Branch deletion
+- `branch-rename` — Branch renaming
+- `tag-operations` — Tag creation/deletion/modification
+- `rebase-interactive` — Interactive rebase (`git rebase -i`)
+- `remote-modify` — Remote add/remove/set-url
+- `branch-needs-fetch` — Requires fetch before rebase (dynamic, matches current branch)
+
+**oc/kubectl introspection rules (ask actions):**
+- `oc-critical` — Critical resource modifications
+- `oc-high` — High-risk resource modifications
+- `oc-medium` — Medium-risk resource modifications
 
 ### Bypass Mechanisms
 
