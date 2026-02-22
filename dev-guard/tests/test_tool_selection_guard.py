@@ -375,6 +375,60 @@ class TestProjectConventions:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Claude Code built-in false-positive prevention
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestBuiltinFalsePositivePrevention:
+    """Block commands that trigger Claude Code's built-in permission heuristics.
+
+    These checks run in _check_subcmd before rule matching, similar to the
+    bash -c wrapper detection.  The goal is to give actionable guidance
+    instead of the cryptic built-in messages like
+    "Command contains empty quotes before dash (potential bypass)".
+    """
+
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # Process substitution <(...)
+            (
+                "diff <(grep -n 'a' file1) <(grep -n 'a' file2)",
+                2,
+                "Process substitution",
+            ),
+            ("sort <(cat file.txt)", 2, "Process substitution"),
+            ("comm -3 <(sort a.txt) <(sort b.txt)", 2, "Process substitution"),
+            # Multiline python -c
+            (
+                'uv run python3 -c "\nimport sys\nprint(sys.version)\n"',
+                2,
+                "uv run python3",
+            ),
+            (
+                'python3 -c "\nimport argparse\nparser = argparse.ArgumentParser()\n"',
+                2,
+                "uv run python3",
+            ),
+            # Single-line python -c should NOT trigger this check
+            # (it may be caught by other rules, but not by multiline-python-c)
+            ('uv run python3 -c "print(1)"', 0, None),
+        ],
+        ids=[
+            "diff-process-sub",
+            "sort-process-sub",
+            "comm-process-sub",
+            "uv-multiline-python-c",
+            "bare-multiline-python-c",
+            "single-line-python-c-allow",
+        ],
+    )
+    def test_false_positive_prevention(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Category D: Simpler patterns (2 rules)
 # ═══════════════════════════════════════════════════════════════════════════════
 
