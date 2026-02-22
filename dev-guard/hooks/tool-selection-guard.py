@@ -476,7 +476,12 @@ def _exit_with_decision(
         else:
             parts.append(guidance)
         if matched_segment:
-            parts.append(f"Matched: {matched_segment}")
+            # Show a concise version — full command is noise when guidance
+            # already explains the issue.  Truncate to first 60 chars.
+            display = matched_segment.strip()
+            if len(display) > 60:
+                display = display[:57] + "..."
+            parts.append(f"Matched: {display}")
         if rule_name:
             sid_hint = f" --session-id {_session_id}" if _session_id else ""
             parts.append(
@@ -1363,11 +1368,12 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
         if skip_rules and rule.name in skip_rules:
             continue
         target = normalized if rule.pattern.pattern.startswith("^") else cmd
-        if rule.pattern.search(target):
+        m = rule.pattern.search(target)
+        if m:
             if rule.exception and rule.exception.search(cmd):
                 continue
             _exit_with_decision(
-                rule.guidance, rule.action, rule_name=rule.name, matched_segment=cmd
+                rule.guidance, rule.action, rule_name=rule.name, matched_segment=m.group(0)
             )
 
 
@@ -1451,6 +1457,10 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
     normalized = strip_env_prefix(strip_shell_keyword(subcmd))
     if re.match(r"^\s*(oc|kubectl)\b", normalized):
         _check_oc_introspection(subcmd)
+
+    # Kill command guard — validate targets against Claude session process tree
+    if re.match(r"^\s*(kill|killall|pkill)\b", normalized):
+        _check_kill_command(subcmd)
 
     return fetch_seen
 
@@ -1555,6 +1565,362 @@ def _list_trust() -> list[dict[str, str]]:
         ]
     except (sqlite3.Error, OSError):
         return []
+
+
+# ── Process tree utilities ──
+
+
+def _get_parent_info(pid: int) -> tuple[int, str] | None:
+    """Return (ppid, comm) for the given PID, or None on failure."""
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "ppid=,comm=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        line = result.stdout.strip()
+        parts = line.split(None, 1)
+        if len(parts) < 2:
+            return None
+        return int(parts[0]), parts[1].strip()
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return None
+
+
+def _get_process_args(pid: int) -> str | None:
+    """Return the full args string for the given PID, or None on failure."""
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "args=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        return result.stdout.strip()
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def _find_claude_session_pid() -> int | None:
+    """Walk up the process tree to find the Claude Code session root PID.
+
+    Checks each ancestor's command name for 'claude' (by comm) or 'node'
+    with 'claude' in args. Returns the PID of the first match, or None
+    if not found (e.g., running outside Claude Code or in tests).
+    """
+    pid = os.getpid()
+    visited: set[int] = set()
+    while pid > 1 and pid not in visited:
+        visited.add(pid)
+        info = _get_parent_info(pid)
+        if info is None:
+            return None
+        ppid, comm = info
+        # Check if this ancestor IS the Claude Code process
+        if comm == "claude" or comm.endswith("/claude"):
+            return pid
+        if comm in ("node", "node.exe") or comm.endswith("/node"):
+            args = _get_process_args(pid)
+            if args and "claude" in args.lower():
+                return pid
+        pid = ppid
+    return None
+
+
+def _is_descendant_of(target_pid: int, ancestor_pid: int) -> bool:
+    """Check if target_pid is a descendant of ancestor_pid in the process tree.
+
+    Walks up from target_pid checking each parent against ancestor_pid.
+    Returns True if ancestor_pid appears in the chain before reaching PID 1.
+    Returns False if the target doesn't exist or the walk fails.
+    """
+    pid = target_pid
+    visited: set[int] = set()
+    while pid > 1 and pid not in visited:
+        if pid == ancestor_pid:
+            return True
+        visited.add(pid)
+        info = _get_parent_info(pid)
+        if info is None:
+            return False
+        pid = info[0]  # ppid
+    return False
+
+
+def _get_process_description(pid: int) -> str:
+    """Return a human-readable description of a process: 'comm (args)'."""
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "comm=,args=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return f"PID {pid} (unknown)"
+        desc = result.stdout.strip()
+        return desc[:100] + "..." if len(desc) > 100 else desc
+    except (subprocess.TimeoutExpired, OSError):
+        return f"PID {pid} (unknown)"
+
+
+# ── Kill command guard ──
+
+
+def _extract_kill_targets(cmd: str) -> tuple[str, list[int], list[str]] | None:
+    """Parse a kill/killall/pkill command and extract target PIDs.
+
+    Returns (command_type, resolved_pids, unresolvable_names) or None if not
+    a kill command.
+    - command_type: "kill", "killall", or "pkill"
+    - resolved_pids: list of numeric PIDs that could be extracted/resolved
+    - unresolvable_names: list of names that couldn't be resolved to PIDs
+      ("dynamic" indicates xargs/pipe-to-kill scenarios)
+    """
+    normalized = strip_env_prefix(strip_shell_keyword(cmd))
+
+    # Detect xargs/pipe-to-kill — can't statically extract PIDs
+    if re.search(r"xargs\s+(?:.*\s+)?kill", normalized):
+        return ("kill", [], ["dynamic"])
+
+    m = re.match(r"^\s*(kill|killall|pkill)\b(.*)", normalized, re.DOTALL)
+    if not m:
+        return None
+
+    cmd_type = m.group(1)
+    rest = m.group(2).strip()
+
+    if cmd_type == "kill":
+        return _parse_kill_args(rest)
+    elif cmd_type == "killall":
+        return _parse_killall_args(rest)
+    else:  # pkill
+        return _parse_pkill_args(rest)
+
+
+def _parse_kill_args(rest: str) -> tuple[str, list[int], list[str]] | None:
+    """Parse arguments to the kill command."""
+    # kill -l / kill -L → informational, allow through
+    if re.match(r"^\s*-[lL]\b", rest):
+        return None
+
+    tokens = rest.split()
+    pids: list[int] = []
+    job_refs: list[str] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "--":
+            i += 1
+            continue
+        # Signal flags: -9, -SIGTERM, -TERM, -s TERM
+        if tok == "-s" and i + 1 < len(tokens):
+            i += 2  # skip -s and signal name
+            continue
+        if re.match(r"^-[A-Za-z]", tok) or re.match(r"^-\d+$", tok):
+            i += 1
+            continue
+        # Job reference: %N
+        if tok.startswith("%"):
+            job_refs.append(tok)
+            i += 1
+            continue
+        # Numeric PID
+        with contextlib.suppress(ValueError):
+            pids.append(int(tok))  # ignore unrecognized tokens
+        i += 1
+
+    return ("kill", pids, job_refs)
+
+
+def _parse_killall_args(rest: str) -> tuple[str, list[int], list[str]]:
+    """Parse arguments to killall and resolve process names to PIDs via pgrep."""
+    tokens = rest.split()
+    names: list[str] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        # Signal flags: -SIGTERM, -TERM, -9, -s SIGNAL
+        if tok == "-s" and i + 1 < len(tokens):
+            i += 2
+            continue
+        if re.match(r"^-[A-Za-z]", tok) or re.match(r"^-\d+$", tok):
+            i += 1
+            continue
+        # Options: -v, -e, -I, -i, -q, -u, -w, -z
+        if re.match(r"^-[veIiquwz]$", tok):
+            i += 1
+            continue
+        # Options with args: -u user, -g group
+        if re.match(r"^-[ug]$", tok) and i + 1 < len(tokens):
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        names.append(tok)
+        i += 1
+
+    resolved_pids: list[int] = []
+    unresolved: list[str] = []
+    for name in names:
+        pids = _pgrep(name)
+        if pids:
+            resolved_pids.extend(pids)
+        # No match = harmless no-op, don't add to unresolved
+
+    return ("killall", resolved_pids, unresolved)
+
+
+def _parse_pkill_args(rest: str) -> tuple[str, list[int], list[str]]:
+    """Parse arguments to pkill and resolve patterns to PIDs via pgrep."""
+    tokens = rest.split()
+    patterns: list[str] = []
+    use_full_match = False
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "-f":
+            use_full_match = True
+            i += 1
+            continue
+        # Signal flags: -SIGTERM, -TERM, -9
+        if re.match(r"^-[A-Za-z]", tok) or re.match(r"^-\d+$", tok):
+            i += 1
+            continue
+        # Options: -x, -n, -o, -v, -c
+        if re.match(r"^-[xnovc]$", tok):
+            i += 1
+            continue
+        # Options with args: -s signal, -u user, -g group, -P ppid, -G gid, -t term
+        if re.match(r"^-[sugPGt]$", tok) and i + 1 < len(tokens):
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        patterns.append(tok)
+        i += 1
+
+    resolved_pids: list[int] = []
+    unresolved: list[str] = []
+    for pattern in patterns:
+        pids = _pgrep(pattern, full=use_full_match)
+        if pids:
+            resolved_pids.extend(pids)
+
+    return ("pkill", resolved_pids, unresolved)
+
+
+def _pgrep(pattern: str, *, full: bool = False) -> list[int]:
+    """Resolve a process name/pattern to PIDs using pgrep."""
+    cmd = ["pgrep"]
+    if full:
+        cmd.append("-f")
+    cmd.append(pattern)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0 or not result.stdout.strip():
+            return []
+        return [int(line) for line in result.stdout.strip().split("\n") if line.strip()]
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return []
+
+
+def _check_kill_command(cmd: str) -> None:
+    """Validate kill/killall/pkill targets against the Claude session process tree.
+
+    Allows commands targeting Claude-spawned processes silently.
+    Prompts the user (ask) for commands targeting external processes.
+    """
+    targets = _extract_kill_targets(cmd)
+    if targets is None:
+        return  # Not a kill command or informational (kill -l)
+
+    cmd_type, resolved_pids, unresolvable = targets
+
+    # Job refs only, or no targets at all — allow silently
+    if not resolved_pids and not any(u == "dynamic" for u in unresolvable):
+        return
+
+    # Dynamic PID resolution (xargs/pipe) — can't verify statically
+    if "dynamic" in unresolvable:
+        _exit_with_decision(
+            "kill with dynamic PID resolution (xargs/pipe) — "
+            "cannot verify process ownership statically.",
+            "ask",
+            rule_name="kill-non-claude-process",
+            matched_segment=cmd[:200],
+        )
+        return
+
+    # Cap PID count to avoid DoS via per-PID subprocess calls
+    MAX_KILL_TARGETS = 50
+    if len(resolved_pids) > MAX_KILL_TARGETS:
+        _exit_with_decision(
+            f"kill targets {len(resolved_pids)} processes — too many to validate individually.",
+            "ask",
+            rule_name="kill-non-claude-process",
+            matched_segment=cmd[:200],
+        )
+        return
+
+    # Find this session's Claude Code root PID
+    claude_pid = _find_claude_session_pid()
+    if claude_pid is None:
+        # Can't verify — running outside Claude Code or can't walk tree
+        if resolved_pids:
+            _exit_with_decision(
+                "Cannot verify process ownership — unable to find Claude Code session root.",
+                "ask",
+                rule_name="kill-non-claude-process",
+                matched_segment=cmd[:200],
+            )
+        return
+
+    # Classify each target PID
+    claude_pids: list[int] = []
+    external_pids: list[int] = []
+    for pid in resolved_pids:
+        if _is_descendant_of(pid, claude_pid):
+            claude_pids.append(pid)
+        else:
+            external_pids.append(pid)
+
+    # All targets are Claude descendants → allow silently
+    if not external_pids:
+        return
+
+    # Some targets are external → ask with rich context
+    parts: list[str] = []
+    if cmd_type in ("killall", "pkill"):
+        parts.append(f"{cmd_type} targets processes outside this Claude session.")
+    else:
+        parts.append("kill targets processes outside this Claude session.")
+
+    if claude_pids:
+        descs = [f"PID {p} ({_get_process_description(p)})" for p in claude_pids[:5]]
+        parts.append(f"  Claude-spawned: {', '.join(descs)}")
+    if external_pids:
+        descs = [f"PID {p} ({_get_process_description(p)})" for p in external_pids[:5]]
+        parts.append(f"  NOT Claude-spawned: {', '.join(descs)}")
+
+    if cmd_type in ("killall", "pkill"):
+        parts.append(
+            f"  {cmd_type} is all-or-nothing — approving will signal ALL matching processes."
+        )
+
+    _exit_with_decision(
+        "\n".join(parts),
+        "ask",
+        rule_name="kill-non-claude-process",
+        matched_segment=cmd[:200],
+    )
 
 
 # ── oc/kubectl introspection ──
@@ -2035,6 +2401,7 @@ def _get_askable_rule_names() -> set[str]:
             names.add(rule.name)
     # oc introspection rules (dynamic)
     names.update(["oc-critical", "oc-high", "oc-medium"])
+    names.add("kill-non-claude-process")
     # Branch-needs-fetch (dynamic git ask)
     names.add("branch-needs-fetch")
     return names

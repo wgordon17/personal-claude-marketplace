@@ -2600,6 +2600,140 @@ class TestValidateMode:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Kill command guard
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestKillCommandGuard:
+    """Tests for _extract_kill_targets, process tree utilities, and kill guard integration."""
+
+    # ── Unit tests: _extract_kill_targets ──
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            # Basic numeric PID
+            ("kill 1234", ("kill", [1234], [])),
+            # Signal flag -9
+            ("kill -9 1234", ("kill", [1234], [])),
+            # Signal flag -SIGTERM, multiple PIDs
+            ("kill -SIGTERM 1234 5678", ("kill", [1234, 5678], [])),
+            # Signal via -s TERM
+            ("kill -s TERM 1234", ("kill", [1234], [])),
+            # Job reference %1 — no numeric PIDs
+            ("kill %1", ("kill", [], ["%1"])),
+            # kill -- separator, numeric PID
+            ("kill -- 1234", ("kill", [1234], [])),
+            # kill -9 with -- separator and multiple PIDs
+            ("kill -9 -- 1234 5678", ("kill", [1234, 5678], [])),
+            # xargs pipe — dynamic
+            ("echo foo | xargs kill", ("kill", [], ["dynamic"])),
+        ],
+        ids=[
+            "basic-pid",
+            "signal-9",
+            "sigterm-multi-pid",
+            "s-term",
+            "job-ref",
+            "double-dash",
+            "signal-double-dash-multi",
+            "xargs-kill",
+        ],
+    )
+    def test_extract_kill_targets_kill(self, cmd, expected):
+        result = _mod._extract_kill_targets(cmd)
+        assert result is not None
+        cmd_type, pids, names = result
+        exp_type, exp_pids, exp_names = expected
+        assert cmd_type == exp_type
+        assert pids == exp_pids
+        assert names == exp_names
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "kill -l",
+            "kill -L",
+        ],
+        ids=["kill-l", "kill-L"],
+    )
+    def test_extract_kill_targets_informational_returns_none(self, cmd):
+        assert _mod._extract_kill_targets(cmd) is None
+
+    def test_extract_kill_targets_killall_command_type(self):
+        result = _mod._extract_kill_targets("killall python3")
+        assert result is not None
+        cmd_type, _pids, _names = result
+        assert cmd_type == "killall"
+
+    def test_extract_kill_targets_pkill_command_type(self):
+        result = _mod._extract_kill_targets('pkill -f "some pattern"')
+        assert result is not None
+        cmd_type, _pids, _names = result
+        assert cmd_type == "pkill"
+
+    def test_extract_kill_targets_not_kill_command(self):
+        assert _mod._extract_kill_targets("echo hello") is None
+
+    # ── Unit tests: process tree utilities ──
+
+    def test_get_parent_info_current_process(self):
+        """_get_parent_info returns (ppid, comm) for a live PID."""
+        result = _mod._get_parent_info(os.getpid())
+        assert result is not None
+        ppid, comm = result
+        assert ppid > 0
+        assert isinstance(comm, str)
+        assert len(comm) > 0
+
+    def test_get_parent_info_nonexistent_pid(self):
+        """_get_parent_info returns None for a nonexistent PID."""
+        assert _mod._get_parent_info(999999999) is None
+
+    def test_is_descendant_of_current_process_descends_from_parent(self):
+        """A live process is a descendant of its own parent PID."""
+        parent_info = _mod._get_parent_info(os.getpid())
+        assert parent_info is not None, "Could not get parent info for current process"
+        ppid = parent_info[0]
+        assert _mod._is_descendant_of(os.getpid(), ppid) is True
+
+    def test_is_descendant_of_nonexistent_target(self):
+        """Nonexistent target PID returns False."""
+        assert _mod._is_descendant_of(999999999, 1) is False
+
+    def test_is_descendant_of_nonexistent_ancestor(self):
+        """A live PID is not a descendant of a nonexistent ancestor."""
+        assert _mod._is_descendant_of(os.getpid(), 999999999) is False
+
+    # ── Integration tests: black-box via run_bash ──
+
+    def test_kill_l_passes_through(self):
+        """`kill -l` is informational — guard allows it (exit 0, no ask)."""
+        result = run_bash("kill -l")
+        assert_guard(result, 0)
+
+    def test_kill_L_passes_through(self):
+        """`kill -L` is informational — guard allows it (exit 0, no ask)."""
+        result = run_bash("kill -L")
+        assert_guard(result, 0)
+
+    def test_kill_nonexistent_pid_triggers_ask(self):
+        """`kill 999999999` targets an unknown PID — guard asks for confirmation."""
+        result = run_bash("kill 999999999")
+        assert_ask_decision(result, "kill-non-claude-process")
+
+    def test_kill_zero_nonexistent_pid_triggers_ask(self):
+        """`kill -0 999999999` (existence check) still triggers ask."""
+        result = run_bash("kill -0 999999999")
+        assert_ask_decision(result, "kill-non-claude-process")
+
+    def test_kill_with_guard_bypass_allowed(self):
+        """GUARD_BYPASS=1 command prefix overrides the kill guard — command passes through."""
+        result = run_bash("GUARD_BYPASS=1 kill 999999999")
+        assert_guard(result, 0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Unified logging: SQLite audit database
 # ═══════════════════════════════════════════════════════════════════════════════
 

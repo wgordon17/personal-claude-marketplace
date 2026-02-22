@@ -282,6 +282,7 @@ stdin JSON → parse → session state → hook dispatch (PreToolUse or PostTool
    - Check subshells recursively
    - Check full subcommand against all rules
    - Introspect oc/kubectl commands for resource risk
+   - Validate kill/killall/pkill targets against Claude session process tree
 8. **Logging:** Audit events recorded to SQLite with category, action, rule, command
 
 ## oc/kubectl Introspection
@@ -307,6 +308,36 @@ Mutating `oc` and `kubectl` commands receive automatic risk assessment based on 
 - Commands with `--dry-run` are always allowed without prompting (safe preview mode)
 - User-defined command rules take priority over built-in introspection
 
+## Kill Command Guard
+
+Validates `kill`, `killall`, and `pkill` commands against the Claude Code session process tree. Commands targeting Claude-spawned child processes are allowed silently. Commands targeting external processes or unresolvable targets trigger an ask prompt with process context.
+
+**Covered commands:**
+- `kill <PID>` — Single PID termination
+- `killall <name>` — Kill by process name
+- `pkill <pattern>` — Kill by pattern match
+
+**Behavior matrix:**
+
+| Scenario | Behavior |
+|----------|----------|
+| PID is Claude-spawned child | Allow silently |
+| PID is external (not Claude child) | Ask prompt with context |
+| Job reference (`kill %1`) | Allow silently (always Claude-spawned) |
+| Informational flags (`kill -l`, `kill -L`) | Allow silently |
+| `xargs kill` or pipe-to-kill | Ask prompt (can't verify statically) |
+| 50+ resolved PIDs | Ask prompt (DoS protection) |
+| Mixed ownership (some Claude, some external) | Ask prompt showing both lists |
+
+**Process tree validation:**
+- Uses `ps` to walk the OS process tree — no state tracking needed
+- Resolves job references and named patterns to PIDs via `pgrep`
+- Shows Claude vs. external process lists in ask prompts
+
+**Custom rule interaction:**
+- Custom command rules take priority (checked earlier in `_check_rules()`)
+- Users can trust the ask rule for auto-approval
+
 ## Trustable Rule Names
 
 Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-name>`:
@@ -326,6 +357,9 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 - `oc-critical` — Critical resource modifications
 - `oc-high` — High-risk resource modifications
 - `oc-medium` — Medium-risk resource modifications
+
+**Kill command guard rules (ask actions):**
+- `kill-non-claude-process` — Killing processes not spawned by this Claude session
 
 ### Bypass Mechanisms
 
