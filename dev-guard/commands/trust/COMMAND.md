@@ -30,6 +30,12 @@ uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust add <rule_nam
 uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust add <rule_name> --scope session
 ```
 
+### Trust a rule with a specific session ID
+
+```bash
+uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust add <rule_name> --scope session --session-id <session_id>
+```
+
 ### Trust a rule with a match pattern
 
 ```bash
@@ -40,6 +46,12 @@ uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust add <rule_nam
 
 ```bash
 uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust remove <rule_name>
+```
+
+### Remove trust for a specific match pattern
+
+```bash
+uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust remove <rule_name> --match <pattern>
 ```
 
 ### List all trusted rules
@@ -57,5 +69,5 @@ uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust list
 ## Caveats
 
 - `--match <pattern>` is a **case-insensitive substring** match against the full command string, not a regex.
-- `--session` requires a prior guard invocation in the current session (it reads the session ID from the database).
+- `--session` requires a prior guard invocation in the current session (it reads the session ID from the database), or an explicit `--session-id`.
 - Trust entries are validated against known ask-type rules. Unknown rule names are rejected.

@@ -103,21 +103,32 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ## Prerequisites
 
+### For All Non-LSP Plugins
+
+- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), dev-essentials (test-runner, uv-python), and git-tools (hook installation)
+
 ### For LSP Plugins
 
-- **uv**: `brew install uv` or `pip install uv`
-- **Node.js/npm**: For npx-based servers
+- **uv**: Required by pyright-uvx (`uvx`)
+- **Node.js/npm**: For npx-based servers (vtsls-npx, vscode-html-css-npx)
 - **Go**: `brew install go` (for gopls)
 - **Rust/rustup**: `brew install rustup` (for rust-analyzer)
+
+### For Git Tools
+
+- **[git-branchless](https://github.com/arxanas/git-branchless)**: `brew install git-branchless` — Required by `/git-history` skill and `/git-tools:review-commits` command
+- **[pre-commit](https://pre-commit.com/)**: `uv tool install pre-commit` — Required by `/git-hooks-install` and `/git-hooks-uninstall` skills
 
 ### Verification
 
 ```bash
-uvx --version          # uv version
-npx --version          # npm version
-go version             # go version
-rustup --version       # rustup version
-rust-analyzer --version # rust-analyzer version
+uv --version           # uv (required for all non-LSP plugins)
+uvx --version          # uvx (for pyright-uvx)
+npx --version          # npm (for npx-based LSP servers)
+go version             # go (for gopls)
+rustup --version       # rustup (for rust-analyzer)
+git branchless --help  # git-branchless (for git-tools)
+pre-commit --version   # pre-commit (for git-tools hooks)
 ```
 
 ## LSP Benefits
@@ -154,6 +165,62 @@ uv cache clean
 # npx cache
 rm -rf ~/.npm/_npx
 ```
+
+## Ecosystem & Dependencies
+
+Plugins in this marketplace have cross-dependencies, external tool requirements, and optional MCP server integrations. This section documents what each plugin needs for full functionality.
+
+### Plugin Dependencies
+
+**code-quality + dev-essentials** are tightly coupled and should be installed together:
+
+- **code-quality** requires **dev-essentials** — The `/swarm` and `/unfuck` skills reference the `dev-essentials:test-runner` agent for verification phases. Without dev-essentials, final verification cannot spawn the correct agent type.
+- **dev-essentials** requires **code-quality** — The `/incremental-planning` skill references `code-quality:architect`, `code-quality:security`, and `code-quality:qa` agents for expert consultation. Without code-quality, Phase 3 (Consult) cannot spawn these agents.
+- **dev-essentials** requires at least one **LSP plugin** — The `/lsp-navigation` skill depends on an installed LSP plugin (pyright-uvx, vtsls-npx, gopls-go, etc.) to function.
+
+**dev-guard** and **git-tools** are self-contained — no cross-plugin dependencies.
+
+### External Tool Requirements
+
+| Tool | Required By | Purpose |
+|------|------------|---------|
+| [`uv`](https://docs.astral.sh/uv/) | **All non-LSP plugins** | dev-guard hooks (`uv run`), test-runner, uv-python enforcement, hook installation |
+| [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
+| [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
+| [`pre-commit`](https://pre-commit.com/) | git-tools | `/git-hooks-install` and `/git-hooks-uninstall` skills |
+| [Node.js/npm](https://nodejs.org/) | vtsls-npx, vscode-html-css-npx | Runs LSP servers via `npx` |
+| [Go](https://go.dev/) | gopls-go | Runs gopls language server |
+| [Rust/rustup](https://rustup.rs/) | rust-analyzer-rustup | Runs rust-analyzer |
+
+### MCP Server Integrations
+
+These MCP servers enhance functionality but are not required for core operation (except where noted):
+
+| MCP Server | Plugin | Dependency | Purpose |
+|------------|--------|------------|---------|
+| **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
+| **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
+| **[Serena](https://github.com/Agentic-Coding/serena)** | dev-essentials | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1. Alternative tools work. |
+| **[Sequential-Thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)** | dev-essentials | Soft | Reasoning about scope boundaries in `/incremental-planning` Phases 1 and 5. Reasoning works without it. |
+| **[claude-mem](https://github.com/pchaganti/gx-claude-mem)** | dev-essentials | Soft | Search past work, decisions, and learnings in `/incremental-planning` Phase 1. Enhanced context, not required. |
+
+### SuperClaude / Superpowers References
+
+Some skills in code-quality (`/unfuck`) and dev-essentials (`/incremental-planning`) reference SuperClaude skills (`sc:index-repo`, `sc:analyze`, `sc:cleanup`, `sc:improve`, `sc:reflect`) and Superpowers patterns (`superpowers:verification-before-completion`, `superpowers:subagent-driven-development`). These are from a separate plugin system not distributed in this marketplace. The skills degrade gracefully without them — the references are informational and the skills use alternative approaches when SuperClaude is unavailable.
+
+### Dependency Matrix
+
+Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** = degraded without it.
+
+| Plugin | code-quality | dev-essentials | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | SuperClaude |
+|--------|-------------|---------------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|-------------|
+| **code-quality** | -- | HARD | soft | HARD | -- | -- | -- | soft | -- | -- | HARD |
+| **dev-essentials** | HARD | -- | HARD | -- | soft | soft | soft | soft | soft | -- | soft |
+| **git-tools** | -- | -- | -- | soft | -- | -- | -- | HARD | HARD | HARD | -- |
+| **dev-guard** | -- | -- | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **LSP plugins** | -- | -- | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
+
+*pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.
 
 ## License
 

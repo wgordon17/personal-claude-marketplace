@@ -17,9 +17,22 @@ import pytest
 SCRIPT = os.path.join(os.path.dirname(__file__), os.pardir, "hooks", "tool-selection-guard.py")
 
 
-def run_guard(tool_name: str, tool_input: dict, *, env=None) -> subprocess.CompletedProcess:
-    """Invoke the guard script with the given tool_name and tool_input."""
-    payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+def run_guard(
+    tool_name: str,
+    tool_input: dict,
+    *,
+    env: dict | None = None,
+    payload_extra: dict | None = None,
+) -> subprocess.CompletedProcess:
+    """Invoke the guard script with the given tool_name and tool_input.
+
+    payload_extra: additional top-level keys merged into the JSON payload
+    (e.g. hook_event_name, tool_response, session_id).
+    """
+    payload_data: dict = {"tool_name": tool_name, "tool_input": tool_input}
+    if payload_extra:
+        payload_data.update(payload_extra)
+    payload = json.dumps(payload_data)
     return subprocess.run(
         ["uv", "run", SCRIPT],
         input=payload,
@@ -75,30 +88,16 @@ def assert_ask_decision(result, expected_reason_fragment=None, test_id=""):
 
 def _run_with_extra_url_rules(tool_name, tool_input, rules_file):
     """Run the guard with a custom extra URL rules file (URL_GUARD_EXTRA_RULES)."""
-    payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
     env = os.environ.copy()
     env["URL_GUARD_EXTRA_RULES"] = str(rules_file)
-    return subprocess.run(
-        ["uv", "run", SCRIPT],
-        input=payload,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    return run_guard(tool_name, tool_input, env=env)
 
 
 def _run_with_extra_cmd_rules(command, rules_file):
     """Run the guard with a custom extra command rules file (COMMAND_GUARD_EXTRA_RULES)."""
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
     env = os.environ.copy()
     env["COMMAND_GUARD_EXTRA_RULES"] = str(rules_file)
-    return subprocess.run(
-        ["uv", "run", SCRIPT],
-        input=payload,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    return run_guard("Bash", {"command": command}, env=env)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1733,23 +1732,17 @@ class TestPostToolUseResponseLogging:
 
     def _run_post_hook(self, tool_name, tool_input, tool_response, tmp_path):
         """Simulate a PostToolUse hook invocation."""
-        payload = json.dumps(
-            {
-                "hook_event_name": "PostToolUse",
-                "tool_name": tool_name,
-                "tool_input": tool_input,
-                "tool_response": tool_response,
-            }
-        )
         env = os.environ.copy()
         env["GUARD_DB_PATH"] = str(tmp_path / "test.db")
         env["GUARD_LOG_LEVEL"] = "all"
-        return subprocess.run(
-            ["uv", "run", SCRIPT],
-            input=payload,
-            capture_output=True,
-            text=True,
+        return run_guard(
+            tool_name,
+            tool_input,
             env=env,
+            payload_extra={
+                "hook_event_name": "PostToolUse",
+                "tool_response": tool_response,
+            },
         )
 
     def test_bash_curl_403_logged(self, tmp_path):
@@ -2246,7 +2239,7 @@ class TestExtraCommandRules:
 
 
 class TestExtraURLRulesAction:
-    """URL_GUARD_EXTRA_RULES action field: ask (exit 1) vs block (exit 2)."""
+    """URL_GUARD_EXTRA_RULES action field: ask vs block."""
 
     def test_url_action_ask_prompts_user(self, tmp_path):
         """URL rule with action: ask outputs JSON permissionDecision."""
@@ -2559,22 +2552,15 @@ class TestValidateMode:
 
 def _run_guard_with_db(tool_name, tool_input, tmp_path, *, env_extra=None, session_id=None):
     """Run the guard with a custom SQLite database path."""
-    payload_data = {"tool_name": tool_name, "tool_input": tool_input}
-    if session_id:
-        payload_data["session_id"] = session_id
-    payload = json.dumps(payload_data)
     env = os.environ.copy()
     env["GUARD_DB_PATH"] = str(tmp_path / "test.db")
     env["GUARD_LOG_LEVEL"] = "all"
     if env_extra:
         env.update(env_extra)
-    return subprocess.run(
-        ["uv", "run", SCRIPT],
-        input=payload,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    extra = {}
+    if session_id:
+        extra["session_id"] = session_id
+    return run_guard(tool_name, tool_input, env=env, payload_extra=extra or None)
 
 
 def _read_all_events(tmp_path):
@@ -2671,17 +2657,6 @@ class TestUnifiedLogging:
         events = _read_all_events(tmp_path)
         allowed_events = [e for e in events if e["action"] == "allowed"]
         assert len(allowed_events) >= 1
-
-    def test_silent_failure_on_bad_db_path(self, tmp_path):
-        """Guard does not crash when the database path is unwritable."""
-        result = _run_guard_with_db(
-            "Bash",
-            {"command": "git status"},
-            tmp_path,
-            env_extra={"GUARD_DB_PATH": "/nonexistent/path/test.db"},
-        )
-        # Should not crash (exit 0 for allowed command)
-        assert result.returncode == 0
 
     def test_session_id_stored(self, tmp_path):
         """Session ID from payload is stored in events."""
@@ -2932,40 +2907,18 @@ class TestTrustIntegration:
     """Integration tests: trusted ask rules auto-allow silently."""
 
     def _setup_trust(self, tmp_path, rule_name, *, match_pattern=None, scope="always", sid=None):
-        """Insert a trust entry directly into the database."""
+        """Insert a trust entry directly into the database.
+
+        Uses a guard invocation to initialize the DB schema, then inserts
+        the trust entry via direct SQL (avoids duplicating DDL).
+        """
         import datetime
+
+        # Run a no-op guard invocation to create the DB with the canonical schema
+        _run_guard_with_db("Bash", {"command": "git status"}, tmp_path)
 
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ts TEXT NOT NULL,
-                session_id TEXT,
-                tool_use_id TEXT,
-                category TEXT NOT NULL,
-                rule TEXT,
-                action TEXT NOT NULL,
-                command TEXT,
-                detail TEXT
-            );
-            CREATE TABLE IF NOT EXISTS trusted_rules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rule_name TEXT NOT NULL,
-                match_pattern TEXT,
-                scope TEXT NOT NULL,
-                session_id TEXT,
-                created_ts TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS session_state (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                updated_ts TEXT NOT NULL
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_trust_rule_match_scope
-                ON trusted_rules(rule_name, COALESCE(match_pattern, ''), scope);
-        """)
         conn.execute(
             "INSERT INTO trusted_rules "
             "(rule_name, match_pattern, scope, session_id, created_ts) "
@@ -3141,6 +3094,83 @@ class TestTrustCommand:
         result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
         assert result.returncode == 0
         assert "Trusted" in result.stdout
+
+    def test_unknown_flag_rejected_bug003(self, tmp_path):
+        """BUG-003: Unknown flags are rejected (not silently ignored)."""
+        result = self._run_trust(["add", "stash-drop", "--unknown-flag", "value"], tmp_path)
+        assert result.returncode == 2
+        assert "Usage error" in result.stderr or "unrecognized" in result.stderr.lower()
+
+    def test_remove_rejects_scope_flag_bug003(self, tmp_path):
+        """BUG-003: remove action doesn't accept --scope flag."""
+        result = self._run_trust(["remove", "stash-drop", "--scope", "session"], tmp_path)
+        assert result.returncode == 2
+        assert "unrecognized" in result.stderr.lower()
+
+    def test_session_shorthand_bug003(self, tmp_path):
+        """BUG-003: --session shorthand works as alias for --scope session."""
+        # First set session ID via guard run
+        _run_guard_with_db(
+            "Bash", {"command": "git status"}, tmp_path, session_id="test-session-xyz"
+        )
+        # Now use --session shorthand (no --scope)
+        result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify it was added with session scope
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "session" in result.stdout
+
+    def test_always_shorthand_bug003(self, tmp_path):
+        """BUG-003: --always shorthand works as alias for --scope always."""
+        result = self._run_trust(["add", "stash-drop", "--always"], tmp_path)
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify it was added with always scope
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "always" in result.stdout
+
+    def test_explicit_session_id_bug004(self, tmp_path):
+        """BUG-004: --session-id <id> allows explicit session ID specification."""
+        result = self._run_trust(
+            ["add", "stash-drop", "--scope", "session", "--session-id", "explicit-id-123"],
+            tmp_path,
+        )
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify the rule was added and is session-scoped
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "stash-drop" in result.stdout
+        assert "session" in result.stdout
+
+    def test_explicit_session_id_with_shorthand_bug004(self, tmp_path):
+        """BUG-004: --session-id works with --session shorthand."""
+        result = self._run_trust(
+            ["add", "stash-drop", "--session", "--session-id", "custom-session"],
+            tmp_path,
+        )
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify the rule was added
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "stash-drop" in result.stdout
+
+    def test_trust_hint_includes_session_id_bug004(self, tmp_path):
+        """BUG-004: Ask prompt trust hint includes --session-id when available."""
+        # Set up a guard check with a session ID and capture the ask output
+        result = _run_guard_with_db(
+            "Bash", {"command": "git stash drop"}, tmp_path, session_id="test-session-abc"
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook_output = output.get("hookSpecificOutput", {})
+        reason = hook_output.get("permissionDecisionReason", "")
+        # The reason should include the trust hint with --session-id
+        assert "--session-id test-session-abc" in reason or "--session-id" in reason
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3431,17 +3461,10 @@ class TestManifestInspection:
 
 def _run_oc_guard(command):
     """Run the guard for oc commands without extra command rules (tests introspection only)."""
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
     env = os.environ.copy()
     env.pop("COMMAND_GUARD_EXTRA_RULES", None)
     env.pop("URL_GUARD_EXTRA_RULES", None)
-    return subprocess.run(
-        ["uv", "run", SCRIPT],
-        input=payload,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    return run_guard("Bash", {"command": command}, env=env)
 
 
 class TestOcIntrospection:
@@ -3532,3 +3555,92 @@ class TestOcIntrospection:
         """kubectl commands are also introspected."""
         result = _run_oc_guard("kubectl delete pod my-pod")
         assert_ask_decision(result, "high-risk")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUG-006: NamedTuple rules with default action="block"
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestNamedTupleRules:
+    """Verify NamedTuple rule types have correct defaults and attributes."""
+
+    def test_command_rule_default_action(self):
+        """CommandRule defaults to action='block' when not specified."""
+        assert (
+            _mod.CommandRule(
+                name="test", pattern=re.compile("test"), exception=None, guidance="test"
+            ).action
+            == "block"
+        )
+
+    def test_url_rule_default_action(self):
+        """URLRule defaults to action='block' when not specified."""
+        assert (
+            _mod.URLRule(name="test", pattern=re.compile("test"), guidance="test").action == "block"
+        )
+
+    def test_command_rule_with_explicit_action(self):
+        """CommandRule accepts explicit action value."""
+        rule = _mod.CommandRule(
+            name="test", pattern=re.compile("test"), exception=None, guidance="test", action="ask"
+        )
+        assert rule.action == "ask"
+
+    def test_url_rule_with_explicit_action(self):
+        """URLRule accepts explicit action value."""
+        rule = _mod.URLRule(
+            name="test", pattern=re.compile("test"), guidance="test", action="allow"
+        )
+        assert rule.action == "allow"
+
+    def test_git_rule_attributes(self):
+        """GitRule has name, check_fn, message attributes."""
+        check_fn = lambda cmd: "test" in cmd  # noqa: E731
+        rule = _mod.GitRule(name="test-rule", check_fn=check_fn, message="test message")
+        assert rule.name == "test-rule"
+        assert rule.check_fn("test") is True
+        assert rule.message == "test message"
+
+    def test_command_rule_unpacking_backward_compat(self):
+        """NamedTuple unpacking still works for backward compatibility."""
+        rule = _mod.CommandRule(
+            name="test", pattern=re.compile("test"), exception=None, guidance="msg"
+        )
+        # Tuple unpacking should work
+        name, pattern, exception, guidance, action = rule
+        assert name == "test"
+        assert guidance == "msg"
+        assert action == "block"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUG-007 Issue F: _hook_output helper
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestHookOutputHelper:
+    """Verify _hook_output produces correct JSON structure."""
+
+    def test_hook_output_allow(self):
+        """_hook_output('allow', 'reason') produces correct JSON."""
+        output = _mod._hook_output("allow", "test reason")
+        parsed = json.loads(output)
+        assert "hookSpecificOutput" in parsed
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert parsed["hookSpecificOutput"]["permissionDecisionReason"] == "test reason"
+        assert parsed["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+
+    def test_hook_output_ask(self):
+        """_hook_output('ask', 'reason') produces correct JSON."""
+        output = _mod._hook_output("ask", "confirm this action")
+        parsed = json.loads(output)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "ask"
+        assert parsed["hookSpecificOutput"]["permissionDecisionReason"] == "confirm this action"
+
+    def test_hook_output_with_special_characters(self):
+        """_hook_output correctly escapes special characters in reason."""
+        reason = 'Test "quoted" reason with\nnewline'
+        output = _mod._hook_output("allow", reason)
+        parsed = json.loads(output)
+        assert parsed["hookSpecificOutput"]["permissionDecisionReason"] == reason

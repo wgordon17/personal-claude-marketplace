@@ -71,6 +71,17 @@ claude plugin install dev-guard@personal-claude-marketplace
 - Bash shell
 - Git repository
 
+## Built-in Rules
+
+The guard includes approximately 70 built-in rules across several categories:
+- **Command rules** (~37): Native tool redirections, Python tooling, git safety, interactive commands, project conventions
+- **URL rules** (~10): GitHub, GitLab, Google, Atlassian, Slack authenticated URLs
+- **Git deny rules** (~13): Force push, branch deletion, unsafe operations (always enforced)
+- **Git ask rules** (~8): Stash drop, filter-branch, rebase, config modifications (can be trusted)
+- **oc/kubectl introspection** (~4): Critical, high, medium, low risk assessments (dynamic)
+
+All rule names and guidance messages are defined in the source file `dev-guard/hooks/tool-selection-guard.py`.
+
 ## Customization
 
 Hooks use plugin-relative paths (`${CLAUDE_PLUGIN_ROOT}`) and work in any project without modification.
@@ -143,7 +154,16 @@ Custom command rules inherit all built-in processing:
 - Checked across chained commands (`&&`, `||`, `;`)
 - Checked in pipe segments and subshells (`$()`, backticks)
 - Environment variable prefixes are stripped before matching (`KUBECONFIG=x oc delete` matches `oc delete`)
-- `GUARD_BYPASS=1` prefix overrides all rules (built-in and custom)
+- `GUARD_BYPASS=1` prefix overrides tool/command rules (git safety rules still enforced)
+
+### Pipe Safety and Segment Checking
+
+Pipes (`|`) are analyzed segment-by-segment to prevent dangerous patterns while allowing legitimate filtering:
+
+- **Pipe-aware matching:** Commands connected by `|` are checked individually. The first segment is checked normally by all rules; subsequent segments are checked with limited context since they're processing piped output rather than reading files.
+- **Skipped rules in pipes:** Certain rules like `cat-file`, `grep`, and `echo-noop` are skipped in pipe context because after `|` they're legitimate filtering operations. For example, `some-command | grep pattern` doesn't trigger the grep redirect rule since grep is filtering output, not doing the file operation that native tools would replace.
+- **Allow rules and pipes:** Even if the first segment matches an `action: "allow"` rule and would exit 0, dangerous subsequent pipe segments are still checked and can block or ask. Example: `safe-command | git reset --hard` is blocked on the git reset rule regardless of the first segment's allow status.
+- **Processing order:** For each subcommand, pipes and subshells are checked **before** the full command rules. This ensures dangerous segments trigger deny/ask before any allow rule can short-circuit.
 
 ### Action Field
 
@@ -205,32 +225,64 @@ All hook decisions (blocked, asked, allowed, trusted) are logged to a SQLite dat
 
 **Schema overview:** The audit log stores category, action, rule name, matched command, and timestamp for each entry.
 
-**Security note:** The audit log database file is created with `0o600` permissions (owner read/write only) because it may contain sensitive command-line data, including credentials, file paths, or API tokens passed on the command line.
+**Credential redaction:** Commands logged to the audit database are automatically scrubbed of potential secrets (tokens, passwords, API keys, bearer auth) before storage. Patterns like `--token XXXX` or `password=XXXX` are replaced with `[REDACTED]`.
+
+**Security note:** The audit log database file is created with `0o600` permissions (owner read/write only) because it may contain sensitive command-line data, including file paths or other operational details.
 
 ## Trust Management
 
 Users can trust ask rules to auto-approve them without manual confirmation:
 
 ```bash
-/dev-guard trust <rule-name>                    # Add to session trust list
-/dev-guard trust <rule-name> --always           # Add to persistent trust (all sessions)
-/dev-guard trust <rule-name> --match <pattern>  # Trust only commands matching substring
-/dev-guard untrust <rule-name>                  # Remove from trust
-/dev-guard trust list                           # Show trusted rules for this session
+/dev-guard trust add <rule-name>                                    # Add to session trust list
+/dev-guard trust add <rule-name> --scope session                    # Add to session trust
+/dev-guard trust add <rule-name> --scope always                     # Add to persistent trust (all sessions)
+/dev-guard trust add <rule-name> --match <pattern> --scope session  # Trust only commands matching substring
+/dev-guard trust add <rule-name> --session-id <id>                  # Explicitly provide session ID
+/dev-guard trust remove <rule-name>                                 # Remove from trust
+/dev-guard trust list                                               # Show trusted rules
 ```
 
 **Important:**
 - Block rules are never trustable (only ask rules can be trusted)
 - Trust entries are stored in SQLite alongside the audit log
 - Session-scoped trust requires a prior hook invocation (reads `session_id` from the database)
-- Users receive a trust hint when prompted: "To trust this rule for future sessions, run: `/dev-guard trust <rule> --always`"
+- Users receive a trust hint when prompted: "To trust this rule, run: `/dev-guard trust add <rule> --scope always`"
 
 **Workflow example:**
 1. Run a command that triggers an ask rule
 2. Receive permission prompt with trust hint
 3. Approve the command
-4. Run `/dev-guard trust git-stash-drop --always` to auto-approve in the future
+4. Run `/dev-guard trust add stash-drop --scope always` to auto-approve in the future
 5. Next session: same command auto-approves without prompting
+
+## Processing Pipeline
+
+The guard processes each command through a structured pipeline:
+
+```
+stdin JSON → parse → session state → hook dispatch (PreToolUse or PostToolUse) →
+  tmp-path guards → plan-mode redirect →
+  WebFetch URL check → Bash command analysis →
+    split_commands (&&, ||, ;, newline) →
+    per-subcmd: pipes → subshells → command rules → oc introspection →
+  passthrough exit(0)
+```
+
+**Key stages:**
+1. **JSON parse:** Extracts tool_name, tool_input, session_id from stdin
+2. **Session state:** Persists session ID to database for trust scope validation
+3. **Early exits:** Non-Bash tools pass through; EnterPlanMode redirects to skill
+4. **GUARD_BYPASS check:** If prefix present, enforce only GIT_DENY_RULES
+5. **Fetch command check:** curl/wget commands checked against AUTH_URL_RULES
+6. **Split commands:** Break on command delimiters (&&, ||, ;, newline)
+7. **Per-subcommand analysis:**
+   - Extract bash -c inner commands
+   - Check pipe segments (skip native-tool rules)
+   - Check subshells recursively
+   - Check full subcommand against all rules
+   - Introspect oc/kubectl commands for resource risk
+8. **Logging:** Audit events recorded to SQLite with category, action, rule, command
 
 ## oc/kubectl Introspection
 
@@ -257,16 +309,17 @@ Mutating `oc` and `kubectl` commands receive automatic risk assessment based on 
 
 ## Trustable Rule Names
 
-Users can trust these built-in rules with `/dev-guard trust <rule-name>`:
+Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-name>`:
 
 **Git safety rules (ask actions):**
 - `config-global-write` — Global git config modifications
 - `stash-drop` — Destructive stash operations
-- `branch-delete` — Branch deletion
-- `branch-rename` — Branch renaming
-- `tag-operations` — Tag creation/deletion/modification
-- `rebase-interactive` — Interactive rebase (`git rebase -i`)
-- `remote-modify` — Remote add/remove/set-url
+- `checkout-dash-dash` — Destructive checkout with -- (deprecated, use git restore)
+- `filter-branch` — Dangerous git filter-branch (use git-filter-repo)
+- `reflog-delete-expire` — Reflog delete/expire operations
+- `remote-remove` — Removing a git remote
+- `branch-from-local-main` — Branching from local main (may be stale)
+- `branch-from-non-upstream` — Branching from non-upstream refs (stacking risk)
 - `branch-needs-fetch` — Requires fetch before rebase (dynamic, matches current branch)
 
 **oc/kubectl introspection rules (ask actions):**
@@ -278,7 +331,7 @@ Users can trust these built-in rules with `/dev-guard trust <rule-name>`:
 
 | Prefix | Scope | Use case |
 |--------|-------|----------|
-| `GUARD_BYPASS=1` | All Bash rules | Override any tool selection or command guard rule |
+| `GUARD_BYPASS=1` | All Bash rules except GIT_DENY_RULES | Override tool selection and command guard rules; git safety (force push, reset --hard, etc.) is always enforced |
 | `ALLOW_FETCH=1` | URL rules (curl/wget only) | Fetch an authenticated URL after confirming alternatives |
 
 ## Author

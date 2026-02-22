@@ -26,6 +26,14 @@ Essential development utilities: LSP navigation, Python tooling enforcement, tes
 | `/dev-essentials:review-project` | Comprehensive TODO validation |
 | `/dev-essentials:lsp-status` | Check LSP server status |
 
+## Requirements
+
+- **code-quality plugin** — Required. The `/incremental-planning` skill uses `code-quality:architect`, `code-quality:security`, and `code-quality:qa` agents for expert consultation.
+- **At least one LSP plugin** — Required for `/lsp-navigation` (pyright-uvx, vtsls-npx, gopls-go, etc.).
+- **Serena MCP** — Optional. Enhances `/incremental-planning` Phase 1 with `get_symbols_overview` for component-level understanding. Alternative tools work.
+- **Sequential-Thinking MCP** — Optional. Used in `/incremental-planning` for scope boundary reasoning. Reasoning works without it.
+- **claude-mem MCP** — Optional. Searches past work and decisions in `/incremental-planning` Phase 1 for enhanced context.
+
 ## Installation
 
 ```bash

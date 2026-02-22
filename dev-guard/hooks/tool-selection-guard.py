@@ -19,97 +19,120 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
-# Each rule: (name, pattern, exception_pattern_or_None, guidance_message)
-# Pattern: if command matches this, consider blocking
-# Exception: if command ALSO matches this, allow it (skip the block)
-RULES = [
+
+class CommandRule(NamedTuple):
+    name: str
+    pattern: re.Pattern[str]
+    exception: re.Pattern[str] | None
+    guidance: str
+    action: str = "block"
+
+
+class URLRule(NamedTuple):
+    name: str
+    pattern: re.Pattern[str]
+    guidance: str
+    action: str = "block"
+
+
+class GitRule(NamedTuple):
+    name: str
+    check_fn: Callable[[str], bool]
+    message: str
+
+
+# Pattern matches → candidate for blocking.
+# Exception matches → allow (skip the block).
+RULES: list[CommandRule] = [
     # ── Category A: Use native tools (no Bash permission needed) ──
-    (
+    CommandRule(
         "cat-file",
         re.compile(r"^\s*cat\s+(?!<<)\S"),
         re.compile(r"\|"),
         "Use the Read tool instead of `cat`. It's always available -- no Bash permission needed.",
     ),
-    (
+    CommandRule(
         "head-file",
         re.compile(r"^\s*head\s+"),
         re.compile(r"\|"),
         "Use the Read tool with `limit` parameter instead of `head`.",
     ),
-    (
+    CommandRule(
         "tail-file",
         re.compile(r"^\s*tail\s+"),
         re.compile(r"\|"),
         "Use the Read tool with `offset` parameter instead of `tail`.",
     ),
-    (
+    CommandRule(
         "grep",
         re.compile(r"^\s*grep\b"),
         None,
         "Use the Grep tool instead of `grep`. For `| wc -l` use `output_mode: 'count'`. "
         "For `| head` use `head_limit`.",
     ),
-    (
+    CommandRule(
         "rg",
         re.compile(r"^\s*rg\b"),
         None,
         "Use the Grep tool instead of `rg`. For `| wc -l` use `output_mode: 'count'`. "
         "For `| head` use `head_limit`.",
     ),
-    (
+    CommandRule(
         "find-name",
         re.compile(r"^\s*find\b.*-name"),
         None,
         "Use the Glob tool -- it's auto-approved and supports patterns like '**/*.py'.",
     ),
-    (
+    CommandRule(
         "ls-dir",
         re.compile(r"^\s*ls\s"),
         re.compile(r"\|"),
         "Use the Glob tool for file listings -- it's auto-approved and supports patterns "
         "like '**/*.py'. Use `ls` via Bash only when you need permissions/metadata.",
     ),
-    (
+    CommandRule(
         "sed-i",
         re.compile(r"^\s*sed\b.*\s-i"),
         None,
         "Use the Edit tool instead of `sed -i`. It's native -- no Bash permission needed.",
     ),
-    (
+    CommandRule(
         "awk-redir",
         re.compile(r"^\s*awk\b.*>\s*\S"),
         None,
         "Use the Edit tool instead of awk with redirect.",
     ),
-    (
+    CommandRule(
         "echo-redir",
         re.compile(r"^\s*(echo|printf)\b.*[^2]>\s*[^&/\s]"),
         re.compile(r">\s*/dev/"),
         "Use the Write tool instead of redirect. It's native -- no permission needed.",
     ),
-    (
+    CommandRule(
         "cat-heredoc",
         re.compile(r"^\s*cat\s*<<"),
         None,
         "Use the Write tool for file content, or native tools (Grep/Read) "
         "for the downstream operation.",
     ),
-    (
+    CommandRule(
         "pager",
         re.compile(r"^\s*(less|more)\b"),
         None,
         "Use the Read tool instead. Pagers are interactive and will hang in this environment.",
     ),
-    (
+    CommandRule(
         "editor",
         re.compile(r"^\s*(nano|vim|vi|emacs)\b"),
         None,
         "Use the Edit tool instead. Interactive editors will hang in this environment.",
     ),
     # ── Category B: Use right Python tooling (match auto-approve patterns) ──
-    (
+    CommandRule(
         "python-json",
         re.compile(r"^\s*python3?\s+-c\s+.*\bjson\b"),
         re.compile(r"^\s*uv\s+run"),
@@ -117,102 +140,102 @@ RULES = [
         "Example: `jq '.key'`, `jq -r '.[]'`, `jq -r '.items[] | .name'`. "
         "If jq can't handle the logic, use `uv run python -c '...'`.",
     ),
-    (
+    CommandRule(
         "python",
         re.compile(r"^\s*python3?\s"),
         re.compile(r"^\s*uv\s+run"),
         "Use `uv run` instead -- it's auto-approved. Example: `uv run script.py`",
     ),
-    (
+    CommandRule(
         "pip",
         re.compile(r"^\s*pip3?\s+\w"),
         None,
         "Use `uv add` (install), `uv remove` (uninstall), or `uv pip` for other pip operations.",
     ),
-    (
+    CommandRule(
         "pytest",
         re.compile(r"^\s*pytest\b"),
         re.compile(r"^\s*(uvx|uv\s+run)"),
         "Check for a `make py-test` or use `uv run pytest` instead -- it's auto-approved.",
     ),
-    (
+    CommandRule(
         "black",
         re.compile(r"^\s*black\b"),
         None,
         "Formatting should be performed with ruff.",
     ),
-    (
+    CommandRule(
         "ruff",
         re.compile(r"^\s*ruff\b"),
         re.compile(r"^\s*(uvx|uv\s+run)"),
         "Check for a `make py-lint` or use `uv run ruff` instead -- it's auto-approved.",
     ),
-    (
+    CommandRule(
         "mypy",
         re.compile(r"^\s*mypy\b"),
         None,
         "Type checking should be performed with pyright.",
     ),
-    (
+    CommandRule(
         "pyright",
         re.compile(r"^\s*pyright\b"),
         re.compile(r"^\s*(uvx|uv\s+run)"),
         "Check for a `make py-lint` or use `uv run pyright` instead -- it's auto-approved.",
     ),
-    (
+    CommandRule(
         "pre-commit",
         re.compile(r"^\s*(uvx\s+|uv\s+run\s+)?pre-commit\b"),
         None,
         "Use `prek` instead of `pre-commit`. "
         "Check for a `make` target or use `uvx prek run --all-files`.",
     ),
-    (
+    CommandRule(
         "prek",
         re.compile(r"^\s*(uvx\s+)?prek\b"),
         re.compile(r"^\s*make\b"),
         "Check for a `make` target (e.g. `make lint`, `make prek`) instead of "
         "running prek directly. If no make target, use `uvx prek run --all-files`.",
     ),
-    (
+    CommandRule(
         "ipython",
         re.compile(r"^\s*ipython3?\b"),
         re.compile(r"^\s*(uvx|uv\s+run)"),
         "Use `uv run ipython` instead -- it's auto-approved.",
     ),
-    (
+    CommandRule(
         "tox",
         re.compile(r"^\s*tox\b"),
         re.compile(r"^\s*(uvx|uv\s+run)"),
         "Use `uvx tox` instead -- it's auto-approved.",
     ),
-    (
+    CommandRule(
         "isort",
         re.compile(r"^\s*isort\b"),
         None,
         "Import sorting should be performed with ruff.",
     ),
-    (
+    CommandRule(
         "flake8",
         re.compile(r"^\s*flake8\b"),
         None,
         "Linting should be performed with ruff.",
     ),
     # ── Rust tooling ──
-    (
+    CommandRule(
         "cargo-lint",
         re.compile(r"^\s*cargo\s+(check|clippy|fmt)\b"),
         None,
         "Check for a `make` target (e.g. `make rust-lint`, `make lint`) instead of "
         "running cargo directly. Makefile targets handle working directory and standard flags.",
     ),
-    (
+    CommandRule(
         "cargo-test",
         re.compile(r"^\s*cargo\s+(test|nextest)\b"),
         None,
         "Check for a `make` target (e.g. `make rust-test`, `make test`) instead of "
         "running cargo test directly.",
     ),
-    (
+    CommandRule(
         "cargo-build",
         re.compile(r"^\s*cargo\s+build\b"),
         None,
@@ -220,19 +243,19 @@ RULES = [
         "running cargo build directly.",
     ),
     # ── Category C: Encourage project conventions ──
-    (
+    CommandRule(
         "bash-script",
         re.compile(r"^\s*(bash|sh)\s+\S+\.sh\b"),
         re.compile(r"^\s*(bash|sh)\s+-"),
         "Check for a `make` target that wraps this script. If none exists, consider creating one.",
     ),
-    (
+    CommandRule(
         "direct-script",
         re.compile(r"^\s*[\w.~/-]+\.sh\b"),
         None,
         "Check for a `make` target that wraps this script. If none exists, consider creating one.",
     ),
-    (
+    CommandRule(
         "tmp-path",
         re.compile(r"/tmp/"),
         re.compile(r"hack/tmp"),
@@ -241,26 +264,26 @@ RULES = [
         "Clean up when done.",
     ),
     # ── Category D: Encourage simpler patterns ──
-    (
+    CommandRule(
         "echo-noop",
         re.compile(r"""^\s*echo\s+(['"].*['"]|[^|>&;$`]+)\s*$"""),
         None,
         "Output text directly in your response instead of using echo.",
     ),
-    (
+    CommandRule(
         "printf-noop",
         re.compile(r"""^\s*printf\s+(['"].*['"]|[^|>&;$`]+)\s*$"""),
         None,
         "Output text directly in your response instead of using printf.",
     ),
     # ── Category E: Interactive commands that will hang ──
-    (
+    CommandRule(
         "git-rebase-i",
         re.compile(r"^\s*git\s+rebase\s+.*(-i\b|--interactive\b)"),
         None,
         "Interactive rebase will hang. Use git-branchless: `git reword`, `git branchless move`.",
     ),
-    (
+    CommandRule(
         "git-add-interactive",
         re.compile(r"^\s*git\s+add\s+.*(-[pi]\b|--patch\b|--interactive\b)"),
         None,
@@ -268,36 +291,42 @@ RULES = [
     ),
 ]
 
-# Action field for user-defined rules: "block" (exit 2), "ask" (exit 1), or "allow" (exit 0).
-_ACTION_EXIT_CODE = {"block": 2, "ask": 1, "allow": 0}
+# Action field for user-defined rules: "block", "ask", or "allow".
+# These strings are stored directly in rule tuples and passed to _exit_with_decision().
 
 _db_conn = None
 
+_MAX_INPUT_BYTES = 10 * 1024 * 1024
+_MAX_COMMAND_LEN = 100_000  # 100KB — generous for any real command
+_MAX_MANIFEST_BYTES = 1_048_576
+_HOOK_EVENT_NAME = "PreToolUse"
+_SESSION_ID_KEY = "last_session_id"
+_DB_TIMEOUT_SEC = 5
+_DB_BUSY_TIMEOUT_MS = 1000
+_LOG_ACTION_FOR: dict[str, str] = {"ask": "asked", "block": "blocked", "allow": "allowed"}
 
-def _validate_user_path(p, default):
-    """Ensure path is within user's home or temp directory. Falls back to default."""
-    try:
-        resolved = Path(p).resolve()
-        home = Path.home().resolve()
-        tmp = Path(tempfile.gettempdir()).resolve()
-        if str(resolved).startswith(str(home)) or str(resolved).startswith(str(tmp)):
-            return resolved
-    except (OSError, ValueError):
-        pass
-    return default
-
-
-_DEFAULT_DB_PATH = Path.home() / ".claude" / "logs" / "dev-guard.db"
-_DB_PATH = _validate_user_path(
-    os.environ.get("GUARD_DB_PATH", str(_DEFAULT_DB_PATH)),
-    _DEFAULT_DB_PATH,
+_DB_PATH = Path(
+    os.environ.get("GUARD_DB_PATH", str(Path.home() / ".claude" / "logs" / "dev-guard.db"))
 )
 _GUARD_LOG_LEVEL = os.environ.get("GUARD_LOG_LEVEL", "actions").lower()
 _session_id = None
 _tool_use_id = None
 
+_SECRET_PATTERN = re.compile(
+    r"((?:password|token|secret|key|auth|bearer|api[_-]?key|credentials)"
+    r"[\s=:]+)\S{8,}",
+    re.IGNORECASE,
+)
 
-def _init_db():
+
+def _redact_secrets(text: str | None) -> str | None:
+    """Redact potential credentials from text before audit logging."""
+    if text is None:
+        return None
+    return _SECRET_PATTERN.sub(r"\1[REDACTED]", text)
+
+
+def _init_db() -> sqlite3.Connection | None:
     """Create/open the SQLite audit database with WAL mode.
 
     Creates all tables upfront. Caches connection in _db_conn.
@@ -314,11 +343,11 @@ def _init_db():
         # Set umask so WAL/SHM files are also owner-only
         old_umask = os.umask(0o177)
         try:
-            conn = sqlite3.connect(str(_DB_PATH), timeout=5)
+            conn = sqlite3.connect(str(_DB_PATH), timeout=_DB_TIMEOUT_SEC)
         finally:
             os.umask(old_umask)
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=1000")
+        conn.execute(f"PRAGMA busy_timeout={int(_DB_BUSY_TIMEOUT_MS)}")
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -357,7 +386,14 @@ def _init_db():
         return None
 
 
-def _log_event(category, action, *, rule=None, command=None, detail=None):
+def _log_event(
+    category: str,
+    action: str,
+    *,
+    rule: str | None = None,
+    command: str | None = None,
+    detail: object | None = None,
+) -> None:
     """Log an event to the SQLite audit database.
 
     Respects _GUARD_LOG_LEVEL: "off" = no logging, "actions" = skip allowed,
@@ -383,7 +419,7 @@ def _log_event(category, action, *, rule=None, command=None, detail=None):
                 category,
                 rule,
                 action,
-                command,
+                _redact_secrets(command),
                 detail_str,
             ),
         )
@@ -392,45 +428,45 @@ def _log_event(category, action, *, rule=None, command=None, detail=None):
         pass
 
 
-def _exit_with_decision(guidance, exit_code, *, rule_name=None, matched_segment=None):
+def _hook_output(decision: str, reason: str) -> str:
+    """Build hookSpecificOutput JSON string for PreToolUse decisions."""
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": _HOOK_EVENT_NAME,
+                "permissionDecision": decision,
+                "permissionDecisionReason": reason,
+            }
+        }
+    )
+
+
+def _exit_with_decision(
+    guidance: str,
+    action: str,
+    *,
+    rule_name: str | None = None,
+    matched_segment: str | None = None,
+) -> None:
     """Exit with guidance, using the correct mechanism for the action type.
 
-    For "allow" (exit 0): outputs hookSpecificOutput JSON with permissionDecision "allow".
-    For "ask" (exit 1): checks trust first, then outputs hookSpecificOutput JSON with
-    permissionDecision "ask" and exits 0, prompting the user for confirmation.
-    For "block" (exit 2): prints guidance to stderr and exits 2.
+    action is one of "allow", "ask", or "block":
+      "allow": outputs hookSpecificOutput JSON with permissionDecision "allow", exits 0.
+      "ask":   checks trust first, then outputs hookSpecificOutput JSON with
+               permissionDecision "ask", exits 0 (prompts user for confirmation).
+      "block": prints guidance to stderr, exits 2.
     """
-    if exit_code == 0:
+    if action == "allow":
         # Allow: log and output allow decision
         _log_event("guard", "allowed", rule=rule_name, command=matched_segment)
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "allow",
-                        "permissionDecisionReason": guidance,
-                    }
-                }
-            )
-        )
+        print(_hook_output("allow", guidance))
         sys.exit(0)
-    elif exit_code == 1:
+    elif action == "ask":
         # Ask: check trust first
         if rule_name and _check_trust(rule_name, matched_segment, _session_id):
             _log_event("guard", "trusted", rule=rule_name, command=matched_segment)
             reason = f"[trusted] [{rule_name}] {guidance}" if rule_name else f"[trusted] {guidance}"
-            print(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": "PreToolUse",
-                            "permissionDecision": "allow",
-                            "permissionDecisionReason": reason,
-                        }
-                    }
-                )
-            )
+            print(_hook_output("allow", reason))
             sys.exit(0)
 
         # Build enhanced reason with trust hint
@@ -442,23 +478,16 @@ def _exit_with_decision(guidance, exit_code, *, rule_name=None, matched_segment=
         if matched_segment:
             parts.append(f"Matched: {matched_segment}")
         if rule_name:
+            sid_hint = f" --session-id {_session_id}" if _session_id else ""
             parts.append(
-                f"To trust: /dev-guard trust {rule_name} [--match <pattern>] [--session|--always]"
+                f"To trust: /dev-guard trust add {rule_name}"
+                f" [--match <pattern>]"
+                f" [--scope session{sid_hint}|--scope always]"
             )
         enhanced_reason = "\n".join(parts)
 
         _log_event("guard", "ask", rule=rule_name, command=matched_segment)
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "ask",
-                        "permissionDecisionReason": enhanced_reason,
-                    }
-                }
-            )
-        )
+        print(_hook_output("ask", enhanced_reason))
         sys.exit(0)
     else:
         # Block
@@ -471,66 +500,66 @@ def _exit_with_decision(guidance, exit_code, *, rule_name=None, matched_segment=
 # ── Category F: Authenticated URL fetch guard ──
 # Each rule: (name, url_pattern, guidance_message)
 # url_pattern: regex matched against the full URL
-AUTH_URL_RULES = [
+AUTH_URL_RULES: list[URLRule] = [
     # GitHub
-    (
+    URLRule(
         "github-api",
         re.compile(r"api\.github\.com"),
         "This URL targets the GitHub API which requires authentication. "
         "Use the `gh` CLI instead. Example: `gh api repos/OWNER/REPO`.",
     ),
-    (
+    URLRule(
         "github-auth-content",
         re.compile(r"github\.com/[^/]+/[^/]+/(settings|pulls|issues|actions|security)"),
         "This GitHub URL requires authentication to return useful content. "
         "Use the `gh` CLI instead. Example: `gh pr list`, `gh issue list`, `gh run list`.",
     ),
     # GitLab (public)
-    (
+    URLRule(
         "gitlab-api",
         re.compile(r"gitlab\.com/api/"),
         "This URL targets the GitLab API which requires authentication. "
         "Use `glab api` instead. Example: `glab api projects/:id/issues`.",
     ),
-    (
+    URLRule(
         "gitlab-raw",
         re.compile(r"gitlab\.com/.+/(-/raw/|-/blob/)"),
         "This GitLab URL points to raw/blob content which may require authentication. "
         "Use `glab` CLI or clone the repo locally.",
     ),
     # Google
-    (
+    URLRule(
         "google-docs",
         re.compile(r"docs\.google\.com/document/"),
         "Google Docs requires authentication. "
         "Use a Google MCP tool or `gcloud` CLI to access document content.",
     ),
-    (
+    URLRule(
         "google-drive",
         re.compile(r"drive\.google\.com/(file|drive)/"),
         "Google Drive requires authentication. "
         "Use a Google MCP tool or `gcloud` CLI to access files.",
     ),
-    (
+    URLRule(
         "google-sheets",
         re.compile(r"sheets\.google\.com/"),
         "Google Sheets requires authentication. "
         "Use a Google MCP tool or `gcloud` CLI to access spreadsheet data.",
     ),
     # Atlassian / Jira
-    (
+    URLRule(
         "atlassian-api",
         re.compile(r"[a-z0-9-]+\.atlassian\.net/(rest/api|wiki)/"),
         "This Atlassian URL requires authentication. Use the Atlassian MCP tools instead.",
     ),
-    (
+    URLRule(
         "jira-server",
         re.compile(r"jira\.[a-z0-9-]+\.(com|org|net)/"),
         "This Jira server URL requires authentication. "
         "Use the `jira` CLI or Atlassian MCP tools instead.",
     ),
     # Slack
-    (
+    URLRule(
         "slack-api",
         re.compile(r"(api|hooks)\.slack\.com/"),
         "This Slack URL requires authentication. "
@@ -539,117 +568,52 @@ AUTH_URL_RULES = [
 ]
 
 
-def _load_extra_url_rules():
-    """Load additional URL guard rules from a JSON file.
+def _load_extra_rules(
+    env_var: str,
+    entry_to_rule: Callable[[dict], CommandRule | URLRule],
+) -> list:
+    """Load extra rules from a JSON file specified by env_var.
 
-    Set URL_GUARD_EXTRA_RULES to the path of a JSON file containing
-    an array of rule objects with keys: name, pattern, message.
-    Optionally include "action": "ask" to prompt for confirmation
-    instead of blocking (default: "block").
-
-    Example JSON:
-    [
-        {
-            "name": "internal-gitlab",
-            "pattern": "gitlab\\\\.internal\\\\.example\\\\.com",
-            "message": "This URL is on internal GitLab. Use glab CLI instead."
-        },
-        {
-            "name": "staging-api",
-            "pattern": "staging\\\\.api\\\\.example\\\\.com",
-            "message": "Staging API — confirm this is intentional.",
-            "action": "ask"
-        }
-    ]
+    The env var should point to a JSON file containing an array of rule
+    objects. Each object is converted using entry_to_rule.
+    Returns an empty list on missing env var or any parse error.
     """
-    rules_path = os.environ.get("URL_GUARD_EXTRA_RULES")
+    rules_path = os.environ.get(env_var)
     if not rules_path:
         return []
     try:
         with open(rules_path) as f:
             raw = json.load(f)
-        extra = []
-        for entry in raw:
-            exit_code = _ACTION_EXIT_CODE.get(entry.get("action", "block"), 2)
-            extra.append(
-                (
-                    entry["name"],
-                    re.compile(entry["pattern"]),
-                    entry["message"],
-                    exit_code,
-                )
-            )
-        return extra
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, re.error):
-        return []  # Fail silently — bad config should not break the guard
-
-
-# Merge built-in rules with any user-defined extra rules
-AUTH_URL_RULES.extend(_load_extra_url_rules())
-
-
-# ── Category G: User-defined command guard rules ──
-# Loaded from COMMAND_GUARD_EXTRA_RULES env var (JSON file path).
-# Rules are appended to the RULES list and checked by the same pipeline
-# (chains, pipes, subshells, env prefix stripping, shell keyword stripping).
-
-
-def _load_extra_command_rules():
-    """Load additional command guard rules from a JSON file.
-
-    Set COMMAND_GUARD_EXTRA_RULES to the path of a JSON file containing
-    an array of rule objects with keys: name, pattern, message.
-    Optionally include "exception" for an exception regex pattern and
-    "action" set to "ask" to prompt for confirmation instead of
-    blocking (default: "block").
-
-    Example JSON:
-    [
-        {
-            "name": "oc-delete",
-            "pattern": "^\\\\s*oc\\\\s+delete\\\\b",
-            "message": "oc delete is blocked. Use the OpenShift console instead.",
-            "exception": "--dry-run"
-        },
-        {
-            "name": "oc-scale-zero",
-            "pattern": "^\\\\s*oc\\\\s+scale\\\\b.*--replicas=0",
-            "message": "Scaling to zero — confirm this is intentional.",
-            "action": "ask"
-        }
-    ]
-    """
-    rules_path = os.environ.get("COMMAND_GUARD_EXTRA_RULES")
-    if not rules_path:
-        return []
-    try:
-        with open(rules_path) as f:
-            raw = json.load(f)
-        extra = []
-        for entry in raw:
-            exception = None
-            if entry.get("exception"):
-                exception = re.compile(entry["exception"])
-            exit_code = _ACTION_EXIT_CODE.get(entry.get("action", "block"), 2)
-            extra.append(
-                (
-                    entry["name"],
-                    re.compile(entry["pattern"]),
-                    exception,
-                    entry["message"],
-                    exit_code,
-                )
-            )
-        return extra
+        return [entry_to_rule(entry) for entry in raw]
     except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError, re.error):
         return []  # Fail silently — bad config should not break the guard
 
 
-# Merge built-in rules with any user-defined extra command rules
-RULES.extend(_load_extra_command_rules())
+def _url_rule_from_entry(entry: dict) -> URLRule:
+    """Convert a JSON dict to a URLRule."""
+    return URLRule(
+        entry["name"],
+        re.compile(entry["pattern"]),
+        entry["message"],
+        entry.get("action", "block"),
+    )
 
 
-def _log_url_event(url, rule_name, action, tool, phase="pre", **extra):
+def _cmd_rule_from_entry(entry: dict) -> CommandRule:
+    """Convert a JSON dict to a CommandRule."""
+    exception = re.compile(entry["exception"]) if entry.get("exception") else None
+    return CommandRule(
+        entry["name"],
+        re.compile(entry["pattern"]),
+        exception,
+        entry["message"],
+        entry.get("action", "block"),
+    )
+
+
+def _log_url_event(
+    url: str, rule_name: str | None, action: str, tool: str, phase: str = "pre", **extra: object
+) -> None:
     """Log a URL guard event to the unified SQLite audit log."""
     detail = {"tool": tool, "phase": phase}
     if extra:
@@ -657,23 +621,21 @@ def _log_url_event(url, rule_name, action, tool, phase="pre", **extra):
     _log_event("url", action, rule=rule_name, command=url, detail=detail)
 
 
-def _extract_urls(text):
+def _extract_urls(text: str) -> list[str]:
     """Extract URLs from a string (command line or text)."""
     return re.findall(r"https?://[^\s\"'<>]+", text)
 
 
-def _check_url_rules(url):
-    """Check a URL against AUTH_URL_RULES. Returns (name, guidance, exit_code) or None."""
+def _check_url_rules(url: str) -> tuple[str, str, str] | None:
+    """Check a URL against AUTH_URL_RULES. Returns (name, guidance, action) or None."""
     for rule in AUTH_URL_RULES:
-        name, pattern, guidance = rule[:3]
-        exit_code = rule[3] if len(rule) > 3 else 2
-        if pattern.search(url):
-            return (name, guidance, exit_code)
+        if rule.pattern.search(url):
+            return (rule.name, rule.guidance, rule.action)
     return None
 
 
-def _check_fetch_command(cmd):
-    """Check curl/wget commands for authenticated URLs. Exits 2 (block) or 1 (ask) on match.
+def _check_fetch_command(cmd: str) -> bool:
+    """Check curl/wget commands for authenticated URLs. Exits on block or ask match.
 
     Returns True if the command was a curl/wget (so caller knows to log),
     or False if not a fetch command.
@@ -683,7 +645,7 @@ def _check_fetch_command(cmd):
         return False
 
     # ALLOW_FETCH=1 bypass — agent has considered alternatives
-    if re.match(r"^\s*ALLOW_FETCH=1\s", cmd):
+    if re.search(r"(?:^|\s)ALLOW_FETCH=1(?:\s|$)", cmd):
         urls = _extract_urls(cmd)
         for url in urls:
             _log_url_event(url, None, "bypassed", "Bash")
@@ -693,14 +655,14 @@ def _check_fetch_command(cmd):
     for url in urls:
         result = _check_url_rules(url)
         if result:
-            rule_name, guidance, exit_code = result
-            _log_url_event(url, rule_name, "asked" if exit_code == 1 else "blocked", "Bash")
+            rule_name, guidance, action = result
+            _log_url_event(url, rule_name, _LOG_ACTION_FOR.get(action, action), "Bash")
             full_guidance = (
                 f"{guidance}\n"
                 "If you've confirmed raw fetch is appropriate, "
                 "prefix with `ALLOW_FETCH=1`."
             )
-            _exit_with_decision(full_guidance, exit_code, rule_name=rule_name, matched_segment=cmd)
+            _exit_with_decision(full_guidance, action, rule_name=rule_name, matched_segment=cmd)
         else:
             _log_url_event(url, None, "allowed", "Bash")
     return True
@@ -722,7 +684,7 @@ _AUTH_FAIL_PATTERNS = [
 _HTTP_STATUS_RE = re.compile(r"HTTP/[\d.]+ (\d{3})\b")
 
 
-def _detect_auth_failure(text):
+def _detect_auth_failure(text: str) -> tuple[bool, int | None]:
     """Check response text for auth failure indicators.
 
     Returns (auth_failed: bool, status_code: int | None).
@@ -740,7 +702,21 @@ def _detect_auth_failure(text):
     return False, status_code
 
 
-def _handle_post_tool_use(data):
+def _check_response_for_auth_failure(text: str, url: str, tool_name: str) -> None:
+    """Check tool response text for authentication failure indicators and log result."""
+    auth_failed, status_code = _detect_auth_failure(text)
+    _log_url_event(
+        url,
+        None,
+        "auth_failed" if auth_failed else "success",
+        tool_name,
+        phase="post",
+        response_code=status_code,
+        auth_failed=auth_failed,
+    )
+
+
+def _handle_post_tool_use(data: dict) -> None:
     """Handle PostToolUse events: log response codes for fetch commands."""
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
@@ -759,17 +735,8 @@ def _handle_post_tool_use(data):
             )
         elif isinstance(tool_response, str):
             response_text = tool_response
-        auth_failed, status_code = _detect_auth_failure(response_text)
         for url in urls:
-            _log_url_event(
-                url,
-                None,
-                "auth_failed" if auth_failed else "success",
-                "Bash",
-                phase="post",
-                response_code=status_code,
-                auth_failed=auth_failed,
-            )
+            _check_response_for_auth_failure(response_text, url, "Bash")
     elif tool_name == "WebFetch":
         url = tool_input.get("url", "")
         if not url:
@@ -779,16 +746,7 @@ def _handle_post_tool_use(data):
             response_text = str(tool_response)
         elif isinstance(tool_response, str):
             response_text = tool_response
-        auth_failed, status_code = _detect_auth_failure(response_text)
-        _log_url_event(
-            url,
-            None,
-            "auth_failed" if auth_failed else "success",
-            "WebFetch",
-            phase="post",
-            response_code=status_code,
-            auth_failed=auth_failed,
-        )
+        _check_response_for_auth_failure(response_text, url, "WebFetch")
 
 
 # Rules to skip when checking pipe segments — these redirect to native tools
@@ -819,7 +777,7 @@ _PIPE_SEGMENT_SKIP = frozenset(
 _SHELL_KEYWORD_PREFIX = re.compile(r"^\s*(do|then|else|elif|if|while|until)\s+")
 
 
-def strip_shell_keyword(cmd):
+def strip_shell_keyword(cmd: str) -> str:
     """Strip leading shell control keywords from a command fragment.
 
     When split_commands splits on ';', shell control structures like
@@ -839,7 +797,7 @@ def strip_shell_keyword(cmd):
     return cmd
 
 
-def strip_env_prefix(cmd):
+def strip_env_prefix(cmd: str) -> str:
     """Strip leading KEY=value pairs from a command.
 
     Bash allows `FOO=bar CMD args` where FOO is set for CMD's environment.
@@ -856,7 +814,7 @@ def strip_env_prefix(cmd):
     return stripped
 
 
-def extract_bash_c(cmd):
+def extract_bash_c(cmd: str) -> str | None:
     """Extract the inner command from `bash -c '...'` or `sh -c '...'`.
 
     Returns the inner command string, or None if not a bash -c invocation.
@@ -876,7 +834,7 @@ def extract_bash_c(cmd):
     return None
 
 
-def extract_subshells(cmd):
+def extract_subshells(cmd: str) -> list[str]:
     """Extract commands inside $() and `` substitutions for rule checking.
 
     Returns a list of inner commands found in subshell substitutions.
@@ -901,7 +859,10 @@ def extract_subshells(cmd):
     return inner
 
 
-def _split_respecting_quotes(text, is_delimiter):
+def _split_respecting_quotes(
+    text: str,
+    is_delimiter: Callable[[str, int, list[str]], int | None],
+) -> list[str]:
     """Split text on unquoted delimiters while respecting single/double quotes.
 
     is_delimiter(text, i, current) -> int or None:
@@ -940,7 +901,7 @@ def _split_respecting_quotes(text, is_delimiter):
     return [p for p in parts if p]
 
 
-def _is_pipe_delimiter(text, i, _current):
+def _is_pipe_delimiter(text: str, i: int, _current: list[str]) -> int | None:
     """Pipe delimiter: | and |& (split_commands already handled ||)."""
     if text[i] == "|":
         return 2 if i + 1 < len(text) and text[i + 1] == "&" else 1
@@ -953,18 +914,18 @@ split_pipes = functools.partial(_split_respecting_quotes, is_delimiter=_is_pipe_
 # ── Git safety rules (consolidated from git-safety-check.sh) ──
 
 
-def _has_force_flag(cmd):
+def _has_force_flag(cmd: str) -> bool:
     """Check if command contains --force (not --force-with-lease) or -f bundled."""
     if re.search(r"(^|\s)--force(\s|=|$)", cmd):
         return True
     return bool(re.search(r"(^|\s)-[a-zA-Z]*f[a-zA-Z]*(\s|$)", cmd))
 
 
-def _has_force_with_lease(cmd):
+def _has_force_with_lease(cmd: str) -> bool:
     return bool(re.search(r"(^|\s)--force-with-lease(=[^\s]+)?(\s|$)", cmd))
 
 
-def _get_push_target(cmd):
+def _get_push_target(cmd: str) -> tuple[str, str]:
     parts = cmd.split()
     remote = ""
     branch = ""
@@ -985,7 +946,7 @@ def _get_push_target(cmd):
     return remote, branch
 
 
-def _next_positional(parts, start):
+def _next_positional(parts: list[str], start: int) -> str | None:
     """Return the first non-flag argument at or after *start*, or None."""
     i = start
     while i < len(parts):
@@ -996,7 +957,9 @@ def _next_positional(parts, start):
     return None
 
 
-def _find_flag_branch(parts, start, flags, equals_prefix=None):
+def _find_flag_branch(
+    parts: list[str], start: int, flags: set[str], equals_prefix: str | None = None
+) -> tuple[str, int] | None:
     """Scan *parts* from *start* for a branch-creation flag.
 
     *flags* is a set of short/long flags (e.g. {"-c", "--create"}).
@@ -1025,7 +988,7 @@ def _find_flag_branch(parts, start, flags, equals_prefix=None):
     return None
 
 
-def _parse_branch_creation(cmd):
+def _parse_branch_creation(cmd: str) -> tuple[str, str | None] | None:
     """Parse branch creation commands, returning (branch_name, start_point) or None.
 
     Handles:
@@ -1093,7 +1056,7 @@ _HEAD_PATTERN = re.compile(r"^HEAD([~^]\d*)*$")
 _SHA_PATTERN = re.compile(r"^[0-9a-f]{7,40}$")
 
 
-def _is_safe_start_point(ref):
+def _is_safe_start_point(ref: str) -> bool:
     """Check if a start-point ref is safe (upstream remote, HEAD variant, or SHA)."""
     if ref in _SAFE_REMOTE_REFS:
         return True
@@ -1102,41 +1065,53 @@ def _is_safe_start_point(ref):
     return bool(_SHA_PATTERN.match(ref))
 
 
-def _is_branch_no_base(cmd):
+def _is_branch_no_base(cmd: str) -> bool:
+    """Check if cmd creates a branch without a start-point.
+
+    Satisfies ``Callable[[str], bool]`` for use as ``GitRule.check_fn``.
+    """
     parsed = _parse_branch_creation(cmd)
     return parsed is not None and parsed[1] is None
 
 
-def _is_branch_from_local_main(cmd):
+def _is_branch_from_local_main(cmd: str) -> bool:
+    """Check if cmd creates a branch from local main/master.
+
+    Satisfies ``Callable[[str], bool]`` for use as ``GitRule.check_fn``.
+    """
     parsed = _parse_branch_creation(cmd)
     return parsed is not None and parsed[1] in _PROTECTED_BRANCHES
 
 
-def _is_branch_from_non_upstream(cmd):
+def _is_branch_from_non_upstream(cmd: str) -> bool:
+    """Check if cmd creates a branch from a non-upstream ref.
+
+    Satisfies ``Callable[[str], bool]`` for use as ``GitRule.check_fn``.
+    """
     parsed = _parse_branch_creation(cmd)
     return parsed is not None and parsed[1] is not None and not _is_safe_start_point(parsed[1])
 
 
 # Each rule: (name, check_function, message)
 # check_function(cmd) -> bool
-GIT_DENY_RULES = [
-    (
+GIT_DENY_RULES: list[GitRule] = [
+    GitRule(
         "reset-hard",
         lambda cmd: bool(re.search(r"git\s+reset\s+--hard", cmd)),
         "git reset --hard is FORBIDDEN. "
         "Use 'git reset --mixed' or 'git stash' to preserve changes.",
     ),
-    (
+    GitRule(
         "push-force",
         lambda cmd: bool(re.search(r"git\s+push", cmd)) and _has_force_flag(cmd),
         "Force push (--force/-f) is FORBIDDEN. Use --force-with-lease for safer force pushing.",
     ),
-    (
+    GitRule(
         "push-upstream",
         lambda cmd: bool(re.search(r"git\s+push", cmd)) and _get_push_target(cmd)[0] == "upstream",
         "Pushing to upstream is FORBIDDEN. Push to origin and create a PR instead.",
     ),
-    (
+    GitRule(
         "fwl-main",
         lambda cmd: (
             bool(re.search(r"git\s+push", cmd))
@@ -1145,7 +1120,7 @@ GIT_DENY_RULES = [
         ),
         "--force-with-lease to main/master is FORBIDDEN. Use feature branches for rebasing.",
     ),
-    (
+    GitRule(
         "branch-D",
         lambda cmd: (
             bool(re.search(r"git\s+branch", cmd))
@@ -1153,28 +1128,28 @@ GIT_DENY_RULES = [
         ),
         "git branch -D is FORBIDDEN. Use 'git branch -d' for safe deletion of merged branches.",
     ),
-    (
+    GitRule(
         "branch-force",
         lambda cmd: bool(re.search(r"git\s+branch.*--force", cmd)),
         "git branch --force is FORBIDDEN. Force operations on branches must be done manually.",
     ),
-    (
+    GitRule(
         "push-origin-main",
         lambda cmd: bool(re.search(r"git\s+push.*origin\s+(main|master)(\s|$)", cmd)),
         "Pushing directly to origin/main or origin/master is FORBIDDEN. "
         "Use feature branches and PRs.",
     ),
-    (
+    GitRule(
         "no-verify",
         lambda cmd: bool(re.search(r"git\s+", cmd)) and "--no-verify" in cmd,
         "--no-verify flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
     ),
-    (
+    GitRule(
         "add-force",
         lambda cmd: bool(re.search(r"git\s+add", cmd)) and _has_force_flag(cmd),
         "git add --force is FORBIDDEN. Files are gitignored for a reason.",
     ),
-    (
+    GitRule(
         "rm-cached-force",
         lambda cmd: (
             bool(re.search(r"git\s+rm", cmd))
@@ -1183,19 +1158,19 @@ GIT_DENY_RULES = [
         ),
         "git rm --cached --force is FORBIDDEN. Use 'git rm --cached' without --force.",
     ),
-    (
+    GitRule(
         "rm-unsafe",
         lambda cmd: bool(re.search(r"git\s+rm", cmd)) and "--cached" not in cmd,
         "git rm is FORBIDDEN (deletes files). Use 'git rm --cached' to unstage only.",
     ),
-    (
+    GitRule(
         "clean-ignored",
         lambda cmd: (
             bool(re.search(r"git\s+clean", cmd)) and bool(re.search(r"-[a-zA-Z]*[xX]", cmd))
         ),
         "git clean with -x or -X is FORBIDDEN. These delete ignored/untracked files irreversibly.",
     ),
-    (
+    GitRule(
         "branch-no-base",
         _is_branch_no_base,
         "Branch creation without a start-point defaults to HEAD (which may be stale "
@@ -1204,9 +1179,9 @@ GIT_DENY_RULES = [
     ),
 ]
 
-# ASK rules exit 1 (prompt user for confirmation)
-GIT_ASK_RULES = [
-    (
+# ASK rules prompt user for confirmation (permissionDecision "ask")
+GIT_ASK_RULES: list[GitRule] = [
+    GitRule(
         "config-global-write",
         lambda cmd: (
             bool(re.search(r"git\s+config\s+--global", cmd))
@@ -1216,37 +1191,37 @@ GIT_ASK_RULES = [
         "git config --global modifications require permission. "
         "Read operations (--get, --list) are allowed.",
     ),
-    (
+    GitRule(
         "stash-drop",
         lambda cmd: bool(re.search(r"git\s+stash\s+drop", cmd)),
         "git stash drop permanently deletes a stash. Confirm this is intentional.",
     ),
-    (
+    GitRule(
         "checkout-dash-dash",
         lambda cmd: bool(re.search(r"git\s+checkout\s+--", cmd)),
         "git checkout -- is destructive and deprecated. Consider using 'git restore' instead.",
     ),
-    (
+    GitRule(
         "filter-branch",
         lambda cmd: bool(re.search(r"git\s+filter-branch", cmd)),
         "git filter-branch is dangerous and deprecated. Use git-filter-repo if truly needed.",
     ),
-    (
+    GitRule(
         "reflog-delete-expire",
         lambda cmd: bool(re.search(r"git\s+reflog\s+(delete|expire)", cmd)),
         "git reflog delete/expire removes recovery points. Confirm this is intentional.",
     ),
-    (
+    GitRule(
         "remote-remove",
         lambda cmd: bool(re.search(r"git\s+remote\s+(remove|rm)", cmd)),
         "Removing a git remote may break workflows. Confirm this is intentional.",
     ),
-    (
+    GitRule(
         "branch-from-local-main",
         _is_branch_from_local_main,
         "Local main may be stale. Prefer upstream/main or run git fetch upstream main first.",
     ),
-    (
+    GitRule(
         "branch-from-non-upstream",
         _is_branch_from_non_upstream,
         "Branching from a non-upstream ref risks branch stacking. Use upstream/main instead.",
@@ -1254,23 +1229,26 @@ GIT_ASK_RULES = [
 ]
 
 
-def check_git_safety(cmd, fetch_seen=False):
-    """Check a command against git safety rules. Exits 2 (deny) or 1 (ask) on match."""
+def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
+    """Check a command against git safety rules. Exits on block or ask match."""
     # Early exit: not a git command
     if not re.search(r"(^|\s)git\s", cmd):
         return
 
-    # DENY rules (exit 2)
+    # DENY rules (block)
     for name, check_fn, message in GIT_DENY_RULES:
         if check_fn(cmd):
-            _log_event("git", "blocked", rule=name, command=cmd)
-            _exit_with_decision(message, 2, rule_name=name, matched_segment=cmd)
+            _exit_with_decision(message, "block", rule_name=name, matched_segment=cmd)
 
     # Special case: commit to main/master (requires git rev-parse)
     if re.search(r"^\s*git\s+commit", cmd):
         try:
+            # _GUARD_TEST_BRANCH is only honoured during test runs
+            _test_branch = None
+            if os.environ.get("PYTEST_CURRENT_TEST"):
+                _test_branch = os.environ.get("_GUARD_TEST_BRANCH")
             branch = (
-                os.environ.get("_GUARD_TEST_BRANCH")
+                _test_branch
                 or subprocess.run(
                     ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                     capture_output=True,
@@ -1283,8 +1261,7 @@ def check_git_safety(cmd, fetch_seen=False):
                     f"Committing directly to {branch} is FORBIDDEN. "
                     "Create a feature branch: git switch -c feature/name"
                 )
-                _log_event("git", "blocked", rule="commit-to-main", command=cmd)
-                _exit_with_decision(msg, 2, rule_name="commit-to-main", matched_segment=cmd)
+                _exit_with_decision(msg, "block", rule_name="commit-to-main", matched_segment=cmd)
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass  # If we can't determine branch, allow (fail open)
 
@@ -1296,12 +1273,11 @@ def check_git_safety(cmd, fetch_seen=False):
         and parsed[1] in _SAFE_REMOTE_REFS
         and not fetch_seen
     ):
-        _log_event("git", "ask", rule="branch-needs-fetch", command=cmd)
         _exit_with_decision(
             "No git fetch detected in this command chain. "
             "Fetch first: git fetch upstream main && "
             "git switch -c <name> upstream/main",
-            1,
+            "ask",
             rule_name="branch-needs-fetch",
             matched_segment=cmd,
         )
@@ -1309,11 +1285,10 @@ def check_git_safety(cmd, fetch_seen=False):
     # ASK rules — prompt user for confirmation
     for name, check_fn, message in GIT_ASK_RULES:
         if check_fn(cmd):
-            _log_event("git", "ask", rule=name, command=cmd)
-            _exit_with_decision(message, 1, rule_name=name, matched_segment=cmd)
+            _exit_with_decision(message, "ask", rule_name=name, matched_segment=cmd)
 
 
-def _is_command_delimiter(text, i, current):
+def _is_command_delimiter(text: str, i: int, current: list[str]) -> int | None:
     """Command delimiter: &&, ||, ;, newline (with backslash continuation)."""
     two = text[i : i + 2]
     if two in ("&&", "||"):
@@ -1331,8 +1306,8 @@ def _is_command_delimiter(text, i, current):
 split_commands = functools.partial(_split_respecting_quotes, is_delimiter=_is_command_delimiter)
 
 
-def _guard_tmp_path(tool_name, tool_input):
-    """Block write-oriented tools targeting /tmp/ paths (exit 2), or return."""
+def _guard_tmp_path(tool_name: str, tool_input: dict) -> None:
+    """Block write-oriented tools targeting /tmp/ paths, or return."""
     file_path = (
         tool_input.get("file_path", "")
         or tool_input.get("path", "")
@@ -1347,13 +1322,13 @@ def _guard_tmp_path(tool_name, tool_input):
         _exit_with_decision(
             "Use `hack/tmp/` (gitignored) instead of `/tmp/` for temporary files. "
             "Native tools (Read/Write/Edit) work on local files without extra permissions.",
-            2,
+            "block",
             rule_name="tmp-path-write",
             matched_segment=file_path,
         )
 
 
-def _guard_plan_mode(tool_name):
+def _guard_plan_mode(tool_name: str) -> None:
     """Block EnterPlanMode, redirecting to incremental-planning skill."""
     if tool_name == "EnterPlanMode":
         _exit_with_decision(
@@ -1363,7 +1338,7 @@ def _guard_plan_mode(tool_name):
             "This skill asks clarifying questions first, writes the plan\n"
             "incrementally to a file, and provides research context in chat\n"
             "for informed feedback.",
-            2,
+            "block",
             rule_name="plan-mode-blocked",
             matched_segment="EnterPlanMode",
         )
@@ -1372,7 +1347,7 @@ def _guard_plan_mode(tool_name):
 _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
 
 
-def _check_rules(cmd, fetch_seen, skip_rules=None):
+def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = None) -> None:
     """Check a command against all rules. Exits on match.
 
     Block rules: stderr + exit 2.
@@ -1385,18 +1360,20 @@ def _check_rules(cmd, fetch_seen, skip_rules=None):
     check_git_safety(cmd, fetch_seen=fetch_seen)
     normalized = strip_env_prefix(cmd)
     for rule in RULES:
-        name, pattern, exception, guidance = rule[:4]
-        exit_code = rule[4] if len(rule) > 4 else 2
-        if skip_rules and name in skip_rules:
+        if skip_rules and rule.name in skip_rules:
             continue
-        target = normalized if pattern.pattern.startswith("^") else cmd
-        if pattern.search(target):
-            if exception and exception.search(cmd):
+        target = normalized if rule.pattern.pattern.startswith("^") else cmd
+        if rule.pattern.search(target):
+            if rule.exception and rule.exception.search(cmd):
                 continue
-            _exit_with_decision(guidance, exit_code, rule_name=name, matched_segment=cmd)
+            _exit_with_decision(
+                rule.guidance, rule.action, rule_name=rule.name, matched_segment=cmd
+            )
 
 
-def _check_pipes(cmd, fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP):
+def _check_pipes(
+    cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = _PIPE_SEGMENT_SKIP
+) -> None:
     """Check later pipe segments of a command for guarded patterns.
 
     NOTE: _check_oc_introspection is NOT called on individual pipe segments.
@@ -1409,7 +1386,7 @@ def _check_pipes(cmd, fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP):
             _check_rules(segment, fetch_seen, skip_rules=skip_rules)
 
 
-def _check_subcmd(subcmd, fetch_seen):
+def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
     """Analyze one subcommand: unwrap bash -c, check pipes, check subshells.
 
     Returns updated fetch_seen.
@@ -1455,7 +1432,7 @@ def _check_subcmd(subcmd, fetch_seen):
 # ── Trust management ──
 
 
-def _check_trust(rule_name, command, session_id):
+def _check_trust(rule_name: str, command: str | None, session_id: str | None) -> bool:
     """Check if a rule is trusted. Returns True if trusted, False otherwise."""
     try:
         conn = _init_db()
@@ -1478,7 +1455,9 @@ def _check_trust(rule_name, command, session_id):
         return False
 
 
-def _add_trust(rule_name, match_pattern, scope, session_id):
+def _add_trust(
+    rule_name: str, match_pattern: str | None, scope: str, session_id: str | None
+) -> tuple[bool, str]:
     """Add a trust rule. Returns (success: bool, message: str)."""
     try:
         conn = _init_db()
@@ -1506,7 +1485,7 @@ def _add_trust(rule_name, match_pattern, scope, session_id):
         return False, f"Failed to add trust: {e}"
 
 
-def _remove_trust(rule_name, match_pattern=None):
+def _remove_trust(rule_name: str, match_pattern: str | None = None) -> tuple[bool, int]:
     """Remove trust rule(s). Returns (success: bool, count: int)."""
     try:
         conn = _init_db()
@@ -1528,7 +1507,7 @@ def _remove_trust(rule_name, match_pattern=None):
         return False, 0
 
 
-def _list_trust():
+def _list_trust() -> list[dict[str, str]]:
     """List all trust rules. Returns list of dicts."""
     try:
         conn = _init_db()
@@ -1645,7 +1624,7 @@ _SECURITY_FIELDS = {
 }
 
 
-def _parse_oc_command(cmd):
+def _parse_oc_command(cmd: str) -> dict | None:
     """Parse an oc/kubectl command string into structured components.
 
     Returns dict with: tool, verb, resource_type, namespace, filename, flags.
@@ -1721,7 +1700,7 @@ def _parse_oc_command(cmd):
     return result
 
 
-def _classify_oc_risk(parsed):
+def _classify_oc_risk(parsed: dict | None) -> tuple[str, str | None]:
     """Classify the risk level of a parsed oc/kubectl command.
 
     Returns (risk_level, reason) where risk_level is one of:
@@ -1765,7 +1744,7 @@ def _classify_oc_risk(parsed):
     return "safe", None
 
 
-def _inspect_manifest(file_path):
+def _inspect_manifest(file_path: str) -> list[dict]:
     """Inspect a YAML/JSON manifest file. Returns list of resource info dicts.
 
     Bail on missing, oversized (>1MB), or binary files.
@@ -1776,15 +1755,11 @@ def _inspect_manifest(file_path):
         cwd = Path.cwd().resolve()
         home = Path.home().resolve()
         tmp = Path(tempfile.gettempdir()).resolve()
-        if not (
-            str(path).startswith(str(cwd))
-            or str(path).startswith(str(home))
-            or str(path).startswith(str(tmp))
-        ):
+        if not (path.is_relative_to(cwd) or path.is_relative_to(home) or path.is_relative_to(tmp)):
             return [{"error": "path outside allowed directories", "path": str(path)}]
         if not path.exists():
             return []
-        if path.stat().st_size > 1_048_576:  # 1MB limit
+        if path.stat().st_size > _MAX_MANIFEST_BYTES:
             return [{"error": "file too large", "path": str(path)}]
         text = path.read_text(errors="replace")
         # Check for binary content
@@ -1798,7 +1773,7 @@ def _inspect_manifest(file_path):
     return _parse_yaml_manifests(text)
 
 
-def _parse_json_manifest(text):
+def _parse_json_manifest(text: str) -> list[dict]:
     """Parse a JSON manifest. Returns list of resource info dicts."""
     try:
         obj = json.loads(text)
@@ -1814,7 +1789,7 @@ def _parse_json_manifest(text):
     return []
 
 
-def _extract_manifest_info(obj):
+def _extract_manifest_info(obj: dict) -> dict:
     """Extract key fields from a manifest object."""
     info = {
         "kind": obj.get("kind", "Unknown"),
@@ -1833,7 +1808,7 @@ def _extract_manifest_info(obj):
     return info
 
 
-def _collect_security_fields(obj, found, depth):
+def _collect_security_fields(obj: object, found: set[str], depth: int) -> None:
     """Recursively collect security-relevant field names from a manifest."""
     if depth > 10:
         return
@@ -1847,7 +1822,7 @@ def _collect_security_fields(obj, found, depth):
             _collect_security_fields(item, found, depth + 1)
 
 
-def _parse_yaml_manifests(text):
+def _parse_yaml_manifests(text: str) -> list[dict]:
     """Parse YAML manifests using line-based regex parser.
 
     Handles multi-document YAML with --- separators.
@@ -1864,7 +1839,7 @@ def _parse_yaml_manifests(text):
     return results
 
 
-def _parse_yaml_doc(text):
+def _parse_yaml_doc(text: str) -> dict:
     """Parse a single YAML document using line-based regex.
 
     Extracts kind, metadata.name, metadata.namespace, and security fields.
@@ -1920,7 +1895,7 @@ def _parse_yaml_doc(text):
     return info
 
 
-def _inspect_pipe_source(cmd):
+def _inspect_pipe_source(cmd: str) -> str | None:
     """Extract filename from pipe source patterns like `cat file | ...` or `< file ...`."""
     # cat file | ...
     m = re.match(r"^\s*cat\s+([^\s|]+)\s*\|", cmd)
@@ -1933,7 +1908,12 @@ def _inspect_pipe_source(cmd):
     return None
 
 
-def _check_oc_introspection(cmd):
+def _risk_order(level: str) -> int:
+    """Return numeric order for risk levels (higher = more risky)."""
+    return {"safe": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}.get(level, 0)
+
+
+def _check_oc_introspection(cmd: str) -> None:
     """Orchestrate oc/kubectl command introspection.
 
     Returns None to let normal flow continue, or exits with ask/allow decision.
@@ -1999,18 +1979,11 @@ def _check_oc_introspection(cmd):
 
     detail = "; ".join(parts)
 
-    if combined_risk in ("critical", "high"):
+    if combined_risk in ("critical", "high", "medium"):
         _exit_with_decision(
             f"oc/kubectl {combined_risk}-risk: {detail}",
-            1,
+            "ask",
             rule_name=f"oc-{combined_risk}",
-            matched_segment=cmd,
-        )
-    elif combined_risk == "medium":
-        _exit_with_decision(
-            f"oc/kubectl medium-risk: {detail}",
-            1,
-            rule_name="oc-medium",
             matched_segment=cmd,
         )
 
@@ -2018,27 +1991,22 @@ def _check_oc_introspection(cmd):
     return None
 
 
-def _risk_order(level):
-    """Return numeric order for risk levels (higher = more risky)."""
-    return {"safe": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}.get(level, 0)
-
-
 # ── Trust CLI handler ──
 
 
-def _get_askable_rule_names():
+def _get_askable_rule_names() -> set[str]:
     """Return set of rule names that are ask-type (eligible for trust)."""
     names = set()
     # Built-in git ask rules
-    names.update(name for name, _, _ in GIT_ASK_RULES)
+    names.update(rule.name for rule in GIT_ASK_RULES)
     # User-defined rules with action=ask
     for rule in RULES:
-        if len(rule) > 4 and rule[4] == 1:  # exit_code 1 = ask
-            names.add(rule[0])
+        if rule.action == "ask":
+            names.add(rule.name)
     # User-defined URL rules with action=ask
     for rule in AUTH_URL_RULES:
-        if len(rule) > 3 and rule[3] == 1:
-            names.add(rule[0])
+        if rule.action == "ask":
+            names.add(rule.name)
     # oc introspection rules (dynamic)
     names.update(["oc-critical", "oc-high", "oc-medium"])
     # Branch-needs-fetch (dynamic git ask)
@@ -2046,13 +2014,49 @@ def _get_askable_rule_names():
     return names
 
 
-def _handle_trust_command(argv):
+def _handle_trust_command(argv: list[str]) -> int:
     """Handle --trust CLI commands. Returns exit code."""
-    # Parse: --trust add|remove|list [rule_name] [--match pat] [--scope session|always]
+    import argparse
+
     trust_idx = argv.index("--trust")
     args = argv[trust_idx + 1 :]
 
-    if not args:
+    parser = argparse.ArgumentParser(prog="dev-guard --trust", exit_on_error=False)
+    subs = parser.add_subparsers(dest="action")
+
+    subs.add_parser("list")
+
+    add_p = subs.add_parser("add")
+    add_p.add_argument("rule_name")
+    add_p.add_argument("--match", dest="match_pattern", default=None)
+    add_p.add_argument("--scope", choices=["session", "always"], default="always")
+    add_p.add_argument("--session", dest="scope", action="store_const", const="session")
+    add_p.add_argument("--always", dest="scope", action="store_const", const="always")
+    add_p.add_argument("--session-id", dest="session_id_override", default=None)
+
+    remove_p = subs.add_parser("remove")
+    remove_p.add_argument("rule_name")
+    remove_p.add_argument("--match", dest="match_pattern", default=None)
+
+    try:
+        ns = parser.parse_args(args)
+    except (SystemExit, argparse.ArgumentError) as e:
+        msg = str(e)
+        if "invalid choice" in msg and "action" in msg:
+            bad = args[0] if args else "?"
+            print(
+                f"Unknown trust action: {bad!r}. Use add, remove, or list.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"Usage error: {e}", file=sys.stderr)
+        return 2
+
+    if hasattr(ns, "match_pattern") and ns.match_pattern and len(ns.match_pattern) > 500:
+        print("--match pattern too long (max 500 chars).", file=sys.stderr)
+        return 2
+
+    if not ns.action:
         print(
             "Usage: --trust add|remove|list [rule_name] "
             "[--match <pattern>] [--scope session|always]",
@@ -2060,9 +2064,7 @@ def _handle_trust_command(argv):
         )
         return 2
 
-    action = args[0]
-
-    if action == "list":
+    if ns.action == "list":
         rules = _list_trust()
         if not rules:
             print("No trusted rules configured.")
@@ -2074,96 +2076,57 @@ def _handle_trust_command(argv):
             print(f"{r['rule_name']:<30} {pat:<20} {r['scope']:<10} {r['created_ts']}")
         return 0
 
-    if action == "add":
-        if len(args) < 2:
-            print(
-                "Usage: --trust add <rule_name> [--match <pattern>] [--scope session|always]",
-                file=sys.stderr,
-            )
-            return 2
-        rule_name = args[1]
+    elif ns.action == "add":
         askable = _get_askable_rule_names()
-        if rule_name not in askable:
+        if ns.rule_name not in askable:
             print(
-                f"Rule {rule_name!r} is not a known ask-type rule. "
+                f"Rule {ns.rule_name!r} is not a known ask-type rule. "
                 f"Trustable rules: {', '.join(sorted(askable))}",
                 file=sys.stderr,
             )
             return 2
-        match_pattern = None
-        scope = "always"
-
-        i = 2
-        while i < len(args):
-            if args[i] == "--match" and i + 1 < len(args):
-                match_pattern = args[i + 1]
-                i += 2
-            elif args[i] == "--scope" and i + 1 < len(args):
-                scope = args[i + 1]
-                i += 2
-            elif args[i] == "--session":
-                scope = "session"
-                i += 1
-            elif args[i] == "--always":
-                scope = "always"
-                i += 1
-            else:
-                i += 1
-
-        if scope not in ("session", "always"):
-            print(f"Invalid scope: {scope!r}. Use 'session' or 'always'.", file=sys.stderr)
-            return 2
 
         sid = None
-        if scope == "session":
-            # Read last_session_id from session_state
-            try:
-                conn = _init_db()
-                if conn:
-                    cursor = conn.execute(
-                        "SELECT value FROM session_state WHERE key = 'last_session_id'"
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        sid = row[0]
-            except (sqlite3.Error, OSError):
-                pass
+        if ns.scope == "session":
+            sid = ns.session_id_override
+            if not sid:
+                # Fallback: read from DB (works in single-session case)
+                try:
+                    conn = _init_db()
+                    if conn:
+                        cursor = conn.execute(
+                            "SELECT value FROM session_state WHERE key = ?",
+                            (_SESSION_ID_KEY,),
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            sid = row[0]
+                except (sqlite3.Error, OSError):
+                    pass
             if not sid:
                 print(
-                    "No session ID found. Run a guard check first, or use --scope always.",
+                    "No session ID found. Run a guard check first, "
+                    "provide --session-id, or use --scope always.",
                     file=sys.stderr,
                 )
                 return 2
 
-        ok, msg = _add_trust(rule_name, match_pattern, scope, sid)
-        print(msg)
-        return 0 if ok else 1
+        ok, msg = _add_trust(ns.rule_name, ns.match_pattern, ns.scope, sid)
+        print(msg, file=sys.stderr if not ok else sys.stdout)
+        return 0 if ok else 2
 
-    if action == "remove":
-        if len(args) < 2:
-            print("Usage: --trust remove <rule_name> [--match <pattern>]", file=sys.stderr)
-            return 2
-        rule_name = args[1]
-        match_pattern = None
-        i = 2
-        while i < len(args):
-            if args[i] == "--match" and i + 1 < len(args):
-                match_pattern = args[i + 1]
-                i += 2
-            else:
-                i += 1
-        ok, count = _remove_trust(rule_name, match_pattern)
+    elif ns.action == "remove":
+        ok, count = _remove_trust(ns.rule_name, ns.match_pattern)
         if ok:
-            print(f"Removed {count} trust rule(s) for {rule_name!r}.")
+            print(f"Removed {count} trust rule(s) for {ns.rule_name!r}.")
         else:
-            print(f"Failed to remove trust rules for {rule_name!r}.", file=sys.stderr)
-        return 0 if ok else 1
+            print(f"Failed to remove trust rules for {ns.rule_name!r}.", file=sys.stderr)
+        return 0 if ok else 2
 
-    print(f"Unknown trust action: {action!r}. Use add, remove, or list.", file=sys.stderr)
     return 2
 
 
-def _validate_rules_file(path, env_var, is_url=False):
+def _validate_rules_file(path: str, env_var: str, is_url: bool = False) -> tuple[list[str], int]:
     """Validate a rules JSON file. Returns (issues, count) tuple."""
     issues = []
     if not os.path.exists(path):
@@ -2233,7 +2196,7 @@ def _validate_rules_file(path, env_var, is_url=False):
     return issues, len(raw)
 
 
-def _validate_config():
+def _validate_config() -> int:
     """Validate extra rules config files.
 
     Output channels follow hook conventions:
@@ -2275,95 +2238,54 @@ def _validate_config():
     return 0
 
 
-def main():
-    global _session_id, _tool_use_id
-
-    if "--trust" in sys.argv:
-        sys.exit(_handle_trust_command(sys.argv))
-
-    if "--validate" in sys.argv:
-        sys.exit(_validate_config())
-
+def _parse_hook_input() -> dict:
+    """Read and parse JSON hook input from stdin. Exits 0 on error (fail-open)."""
     try:
-        raw_input = sys.stdin.buffer.read(10 * 1024 * 1024 + 1)  # 10MB + 1
-        if len(raw_input) > 10 * 1024 * 1024:
-            sys.exit(0)  # Fail open — oversized input is anomalous
-        data = json.loads(raw_input)
+        raw_input = sys.stdin.buffer.read(_MAX_INPUT_BYTES + 1)
+        if len(raw_input) > _MAX_INPUT_BYTES:
+            sys.exit(0)  # Fail open — oversized input
+        return json.loads(raw_input)
     except (json.JSONDecodeError, EOFError, ValueError):
         print("Hook received malformed/empty JSON input — failing open", file=sys.stderr)
         sys.exit(0)
 
-    # Extract session/tool context for logging
-    _session_id = data.get("session_id")
-    _tool_use_id = data.get("tool_use_id")
-    if _session_id:
-        try:
-            conn = _init_db()
-            if conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO session_state (key, value, updated_ts) "
-                    "VALUES (?, ?, ?)",
-                    (
-                        "last_session_id",
-                        _session_id,
-                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    ),
-                )
-                conn.commit()
-        except (sqlite3.Error, OSError):
-            pass
 
-    # PostToolUse: observational logging only (no blocking)
-    hook_event = data.get("hook_event_name", "PreToolUse")
-    if hook_event == "PostToolUse":
-        _handle_post_tool_use(data)
-        sys.exit(0)
+def _handle_webfetch(tool_input: dict) -> None:
+    """Check WebFetch URLs against auth rules. Exits after handling."""
+    url = tool_input.get("url", "")
+    if url:
+        result = _check_url_rules(url)
+        if result:
+            rule_name, guidance, action = result
+            _log_url_event(url, rule_name, _LOG_ACTION_FOR.get(action, action), "WebFetch")
+            _exit_with_decision(guidance, action, rule_name=rule_name, matched_segment=url)
+        else:
+            _log_url_event(url, None, "allowed", "WebFetch")
+    sys.exit(0)
 
-    tool_name = data.get("tool_name", "")
-    tool_input = data.get("tool_input", {})
 
-    _guard_tmp_path(tool_name, tool_input)
-    _guard_plan_mode(tool_name)
-
-    # WebFetch: check URL against auth rules
-    if tool_name == "WebFetch":
-        url = tool_input.get("url", "")
-        if url:
-            result = _check_url_rules(url)
-            if result:
-                rule_name, guidance, exit_code = result
-                _log_url_event(url, rule_name, "asked" if exit_code == 1 else "blocked", "WebFetch")
-                _exit_with_decision(guidance, exit_code, rule_name=rule_name, matched_segment=url)
-            else:
-                _log_url_event(url, None, "allowed", "WebFetch")
-        sys.exit(0)
-
-    if tool_name != "Bash":
-        sys.exit(0)
-
-    command = tool_input.get("command", "").strip()
+def _handle_bash_command(command: str) -> None:
+    """Process a Bash command through all guard checks."""
     if not command:
         sys.exit(0)
 
-    MAX_COMMAND_LEN = 100_000  # 100KB — generous for any real command
-    if len(command) > MAX_COMMAND_LEN:
+    if len(command) > _MAX_COMMAND_LEN:
         _log_event("guard", "oversized", command=command[:500])
         print("Command too large for guard analysis.", file=sys.stderr)
         sys.exit(2)
 
     # Andon cord: GUARD_BYPASS=1 prefix skips tool-selection and ask rules,
-    # but still enforces hard deny rules (git safety).
+    # but still enforces hard deny rules (git safety) and URL auth guards.
     if command.startswith("GUARD_BYPASS=1 "):
         _log_event("bypass", "bypassed", command=command)
-        # Still enforce hard denials even in bypass mode
         real_cmd = command[len("GUARD_BYPASS=1 ") :]
+        _check_fetch_command(real_cmd)
         subcmds = split_commands(real_cmd)
         for subcmd in subcmds:
             stripped = strip_env_prefix(strip_shell_keyword(subcmd))
             for name, check_fn, message in GIT_DENY_RULES:
                 if check_fn(stripped):
-                    _log_event("git", "blocked", rule=name, command=stripped)
-                    _exit_with_decision(message, 2, rule_name=name, matched_segment=stripped)
+                    _exit_with_decision(message, "block", rule_name=name, matched_segment=stripped)
         sys.exit(0)
 
     # Check curl/wget commands for authenticated URLs (before rule checks)
@@ -2386,6 +2308,64 @@ def main():
         _log_event("guard", "allowed", command=command)
 
     sys.exit(0)
+
+
+def main() -> None:
+    global _session_id, _tool_use_id
+
+    # Load user-defined extra rules (deferred from module level to avoid
+    # side effects during import and to keep rule loading in one place)
+    AUTH_URL_RULES.extend(_load_extra_rules("URL_GUARD_EXTRA_RULES", _url_rule_from_entry))
+    RULES.extend(_load_extra_rules("COMMAND_GUARD_EXTRA_RULES", _cmd_rule_from_entry))
+
+    if "--trust" in sys.argv:
+        sys.exit(_handle_trust_command(sys.argv))
+
+    if "--validate" in sys.argv:
+        sys.exit(_validate_config())
+
+    data = _parse_hook_input()
+
+    # Extract session/tool context for logging
+    _session_id = data.get("session_id")
+    _tool_use_id = data.get("tool_use_id")
+    if _session_id:
+        try:
+            conn = _init_db()
+            if conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO session_state (key, value, updated_ts) "
+                    "VALUES (?, ?, ?)",
+                    (
+                        _SESSION_ID_KEY,
+                        _session_id,
+                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    ),
+                )
+                conn.commit()
+        except (sqlite3.Error, OSError):
+            pass
+
+    # PostToolUse: observational logging only (no blocking)
+    hook_event = data.get("hook_event_name", _HOOK_EVENT_NAME)
+    if hook_event == "PostToolUse":
+        _handle_post_tool_use(data)
+        sys.exit(0)
+
+    tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+
+    _guard_tmp_path(tool_name, tool_input)
+    _guard_plan_mode(tool_name)
+
+    if tool_name == "WebFetch":
+        _handle_webfetch(tool_input)
+
+    if tool_name != "Bash":
+        sys.exit(0)
+
+    command = tool_input.get("command", "").strip()
+    _handle_bash_command(command)
 
 
 if __name__ == "__main__":
