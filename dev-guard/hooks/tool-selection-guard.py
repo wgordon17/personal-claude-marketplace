@@ -1408,6 +1408,32 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
         )
         sys.exit(2)
 
+    # Process substitution <(...) triggers Claude Code's built-in shell-operator
+    # detector ("false positive").  Block early with actionable guidance so the
+    # user never sees the cryptic built-in message.
+    if re.search(r"<\(", subcmd):
+        _exit_with_decision(
+            "Process substitution `<(...)` triggers a Claude Code permission prompt. "
+            "Run each command separately and diff the output files instead:\n"
+            "  cmd1 > /tmp/a.txt && cmd2 > /tmp/b.txt && diff /tmp/a.txt /tmp/b.txt",
+            "block",
+            rule_name="process-substitution",
+            matched_segment=subcmd[:200],
+        )
+
+    # Multiline `python -c` triggers Claude Code's "empty quotes before dash"
+    # heuristic when the inline code contains flag-like strings (e.g. --scope).
+    # Block and redirect to a temp-file workflow.
+    if re.match(r"^\s*(?:uv\s+run\s+)?python[3]?\s+-c\s+", subcmd) and "\n" in subcmd:
+        _exit_with_decision(
+            "Multiline `python -c` triggers a Claude Code permission prompt "
+            "(inline flags hit the built-in argument validator). "
+            "Write the code to a file and run it with `uv run python3 <file>` instead.",
+            "block",
+            rule_name="multiline-python-c",
+            matched_segment=subcmd[:200],
+        )
+
     # Check pipe segments and subshells FIRST — deny/ask on dangerous segments
     # must happen before any "allow" rule on the full command can short-circuit.
     _check_pipes(subcmd, fetch_seen)
