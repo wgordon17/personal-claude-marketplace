@@ -22,6 +22,12 @@ Code quality agents and orchestration skills for architecture, security, QA, per
 | `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
 | `/swarm` | Full agent team implementation via TeamCreate | Manual |
 
+## Requirements
+
+- **dev-essentials plugin** — Required. The `/swarm` and `/unfuck` skills use the `dev-essentials:test-runner` agent for verification phases.
+- **Context7 MCP** — Required for `/file-audit` library validation (deprecated APIs, wrong signatures). Listed in `/file-audit` allowed-tools.
+- **SuperClaude** — The `/unfuck` skill references SuperClaude skills (`sc:index-repo`, `sc:analyze`, etc.) from a separate plugin system. These are informational — the skill degrades gracefully without them.
+
 ## Installation
 
 ```bash

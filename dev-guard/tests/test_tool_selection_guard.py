@@ -8,21 +8,37 @@ import importlib.util
 import json
 import os
 import re
+import sqlite3
 import subprocess
+from pathlib import Path
 
 import pytest
 
 SCRIPT = os.path.join(os.path.dirname(__file__), os.pardir, "hooks", "tool-selection-guard.py")
 
 
-def run_guard(tool_name: str, tool_input: dict) -> subprocess.CompletedProcess:
-    """Invoke the guard script with the given tool_name and tool_input."""
-    payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+def run_guard(
+    tool_name: str,
+    tool_input: dict,
+    *,
+    env: dict | None = None,
+    payload_extra: dict | None = None,
+) -> subprocess.CompletedProcess:
+    """Invoke the guard script with the given tool_name and tool_input.
+
+    payload_extra: additional top-level keys merged into the JSON payload
+    (e.g. hook_event_name, tool_response, session_id).
+    """
+    payload_data: dict = {"tool_name": tool_name, "tool_input": tool_input}
+    if payload_extra:
+        payload_data.update(payload_extra)
+    payload = json.dumps(payload_data)
     return subprocess.run(
         ["uv", "run", SCRIPT],
         input=payload,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -68,6 +84,20 @@ def assert_ask_decision(result, expected_reason_fragment=None, test_id=""):
         assert expected_reason_fragment in reason, (
             f"[{test_id}] Expected '{expected_reason_fragment}' in reason, got: {reason!r}"
         )
+
+
+def _run_with_extra_url_rules(tool_name, tool_input, rules_file):
+    """Run the guard with a custom extra URL rules file (URL_GUARD_EXTRA_RULES)."""
+    env = os.environ.copy()
+    env["URL_GUARD_EXTRA_RULES"] = str(rules_file)
+    return run_guard(tool_name, tool_input, env=env)
+
+
+def _run_with_extra_cmd_rules(command, rules_file):
+    """Run the guard with a custom extra command rules file (COMMAND_GUARD_EXTRA_RULES)."""
+    env = os.environ.copy()
+    env["COMMAND_GUARD_EXTRA_RULES"] = str(rules_file)
+    return run_guard("Bash", {"command": command}, env=env)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1092,21 +1122,24 @@ class TestGitSafetyAsk:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-_current_branch = subprocess.run(
-    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-    capture_output=True,
-    text=True,
-).stdout.strip()
-
-
 class TestGitSafetyCommitToMain:
-    @pytest.mark.skipif(
-        _current_branch not in ("main", "master"),
-        reason=f"Only runs on main/master (currently on {_current_branch!r})",
-    )
     def test_commit_to_main(self):
-        result = run_bash("git commit -m 'test'")
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "main"
+        result = run_guard("Bash", {"command": "git commit -m 'test'"}, env=env)
         assert_guard(result, 2, "FORBIDDEN", "commit-to-main")
+
+    def test_commit_to_master(self):
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "master"
+        result = run_guard("Bash", {"command": "git commit -m 'test'"}, env=env)
+        assert_guard(result, 2, "FORBIDDEN", "commit-to-main")
+
+    def test_commit_to_feature_branch_allowed(self):
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "feat/something"
+        result = run_guard("Bash", {"command": "git commit -m 'test'"}, env=env)
+        assert result.returncode == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1491,11 +1524,6 @@ class TestStripShellKeyword:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Shell control structure integration tests
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # hooks.json configuration validation
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1607,36 +1635,15 @@ class TestShellControlStructures:
 
 
 class TestURLGuardAuditLog:
-    """Verify URL guard events are logged to JSONL file."""
-
-    def _run_with_log_dir(self, tool_name, tool_input, tmp_path):
-        """Run the guard with a custom log directory."""
-        payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-        env = os.environ.copy()
-        env["URL_GUARD_LOG_DIR"] = str(tmp_path)
-        return subprocess.run(
-            ["uv", "run", SCRIPT],
-            input=payload,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-
-    def _read_log(self, tmp_path):
-        """Read and parse all JSONL entries from the log file."""
-        log_file = tmp_path / "url-guard.log"
-        if not log_file.exists():
-            return []
-        lines = log_file.read_text().strip().splitlines()
-        return [json.loads(line) for line in lines]
+    """Verify URL guard events are logged to SQLite database."""
 
     def test_blocked_url_logged(self, tmp_path):
-        self._run_with_log_dir(
+        _run_guard_with_db(
             "Bash",
             {"command": "curl https://api.github.com/repos/org/repo"},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         entry = entries[0]
         assert entry["action"] == "blocked"
@@ -1644,75 +1651,73 @@ class TestURLGuardAuditLog:
         assert entry["tool"] == "Bash"
         assert entry["phase"] == "pre"
         assert "api.github.com" in entry["url"]
-        assert "timestamp" in entry
+        assert "ts" in entry
 
     def test_allowed_url_logged(self, tmp_path):
-        self._run_with_log_dir(
+        _run_guard_with_db(
             "Bash",
             {"command": "curl https://example.com/data"},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["action"] == "allowed"
         assert entries[0]["rule"] is None
 
     def test_bypassed_url_logged(self, tmp_path):
-        self._run_with_log_dir(
+        _run_guard_with_db(
             "Bash",
             {"command": "ALLOW_FETCH=1 curl https://api.github.com/repos/org/repo"},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["action"] == "bypassed"
 
     def test_webfetch_blocked_logged(self, tmp_path):
-        self._run_with_log_dir(
+        _run_guard_with_db(
             "WebFetch",
             {"url": "https://api.github.com/repos/org/repo", "prompt": "test"},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["action"] == "blocked"
         assert entries[0]["tool"] == "WebFetch"
 
     def test_webfetch_allowed_logged(self, tmp_path):
-        self._run_with_log_dir(
+        _run_guard_with_db(
             "WebFetch",
             {"url": "https://example.com", "prompt": "test"},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["action"] == "allowed"
         assert entries[0]["tool"] == "WebFetch"
 
     def test_non_fetch_command_not_logged(self, tmp_path):
-        """Non-curl/wget bash commands should not produce log entries."""
-        self._run_with_log_dir("Bash", {"command": "git status"}, tmp_path)
-        entries = self._read_log(tmp_path)
+        """Non-curl/wget bash commands should not produce URL log entries."""
+        _run_guard_with_db("Bash", {"command": "git status"}, tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 0
 
-    def test_jsonl_format(self, tmp_path):
-        """Each line is valid JSON."""
-        self._run_with_log_dir(
+    def test_multiple_events_stored(self, tmp_path):
+        """Multiple events are stored in the SQLite database."""
+        _run_guard_with_db(
             "Bash",
             {"command": "curl https://api.github.com/repos/o/r"},
             tmp_path,
         )
-        self._run_with_log_dir(
+        _run_guard_with_db(
             "WebFetch",
             {"url": "https://example.com", "prompt": "t"},
             tmp_path,
         )
-        log_file = tmp_path / "url-guard.log"
-        lines = log_file.read_text().strip().splitlines()
-        assert len(lines) == 2
-        for line in lines:
-            entry = json.loads(line)
-            assert "timestamp" in entry
+        entries = _read_url_events(tmp_path)
+        assert len(entries) == 2
+        for entry in entries:
+            assert "ts" in entry
             assert "url" in entry
             assert "action" in entry
 
@@ -1727,29 +1732,18 @@ class TestPostToolUseResponseLogging:
 
     def _run_post_hook(self, tool_name, tool_input, tool_response, tmp_path):
         """Simulate a PostToolUse hook invocation."""
-        payload = json.dumps(
-            {
-                "hook_event_name": "PostToolUse",
-                "tool_name": tool_name,
-                "tool_input": tool_input,
-                "tool_response": tool_response,
-            }
-        )
         env = os.environ.copy()
-        env["URL_GUARD_LOG_DIR"] = str(tmp_path)
-        return subprocess.run(
-            ["uv", "run", SCRIPT],
-            input=payload,
-            capture_output=True,
-            text=True,
+        env["GUARD_DB_PATH"] = str(tmp_path / "test.db")
+        env["GUARD_LOG_LEVEL"] = "all"
+        return run_guard(
+            tool_name,
+            tool_input,
             env=env,
+            payload_extra={
+                "hook_event_name": "PostToolUse",
+                "tool_response": tool_response,
+            },
         )
-
-    def _read_log(self, tmp_path):
-        log_file = tmp_path / "url-guard.log"
-        if not log_file.exists():
-            return []
-        return [json.loads(line) for line in log_file.read_text().strip().splitlines()]
 
     def test_bash_curl_403_logged(self, tmp_path):
         """HTTP 403 from curl is logged as auth_failed."""
@@ -1759,7 +1753,7 @@ class TestPostToolUseResponseLogging:
             {"stdout": "HTTP/1.1 403 Forbidden\n<html>Access Denied</html>", "stderr": ""},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["phase"] == "post"
         assert entries[0]["auth_failed"] is True
@@ -1774,7 +1768,7 @@ class TestPostToolUseResponseLogging:
             {"stdout": "HTTP/2 401 Unauthorized", "stderr": ""},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["auth_failed"] is True
         assert entries[0]["response_code"] == 401
@@ -1787,7 +1781,7 @@ class TestPostToolUseResponseLogging:
             {"stdout": 'HTTP/1.1 200 OK\n{"data": 1}', "stderr": ""},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["auth_failed"] is False
         assert entries[0]["response_code"] == 200
@@ -1801,7 +1795,7 @@ class TestPostToolUseResponseLogging:
             "Login Required - Please sign in to continue",
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["tool"] == "WebFetch"
         assert entries[0]["auth_failed"] is True
@@ -1814,7 +1808,7 @@ class TestPostToolUseResponseLogging:
             "Welcome to Example.com! Here is the page content.",
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["auth_failed"] is False
         assert entries[0]["action"] == "success"
@@ -1827,7 +1821,7 @@ class TestPostToolUseResponseLogging:
             {"stdout": "On branch main", "stderr": ""},
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 0
 
     def test_post_hook_always_exits_0(self, tmp_path):
@@ -1848,7 +1842,7 @@ class TestPostToolUseResponseLogging:
             "Redirecting to SSO... SSO redirect detected for authentication",
             tmp_path,
         )
-        entries = self._read_log(tmp_path)
+        entries = _read_url_events(tmp_path)
         assert len(entries) == 1
         assert entries[0]["auth_failed"] is True
 
@@ -1861,19 +1855,6 @@ class TestPostToolUseResponseLogging:
 class TestExtraURLRules:
     """URL_GUARD_EXTRA_RULES env var loads custom rules from a JSON file."""
 
-    def _run_with_extra_rules(self, tool_name, tool_input, rules_file):
-        """Run the guard with a custom extra rules file."""
-        payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-        env = os.environ.copy()
-        env["URL_GUARD_EXTRA_RULES"] = str(rules_file)
-        return subprocess.run(
-            ["uv", "run", SCRIPT],
-            input=payload,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-
     def test_extra_rule_blocks_custom_domain(self, tmp_path):
         """Custom rules loaded from JSON file block matching URLs."""
         rules = [
@@ -1885,7 +1866,7 @@ class TestExtraURLRules:
         ]
         rules_file = tmp_path / "extra-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "Bash",
             {"command": "curl https://internal.example.corp/api/data"},
             rules_file,
@@ -1904,7 +1885,7 @@ class TestExtraURLRules:
         ]
         rules_file = tmp_path / "extra-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "Bash",
             {"command": "curl https://example.com/api/data"},
             rules_file,
@@ -1922,7 +1903,7 @@ class TestExtraURLRules:
         ]
         rules_file = tmp_path / "extra-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "WebFetch",
             {"url": "https://internal.example.corp/page", "prompt": "test"},
             rules_file,
@@ -1931,7 +1912,7 @@ class TestExtraURLRules:
 
     def test_missing_file_does_not_break(self, tmp_path):
         """Non-existent rules file is silently ignored."""
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "Bash",
             {"command": "curl https://example.com/data"},
             tmp_path / "nonexistent.json",
@@ -1942,7 +1923,7 @@ class TestExtraURLRules:
         """Malformed JSON rules file is silently ignored."""
         rules_file = tmp_path / "bad-rules.json"
         rules_file.write_text("not valid json {{{")
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "Bash",
             {"command": "curl https://example.com/data"},
             rules_file,
@@ -1954,7 +1935,7 @@ class TestExtraURLRules:
         rules = [{"name": "bad", "pattern": "[invalid(", "message": "msg"}]
         rules_file = tmp_path / "bad-regex.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "Bash",
             {"command": "curl https://example.com/data"},
             rules_file,
@@ -1966,7 +1947,7 @@ class TestExtraURLRules:
         rules = [{"name": "bad", "pattern": 123, "message": "msg"}]
         rules_file = tmp_path / "bad-type.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "Bash",
             {"command": "curl https://example.com/data"},
             rules_file,
@@ -1982,19 +1963,6 @@ class TestExtraURLRules:
 class TestExtraCommandRules:
     """COMMAND_GUARD_EXTRA_RULES env var loads custom command rules from a JSON file."""
 
-    def _run_with_extra_rules(self, command, rules_file):
-        """Run the guard with a custom extra command rules file."""
-        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
-        env = os.environ.copy()
-        env["COMMAND_GUARD_EXTRA_RULES"] = str(rules_file)
-        return subprocess.run(
-            ["uv", "run", SCRIPT],
-            input=payload,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-
     def test_extra_rule_blocks_matching_command(self, tmp_path):
         """Custom rules loaded from JSON file block matching commands."""
         rules = [
@@ -2006,7 +1974,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
         assert "OpenShift console" in result.stderr
 
@@ -2021,7 +1989,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("oc get pods", rules_file)
+        result = _run_with_extra_cmd_rules("oc get pods", rules_file)
         assert result.returncode == 0
 
     def test_extra_rule_with_exception(self, tmp_path):
@@ -2037,10 +2005,10 @@ class TestExtraCommandRules:
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
         # Without exception → blocked
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
         # With exception → allowed
-        result = self._run_with_extra_rules("oc delete pod my-pod --dry-run", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod --dry-run", rules_file)
         assert result.returncode == 0
 
     def test_extra_rule_in_chained_commands(self, tmp_path):
@@ -2054,7 +2022,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("git status && gh repo delete my-repo", rules_file)
+        result = _run_with_extra_cmd_rules("git status && gh repo delete my-repo", rules_file)
         assert result.returncode == 2
 
     def test_extra_rule_in_pipe_segment(self, tmp_path):
@@ -2068,7 +2036,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("echo data | dangerous --flag", rules_file)
+        result = _run_with_extra_cmd_rules("echo data | dangerous --flag", rules_file)
         assert result.returncode == 2
 
     def test_extra_rule_with_env_prefix(self, tmp_path):
@@ -2082,7 +2050,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("KUBECONFIG=x oc delete pod p", rules_file)
+        result = _run_with_extra_cmd_rules("KUBECONFIG=x oc delete pod p", rules_file)
         assert result.returncode == 2
 
     def test_guard_bypass_overrides_extra_rules(self, tmp_path):
@@ -2096,19 +2064,19 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("GUARD_BYPASS=1 oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("GUARD_BYPASS=1 oc delete pod my-pod", rules_file)
         assert result.returncode == 0
 
     def test_missing_file_does_not_break(self, tmp_path):
         """Non-existent rules file is silently ignored."""
-        result = self._run_with_extra_rules("oc delete pod my-pod", tmp_path / "nonexistent.json")
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", tmp_path / "nonexistent.json")
         assert result.returncode == 0
 
     def test_invalid_json_does_not_break(self, tmp_path):
         """Malformed JSON rules file is silently ignored."""
         rules_file = tmp_path / "bad-rules.json"
         rules_file.write_text("not valid json {{{")
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 0
 
     def test_invalid_regex_does_not_break(self, tmp_path):
@@ -2116,7 +2084,7 @@ class TestExtraCommandRules:
         rules = [{"name": "bad", "pattern": "[invalid(", "message": "msg"}]
         rules_file = tmp_path / "bad-regex.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("some command", rules_file)
+        result = _run_with_extra_cmd_rules("some command", rules_file)
         assert result.returncode == 0
 
     def test_non_string_pattern_does_not_break(self, tmp_path):
@@ -2124,7 +2092,7 @@ class TestExtraCommandRules:
         rules = [{"name": "bad", "pattern": 123, "message": "msg"}]
         rules_file = tmp_path / "bad-type.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("some command", rules_file)
+        result = _run_with_extra_cmd_rules("some command", rules_file)
         assert result.returncode == 0
 
     def test_multiple_extra_rules(self, tmp_path):
@@ -2144,15 +2112,15 @@ class TestExtraCommandRules:
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
         # First rule matches
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
         assert "oc delete" in result.stderr
         # Second rule matches
-        result = self._run_with_extra_rules("gh repo delete my-repo", rules_file)
+        result = _run_with_extra_cmd_rules("gh repo delete my-repo", rules_file)
         assert result.returncode == 2
         assert "gh repo delete" in result.stderr
         # Neither rule matches
-        result = self._run_with_extra_rules("oc get pods", rules_file)
+        result = _run_with_extra_cmd_rules("oc get pods", rules_file)
         assert result.returncode == 0
 
     def test_action_ask_prompts_user(self, tmp_path):
@@ -2167,7 +2135,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("oc scale deployment/app --replicas=0", rules_file)
+        result = _run_with_extra_cmd_rules("oc scale deployment/app --replicas=0", rules_file)
         assert_ask_decision(result, "confirm")
 
     def test_action_block_exits_2(self, tmp_path):
@@ -2182,7 +2150,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
 
     def test_action_default_is_block(self, tmp_path):
@@ -2196,7 +2164,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
 
     def test_action_ask_with_exception(self, tmp_path):
@@ -2213,10 +2181,10 @@ class TestExtraCommandRules:
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
         # Without exception → ask (JSON decision)
-        result = self._run_with_extra_rules("oc scale deployment/app --replicas=0", rules_file)
+        result = _run_with_extra_cmd_rules("oc scale deployment/app --replicas=0", rules_file)
         assert_ask_decision(result, "confirm")
         # With exception → allowed (exit 0, no JSON)
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_cmd_rules(
             "oc scale deployment/app --replicas=0 --dry-run", rules_file
         )
         assert result.returncode == 0
@@ -2240,13 +2208,13 @@ class TestExtraCommandRules:
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
         # Block rule → exit 2
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
         # Ask rule → JSON decision
-        result = self._run_with_extra_rules("oc scale deployment/app --replicas=0", rules_file)
+        result = _run_with_extra_cmd_rules("oc scale deployment/app --replicas=0", rules_file)
         assert_ask_decision(result, "confirm")
         # Neither → exit 0
-        result = self._run_with_extra_rules("oc get pods", rules_file)
+        result = _run_with_extra_cmd_rules("oc get pods", rules_file)
         assert result.returncode == 0
 
     def test_invalid_action_defaults_to_block(self, tmp_path):
@@ -2261,7 +2229,7 @@ class TestExtraCommandRules:
         ]
         rules_file = tmp_path / "extra-cmd-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules("oc delete pod my-pod", rules_file)
+        result = _run_with_extra_cmd_rules("oc delete pod my-pod", rules_file)
         assert result.returncode == 2
 
 
@@ -2271,20 +2239,7 @@ class TestExtraCommandRules:
 
 
 class TestExtraURLRulesAction:
-    """URL_GUARD_EXTRA_RULES action field: ask (exit 1) vs block (exit 2)."""
-
-    def _run_with_extra_rules(self, tool_name, tool_input, rules_file):
-        """Run the guard with a custom extra URL rules file."""
-        payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-        env = os.environ.copy()
-        env["URL_GUARD_EXTRA_RULES"] = str(rules_file)
-        return subprocess.run(
-            ["uv", "run", SCRIPT],
-            input=payload,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
+    """URL_GUARD_EXTRA_RULES action field: ask vs block."""
 
     def test_url_action_ask_prompts_user(self, tmp_path):
         """URL rule with action: ask outputs JSON permissionDecision."""
@@ -2298,7 +2253,7 @@ class TestExtraURLRulesAction:
         ]
         rules_file = tmp_path / "extra-url-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "WebFetch",
             {"url": "https://staging.api.example.com/data", "prompt": "test"},
             rules_file,
@@ -2317,7 +2272,7 @@ class TestExtraURLRulesAction:
         ]
         rules_file = tmp_path / "extra-url-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "WebFetch",
             {"url": "https://internal.example.com/api", "prompt": "test"},
             rules_file,
@@ -2335,7 +2290,7 @@ class TestExtraURLRulesAction:
         ]
         rules_file = tmp_path / "extra-url-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "WebFetch",
             {"url": "https://internal.example.com/api", "prompt": "test"},
             rules_file,
@@ -2354,7 +2309,7 @@ class TestExtraURLRulesAction:
         ]
         rules_file = tmp_path / "extra-url-rules.json"
         rules_file.write_text(json.dumps(rules))
-        result = self._run_with_extra_rules(
+        result = _run_with_extra_url_rules(
             "Bash",
             {"command": "curl https://staging.api.example.com/data"},
             rules_file,
@@ -2525,7 +2480,7 @@ class TestValidateMode:
         rules_file.write_text(json.dumps(rules))
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
         assert result.returncode == 2
-        assert "'block' or 'ask'" in result.stderr
+        assert "'block', 'ask', or 'allow'" in result.stderr
 
     def test_non_string_action(self, tmp_path):
         """Non-string action → exit 2."""
@@ -2560,7 +2515,7 @@ class TestValidateMode:
         assert result.returncode == 0
 
     def test_mixed_valid_and_invalid(self, tmp_path):
-        """One valid + one invalid file → exit 1, shows both."""
+        """One valid + one invalid file → exit 2, shows both."""
         url_rules = [{"name": "x", "pattern": r"example\.com", "message": "Blocked."}]
         url_file = tmp_path / "url.json"
         url_file.write_text(json.dumps(url_rules))
@@ -2587,4 +2542,1105 @@ class TestValidateMode:
         result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
         assert result.returncode == 2
         assert "invalid regex" in result.stderr
-        assert "'block' or 'ask'" in result.stderr
+        assert "'block', 'ask', or 'allow'" in result.stderr
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Unified logging: SQLite audit database
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _run_guard_with_db(tool_name, tool_input, tmp_path, *, env_extra=None, session_id=None):
+    """Run the guard with a custom SQLite database path."""
+    env = os.environ.copy()
+    env["GUARD_DB_PATH"] = str(tmp_path / "test.db")
+    env["GUARD_LOG_LEVEL"] = "all"
+    if env_extra:
+        env.update(env_extra)
+    extra = {}
+    if session_id:
+        extra["session_id"] = session_id
+    return run_guard(tool_name, tool_input, env=env, payload_extra=extra or None)
+
+
+def _read_all_events(tmp_path):
+    """Read all events from the SQLite database."""
+    db_path = tmp_path / "test.db"
+    if not db_path.exists():
+        return []
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM events ORDER BY id").fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def _read_url_events(tmp_path):
+    """Read URL guard events from the SQLite database."""
+    db_path = tmp_path / "test.db"
+    if not db_path.exists():
+        return []
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM events WHERE category='url' ORDER BY id").fetchall()
+    conn.close()
+    entries = []
+    for row in rows:
+        entry = {
+            "action": row["action"],
+            "rule": row["rule"],
+            "url": row["command"],
+            "ts": row["ts"],
+        }
+        if row["detail"]:
+            detail = json.loads(row["detail"])
+            entry["tool"] = detail.get("tool")
+            entry["phase"] = detail.get("phase")
+            entry["response_code"] = detail.get("response_code")
+            entry["auth_failed"] = detail.get("auth_failed")
+        entries.append(entry)
+    return entries
+
+
+class TestUnifiedLogging:
+    """Tests for the unified SQLite audit logging system."""
+
+    def test_db_created_on_first_event(self, tmp_path):
+        """Database file is created when the first event is logged."""
+        db_path = tmp_path / "test.db"
+        assert not db_path.exists()
+        _run_guard_with_db("Bash", {"command": "cat file.py"}, tmp_path)
+        assert db_path.exists()
+
+    def test_db_uses_wal_mode(self, tmp_path):
+        """Database uses WAL journal mode."""
+        _run_guard_with_db("Bash", {"command": "cat file.py"}, tmp_path)
+        conn = sqlite3.connect(str(tmp_path / "test.db"))
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        conn.close()
+        assert mode == "wal"
+
+    def test_event_inserted_on_block(self, tmp_path):
+        """Blocked commands produce events in the database."""
+        _run_guard_with_db("Bash", {"command": "cat file.py"}, tmp_path)
+        events = _read_all_events(tmp_path)
+        assert len(events) >= 1
+        guard_events = [e for e in events if e["category"] == "guard"]
+        assert len(guard_events) >= 1
+        assert guard_events[0]["action"] == "blocked"
+
+    def test_log_level_off_no_events(self, tmp_path):
+        """GUARD_LOG_LEVEL=off produces no events."""
+        _run_guard_with_db(
+            "Bash", {"command": "cat file.py"}, tmp_path, env_extra={"GUARD_LOG_LEVEL": "off"}
+        )
+        db_path = tmp_path / "test.db"
+        if db_path.exists():
+            events = _read_all_events(tmp_path)
+            assert len(events) == 0
+
+    def test_log_level_actions_skips_allowed(self, tmp_path):
+        """GUARD_LOG_LEVEL=actions skips allowed events."""
+        _run_guard_with_db(
+            "Bash",
+            {"command": "git status"},
+            tmp_path,
+            env_extra={"GUARD_LOG_LEVEL": "actions"},
+        )
+        events = _read_all_events(tmp_path)
+        allowed_events = [e for e in events if e["action"] == "allowed"]
+        assert len(allowed_events) == 0
+
+    def test_log_level_all_includes_allowed(self, tmp_path):
+        """GUARD_LOG_LEVEL=all includes allowed events."""
+        _run_guard_with_db("Bash", {"command": "git status"}, tmp_path)
+        events = _read_all_events(tmp_path)
+        allowed_events = [e for e in events if e["action"] == "allowed"]
+        assert len(allowed_events) >= 1
+
+    def test_session_id_stored(self, tmp_path):
+        """Session ID from payload is stored in events."""
+        _run_guard_with_db(
+            "Bash", {"command": "cat file.py"}, tmp_path, session_id="test-session-123"
+        )
+        events = _read_all_events(tmp_path)
+        guard_events = [e for e in events if e["category"] == "guard"]
+        assert len(guard_events) >= 1
+        assert guard_events[0]["session_id"] == "test-session-123"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Extra command rules: action=allow
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestExtraCommandRulesAllow:
+    """Tests for the allow action in extra command rules."""
+
+    def test_allow_bypasses_permission_system(self, tmp_path):
+        """action: allow exits 0 and outputs permissionDecision allow."""
+        rules = [
+            {
+                "name": "oc-get-allow",
+                "pattern": r"^\s*oc\s+get\b",
+                "message": "oc get is always allowed.",
+                "action": "allow",
+            }
+        ]
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = _run_with_extra_cmd_rules("oc get pods", rules_file)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook_output = output.get("hookSpecificOutput", {})
+        assert hook_output.get("permissionDecision") == "allow"
+
+    def test_allow_with_exception(self, tmp_path):
+        """Exception pattern skips the allow rule."""
+        rules = [
+            {
+                "name": "oc-get-allow",
+                "pattern": r"^\s*oc\s+get\b",
+                "message": "oc get allowed.",
+                "action": "allow",
+                "exception": "--all-namespaces",
+            }
+        ]
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(json.dumps(rules))
+        # Without exception -> allow decision
+        result = _run_with_extra_cmd_rules("oc get pods", rules_file)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "allow"
+        # With exception -> passes through (no allow decision from this rule)
+        result = _run_with_extra_cmd_rules("oc get pods --all-namespaces", rules_file)
+        assert result.returncode == 0
+
+    def test_allow_before_ask(self, tmp_path):
+        """First matching rule wins: allow before ask."""
+        rules = [
+            {
+                "name": "oc-get-allow",
+                "pattern": r"^\s*oc\s+get\b",
+                "message": "oc get allowed.",
+                "action": "allow",
+            },
+            {
+                "name": "oc-any-ask",
+                "pattern": r"^\s*oc\b",
+                "message": "Confirm oc command.",
+                "action": "ask",
+            },
+        ]
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = _run_with_extra_cmd_rules("oc get pods", rules_file)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "allow"
+
+    def test_allow_does_not_skip_dangerous_pipe_segment(self, tmp_path):
+        """Allow on first pipe segment must NOT skip checking later segments."""
+        rules = [
+            {
+                "name": "gh-read-allow",
+                "pattern": r"^\s*gh\s+pr\s+view\b",
+                "message": "Read-only gh commands are safe.",
+                "action": "allow",
+            },
+            {
+                "name": "danger-block",
+                "pattern": r"^\s*dangerous-cmd\b",
+                "message": "This command is blocked.",
+                "action": "block",
+            },
+        ]
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(json.dumps(rules))
+        # gh pr view is allowed, but dangerous-cmd in the pipe must still be blocked
+        result = _run_with_extra_cmd_rules(
+            "gh pr view 172 --json title | dangerous-cmd", rules_file
+        )
+        assert result.returncode == 2
+        assert "blocked" in result.stderr.lower() or "danger" in result.stderr.lower()
+
+    def test_allow_passes_when_pipe_segments_clean(self, tmp_path):
+        """Allow rule passes when all pipe segments are also clean."""
+        rules = [
+            {
+                "name": "gh-read-allow",
+                "pattern": r"^\s*gh\s+pr\s+view\b",
+                "message": "Read-only gh commands are safe.",
+                "action": "allow",
+            }
+        ]
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = _run_with_extra_cmd_rules("gh pr view 172 --json title | jq '.title'", rules_file)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "allow"
+
+    def test_validate_accepts_allow_action(self, tmp_path):
+        """--validate accepts action: allow as valid."""
+        rules = [
+            {
+                "name": "oc-get-allow",
+                "pattern": r"^\s*oc\s+get\b",
+                "message": "Allowed.",
+                "action": "allow",
+            }
+        ]
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(json.dumps(rules))
+        result = _run_validate(COMMAND_GUARD_EXTRA_RULES=str(rules_file))
+        assert result.returncode == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Trust database: unit tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _load_guard_module(tmp_path):
+    """Load the guard module with a fresh DB path. Returns the module."""
+    spec = importlib.util.spec_from_file_location("guard_trust", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    # Post-exec override needed because module-level _DB_PATH is computed at import time
+    mod._DB_PATH = tmp_path / "trust-test.db"
+    mod._db_conn = None
+    mod._GUARD_LOG_LEVEL = "all"
+    return mod
+
+
+class TestTrustDatabase:
+    """Unit tests for _add_trust, _check_trust, _remove_trust, _list_trust."""
+
+    def test_add_and_check_trust(self, tmp_path):
+        """Adding a trust rule makes it checkable."""
+        mod = _load_guard_module(tmp_path)
+        ok, msg = mod._add_trust("test-rule", None, "always", None)
+        assert ok is True
+        assert "Trusted" in msg
+        assert mod._check_trust("test-rule", "some command", "any-session") is True
+
+    def test_check_trust_not_found(self, tmp_path):
+        """Non-existent rule returns False."""
+        mod = _load_guard_module(tmp_path)
+        assert mod._check_trust("nonexistent", "cmd", "session") is False
+
+    def test_session_scoped_trust(self, tmp_path):
+        """Session-scoped trust only matches the correct session."""
+        mod = _load_guard_module(tmp_path)
+        mod._add_trust("test-rule", None, "session", "session-A")
+        assert mod._check_trust("test-rule", "cmd", "session-A") is True
+        assert mod._check_trust("test-rule", "cmd", "session-B") is False
+
+    def test_match_pattern_filter(self, tmp_path):
+        """Match pattern does case-insensitive substring filtering."""
+        mod = _load_guard_module(tmp_path)
+        mod._add_trust("test-rule", "deploy", "always", None)
+        assert mod._check_trust("test-rule", "oc get deploy -n prod", "s") is True
+        assert mod._check_trust("test-rule", "oc get DEPLOY -n prod", "s") is True
+        assert mod._check_trust("test-rule", "oc get pods", "s") is False
+
+    def test_remove_trust(self, tmp_path):
+        """Removing a trust rule makes it no longer checkable."""
+        mod = _load_guard_module(tmp_path)
+        mod._add_trust("test-rule", None, "always", None)
+        assert mod._check_trust("test-rule", "cmd", "s") is True
+        ok, count = mod._remove_trust("test-rule")
+        assert ok is True
+        assert count == 1
+        assert mod._check_trust("test-rule", "cmd", "s") is False
+
+    def test_remove_with_match_pattern(self, tmp_path):
+        """Remove only the trust entry with matching pattern."""
+        mod = _load_guard_module(tmp_path)
+        mod._add_trust("test-rule", "deploy", "always", None)
+        mod._add_trust("test-rule", "pod", "always", None)
+        ok, count = mod._remove_trust("test-rule", "deploy")
+        assert ok is True
+        assert count == 1
+        # "pod" pattern still exists
+        assert mod._check_trust("test-rule", "oc get pod", "s") is True
+        assert mod._check_trust("test-rule", "oc get deploy", "s") is False
+
+    def test_list_trust(self, tmp_path):
+        """Listing trust rules returns all entries."""
+        mod = _load_guard_module(tmp_path)
+        mod._add_trust("rule-a", None, "always", None)
+        mod._add_trust("rule-b", "pattern", "session", "sid")
+        rules = mod._list_trust()
+        assert len(rules) == 2
+        assert rules[0]["rule_name"] == "rule-a"
+        assert rules[1]["rule_name"] == "rule-b"
+        assert rules[1]["match_pattern"] == "pattern"
+        assert rules[1]["scope"] == "session"
+
+    def test_add_trust_replace_on_conflict(self, tmp_path):
+        """Adding the same rule+pattern+scope replaces (INSERT OR REPLACE)."""
+        mod = _load_guard_module(tmp_path)
+        mod._add_trust("test-rule", None, "always", None)
+        # Same rule, pattern, scope -> replaces
+        mod._add_trust("test-rule", None, "always", None)
+        rules = mod._list_trust()
+        assert len(rules) == 1
+
+    def test_different_scope_creates_separate_entries(self, tmp_path):
+        """Different scopes for same rule+pattern create separate entries."""
+        mod = _load_guard_module(tmp_path)
+        mod._add_trust("test-rule", None, "always", None)
+        mod._add_trust("test-rule", None, "session", "sid")
+        rules = mod._list_trust()
+        assert len(rules) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Trust integration: ask rules with trust entries
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestTrustIntegration:
+    """Integration tests: trusted ask rules auto-allow silently."""
+
+    def _setup_trust(self, tmp_path, rule_name, *, match_pattern=None, scope="always", sid=None):
+        """Insert a trust entry directly into the database.
+
+        Uses a guard invocation to initialize the DB schema, then inserts
+        the trust entry via direct SQL (avoids duplicating DDL).
+        """
+        import datetime
+
+        # Run a no-op guard invocation to create the DB with the canonical schema
+        _run_guard_with_db("Bash", {"command": "git status"}, tmp_path)
+
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO trusted_rules "
+            "(rule_name, match_pattern, scope, session_id, created_ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                rule_name,
+                match_pattern,
+                scope,
+                sid,
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def _run(self, command, tmp_path, *, session_id=None):
+        """Run the guard with trust DB."""
+        return _run_guard_with_db("Bash", {"command": command}, tmp_path, session_id=session_id)
+
+    def test_trusted_rule_allows_silently(self, tmp_path):
+        """An ask rule with a trust entry auto-allows with trusted reason."""
+        # git stash drop triggers the "stash-drop" ask rule
+        self._setup_trust(tmp_path, "stash-drop")
+        result = self._run("git stash drop", tmp_path)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook_output = output.get("hookSpecificOutput", {})
+        assert hook_output.get("permissionDecision") == "allow"
+        assert "[trusted]" in hook_output.get("permissionDecisionReason", "")
+
+    def test_block_rule_never_trusted(self, tmp_path):
+        """Block rules (exit 2) are never bypassed by trust."""
+        # "reset-hard" is a deny (block) rule, trust should not help
+        self._setup_trust(tmp_path, "reset-hard")
+        result = self._run("git reset --hard", tmp_path)
+        assert result.returncode == 2
+
+    def test_session_trust_expires(self, tmp_path):
+        """Session-scoped trust only works for the matching session."""
+        self._setup_trust(tmp_path, "stash-drop", scope="session", sid="session-A")
+        # Right session -> trusted
+        result = self._run("git stash drop", tmp_path, session_id="session-A")
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert "[trusted]" in output.get("hookSpecificOutput", {}).get(
+            "permissionDecisionReason", ""
+        )
+        # Wrong session -> ask
+        result = self._run("git stash drop", tmp_path, session_id="session-B")
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
+
+    def test_match_pattern_filters(self, tmp_path):
+        """Trust with match pattern only matches commands containing the pattern."""
+        self._setup_trust(tmp_path, "stash-drop", match_pattern="stash@{0}")
+        result = self._run("git stash drop stash@{0}", tmp_path)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert "[trusted]" in output.get("hookSpecificOutput", {}).get(
+            "permissionDecisionReason", ""
+        )
+        # Different stash ref -> not trusted, falls through to ask
+        result = self._run("git stash drop stash@{1}", tmp_path)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
+
+    def test_untrusted_rule_still_asks(self, tmp_path):
+        """Without trust, ask rules still prompt."""
+        result = self._run("git stash drop", tmp_path)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Trust CLI: --trust add/remove/list
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestTrustCommand:
+    """CLI tests for --trust add/remove/list."""
+
+    def _run_trust(self, args, tmp_path):
+        """Run the guard with --trust and given args."""
+        env = os.environ.copy()
+        env["GUARD_DB_PATH"] = str(tmp_path / "test.db")
+        return subprocess.run(
+            ["uv", "run", SCRIPT, "--trust"] + args,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_list_empty(self, tmp_path):
+        """--trust list with no rules shows 'No trusted rules'."""
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "No trusted rules" in result.stdout
+
+    def test_add_and_list(self, tmp_path):
+        """--trust add creates a rule visible in --trust list."""
+        result = self._run_trust(["add", "stash-drop", "--scope", "always"], tmp_path)
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "stash-drop" in result.stdout
+
+    def test_add_with_match(self, tmp_path):
+        """--trust add with --match stores the pattern."""
+        self._run_trust(["add", "stash-drop", "--match", "deploy"], tmp_path)
+        result = self._run_trust(["list"], tmp_path)
+        assert "deploy" in result.stdout
+
+    def test_remove(self, tmp_path):
+        """--trust remove deletes a rule."""
+        self._run_trust(["add", "stash-drop"], tmp_path)
+        result = self._run_trust(["remove", "stash-drop"], tmp_path)
+        assert result.returncode == 0
+        assert "Removed" in result.stdout
+        result = self._run_trust(["list"], tmp_path)
+        assert "No trusted rules" in result.stdout
+
+    def test_remove_with_match(self, tmp_path):
+        """--trust remove with --match only removes the matching entry."""
+        self._run_trust(["add", "stash-drop", "--match", "deploy"], tmp_path)
+        self._run_trust(["add", "stash-drop", "--match", "pod"], tmp_path)
+        self._run_trust(["remove", "stash-drop", "--match", "deploy"], tmp_path)
+        result = self._run_trust(["list"], tmp_path)
+        assert "pod" in result.stdout
+        assert "deploy" not in result.stdout
+
+    def test_add_no_rule_name(self, tmp_path):
+        """--trust add without rule name shows usage."""
+        result = self._run_trust(["add"], tmp_path)
+        assert result.returncode == 2
+        assert "Usage" in result.stderr
+
+    def test_add_unknown_rule_rejected(self, tmp_path):
+        """--trust add with unknown rule name is rejected."""
+        result = self._run_trust(["add", "nonexistent-rule"], tmp_path)
+        assert result.returncode == 2
+        assert "not a known ask-type rule" in result.stderr
+        assert "Trustable rules:" in result.stderr
+
+    def test_unknown_action(self, tmp_path):
+        """--trust with unknown action shows error."""
+        result = self._run_trust(["invalid"], tmp_path)
+        assert result.returncode == 2
+        assert "Unknown trust action" in result.stderr
+
+    def test_no_args(self, tmp_path):
+        """--trust with no args shows usage."""
+        result = self._run_trust([], tmp_path)
+        assert result.returncode == 2
+        assert "Usage" in result.stderr
+
+    def test_session_scope_without_session(self, tmp_path):
+        """--trust add --session without prior session ID fails."""
+        result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
+        assert result.returncode == 2
+        assert "No session ID" in result.stderr
+
+    def test_session_scope_with_prior_session(self, tmp_path):
+        """--trust add --session works after a guard check sets the session."""
+        # First, run a guard check to set the session ID
+        _run_guard_with_db(
+            "Bash", {"command": "git status"}, tmp_path, session_id="test-session-xyz"
+        )
+        # Now add a session trust
+        result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+
+    def test_unknown_flag_rejected_bug003(self, tmp_path):
+        """BUG-003: Unknown flags are rejected (not silently ignored)."""
+        result = self._run_trust(["add", "stash-drop", "--unknown-flag", "value"], tmp_path)
+        assert result.returncode == 2
+        assert "Usage error" in result.stderr or "unrecognized" in result.stderr.lower()
+
+    def test_remove_rejects_scope_flag_bug003(self, tmp_path):
+        """BUG-003: remove action doesn't accept --scope flag."""
+        result = self._run_trust(["remove", "stash-drop", "--scope", "session"], tmp_path)
+        assert result.returncode == 2
+        assert "unrecognized" in result.stderr.lower()
+
+    def test_session_shorthand_bug003(self, tmp_path):
+        """BUG-003: --session shorthand works as alias for --scope session."""
+        # First set session ID via guard run
+        _run_guard_with_db(
+            "Bash", {"command": "git status"}, tmp_path, session_id="test-session-xyz"
+        )
+        # Now use --session shorthand (no --scope)
+        result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify it was added with session scope
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "session" in result.stdout
+
+    def test_always_shorthand_bug003(self, tmp_path):
+        """BUG-003: --always shorthand works as alias for --scope always."""
+        result = self._run_trust(["add", "stash-drop", "--always"], tmp_path)
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify it was added with always scope
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "always" in result.stdout
+
+    def test_explicit_session_id_bug004(self, tmp_path):
+        """BUG-004: --session-id <id> allows explicit session ID specification."""
+        result = self._run_trust(
+            ["add", "stash-drop", "--scope", "session", "--session-id", "explicit-id-123"],
+            tmp_path,
+        )
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify the rule was added and is session-scoped
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "stash-drop" in result.stdout
+        assert "session" in result.stdout
+
+    def test_explicit_session_id_with_shorthand_bug004(self, tmp_path):
+        """BUG-004: --session-id works with --session shorthand."""
+        result = self._run_trust(
+            ["add", "stash-drop", "--session", "--session-id", "custom-session"],
+            tmp_path,
+        )
+        assert result.returncode == 0
+        assert "Trusted" in result.stdout
+        # Verify the rule was added
+        result = self._run_trust(["list"], tmp_path)
+        assert result.returncode == 0
+        assert "stash-drop" in result.stdout
+
+    def test_trust_hint_includes_session_id_bug004(self, tmp_path):
+        """BUG-004: Ask prompt trust hint includes --session-id when available."""
+        # Set up a guard check with a session ID and capture the ask output
+        result = _run_guard_with_db(
+            "Bash", {"command": "git stash drop"}, tmp_path, session_id="test-session-abc"
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook_output = output.get("hookSpecificOutput", {})
+        reason = hook_output.get("permissionDecisionReason", "")
+        # The reason should include the trust hint with --session-id
+        assert "--session-id test-session-abc" in reason or "--session-id" in reason
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# oc/kubectl command parsing: unit tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+_parse_oc_command = _mod._parse_oc_command
+_classify_oc_risk = _mod._classify_oc_risk
+
+
+class TestOcCommandParsing:
+    """Unit tests for _parse_oc_command and _classify_oc_risk."""
+
+    @pytest.mark.parametrize(
+        "cmd, expected_verb, expected_resource",
+        [
+            ("oc get pods", "get", "pods"),
+            ("oc get deploy -n prod", "get", "deploy"),
+            ("kubectl get pods -o json", "get", "pods"),
+            ("oc delete pod my-pod", "delete", "pod"),
+            ("oc apply -f manifest.yaml", "apply", None),
+            ("oc create deployment my-dep", "create", "deployment"),
+            ("oc scale deployment/app --replicas=3", "scale", "deployment"),
+            ("oc exec pod/my-pod -- ls", "exec", "pod"),
+            ("oc logs my-pod", "logs", "my-pod"),
+            ("oc describe pod my-pod", "describe", "pod"),
+            ("oc get pods --all-namespaces", "get", "pods"),
+            ("oc patch configmap cm-name -p '{}'", "patch", "configmap"),
+        ],
+        ids=[
+            "get-pods",
+            "get-deploy-namespace",
+            "kubectl-get",
+            "delete-pod",
+            "apply-file",
+            "create-deployment",
+            "scale-deployment",
+            "exec-pod",
+            "logs",
+            "describe",
+            "get-all-ns",
+            "patch-configmap",
+        ],
+    )
+    def test_parse_verb_and_resource(self, cmd, expected_verb, expected_resource):
+        parsed = _parse_oc_command(cmd)
+        assert parsed is not None
+        assert parsed["verb"] == expected_verb
+        assert parsed["resource_type"] == expected_resource
+
+    def test_parse_namespace(self):
+        parsed = _parse_oc_command("oc get pods -n my-namespace")
+        assert parsed["namespace"] == "my-namespace"
+
+    def test_parse_namespace_long(self):
+        parsed = _parse_oc_command("oc get pods --namespace=kube-system")
+        assert parsed["namespace"] == "kube-system"
+
+    def test_parse_filename(self):
+        parsed = _parse_oc_command("oc apply -f deployment.yaml")
+        assert parsed["filename"] == "deployment.yaml"
+
+    def test_parse_filename_long(self):
+        parsed = _parse_oc_command("oc apply --filename=deployment.yaml")
+        assert parsed["filename"] == "deployment.yaml"
+
+    def test_parse_flags(self):
+        parsed = _parse_oc_command("oc get pods -o json --show-labels")
+        assert "-o" in parsed["flags"]
+        assert "--show-labels" in parsed["flags"]
+
+    def test_parse_non_oc_returns_none(self):
+        assert _parse_oc_command("git status") is None
+        assert _parse_oc_command("") is None
+        assert _parse_oc_command("ls -la") is None
+
+    def test_parse_no_verb(self):
+        parsed = _parse_oc_command("oc")
+        assert parsed is not None
+        assert parsed["verb"] is None
+
+    @pytest.mark.parametrize(
+        "cmd, expected_risk",
+        [
+            ("oc get pods", "safe"),
+            ("oc describe pod my-pod", "safe"),
+            ("oc logs my-pod", "safe"),
+            ("oc delete pod my-pod", "high"),
+            ("oc delete namespace prod", "critical"),
+            ("oc apply -f deployment.yaml", "medium"),
+            ("oc apply -f deployment.yaml --dry-run=client", "safe"),
+            ("oc exec pod/my-pod -- ls", "high"),
+            ("oc rsh my-pod", "high"),
+            ("oc create configmap cm --from-literal=k=v", "high"),
+            ("oc patch pod my-pod -p '{}'", "medium"),
+            ("oc scale deployment/app --replicas=3", "high"),
+            ("oc create clusterrole admin", "critical"),
+            ("oc delete clusterrolebinding admin", "critical"),
+            ("oc create build my-build", "low"),
+        ],
+        ids=[
+            "get-safe",
+            "describe-safe",
+            "logs-safe",
+            "delete-pod-high",
+            "delete-ns-critical",
+            "apply-high",
+            "apply-dry-run-safe",
+            "exec-high",
+            "rsh-high",
+            "create-configmap-high",
+            "patch-pod-medium",
+            "scale-high",
+            "create-clusterrole-critical",
+            "delete-clusterrolebinding-critical",
+            "create-build-low",
+        ],
+    )
+    def test_classify_risk(self, cmd, expected_risk):
+        parsed = _parse_oc_command(cmd)
+        risk, _reason = _classify_oc_risk(parsed)
+        assert risk == expected_risk
+
+    def test_classify_none_parsed(self):
+        risk, reason = _classify_oc_risk(None)
+        assert risk == "safe"
+        assert reason is None
+
+    def test_classify_no_verb(self):
+        parsed = _parse_oc_command("oc")
+        risk, reason = _classify_oc_risk(parsed)
+        assert risk == "safe"
+
+    def test_classify_mutating_unknown_resource(self):
+        """Mutating verb with unrecognized resource is medium risk."""
+        parsed = _parse_oc_command("oc create customthing my-thing")
+        risk, _reason = _classify_oc_risk(parsed)
+        assert risk == "medium"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Manifest inspection: unit tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+_inspect_manifest = _mod._inspect_manifest
+_inspect_pipe_source = _mod._inspect_pipe_source
+
+
+class TestManifestInspection:
+    """Unit tests for _inspect_manifest and _inspect_pipe_source."""
+
+    def test_yaml_manifest(self, tmp_path):
+        """Parse a simple YAML manifest."""
+        manifest = tmp_path / "deploy.yaml"
+        manifest.write_text(
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: my-app\n"
+            "  namespace: prod\n"
+            "spec:\n"
+            "  replicas: 3\n"
+        )
+        result = _inspect_manifest(str(manifest))
+        assert len(result) == 1
+        assert result[0]["kind"] == "Deployment"
+        assert result[0]["name"] == "my-app"
+        assert result[0]["namespace"] == "prod"
+
+    def test_multi_document_yaml(self, tmp_path):
+        """Parse multi-document YAML with --- separators."""
+        manifest = tmp_path / "multi.yaml"
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "kind: Service\n"
+            "metadata:\n"
+            "  name: my-svc\n"
+            "---\n"
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: my-app\n"
+        )
+        result = _inspect_manifest(str(manifest))
+        assert len(result) == 2
+        assert result[0]["kind"] == "Service"
+        assert result[1]["kind"] == "Deployment"
+
+    def test_security_fields_detected(self, tmp_path):
+        """Security-relevant fields are collected."""
+        manifest = tmp_path / "sec.yaml"
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "kind: Pod\n"
+            "metadata:\n"
+            "  name: priv-pod\n"
+            "spec:\n"
+            "  containers:\n"
+            "  - name: main\n"
+            "    securityContext:\n"
+            "      privileged: true\n"
+            "      capabilities:\n"
+            "        add: [NET_ADMIN]\n"
+        )
+        result = _inspect_manifest(str(manifest))
+        assert len(result) == 1
+        sec = result[0]["security_fields"]
+        assert "privileged" in sec
+        assert "securityContext" in sec
+        assert "capabilities" in sec
+
+    def test_json_manifest(self, tmp_path):
+        """Parse a JSON manifest."""
+        manifest = tmp_path / "deploy.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "apiVersion": "apps/v1",
+                    "kind": "Deployment",
+                    "metadata": {"name": "my-app", "namespace": "prod"},
+                }
+            )
+        )
+        result = _inspect_manifest(str(manifest))
+        assert len(result) == 1
+        assert result[0]["kind"] == "Deployment"
+        assert result[0]["name"] == "my-app"
+
+    def test_json_list_manifest(self, tmp_path):
+        """Parse a JSON List kind manifest."""
+        manifest = tmp_path / "list.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "kind": "List",
+                    "items": [
+                        {"kind": "Service", "metadata": {"name": "svc1"}},
+                        {"kind": "Deployment", "metadata": {"name": "dep1"}},
+                    ],
+                }
+            )
+        )
+        result = _inspect_manifest(str(manifest))
+        assert len(result) == 2
+        assert result[0]["kind"] == "Service"
+        assert result[1]["kind"] == "Deployment"
+
+    def test_oversized_file(self, tmp_path):
+        """Files over 1MB return error info."""
+        manifest = tmp_path / "big.yaml"
+        manifest.write_text("x" * (1_048_577))
+        result = _inspect_manifest(str(manifest))
+        assert len(result) == 1
+        assert result[0].get("error") == "file too large"
+
+    def test_binary_file(self, tmp_path):
+        """Binary files return error info."""
+        manifest = tmp_path / "binary.yaml"
+        manifest.write_bytes(b"kind: Pod\n\x00\x01\x02binary content")
+        result = _inspect_manifest(str(manifest))
+        assert len(result) == 1
+        assert result[0].get("error") == "binary file"
+
+    def test_missing_file(self, tmp_path):
+        """Missing file returns empty list."""
+        result = _inspect_manifest(str(tmp_path / "nonexistent.yaml"))
+        assert result == []
+
+    def test_inspect_pipe_source_cat(self):
+        """Extract filename from 'cat file | ...'."""
+        assert _inspect_pipe_source("cat deploy.yaml | oc apply -f -") == "deploy.yaml"
+
+    def test_inspect_pipe_source_redirect(self):
+        """Extract filename from '< file ...'."""
+        assert _inspect_pipe_source("oc apply -f - < deploy.yaml") == "deploy.yaml"
+
+    def test_inspect_pipe_source_none(self):
+        """No pipe source returns None."""
+        assert _inspect_pipe_source("oc apply -f deploy.yaml") is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# oc/kubectl introspection: black-box integration tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _run_oc_guard(command):
+    """Run the guard for oc commands without extra command rules (tests introspection only)."""
+    env = os.environ.copy()
+    env.pop("COMMAND_GUARD_EXTRA_RULES", None)
+    env.pop("URL_GUARD_EXTRA_RULES", None)
+    return run_guard("Bash", {"command": command}, env=env)
+
+
+class TestOcIntrospection:
+    """Black-box subprocess tests: run guard with oc commands, check behavior."""
+
+    def test_oc_get_safe(self):
+        """oc get (read-only) passes through."""
+        result = _run_oc_guard("oc get pods")
+        assert result.returncode == 0
+
+    def test_oc_describe_safe(self):
+        """oc describe (read-only) passes through."""
+        result = _run_oc_guard("oc describe pod my-pod")
+        assert result.returncode == 0
+
+    def test_oc_delete_asks(self):
+        """oc delete (mutating, high risk) triggers ask."""
+        result = _run_oc_guard("oc delete pod my-pod")
+        assert_ask_decision(result, "high-risk")
+
+    def test_oc_delete_namespace_asks(self):
+        """oc delete namespace (critical risk) triggers ask."""
+        result = _run_oc_guard("oc delete namespace prod")
+        assert_ask_decision(result, "critical-risk")
+
+    def test_oc_dry_run_safe(self):
+        """oc with --dry-run passes through."""
+        result = _run_oc_guard("oc delete pod my-pod --dry-run=client")
+        assert result.returncode == 0
+
+    def test_oc_exec_asks(self):
+        """oc exec (high risk) triggers ask."""
+        result = _run_oc_guard("oc exec pod/my-pod -- ls")
+        assert_ask_decision(result, "high-risk")
+
+    def test_oc_apply_with_manifest(self):
+        """oc apply -f with manifest file inspects the manifest."""
+        manifest = Path(SCRIPT).parent / "_test_deploy.yaml"
+        try:
+            manifest.write_text(
+                "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n"
+            )
+            result = _run_oc_guard(f"oc apply -f {manifest}")
+            assert_ask_decision(result)
+        finally:
+            manifest.unlink(missing_ok=True)
+
+    def test_oc_apply_with_security_fields(self):
+        """oc apply with security fields in manifest triggers ask."""
+        manifest = Path(SCRIPT).parent / "_test_priv.yaml"
+        try:
+            manifest.write_text(
+                "apiVersion: v1\n"
+                "kind: Pod\n"
+                "metadata:\n"
+                "  name: priv-pod\n"
+                "spec:\n"
+                "  containers:\n"
+                "  - name: main\n"
+                "    securityContext:\n"
+                "      privileged: true\n"
+            )
+            result = _run_oc_guard(f"oc apply -f {manifest}")
+            assert_ask_decision(result)
+        finally:
+            manifest.unlink(missing_ok=True)
+
+    def test_oc_create_low_risk_passes(self):
+        """oc create for low-risk resources passes through."""
+        result = _run_oc_guard("oc create build my-build")
+        # low risk passes through
+        assert result.returncode == 0
+
+    def test_pipe_source_inspection(self):
+        """cat file | oc apply -f - passes through (introspection checks subcmd start)."""
+        manifest = Path(SCRIPT).parent / "_test_svc.yaml"
+        try:
+            manifest.write_text("apiVersion: v1\nkind: Service\nmetadata:\n  name: my-svc\n")
+            result = _run_oc_guard(f"cat {manifest} | oc apply -f -")
+            # cat-file rule has pipe exception for |, so cat passes;
+            # oc introspection only runs when subcmd starts with oc/kubectl,
+            # but the subcmd here starts with cat, so introspection doesn't trigger
+            assert result.returncode == 0
+        finally:
+            manifest.unlink(missing_ok=True)
+
+    def test_kubectl_also_introspected(self):
+        """kubectl commands are also introspected."""
+        result = _run_oc_guard("kubectl delete pod my-pod")
+        assert_ask_decision(result, "high-risk")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUG-006: NamedTuple rules with default action="block"
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestNamedTupleRules:
+    """Verify NamedTuple rule types have correct defaults and attributes."""
+
+    def test_command_rule_default_action(self):
+        """CommandRule defaults to action='block' when not specified."""
+        assert (
+            _mod.CommandRule(
+                name="test", pattern=re.compile("test"), exception=None, guidance="test"
+            ).action
+            == "block"
+        )
+
+    def test_url_rule_default_action(self):
+        """URLRule defaults to action='block' when not specified."""
+        assert (
+            _mod.URLRule(name="test", pattern=re.compile("test"), guidance="test").action == "block"
+        )
+
+    def test_command_rule_with_explicit_action(self):
+        """CommandRule accepts explicit action value."""
+        rule = _mod.CommandRule(
+            name="test", pattern=re.compile("test"), exception=None, guidance="test", action="ask"
+        )
+        assert rule.action == "ask"
+
+    def test_url_rule_with_explicit_action(self):
+        """URLRule accepts explicit action value."""
+        rule = _mod.URLRule(
+            name="test", pattern=re.compile("test"), guidance="test", action="allow"
+        )
+        assert rule.action == "allow"
+
+    def test_git_rule_attributes(self):
+        """GitRule has name, check_fn, message attributes."""
+        check_fn = lambda cmd: "test" in cmd  # noqa: E731
+        rule = _mod.GitRule(name="test-rule", check_fn=check_fn, message="test message")
+        assert rule.name == "test-rule"
+        assert rule.check_fn("test") is True
+        assert rule.message == "test message"
+
+    def test_command_rule_unpacking_backward_compat(self):
+        """NamedTuple unpacking still works for backward compatibility."""
+        rule = _mod.CommandRule(
+            name="test", pattern=re.compile("test"), exception=None, guidance="msg"
+        )
+        # Tuple unpacking should work
+        name, pattern, exception, guidance, action = rule
+        assert name == "test"
+        assert guidance == "msg"
+        assert action == "block"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUG-007 Issue F: _hook_output helper
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestHookOutputHelper:
+    """Verify _hook_output produces correct JSON structure."""
+
+    def test_hook_output_allow(self):
+        """_hook_output('allow', 'reason') produces correct JSON."""
+        output = _mod._hook_output("allow", "test reason")
+        parsed = json.loads(output)
+        assert "hookSpecificOutput" in parsed
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert parsed["hookSpecificOutput"]["permissionDecisionReason"] == "test reason"
+        assert parsed["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+
+    def test_hook_output_ask(self):
+        """_hook_output('ask', 'reason') produces correct JSON."""
+        output = _mod._hook_output("ask", "confirm this action")
+        parsed = json.loads(output)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "ask"
+        assert parsed["hookSpecificOutput"]["permissionDecisionReason"] == "confirm this action"
+
+    def test_hook_output_with_special_characters(self):
+        """_hook_output correctly escapes special characters in reason."""
+        reason = 'Test "quoted" reason with\nnewline'
+        output = _mod._hook_output("allow", reason)
+        parsed = json.loads(output)
+        assert parsed["hookSpecificOutput"]["permissionDecisionReason"] == reason

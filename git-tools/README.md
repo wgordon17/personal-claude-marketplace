@@ -23,10 +23,11 @@ Defense-in-depth hook scripts for use with pre-commit framework:
 - `git-hooks/pre-commit.sh` — Sets success marker after all pre-commit hooks pass
 - `git-hooks/prepare-commit-msg.sh` — Unbypassable safety validator (branch protection, conflict detection)
 
-## Dependencies
+## Requirements
 
-- **git-branchless**: `brew install git-branchless` (for git-history skill)
-- **pre-commit**: Installed via uv in Python projects (for git-hooks skills)
+- **git-branchless**: `brew install git-branchless` — Required by `/git-history` skill and `/git-tools:review-commits` command. Without it, history manipulation and commit review are non-functional.
+- **pre-commit**: `uv tool install pre-commit` — Required by `/git-hooks-install` and `/git-hooks-uninstall` skills.
+- **uv**: Required for pre-commit installation and hook management.
 
 ## Installation
 

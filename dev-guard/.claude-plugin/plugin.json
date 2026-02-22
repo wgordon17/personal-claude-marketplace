@@ -1,6 +1,6 @@
 {
   "name": "dev-guard",
-  "description": "Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard",
-  "version": "1.21.0",
+  "description": "Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard, trust management, oc/kubectl introspection",
+  "version": "1.26.0",
   "author": { "name": "wgordon17" }
 }
