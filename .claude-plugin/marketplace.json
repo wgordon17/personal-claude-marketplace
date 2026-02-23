@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "2.2.0"
+    "version": "2.3.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -104,6 +104,17 @@
       "description": "Git workflow tools: history manipulation, defense-in-depth hooks, commit review, and CONTRIBUTING.md generation",
       "category": "productivity",
       "tags": ["git", "hooks", "commits", "history"],
+      "author": {
+        "name": "wgordon17"
+      }
+    },
+    {
+      "name": "cmux-integration",
+      "version": "1.0.0",
+      "source": "./cmux-integration",
+      "description": "Bridges Claude Code hook events to CMUX terminal's CLI API: notifications, sidebar status, and activity logging",
+      "category": "productivity",
+      "tags": ["cmux", "hooks", "notifications", "terminal"],
       "author": {
         "name": "wgordon17"
       }
