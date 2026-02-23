@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "2.1.0"
+    "version": "2.2.0"
   },
   "owner": {
     "name": "wgordon17"
