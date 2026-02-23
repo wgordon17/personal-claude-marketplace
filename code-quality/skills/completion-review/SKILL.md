@@ -135,14 +135,28 @@ For non-code artifacts, apply improvements directly (fix issues found in Step 3A
 
 ### Step 5: Challenge Deferred Work
 
-Search all modified files and conversation context for deferred work. **Bias toward implementation — defer only when there is a genuine, concrete reason.**
+Search all modified files, conversation context, task lists, and subagent outputs for deferred work. **Bias toward implementation — defer only when there is a genuine, concrete reason.**
 
-**Scan for deferral signals:**
+**Scan for deferral signals across all sources:**
+
+In **modified files:**
 - `TODO`, `FIXME`, `HACK`, `XXX` comments
 - "later", "for now", "temporarily", "future work", "out of scope", "follow-up"
 - Placeholder implementations, stub functions, empty catch blocks
 - Plan steps marked as "optional" or "stretch goal"
 - Items moved to a backlog or "phase 2" without justification
+
+In **conversation context and task lists:**
+- Tasks marked as completed but with caveats ("done, except for...", "mostly complete")
+- Items the primary session or a subagent explicitly skipped or deprioritized
+- Work described as "out of scope" without the user having defined the scope boundary
+- Suggestions to "handle in a follow-up" or "address in a future PR"
+
+In **subagent outputs** (check `last_assistant_message` from any completed subagents):
+- Subagent reporting partial completion ("I implemented X but not Y")
+- Subagent deferring items that were part of its assigned task
+- Subagent flagging something as "beyond scope" that the parent task included
+- Subagent suggesting follow-up work that could have been done inline
 
 **For each deferred item, evaluate:**
 
