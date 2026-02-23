@@ -86,6 +86,29 @@ def assert_ask_decision(result, expected_reason_fragment=None, test_id=""):
         )
 
 
+def assert_allow_decision(result, expected_reason_fragment=None, test_id=""):
+    """Assert that the hook returned a permissionDecision: allow JSON response."""
+    assert result.returncode == 0, (
+        f"[{test_id}] Expected exit 0 for allow decision, got {result.returncode}. "
+        f"stderr: {result.stderr.strip()!r}"
+    )
+    try:
+        output = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(
+            f"[{test_id}] Expected JSON stdout for allow decision, got: {result.stdout.strip()!r}"
+        ) from exc
+    hook_output = output.get("hookSpecificOutput", {})
+    assert hook_output.get("permissionDecision") == "allow", (
+        f"[{test_id}] Expected permissionDecision 'allow', got: {hook_output}"
+    )
+    if expected_reason_fragment:
+        reason = hook_output.get("permissionDecisionReason", "")
+        assert expected_reason_fragment in reason, (
+            f"[{test_id}] Expected '{expected_reason_fragment}' in reason, got: {reason!r}"
+        )
+
+
 def _run_with_extra_url_rules(tool_name, tool_input, rules_file):
     """Run the guard with a custom extra URL rules file (URL_GUARD_EXTRA_RULES)."""
     env = os.environ.copy()
@@ -822,26 +845,61 @@ class TestPipeSegments:
 
 
 class TestNewlineSeparation:
+    """Newline-separated commands: blocked subcmds still block, but when all
+    subcmds pass we emit an explicit permissionDecision 'allow' so Claude
+    Code's built-in newline detector doesn't reject the command."""
+
     @pytest.mark.parametrize(
         "command, expected_exit, expected_msg",
         [
             ("git status\ncat file.py", 2, "Read tool"),
             ("git status\npwd\ngrep pattern src/", 2, "Grep tool"),
-            ("docker run \\\n  -v /app:/app \\\n  image", 0, None),
-            ("git status\npwd\nmake build", 0, None),
             ('git log\necho "done"', 2, "directly"),
             ("# comment\ncat file.py", 2, "Read tool"),
         ],
         ids=[
             "cat-on-line-2",
             "grep-on-line-3",
-            "continuation-allow",
-            "all-safe-allow",
             "echo-on-newline",
             "comment-then-cat",
         ],
     )
-    def test_newlines(self, command, expected_exit, expected_msg):
+    def test_newlines_blocked(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "docker run \\\n  -v /app:/app \\\n  image",
+            "git status\npwd\nmake build",
+        ],
+        ids=[
+            "continuation-allow",
+            "all-safe-allow",
+        ],
+    )
+    def test_newlines_explicit_allow(self, command):
+        """Multiline commands where all subcmds pass get explicit allow."""
+        result = run_bash(command)
+        assert_allow_decision(result, "Multiline command reviewed")
+
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # Backslash continuation joins lines — guard sees the full command
+            ("git push \\\n--force", 2, "FORBIDDEN"),
+            ("git reset \\\n--hard", 2, "FORBIDDEN"),
+            ("cat \\\nfile.py", 2, "Read tool"),
+        ],
+        ids=[
+            "continuation-push-force",
+            "continuation-reset-hard",
+            "continuation-cat-file",
+        ],
+    )
+    def test_backslash_continuation_still_blocked(self, command, expected_exit, expected_msg):
+        """Backslash continuation can't split dangerous commands across lines."""
         result = run_bash(command)
         assert_guard(result, expected_exit, expected_msg)
 
@@ -932,6 +990,11 @@ class TestAndonCord:
     def test_andon_cord(self, command, expected_exit, expected_msg):
         result = run_bash(command)
         assert_guard(result, expected_exit, expected_msg)
+
+    def test_andon_cord_multiline_allow(self):
+        """GUARD_BYPASS with multiline emits explicit allow decision."""
+        result = run_bash("GUARD_BYPASS=1 git status\npwd")
+        assert_allow_decision(result, "Multiline bypass command reviewed")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
