@@ -1294,7 +1294,7 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
 
 
 def _is_command_delimiter(text: str, i: int, current: list[str]) -> int | None:
-    """Command delimiter: &&, ||, ;, newline (with backslash continuation)."""
+    """Command delimiter: &&, ||, ;, newline."""
     two = text[i : i + 2]
     if two in ("&&", "||"):
         return 2
@@ -1302,13 +1302,23 @@ def _is_command_delimiter(text: str, i: int, current: list[str]) -> int | None:
     if c == ";":
         return 1
     if c == "\n":
-        if current and current[-1] == "\\":
-            current[-1] = " "
         return 1
     return None
 
 
-split_commands = functools.partial(_split_respecting_quotes, is_delimiter=_is_command_delimiter)
+def _resolve_backslash_continuations(text: str) -> str:
+    """Replace backslash + newline with a space (bash line continuation)."""
+    return text.replace("\\\n", " ")
+
+
+def split_commands(text: str) -> list[str]:
+    """Split a command string on unquoted delimiters (&&, ||, ;, newline).
+
+    Backslash continuations are resolved first so that a command spanning
+    multiple lines is treated as a single subcommand — matching bash semantics.
+    """
+    resolved = _resolve_backslash_continuations(text)
+    return _split_respecting_quotes(resolved, is_delimiter=_is_command_delimiter)
 
 
 def _guard_tmp_path(tool_name: str, tool_input: dict) -> None:
@@ -1367,9 +1377,12 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
     for rule in RULES:
         if skip_rules and rule.name in skip_rules:
             continue
-        target = normalized if rule.pattern.pattern.startswith("^") else cmd
-        m = rule.pattern.search(target)
+        m = rule.pattern.search(normalized)
         if m:
+            # Exceptions match the raw command (before env stripping) so that
+            # env prefixes can't make an exception trigger when it shouldn't.
+            # e.g. EVIL=1 uv run python → exception "^\s*uv\s+run" must NOT
+            # match because EVIL=1 is at the start of the raw command.
             if rule.exception and rule.exception.search(cmd):
                 continue
             _exit_with_decision(
@@ -2679,6 +2692,14 @@ def _handle_bash_command(command: str) -> None:
             for name, check_fn, message in GIT_DENY_RULES:
                 if check_fn(stripped):
                     _exit_with_decision(message, "block", rule_name=name, matched_segment=stripped)
+        # Explicit allow for multiline bypass commands (same rationale as below)
+        if "\n" in real_cmd:
+            _exit_with_decision(
+                "Multiline bypass command reviewed — deny rules passed.",
+                "allow",
+                rule_name="multiline-reviewed",
+                matched_segment=real_cmd[:200],
+            )
         sys.exit(0)
 
     # Check curl/wget commands for authenticated URLs (before rule checks)
@@ -2689,11 +2710,26 @@ def _handle_bash_command(command: str) -> None:
     for subcmd in subcmds:
         fetch_seen = _check_subcmd(subcmd, fetch_seen)
 
+    # Multiline commands that pass all guard checks: emit an explicit "allow"
+    # decision.  Without this, a plain exit(0) means "no opinion" and Claude
+    # Code's built-in newline detector blocks the command with:
+    #   "Command contains newlines that could separate multiple commands"
+    # By returning permissionDecision "allow" we tell Claude Code that we
+    # already reviewed every subcommand and it's safe to execute.
+    if "\n" in command:
+        _exit_with_decision(
+            "Multiline command reviewed — all subcommands passed guard checks.",
+            "allow",
+            rule_name="multiline-reviewed",
+            matched_segment=command[:200],
+        )
+
     # Advisory (non-blocking): suggest Makefile targets for multi-step commands
     if len(subcmds) > 1 and os.path.exists("Makefile"):
         print(
             "TIP: A Makefile exists in this directory. "
-            "Check if there's a `make` target before running raw commands."
+            "Check if there's a `make` target before running raw commands.",
+            file=sys.stderr,
         )
 
     # Pass-through logging when log level is "all"
