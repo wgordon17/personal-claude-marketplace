@@ -1,20 +1,22 @@
 ---
 name: completion-review
 description: |
-  Post-implementation quality gate. PROACTIVE — invoke when:
+  Post-implementation and artifact quality gate. PROACTIVE — invoke when:
   - About to claim implementation work is complete
   - After team/subagent-driven development produces code changes
   - Before committing, creating PRs, or moving to next task
   - After completing a major feature or multi-file change
   - A subagent just completed and returned modified files
-  Combines code quality analysis, dead code detection, subagent output validation,
-  and improvement application into a single review pass. Replaces former Stop and
-  SubagentStop hooks with an on-demand skill.
+  - Reviewing non-code artifacts: plan files, specs, documentation, configs
+  - User asks for a "comprehensive review" of any file or artifact
+  Combines code quality analysis, dead code detection, document quality review,
+  subagent output validation, and improvement application into a single review
+  pass. Works on both code and non-code files.
 ---
 
 # Completion Review
 
-Post-implementation quality gate. Run this as a single comprehensive review pass instead of per-turn automatic hooks.
+Quality gate for code and non-code artifacts. Run as a single comprehensive review pass.
 
 ## When to Invoke
 
@@ -24,9 +26,14 @@ Post-implementation quality gate. Run this as a single comprehensive review pass
 - Creating PRs
 - Moving to the next task after significant changes (3+ file edits)
 
+**Also invoke for non-code artifacts when:**
+- User asks for a comprehensive review of a plan, spec, or document
+- A plan file in `hack/plans/` has been written or significantly updated
+- Configuration files (YAML, JSON, TOML) have been created or changed
+- Any artifact where quality, completeness, or correctness matters
+
 **Skip when:**
 - Only research/exploration was done (no Write/Edit calls)
-- Only documentation or markdown was updated
 - Single-line fixes with no structural impact
 
 ---
@@ -35,16 +42,26 @@ Post-implementation quality gate. Run this as a single comprehensive review pass
 
 Execute these steps in order. Each step builds on the previous.
 
-### Step 1: Identify Modified Files
+### Step 1: Identify Files to Review
 
+For code changes:
 ```bash
 git diff --name-only          # Unstaged changes
 git diff --cached --name-only # Staged changes
 ```
 
-If no modified files, stop here — nothing to review.
+For non-code artifacts: use the specific file(s) the user references or that were just created/modified.
 
-### Step 2: Quality Analysis
+If no files to review, stop here.
+
+### Step 2: Classify and Route
+
+Separate files into two categories and apply the appropriate review track:
+
+- **Code files** (`.py`, `.ts`, `.js`, `.go`, `.rs`, etc.) → Steps 3-4
+- **Non-code artifacts** (`.md`, `.yaml`, `.json`, `.toml`, plan files, specs) → Step 3A
+
+### Step 3: Code Quality Analysis
 
 Invoke Skill `sc:analyze` on all modified code files. This covers:
 - Code quality and readability
@@ -52,7 +69,32 @@ Invoke Skill `sc:analyze` on all modified code files. This covers:
 - Performance concerns
 - Architecture alignment
 
-### Step 3: Apply Improvements
+### Step 3A: Artifact Quality Analysis
+
+For non-code files (plans, specs, configs, documentation), review for:
+
+| Aspect | What to Check |
+|--------|---------------|
+| **Completeness** | All sections filled in, no TBD/placeholder content, no gaps in coverage |
+| **Consistency** | Terminology used consistently, no contradictions between sections |
+| **Actionability** | Steps are concrete and unambiguous, not vague hand-waving |
+| **Accuracy** | References to code, files, APIs match what actually exists in the codebase |
+| **Structure** | Logical flow, appropriate level of detail, no redundant sections |
+| **Staleness** | No references to removed code, old APIs, or outdated decisions |
+
+For **plan files** specifically, also check:
+- Each step has clear inputs and outputs
+- Dependencies between steps are identified
+- Edge cases and failure modes are addressed
+- Scope matches the original request (no scope creep, no missing pieces)
+
+For **config files** (YAML, JSON, TOML), also check:
+- Valid syntax
+- No commented-out blocks left as dead config
+- Values match the environment/context they target
+- No secrets or credentials present
+
+### Step 4: Apply Improvements
 
 Invoke Skill `sc:improve` on all modified code. **Specifically target:**
 
@@ -68,18 +110,20 @@ Invoke Skill `sc:improve` on all modified code. **Specifically target:**
 | TODO/FIXME/HACK comments | Delete unless explicitly deferred by user |
 | Placeholder or stub implementations | Complete or delete |
 
-### Step 4: Completeness Check
+For non-code artifacts, apply improvements directly (fix issues found in Step 3A) rather than invoking `sc:improve`.
+
+### Step 5: Completeness Check
 
 Review all changes against the original user request:
 - Does the implementation fully address what was asked?
 - Are there gaps or missing edge cases?
 - Ask the user if anything is missing
 
-### Step 5: Reflection
+### Step 6: Reflection
 
 Invoke Skill `sc:reflect` for final task reflection and validation.
 
-### Step 6: Preserve Context
+### Step 7: Preserve Context
 
 If subagents produced architecture findings, codebase structure, or key decisions:
 - Save to `hack/PROJECT.md` or Serena memories
