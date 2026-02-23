@@ -1,6 +1,6 @@
 {
   "name": "cmux-integration",
   "description": "Bridges Claude Code hook events to CMUX terminal's CLI API: notifications, sidebar status, and activity logging",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": { "name": "wgordon17" }
 }

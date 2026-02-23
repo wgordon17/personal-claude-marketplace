@@ -1,18 +1,7 @@
 {
-  "description": "CMUX integration: route Claude Code hook events to cmux CLI for notifications, status, and activity logging",
+  "description": "CMUX integration: route Claude Code hook events to cmux notify for desktop notifications",
   "hooks": {
     "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/cmux-hook.py"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
       {
         "matcher": "",
         "hooks": [
@@ -48,37 +37,6 @@
     "Notification": [
       {
         "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/cmux-hook.py"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/cmux-hook.py"
-          }
-        ]
-      },
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/cmux-hook.py"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Task",
         "hooks": [
           {
             "type": "command",
