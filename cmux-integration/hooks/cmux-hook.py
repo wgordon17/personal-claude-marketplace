@@ -4,9 +4,13 @@
 # ///
 """CMUX Integration Hook -- bridges Claude Code events to cmux CLI.
 
-Routes hook events (session lifecycle, tool use, notifications, agent completion)
-to the cmux terminal multiplexer for sidebar status, desktop notifications,
-and activity logging.
+Routes hook events (session lifecycle, notifications, agent completion)
+to the cmux terminal multiplexer for desktop notifications.
+
+NOTE: Sidebar commands (set-status, clear-status, log, set-progress) are
+documented in CMUX's API reference but not yet available in the CLI as of
+v0.60.0. See https://github.com/manaflow-ai/cmux/issues/375. When shipped,
+re-enable the sidebar handlers and PreToolUse/PostToolUse hooks.
 """
 
 import contextlib
@@ -96,18 +100,14 @@ def _handle_subagent_stop(data: dict) -> None:
     msg = _first_sentence(data.get("last_assistant_message"))
     body = f"Agent {agent_type} finished: {msg}" if msg else f"Agent {agent_type} finished"
     _cmux("notify", "--title", "Agent Complete", "--body", body)
-    _cmux("log", body, "--level", "success", "--source", "claude")
 
 
 def _handle_stop(data: dict) -> None:
     if data.get("stop_hook_active") is True:
         return
     msg = _first_sentence(data.get("last_assistant_message"))
-    _cmux("set-status", "claude-session", "complete", "--icon", "✓", "--color", "green")
-    _cmux("clear-status", "claude-activity")
     body = f"Work complete: {msg}" if msg else "Work complete"
     _cmux("notify", "--title", "Claude Code", "--body", body)
-    _cmux("log", "Claude stopped", "--level", "info", "--source", "claude")
 
 
 def _handle_session_start(data: dict) -> None:
@@ -119,38 +119,10 @@ def _handle_session_start(data: dict) -> None:
             "Consider removing it — the cmux-integration plugin handles all CMUX notifications.",
             file=sys.stderr,
         )
-    _cmux("set-status", "claude-session", "active", "--icon", "●", "--color", "green")
-    _cmux("log", "Session started", "--level", "info", "--source", "claude")
 
 
 def _handle_session_end(data: dict) -> None:
-    _cmux("clear-status", "claude-session")
-    _cmux("clear-status", "claude-activity")
-    _cmux("log", "Session ended", "--level", "info", "--source", "claude")
-
-
-def _handle_pre_tool_use(data: dict) -> None:
-    tool_name = data.get("tool_name", "")
-    tool_input = data.get("tool_input", {})
-    if tool_name == "Bash":
-        cmd = tool_input.get("command", "")[:60]
-        _cmux("set-status", "claude-activity", f"Running: {cmd}", "--icon", "⏳")
-    elif tool_name == "Task":
-        desc = tool_input.get("description", "agent")[:60]
-        _cmux("set-status", "claude-activity", f"Spawning: {desc}", "--icon", "🚀")
-
-
-def _handle_post_tool_use(data: dict) -> None:
-    _cmux("clear-status", "claude-activity")
-    response = data.get("tool_response", "")
-    if isinstance(response, str):
-        summary = _first_sentence(response)
-    elif isinstance(response, dict):
-        summary = _first_sentence(str(response.get("stdout", ""))[:500])
-    else:
-        summary = ""
-    msg = f"Task completed: {summary}" if summary else "Task completed"
-    _cmux("log", msg, "--level", "success", "--source", "claude")
+    pass  # No-op until sidebar commands are available in cmux CLI
 
 
 # ── Dispatcher ──────────────────────────────────────────────────────────────
@@ -161,8 +133,6 @@ _DISPATCH: dict[str, Callable[[dict], None]] = {
     "Stop": _handle_stop,
     "SessionStart": _handle_session_start,
     "SessionEnd": _handle_session_end,
-    "PreToolUse": _handle_pre_tool_use,
-    "PostToolUse": _handle_post_tool_use,
 }
 
 
