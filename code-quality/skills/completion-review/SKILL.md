@@ -71,7 +71,9 @@ Invoke Skill `sc:analyze` on all modified code files. This covers:
 
 ### Step 3A: Artifact Quality Analysis
 
-For non-code files (plans, specs, configs, documentation), review for:
+For non-code files (plans, specs, configs, documentation), review across **all** dimensions — both document quality and substantive technical concerns.
+
+**Document quality:**
 
 | Aspect | What to Check |
 |--------|---------------|
@@ -81,6 +83,26 @@ For non-code files (plans, specs, configs, documentation), review for:
 | **Accuracy** | References to code, files, APIs match what actually exists in the codebase |
 | **Structure** | Logical flow, appropriate level of detail, no redundant sections |
 | **Staleness** | No references to removed code, old APIs, or outdated decisions |
+
+**Security review:**
+- Does the design introduce attack surface (injection points, auth gaps, privilege escalation)?
+- Are secrets, credentials, or tokens handled safely (not hardcoded, not logged)?
+- Are trust boundaries identified and enforced?
+- Does the plan account for input validation at system boundaries?
+- Config files: no secrets or credentials present, no overly permissive settings
+
+**Performance review:**
+- Are there N+1 patterns, unbounded loops, or missing pagination in the design?
+- Does the approach scale with data/user growth?
+- Are caching, batching, or lazy-loading strategies considered where relevant?
+- Config files: no settings that degrade performance (excessive logging, debug mode, missing limits)
+
+**Architecture review:**
+- Does the design fit the existing codebase patterns and conventions?
+- Are responsibilities cleanly separated (no god objects, no tangled dependencies)?
+- Are integration points with existing code identified and compatible?
+- Does the approach introduce unnecessary coupling or complexity?
+- Will this be maintainable by someone unfamiliar with the original context?
 
 For **plan files** specifically, also check:
 - Each step has clear inputs and outputs
@@ -92,7 +114,6 @@ For **config files** (YAML, JSON, TOML), also check:
 - Valid syntax
 - No commented-out blocks left as dead config
 - Values match the environment/context they target
-- No secrets or credentials present
 
 ### Step 4: Apply Improvements
 
