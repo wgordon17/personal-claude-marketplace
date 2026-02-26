@@ -4,13 +4,15 @@
 # ///
 """CMUX Integration Hook -- bridges Claude Code events to cmux CLI.
 
-Routes hook events (session lifecycle, notifications, agent completion)
-to the cmux terminal multiplexer for desktop notifications.
+Routes hook events (session lifecycle, tool use, notifications, agent completion)
+to the cmux terminal multiplexer for sidebar status, desktop notifications,
+and activity logging.
 
-NOTE: Sidebar commands (set-status, clear-status, log, set-progress) are
-documented in CMUX's API reference but not yet available in the CLI as of
-v0.60.0. See https://github.com/manaflow-ai/cmux/issues/375. When shipped,
-re-enable the sidebar handlers and PreToolUse/PostToolUse hooks.
+Notifications are deliberately limited to two cases:
+  1. Blocked — permission_prompt / elicitation_dialog (agent can't proceed)
+  2. Done — Stop event (agent finished, waiting on user)
+
+Subagent notifications are intentionally suppressed to reduce noise.
 """
 
 import contextlib
@@ -24,6 +26,9 @@ from pathlib import Path
 _CMUX_AVAILABLE: bool | None = None
 
 _MAX_INPUT = 10 * 1024 * 1024  # 10 MB
+
+# Notification types that indicate the agent is blocked and needs user action.
+_BLOCKED_NOTIFICATIONS = frozenset({"permission_prompt", "elicitation_dialog"})
 
 
 def _cmux_available() -> bool:
@@ -84,30 +89,26 @@ def _parse_hook_input() -> dict:
 
 def _handle_notification(data: dict) -> None:
     notification_type = data.get("notification_type", "")
+    if notification_type not in _BLOCKED_NOTIFICATIONS:
+        return
     message = data.get("message", "")
     title_map = {
         "permission_prompt": "Permission Needed",
-        "idle_prompt": "Claude Idle",
-        "auth_success": "Auth Success",
-        "elicitation_dialog": "Claude Code",
+        "elicitation_dialog": "Input Required",
     }
-    title = title_map.get(notification_type) or data.get("title") or "Claude Code"
+    title = title_map[notification_type]
     _cmux("notify", "--title", title, "--body", message)
-
-
-def _handle_subagent_stop(data: dict) -> None:
-    agent_type = data.get("agent_type") or "unknown"
-    msg = _first_sentence(data.get("last_assistant_message"))
-    body = f"Agent {agent_type} finished: {msg}" if msg else f"Agent {agent_type} finished"
-    _cmux("notify", "--title", "Agent Complete", "--body", body)
 
 
 def _handle_stop(data: dict) -> None:
     if data.get("stop_hook_active") is True:
         return
     msg = _first_sentence(data.get("last_assistant_message"))
+    _cmux("set-status", "claude-session", "complete", "--icon", "✓", "--color", "#22c55e")
+    _cmux("clear-status", "claude-activity")
     body = f"Work complete: {msg}" if msg else "Work complete"
     _cmux("notify", "--title", "Claude Code", "--body", body)
+    _cmux("log", "--level", "info", "--source", "claude", "--", "Claude stopped")
 
 
 def _handle_session_start(data: dict) -> None:
@@ -119,20 +120,40 @@ def _handle_session_start(data: dict) -> None:
             "Consider removing it — the cmux-integration plugin handles all CMUX notifications.",
             file=sys.stderr,
         )
+    _cmux("set-status", "claude-session", "active", "--icon", "●", "--color", "#22c55e")
+    _cmux("log", "--level", "info", "--source", "claude", "--", "Session started")
 
 
 def _handle_session_end(data: dict) -> None:
-    pass  # No-op until sidebar commands are available in cmux CLI
+    _cmux("clear-status", "claude-session")
+    _cmux("clear-status", "claude-activity")
+    _cmux("log", "--level", "info", "--source", "claude", "--", "Session ended")
+
+
+def _handle_pre_tool_use(data: dict) -> None:
+    tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "")[:60]
+        _cmux("set-status", "claude-activity", f"Running: {cmd}", "--icon", "⏳")
+    elif tool_name == "Task":
+        desc = tool_input.get("description", "agent")[:60]
+        _cmux("set-status", "claude-activity", f"Spawning: {desc}", "--icon", "🚀")
+
+
+def _handle_post_tool_use(data: dict) -> None:
+    _cmux("clear-status", "claude-activity")
 
 
 # ── Dispatcher ──────────────────────────────────────────────────────────────
 
 _DISPATCH: dict[str, Callable[[dict], None]] = {
     "Notification": _handle_notification,
-    "SubagentStop": _handle_subagent_stop,
     "Stop": _handle_stop,
     "SessionStart": _handle_session_start,
     "SessionEnd": _handle_session_end,
+    "PreToolUse": _handle_pre_tool_use,
+    "PostToolUse": _handle_post_tool_use,
 }
 
 

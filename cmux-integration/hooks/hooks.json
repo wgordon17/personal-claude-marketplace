@@ -1,7 +1,18 @@
 {
-  "description": "CMUX integration: route Claude Code hook events to cmux notify for desktop notifications",
+  "description": "CMUX integration: sidebar status, desktop notifications (blocked/done only), and activity logging",
   "hooks": {
     "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/cmux-hook.py"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
       {
         "matcher": "",
         "hooks": [
@@ -23,7 +34,7 @@
         ]
       }
     ],
-    "SubagentStop": [
+    "Notification": [
       {
         "matcher": "",
         "hooks": [
@@ -34,7 +45,18 @@
         ]
       }
     ],
-    "Notification": [
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/cmux-hook.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
       {
         "matcher": "",
         "hooks": [

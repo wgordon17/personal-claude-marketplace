@@ -202,9 +202,9 @@ class TestCmuxCall:
 
 
 class TestHandleNotification:
-    """Tests for _handle_notification() event handler."""
+    """Tests for _handle_notification() — only blocked notifications fire."""
 
-    def test_permission_prompt_type(self):
+    def test_permission_prompt_notifies(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
             data = {"notification_type": "permission_prompt", "message": "Need permission"}
             cmux_hook._handle_notification(data)
@@ -212,49 +212,37 @@ class TestHandleNotification:
                 "notify", "--title", "Permission Needed", "--body", "Need permission"
             )
 
-    def test_idle_prompt_type(self):
-        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
-            data = {"notification_type": "idle_prompt", "message": "Claude is idle"}
-            cmux_hook._handle_notification(data)
-            mock_cmux.assert_called_once_with(
-                "notify", "--title", "Claude Idle", "--body", "Claude is idle"
-            )
-
-    def test_auth_success_type(self):
-        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
-            data = {"notification_type": "auth_success", "message": "Authenticated"}
-            cmux_hook._handle_notification(data)
-            mock_cmux.assert_called_once_with(
-                "notify", "--title", "Auth Success", "--body", "Authenticated"
-            )
-
-    def test_elicitation_dialog_type(self):
+    def test_elicitation_dialog_notifies(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
             data = {"notification_type": "elicitation_dialog", "message": "Respond please"}
             cmux_hook._handle_notification(data)
             mock_cmux.assert_called_once_with(
-                "notify", "--title", "Claude Code", "--body", "Respond please"
+                "notify", "--title", "Input Required", "--body", "Respond please"
             )
 
-    def test_unknown_type_uses_title_field(self):
+    def test_idle_prompt_ignored(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
-            data = {
-                "notification_type": "unknown_type",
-                "message": "Message body",
-                "title": "Custom Title",
-            }
+            data = {"notification_type": "idle_prompt", "message": "Claude is idle"}
             cmux_hook._handle_notification(data)
-            mock_cmux.assert_called_once_with(
-                "notify", "--title", "Custom Title", "--body", "Message body"
-            )
+            mock_cmux.assert_not_called()
 
-    def test_unknown_type_fallback_to_default(self):
+    def test_auth_success_ignored(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
-            data = {"notification_type": "unknown_type", "message": "Message"}
+            data = {"notification_type": "auth_success", "message": "Authenticated"}
             cmux_hook._handle_notification(data)
-            mock_cmux.assert_called_once_with(
-                "notify", "--title", "Claude Code", "--body", "Message"
-            )
+            mock_cmux.assert_not_called()
+
+    def test_unknown_type_ignored(self):
+        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
+            data = {"notification_type": "unknown_type", "message": "Something"}
+            cmux_hook._handle_notification(data)
+            mock_cmux.assert_not_called()
+
+    def test_empty_type_ignored(self):
+        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
+            data = {"message": "No type"}
+            cmux_hook._handle_notification(data)
+            mock_cmux.assert_not_called()
 
     def test_empty_message_uses_empty_body(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
@@ -265,43 +253,8 @@ class TestHandleNotification:
             )
 
 
-class TestHandleSubagentStop:
-    """Tests for _handle_subagent_stop() event handler."""
-
-    def test_with_last_message(self):
-        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
-            data = {
-                "agent_type": "architect",
-                "last_assistant_message": "Analysis complete. Summary here.",
-            }
-            cmux_hook._handle_subagent_stop(data)
-            mock_cmux.assert_called_once_with(
-                "notify",
-                "--title",
-                "Agent Complete",
-                "--body",
-                "Agent architect finished: Analysis complete.",
-            )
-
-    def test_without_last_message(self):
-        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
-            data = {"agent_type": "security"}
-            cmux_hook._handle_subagent_stop(data)
-            mock_cmux.assert_called_once_with(
-                "notify", "--title", "Agent Complete", "--body", "Agent security finished"
-            )
-
-    def test_unknown_agent_type(self):
-        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
-            data = {}
-            cmux_hook._handle_subagent_stop(data)
-            mock_cmux.assert_called_once_with(
-                "notify", "--title", "Agent Complete", "--body", "Agent unknown finished"
-            )
-
-
 class TestHandleStop:
-    """Tests for _handle_stop() event handler."""
+    """Tests for _handle_stop() — notifies + sidebar status."""
 
     def test_stop_hook_active_returns_early(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
@@ -309,12 +262,21 @@ class TestHandleStop:
             cmux_hook._handle_stop(data)
             mock_cmux.assert_not_called()
 
-    def test_stop_notifies(self):
+    def test_stop_sets_sidebar_and_notifies(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
             data = {"stop_hook_active": False}
             cmux_hook._handle_stop(data)
-            mock_cmux.assert_called_once_with(
+            calls = mock_cmux.call_args_list
+            assert len(calls) == 4
+            assert calls[0] == mock.call(
+                "set-status", "claude-session", "complete", "--icon", "✓", "--color", "#22c55e"
+            )
+            assert calls[1] == mock.call("clear-status", "claude-activity")
+            assert calls[2] == mock.call(
                 "notify", "--title", "Claude Code", "--body", "Work complete"
+            )
+            assert calls[3] == mock.call(
+                "log", "--level", "info", "--source", "claude", "--", "Claude stopped"
             )
 
     def test_stop_with_last_message(self):
@@ -324,22 +286,30 @@ class TestHandleStop:
                 "last_assistant_message": "Task finished. Done.",
             }
             cmux_hook._handle_stop(data)
-            mock_cmux.assert_called_once_with(
+            notify_call = mock_cmux.call_args_list[2]
+            assert notify_call == mock.call(
                 "notify", "--title", "Claude Code", "--body", "Work complete: Task finished."
             )
 
 
 class TestHandleSessionStart:
-    """Tests for _handle_session_start() event handler."""
+    """Tests for _handle_session_start() — sidebar status + legacy detection."""
 
-    def test_no_legacy_hook(self):
+    def test_no_legacy_hook_sets_sidebar(self):
         with (
             mock.patch.object(cmux_hook, "_cmux") as mock_cmux,
             mock.patch("pathlib.Path.exists", return_value=False),
             mock.patch("sys.stderr"),
         ):
             cmux_hook._handle_session_start({})
-            mock_cmux.assert_not_called()
+            calls = mock_cmux.call_args_list
+            assert len(calls) == 2
+            assert calls[0] == mock.call(
+                "set-status", "claude-session", "active", "--icon", "●", "--color", "#22c55e"
+            )
+            assert calls[1] == mock.call(
+                "log", "--level", "info", "--source", "claude", "--", "Session started"
+            )
 
     def test_legacy_hook_exists_prints_warning(self):
         with (
@@ -354,12 +324,61 @@ class TestHandleSessionStart:
 
 
 class TestHandleSessionEnd:
-    """Tests for _handle_session_end() — no-op until sidebar commands ship."""
+    """Tests for _handle_session_end() — clears sidebar status."""
 
-    def test_session_end_is_noop(self):
+    def test_session_end_clears_sidebar(self):
         with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
             cmux_hook._handle_session_end({})
+            calls = mock_cmux.call_args_list
+            assert len(calls) == 3
+            assert calls[0] == mock.call("clear-status", "claude-session")
+            assert calls[1] == mock.call("clear-status", "claude-activity")
+            assert calls[2] == mock.call(
+                "log", "--level", "info", "--source", "claude", "--", "Session ended"
+            )
+
+
+class TestHandlePreToolUse:
+    """Tests for _handle_pre_tool_use() — sidebar activity status."""
+
+    def test_bash_shows_command(self):
+        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
+            data = {"tool_name": "Bash", "tool_input": {"command": "make test"}}
+            cmux_hook._handle_pre_tool_use(data)
+            mock_cmux.assert_called_once_with(
+                "set-status", "claude-activity", "Running: make test", "--icon", "⏳"
+            )
+
+    def test_bash_truncates_long_command(self):
+        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
+            long_cmd = "x" * 100
+            data = {"tool_name": "Bash", "tool_input": {"command": long_cmd}}
+            cmux_hook._handle_pre_tool_use(data)
+            call_args = mock_cmux.call_args[0]
+            assert len(call_args[2]) <= len("Running: ") + 60
+
+    def test_task_shows_description(self):
+        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
+            data = {"tool_name": "Task", "tool_input": {"description": "Run analysis"}}
+            cmux_hook._handle_pre_tool_use(data)
+            mock_cmux.assert_called_once_with(
+                "set-status", "claude-activity", "Spawning: Run analysis", "--icon", "🚀"
+            )
+
+    def test_other_tool_no_status(self):
+        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
+            data = {"tool_name": "Read", "tool_input": {"file_path": "/tmp/test"}}
+            cmux_hook._handle_pre_tool_use(data)
             mock_cmux.assert_not_called()
+
+
+class TestHandlePostToolUse:
+    """Tests for _handle_post_tool_use() — clears activity status."""
+
+    def test_clears_activity_status(self):
+        with mock.patch.object(cmux_hook, "_cmux") as mock_cmux:
+            cmux_hook._handle_post_tool_use({})
+            mock_cmux.assert_called_once_with("clear-status", "claude-activity")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -425,7 +444,50 @@ class TestMain:
             assert exc_info.value.code == 0
             assert mock_cmux.called
 
-    def test_subagent_stop_event_dispatches(self):
+    def test_session_start_event_dispatches(self):
+        with (
+            mock.patch.object(cmux_hook, "_cmux_available", return_value=True),
+            mock.patch.object(cmux_hook, "_parse_hook_input") as mock_parse,
+            mock.patch.object(cmux_hook, "_cmux") as mock_cmux,
+            mock.patch("pathlib.Path.exists", return_value=False),
+            mock.patch("sys.stderr"),
+        ):
+            mock_parse.return_value = {"hook_event_name": "SessionStart"}
+            with pytest.raises(SystemExit) as exc_info:
+                cmux_hook.main()
+            assert exc_info.value.code == 0
+            assert mock_cmux.called
+
+    def test_pre_tool_use_event_dispatches(self):
+        with (
+            mock.patch.object(cmux_hook, "_cmux_available", return_value=True),
+            mock.patch.object(cmux_hook, "_parse_hook_input") as mock_parse,
+            mock.patch.object(cmux_hook, "_cmux") as mock_cmux,
+        ):
+            mock_parse.return_value = {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "ls"},
+            }
+            with pytest.raises(SystemExit) as exc_info:
+                cmux_hook.main()
+            assert exc_info.value.code == 0
+            assert mock_cmux.called
+
+    def test_post_tool_use_event_dispatches(self):
+        with (
+            mock.patch.object(cmux_hook, "_cmux_available", return_value=True),
+            mock.patch.object(cmux_hook, "_parse_hook_input") as mock_parse,
+            mock.patch.object(cmux_hook, "_cmux") as mock_cmux,
+        ):
+            mock_parse.return_value = {"hook_event_name": "PostToolUse"}
+            with pytest.raises(SystemExit) as exc_info:
+                cmux_hook.main()
+            assert exc_info.value.code == 0
+            assert mock_cmux.called
+
+    def test_subagent_stop_no_longer_dispatches(self):
+        """SubagentStop was intentionally removed to reduce notification noise."""
         with (
             mock.patch.object(cmux_hook, "_cmux_available", return_value=True),
             mock.patch.object(cmux_hook, "_parse_hook_input") as mock_parse,
@@ -438,16 +500,4 @@ class TestMain:
             with pytest.raises(SystemExit) as exc_info:
                 cmux_hook.main()
             assert exc_info.value.code == 0
-            assert mock_cmux.called
-
-    def test_session_start_event_dispatches(self):
-        with (
-            mock.patch.object(cmux_hook, "_cmux_available", return_value=True),
-            mock.patch.object(cmux_hook, "_parse_hook_input") as mock_parse,
-            mock.patch("pathlib.Path.exists", return_value=False),
-            mock.patch("sys.stderr"),
-        ):
-            mock_parse.return_value = {"hook_event_name": "SessionStart"}
-            with pytest.raises(SystemExit) as exc_info:
-                cmux_hook.main()
-            assert exc_info.value.code == 0
+            mock_cmux.assert_not_called()
