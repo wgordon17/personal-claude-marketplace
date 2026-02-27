@@ -1,362 +1,320 @@
 ---
 name: swarm
-description: Force full TeamCreate agent swarm for any implementation task. Launches Architect, Implementer, Tester, Security, QA, Docs, and Verifier agents in a coordinated pipeline. Use when asked to "swarm this", "full team", "agent team", or when you want maximum rigor on an implementation.
-allowed-tools: [Task, Read, Write, Edit, Grep, Glob, Bash, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet]
+description: >-
+  Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
+  of 13+ specialized agents (Architect, Implementer, Reviewer, Test-Writer,
+  Test-Runner, Security, QA, Code-Reviewer, Performance, Fixer, Code-Simplifier,
+  Docs, Verifier) with structured JSON communication, audit trails, and early
+  user checkpoint. Use when asked to "swarm this", "full team", "agent team",
+  "full send", or when maximum rigor is needed on an implementation task.
+  Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
+allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion, TeamCreate, TeamDelete,
+  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, Skill]
 ---
 
 # /swarm — Full Agent Swarm Implementation
 
-You MUST implement the given task using a **full TeamCreate agent swarm**. No shortcuts. No doing it yourself. Every phase gets a dedicated agent.
+You MUST use the full TeamCreate swarm described here. Do not take shortcuts. Do not implement
+the task yourself. Your role is orchestration — you route work, relay context, make judgment
+calls, and coordinate the pipeline. Every phase of implementation goes through the appropriate
+specialist agent.
+
+---
 
 ## Team Composition
 
-| Step | Role | Agent Type | Model | Can Edit | Purpose |
-|------|------|-----------|-------|----------|---------|
-| 1 | Architect | `code-quality:architect` | sonnet | No | Analyze codebase, design solution, produce plan |
-| 2 | Implementer | `general-purpose` | sonnet | **Yes** | Write code following architect's plan |
-| 3 | Tester | `general-purpose` | haiku | **Yes** | Write tests for the implementation |
-| 4a | Security | `code-quality:security` | sonnet | No | OWASP review, secrets, auth gaps |
-| 4b | QA | `code-quality:qa` | sonnet | No | Code quality, patterns, conventions |
-| 5 | Fixer | `general-purpose` | sonnet | **Yes** | Fix issues from Security + QA reviews |
-| 6 | Docs | `general-purpose` | haiku | **Yes** | Update repo docs + project memory |
-| 7 | Verifier | `dev-essentials:test-runner` | haiku | No | Run tests + lint, final validation |
+### Core Agents (always spawned)
 
-## Orchestration Flow
+| Phase | Role | Agent Type | Model | Can Edit | Purpose |
+|-------|------|------------|-------|----------|---------|
+| 0 | Lead (YOU) | — | — | No | Orchestration, routing, judgment |
+| 2 | Architect | code-quality:architect | opus | No | Design, decomposition, risk analysis |
+| 3 | Implementer | general-purpose | sonnet | Yes | Write code, component by component |
+| 3 | Reviewer | general-purpose | opus | No | Review each component before testing |
+| 3 | Test-Writer | general-purpose | sonnet | Yes | Write tests for reviewed components |
+| 3 | Test-Runner | dev-essentials:test-runner | haiku | No | Execute tests, report results |
+| 4 | Security | code-quality:security | opus | No | OWASP, auth, secrets, injection review |
+| 4 | QA | code-quality:qa | opus | No | Patterns, conventions, code quality |
+| 4 | Code-Reviewer | superpowers:code-reviewer | sonnet | No | Broader review, complements QA |
+| 4 | Performance | code-quality:performance | sonnet | No | Bottlenecks, N+1, memory issues |
+| 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
+| 5 | Code-Simplifier | code-simplifier:code-simplifier | sonnet | Yes | Post-fix simplification pass |
+| 6 | Docs | general-purpose | haiku | Yes | Update repo docs and hack/ memory |
+| 7 | Verifier | dev-essentials:test-runner | haiku | No | Final test suite + lint verification |
 
-```
-User: "/swarm <task>"
-    |
-    v
-[Lead: YOU] ── TeamCreate("swarm-{timestamp}")
-    |
-    |── TaskCreate: Phase 1 (Architect)
-    |── TaskCreate: Phase 2 (Implement) ── blockedBy: Phase 1
-    |── TaskCreate: Phase 3 (Tests) ── blockedBy: Phase 2
-    |── TaskCreate: Phase 4a (Security) ── blockedBy: Phase 3
-    |── TaskCreate: Phase 4b (QA) ── blockedBy: Phase 3
-    |── TaskCreate: Phase 5 (Fix) ── blockedBy: Phase 4a, 4b
-    |── TaskCreate: Phase 6 (Docs) ── blockedBy: Phase 5
-    |── TaskCreate: Phase 7 (Verify) ── blockedBy: Phase 6
-    |
-    v
-[Spawn teammates sequentially as tasks unblock]
-```
+### Optional Domain Reviewers (auto-detected in Phase 1)
 
-## Execution Protocol
+| Role | Agent Type | Model | Trigger |
+|------|------------|-------|---------|
+| UI Reviewer | general-purpose | sonnet | Glob finds `*.tsx`, `*.vue`, `*.svelte`, `*.css` files |
+| API Reviewer | general-purpose | sonnet | Grep finds router/endpoint/handler patterns |
+| DB Reviewer | general-purpose | sonnet | Grep finds migration/schema/model/query patterns |
+| Plugin Validator | general-purpose | sonnet | `Glob("**/.claude-plugin/plugin.json")` finds results |
+| Skill Reviewer | general-purpose | sonnet | `Glob("**/skills/*/SKILL.md")` finds results |
 
-### Step 0: Create Team and Tasks
+---
 
-```
-TeamCreate(team_name="swarm-impl", description="Full swarm: <task summary>")
-```
+## Workflow Phases
 
-Create ALL tasks upfront with dependencies. Use `addBlockedBy` so tasks auto-unblock:
+### Phase 0: Pre-flight & Setup
 
-```
-TaskCreate: "Phase 1: Architect designs solution for <task>"
-TaskCreate: "Phase 2: Implement solution" → blockedBy: [Phase 1]
-TaskCreate: "Phase 3: Write tests" → blockedBy: [Phase 2]
-TaskCreate: "Phase 4a: Security review" → blockedBy: [Phase 3]
-TaskCreate: "Phase 4b: QA review" → blockedBy: [Phase 3]
-TaskCreate: "Phase 5: Fix review findings" → blockedBy: [Phase 4a, Phase 4b]
-TaskCreate: "Phase 6: Update documentation" → blockedBy: [Phase 5]
-TaskCreate: "Phase 7: Run tests and verify" → blockedBy: [Phase 6]
-```
+Run the project test suite and record the baseline (pass/fail count, any pre-existing failures).
+Check git status — ensure the working tree is clean, identify the current branch, and determine
+whether a feature branch is needed. If not already on a feature branch, create one from
+`upstream/main` or `origin/main`. Create the audit trail directory at `hack/swarm/YYYY-MM-DD/`
+(append sequence number if the directory already exists). Call `TeamCreate("swarm-impl")`, then
+create all tasks upfront with `addBlockedBy` dependencies so the full task graph is visible from
+the start.
 
-### Step 1: Architect
+### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
-Spawn with `code-quality:architect` (read-only — designs, does not code):
+Use `AskUserQuestion` to resolve any ambiguity in the task before spawning agents. Auto-detect
+optional reviewers: Glob for UI files (`*.tsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`); Grep
+for API patterns (`router`, `endpoint`, `handler`, `@api`); Grep for DB patterns (`migration`,
+`schema`, `model`, `query`). Present the proposed swarm composition to the user — list all core
+agents plus any auto-detected optional reviewers. Allow the user to add or remove reviewers.
+After the user approves the composition and confirms they understand the scope, proceed without
+further checkpoints. The user can walk away after Phase 1 approval.
 
-```
-Task(
-  subagent_type="code-quality:architect",
-  team_name="swarm-impl",
-  name="architect",
-  prompt="""You are the Architect for this implementation.
+### Phase 2: Architect (opus)
 
-TASK: <full task description>
+Spawn the architect agent with the full task description, codebase context, and audit trail path.
+The architect analyzes the codebase, designs the solution, and decomposes the work into
+independent components suitable for pipelined implementation. Output is a structured JSON plan
+written to `hack/swarm/YYYY-MM-DD/architect-plan.json` (see schema in `references/communication-schema.md`).
+The architect also identifies global risks, data model changes, and API surface changes. After
+receiving the plan, the Lead reviews it for quality and feasibility. Raise any unclear or risky
+items to the user via `AskUserQuestion` before proceeding to Phase 3. The Architect remains
+active through Phase 3 to answer clarification questions from the Implementer and Reviewer.
 
-Your job:
-1. Analyze the codebase to understand the current architecture
-2. Identify which files need to be created or modified
-3. Design the solution approach with specific file paths and function signatures
-4. Identify potential risks and edge cases
-5. Produce a detailed implementation plan
+### Phase 3: Pipelined Implementation
 
-OUTPUT FORMAT — send this to the lead via SendMessage:
-- Goal (1 sentence)
-- Files to create/modify (exact paths)
-- Implementation steps (ordered, specific)
-- Data model changes (if any)
-- API/interface changes (if any)
-- Edge cases to handle
-- Testing strategy recommendations
-"""
-)
-```
+Spawn the full pipeline team at once: Implementer, Reviewer, Test-Writer, and Test-Runner. The
+Lead routes work through the pipeline using structured JSON messages — components flow from
+Implementer to Reviewer to Test-Writer to Test-Runner, with the Implementer moving to the next
+component while earlier ones advance through the pipeline. Each handoff uses a typed JSON message
+(see `references/communication-schema.md`). If the Reviewer rejects a component, the Lead routes
+specific feedback back to the Implementer for targeted fixes and re-submission (max 3 iterations
+per component). If Test-Runner reports failures, the Lead routes the failure details back to the
+Implementer for fixes, then re-submits through Review and Test stages. See
+`references/pipeline-model.md` for full parallelism rules, backpressure handling, and fallback
+to sequential mode.
 
-**When architect completes:** Read the plan, mark Phase 1 complete, assign Phase 2.
+### Phase 4: Parallel Review
 
-### Step 2: Implementer
+Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, and any
+auto-detected optional reviewers (UI, API, DB). All reviewers operate in read-only mode on the
+completed implementation. Each writes structured JSON findings to `hack/swarm/YYYY-MM-DD/reviews/`
+(see schema in `references/communication-schema.md`). The Lead collects all findings, filters by
+severity, and synthesizes into a consolidated view. Critical and high-severity findings go to the
+Fixer in Phase 5. Low/informational findings are recorded in the audit trail but not acted on.
 
-Spawn with `general-purpose` (has Write/Edit/Bash):
+### Phase 5: Fix & Simplify (conditional)
 
-```
-Task(
-  subagent_type="general-purpose",
-  team_name="swarm-impl",
-  name="implementer",
-  prompt="""You are the Implementer. Write code following this plan from the Architect:
+Skip this phase if ALL reviews report clean (zero critical or high findings). Otherwise, spawn
+the Fixer with the consolidated critical/high findings and full context of the implementation.
+The Fixer addresses each finding with targeted, minimal changes. After the Fixer completes, spawn
+the Code-Simplifier for a post-fix pass — it looks for over-engineering, unnecessary abstractions,
+and complexity introduced during implementation or fixing. Skip Code-Simplifier if the Fixer made
+no changes. Re-run affected tests after any fixes to confirm nothing regressed.
 
-<paste architect's plan here>
+### Phase 6: Docs & Memory
 
-RULES:
-- Follow the plan precisely — the Architect already designed the solution
-- Write clean, idiomatic code matching existing project patterns
-- Do NOT write tests — the Tester handles that
-- Do NOT add documentation — the Docs agent handles that
-- Commit nothing — leave changes unstaged
+Spawn the Docs agent with the full list of modified files and a summary of what changed. The Docs
+agent updates affected README files, API documentation, and inline docs. It also detects the
+project's memory directory (`hack/`, `.local/`, `scratch/`, `.dev/`) and updates PROJECT.md with
+architectural decisions, TODO.md with completed and new items, and SESSIONS.md with a 3-5 bullet
+summary. Only update documentation that is actually affected by the implementation.
 
-When done, send a summary of all files created/modified to the lead.
-"""
-)
-```
+### Phase 7: Verification & Completion
 
-### Step 3: Tester
+Spawn the Verifier to run the full test suite and lint. Compare results against the Phase 0
+baseline — all tests that passed before must still pass; net-new failures are a blocker. After
+Verifier reports green, invoke the `completion-review` skill to check deferred architect items
+and any findings that were noted but not fixed. Invoke `sc:reflect` to validate completeness
+against the original task. If there are 20 or more modified files, run an `/unfuck` sweep to
+catch any issues introduced at scale. Generate the final audit report at
+`hack/swarm/YYYY-MM-DD/swarm-report.md`. Announce completion with a summary and report path.
+Shut down all teammates via `SendMessage(type="shutdown_request")` and call `TeamDelete`.
 
-Spawn with `general-purpose` model haiku (has Write/Edit):
+---
 
-```
-Task(
-  subagent_type="general-purpose",
-  model="haiku",
-  team_name="swarm-impl",
-  name="tester",
-  prompt="""You are the Tester. Write tests for the implementation just completed.
-
-ARCHITECT'S PLAN:
-<paste plan>
-
-FILES MODIFIED BY IMPLEMENTER:
-<paste implementer's summary>
-
-RULES:
-- Write tests that verify the implementation works correctly
-- Cover happy path, edge cases, and error conditions
-- Follow existing test patterns in the project (check conftest.py, existing tests)
-- Use the project's test framework and fixtures
-- Run the tests to verify they pass: use `uv run pytest <test_file> -v`
-- If tests fail, fix them until they pass
-
-When done, send test results and file paths to the lead.
-"""
-)
-```
-
-### Step 4a + 4b: Security and QA (parallel)
-
-Spawn BOTH simultaneously — they're read-only reviewers:
+## Orchestration Flow Diagram
 
 ```
-Task(
-  subagent_type="code-quality:security",
-  team_name="swarm-impl",
-  name="security",
-  prompt="""You are the Security Reviewer. Review the implementation for vulnerabilities.
-
-FILES TO REVIEW:
-<paste all modified/created files>
-
-CHECK FOR:
-- Injection vulnerabilities (SQL, command, XSS)
-- Authentication/authorization gaps
-- Hardcoded secrets or credentials
-- Input validation at system boundaries
-- Sensitive data exposure (logging, error messages)
-- OWASP Top 10 issues
-
-OUTPUT: Send findings to lead. For each issue:
-- Severity (critical/high/medium/low)
-- File and line
-- Description
-- Recommended fix
-
-If no issues found, say "No security issues found."
-"""
-)
-
-Task(
-  subagent_type="code-quality:qa",
-  team_name="swarm-impl",
-  name="qa",
-  prompt="""You are the QA Reviewer. Review the implementation for code quality.
-
-FILES TO REVIEW:
-<paste all modified/created files>
-
-CHECK FOR:
-- Code follows project conventions and patterns
-- No unnecessary complexity or over-engineering
-- Error handling is appropriate
-- No dead code or unused imports
-- Functions are focused (single responsibility)
-- Variable/function names are clear
-- No duplicated logic
-- Edge cases handled
-
-OUTPUT: Send findings to lead. For each issue:
-- Severity (must-fix/should-fix/nitpick)
-- File and line
-- Description
-- Recommended fix
-
-If no issues found, say "Code quality looks good."
-"""
-)
+User request
+     |
+     v
+Phase 0: Pre-flight
+  +-- Baseline tests
+  +-- Git branch check/create
+  +-- Create hack/swarm/YYYY-MM-DD/
+  +-- TeamCreate + TaskGraph
+     |
+     v
+Phase 1: Clarify & Checkpoint <-- AskUserQuestion (ambiguity resolution)
+  +-- Auto-detect optional reviewers
+  +-- Present composition to user
+  +-- User approves -------------- FIRE-AND-FORGET AFTER THIS
+     |
+     v
+Phase 2: Architect (opus)
+  +-- Analyzes codebase
+  +-- Decomposes into components
+  +-- Writes architect-plan.json
+  +-- Lead reviews --> AskUserQuestion if risky
+     |
+     v
+Phase 3: Pipelined Implementation
+  +-------------------------------------------------------+
+  | Implementer --> Reviewer --> Test-Writer --> Test-Runner |
+  |      |              |              |               |    |
+  | (next comp)   (feedback)     (next comp)    (results)   |
+  |      <-------- reject ----------------------------------  |
+  +-------------------------------------------------------+
+     |
+     v
+Phase 4: Parallel Review
+  +-- Security (opus) --------------------------------+
+  +-- QA (opus) --------------------------------------|
+  +-- Code-Reviewer (sonnet) -------------------------+--> Lead synthesizes findings
+  +-- Performance (sonnet) ---------------------------|
+  +-- Optional: UI / API / DB reviewers -------------+
+     |
+     v
+Phase 5: Fix & Simplify (if findings exist)
+  +-- Fixer: critical/high findings
+  +-- Code-Simplifier: post-fix pass
+     |
+     v
+Phase 6: Docs & Memory
+  +-- Docs agent: repo docs + hack/ updates
+     |
+     v
+Phase 7: Verification & Completion
+  +-- Verifier: full test + lint
+  +-- completion-review skill
+  +-- sc:reflect
+  +-- /unfuck sweep (if 20+ files changed)
+  +-- Generate swarm-report.md
+  +-- Shutdown all teammates, TeamDelete
 ```
 
-### Step 5: Fixer (conditional)
-
-**Only spawn if Security or QA found issues.** Skip if both report clean.
-
-```
-Task(
-  subagent_type="general-purpose",
-  team_name="swarm-impl",
-  name="fixer",
-  prompt="""You are the Fixer. Address these review findings:
-
-SECURITY FINDINGS:
-<paste security findings>
-
-QA FINDINGS:
-<paste QA findings>
-
-RULES:
-- Fix all critical and high severity issues
-- Fix must-fix QA items
-- Use judgment on medium/should-fix items
-- Do NOT refactor beyond what's needed for fixes
-- Run affected tests after fixes: `uv run pytest <test_file> -v`
-
-When done, send summary of fixes to the lead.
-"""
-)
-```
-
-**If no issues found:** Mark Phase 5 complete immediately, proceed to Docs.
-
-### Step 6: Docs
-
-Spawn with `general-purpose` (needs Write/Edit for updating files):
-
-```
-Task(
-  subagent_type="general-purpose",
-  model="haiku",
-  team_name="swarm-impl",
-  name="docs",
-  prompt="""You are the Documentation Updater. Update all documentation to reflect the implementation.
-
-WHAT WAS IMPLEMENTED:
-<paste architect's plan + implementer's summary>
-
-YOUR TASKS:
-1. **Repo documentation** — Update any README, CONTRIBUTING.md, or doc files that reference
-   the changed functionality. Only update if the changes affect documented behavior.
-
-2. **Project memory** — Update these files if they exist:
-   - hack/PROJECT.md — Add architectural decisions, new patterns, gotchas discovered
-   - hack/TODO.md — Check off completed items, add new follow-up items if any
-   - hack/SESSIONS.md — Add 3-5 bullet summary of this implementation
-
-3. **Inline documentation** — Only add comments where the logic is non-obvious.
-   Do NOT add docstrings to every function. Match existing project style.
-
-RULES:
-- Do NOT create new doc files unless the project has none
-- Match existing documentation tone and density
-- Keep hack/ updates concise (SESSIONS.md is a log, not documentation)
-- Only update docs that are actually affected by the changes
-"""
-)
-```
-
-### Step 7: Verifier
-
-Spawn with `dev-essentials:test-runner` (runs tests, does not edit):
-
-```
-Task(
-  subagent_type="dev-essentials:test-runner",
-  team_name="swarm-impl",
-  name="verifier",
-  prompt="""You are the Verifier. Run the full test suite and lint checks.
-
-Run these commands SEQUENTIALLY (not in parallel):
-
-1. Lint check (if project has one):
-   - Python: `uv run ruff check .`
-   - Or check Makefile for lint target: `make lint`
-
-2. Full test suite:
-   - `uv run pytest --tb=short -v`
-   - Or check Makefile: `make test`
-
-3. If the project has a combined target: `make all`
-
-REPORT:
-- Total tests: X passed, Y failed
-- Lint: clean / N issues
-- Any failures: specific test paths and error messages
-
-If everything passes, report SUCCESS.
-If failures exist, report FAILURE with details so the lead can spawn a fixer.
-"""
-)
-```
-
-### Step 8: Handle Failures
-
-If Verifier reports failures:
-1. Spawn another `general-purpose` agent as "fixer-2" with the failure details
-2. After fixes, spawn Verifier again
-3. Loop until green or 3 iterations max
-
-### Step 9: Shutdown
-
-When all phases complete successfully:
-1. Send shutdown requests to all teammates
-2. Report final summary to user
-3. Delete the team: `TeamDelete()`
+---
 
 ## Lead Responsibilities
 
-As the lead, YOU:
-- **Create all tasks upfront** with proper `addBlockedBy` dependencies
-- **Spawn teammates** as their blocked tasks become unblocked
-- **Relay context** between agents — paste the architect's plan into the implementer's prompt, paste file lists into reviewer prompts, etc.
-- **Make judgment calls** — if Security says "medium" and QA says "nitpick," skip the fixer
-- **Handle the feedback loop** — route review findings back to fixer, re-verify after fixes
-- **Never do the work yourself** — every phase gets an agent, even if it seems simple
+You are the orchestrator. You coordinate the pipeline, relay context, and make judgment calls.
+You never implement, review, or test code yourself.
 
-## Context Bundle Template
+### Task Graph
 
-Every agent prompt should include this context header:
+Create all tasks upfront in Phase 0 using TaskCreate with addBlockedBy dependencies. The full
+task graph should be visible from the start so the user can see the plan at any time.
 
+### Context Relay
+
+Every agent receives a structured context bundle when spawned (see schema in
+`references/communication-schema.md`). The bundle includes: project name, task description,
+current branch, key files from the architect's plan, audit trail path (`run_dir`), and the
+tool guard reminder. Never spawn an agent without the full context bundle.
+
+### Judgment Calls
+
+You decide: which review findings are critical vs. noise; when to escalate to the user; whether
+a component rejection warrants escalation vs. another iteration; whether a test failure is a
+blocker or a pre-existing issue. Lean toward escalation for ambiguous decisions.
+
+### Pipeline Coordination
+
+Monitor the pipeline flow actively. Route handoff messages between agents using the schemas in
+`references/communication-schema.md`. Detect backpressure (see `references/pipeline-model.md`)
+and throttle the Implementer when the Reviewer queue is full.
+
+### Feedback Loops
+
+When the Reviewer rejects a component: collect the specific issues JSON, add context about what
+the Implementer tried, and route the combined feedback back to the Implementer. Track iteration
+counts per component — after 3 failed iterations, stash the component, create a blocked task,
+and report to the user with full context.
+
+### Audit Trail
+
+Write all structured outputs to `hack/swarm/YYYY-MM-DD/`:
+- `architect-plan.json` — architect's component plan
+- `reviews/security.json`, `reviews/qa.json`, etc. — review findings
+- `swarm-report.md` — final completion report
+
+### Escalation Protocol
+
+Escalate to the user (via `AskUserQuestion`) when: the architect flags a decision point; a
+reviewer finds a security issue that might require business logic changes; a component fails
+3 iterations; the Verifier fails after 2 fix attempts; a git conflict blocks the pipeline.
+After escalation, wait for user input before proceeding.
+
+### Context Bundle Template
+
+```json
+{
+  "project": "<project name>",
+  "task": "<original task description>",
+  "branch": "<current git branch>",
+  "run_dir": "hack/swarm/YYYY-MM-DD",
+  "key_files": ["<files identified by architect as central>"],
+  "tool_guard": "Use Read/Write/Edit/Glob/Grep/Bash for file ops. No raw shell for file reads."
+}
 ```
-PROJECT: <project name from repo>
-TASK: <the user's original request>
-CURRENT BRANCH: <git branch>
-KEY FILES: <relevant files from architect's analysis>
-```
+
+---
 
 ## When to Skip Phases
 
-- **Skip Fixer (Phase 5)** if Security and QA both report clean
-- **Skip Docs (Phase 6)** if the change is purely internal with no user-facing behavior
-- **Never skip** Architect, Implementer, Tester, or Verifier
+| Phase / Agent | Skip When |
+|---------------|-----------|
+| Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
+| Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
+| Phase 5: Fix | ALL review agents report zero critical or high findings |
+| Code-Simplifier | Fixer made no changes in Phase 5 |
+| Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
+| /unfuck sweep | Fewer than 20 files modified and not an architectural change |
+| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 7 (Verifier) |
+
+---
 
 ## Cost Awareness
 
-This workflow spawns 7-8 agents. Each gets its own context window. This is intentionally expensive — it's the "full send" option for maximum rigor. For simple changes, use regular subagents instead.
+This skill spawns 13+ agents, each with their own context and API calls. Use it only when the
+task genuinely warrants maximum rigor. For smaller tasks, use a targeted subagent or invoke
+specific skills directly.
+
+### When to Use /swarm vs. Alternatives
+
+| Scenario | Recommended Approach |
+|----------|----------------------|
+| Simple bug fix (1-3 files) | Single targeted subagent |
+| Medium feature (4-10 files) | 2-3 targeted subagents in sequence |
+| Large feature or architectural change | `/swarm` |
+| Codebase-wide cleanup | `/unfuck` |
+| Security audit only | `code-quality:security` directly |
+| Test coverage only | `dev-essentials:test-runner` directly |
+
+### Model Cost Hierarchy
+
+| Model | Cost | Used For |
+|-------|------|---------|
+| opus | Expensive | Architect, Reviewer, Security, QA — judgment-heavy tasks |
+| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier |
+| haiku | Cheap | Test-Runner, Docs, Verifier — execution-only tasks |
+
+Minimize opus usage to the phases where nuanced judgment is genuinely required.
+
+---
+
+## References
+
+| File | Content |
+|------|---------|
+| `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, TeamCreate config, and git workflow |
+| `references/agent-prompts.md` | Full prompt templates for all 13+ agents — role, boundaries, communication protocol, output format |
+| `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
+| `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
