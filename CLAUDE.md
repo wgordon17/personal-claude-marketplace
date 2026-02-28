@@ -8,14 +8,15 @@ make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
 make test         # uv run pytest (runs dev-guard/tests/)
 ```
 
-Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests only exist in `dev-guard/tests/`.
+Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-guard/tests/` and `cmux-integration/tests/`.
 
 ## Critical Rules
 
 - **Never edit `~/.claude/plugins/` or `~/.claude/plugins/cache/`** — those directories contain installed/cached versions. Always edit this source repository. Changes in `~/.claude/plugins/` will be lost on update and are never committed.
-- **Always bump versions in both files** when modifying a plugin:
+- **Always bump plugin versions in both files** when modifying a plugin:
   - `<plugin>/.claude-plugin/plugin.json`
-  - `.claude-plugin/marketplace.json`
+  - `.claude-plugin/marketplace.json` (the plugin's entry, NOT `metadata.version`)
+- The marketplace `metadata.version` is **informational only** — it does not control update detection. Bump it only for structural marketplace changes (adding/removing plugins, schema changes), not for individual plugin version bumps.
 
 ## Change Workflow
 

@@ -27,6 +27,13 @@ This repo has a tool-selection-guard hook. You MUST use native tools:
 - Bash is ONLY for: git, uv/uvx, npx, make, and system commands
 If a Bash command is blocked, switch to the equivalent native tool.
 
+IMPORTANT — Turn Counting:
+Track your turn count — the number of tool-call rounds you have completed since spawning.
+Include "turn_count": N in EVERY structured JSON message you send to the lead. The lead uses
+this to monitor context health and may request a handoff if your count gets high. If you
+receive a HandoffRequest message, respond immediately with a HandoffSummary (see
+communication-schema.md) — your context is about to be rotated to a fresh agent.
+
 === END CONTEXT ===
 ```
 
@@ -239,7 +246,8 @@ SendMessage(type="message", recipient="team-lead",
     "summary": "Implemented OAuth2 authorization code flow with PKCE. "
                "Added token storage in session. Error handling via existing OAuthError class.",
     "notes_for_reviewer": "The token refresh logic in lines 78-95 is slightly non-obvious — "
-                          "it handles concurrent refresh requests via a lock."
+                          "it handles concurrent refresh requests via a lock.",
+    "turn_count": 12
   }',
   summary="Implementer: component-1 complete")
 ```
@@ -319,7 +327,8 @@ SendMessage(type="message", recipient="team-lead",
     "component_id": "component-1",
     "verdict": "approved",
     "issues": [],
-    "notes": "Token refresh lock could be replaced with a simpler Redis TTL, but it works correctly"
+    "notes": "Token refresh lock could be replaced with a simpler Redis TTL, but it works correctly",
+    "turn_count": 8
   }',
   summary="Reviewer: component-1 approved")
 ```
@@ -340,7 +349,8 @@ SendMessage(type="message", recipient="team-lead",
         "description": "Token expiry not handled — if the access token is expired, refresh() silently returns None",
         "suggested_fix": "Check if token.expires_at < now() before returning, raise TokenExpiredError if so"
       }
-    ]
+    ],
+    "turn_count": 10
   }',
   summary="Reviewer: component-1 rejected — 1 critical")
 ```
@@ -434,7 +444,8 @@ SendMessage(type="message", recipient="team-lead",
     "test_files": ["tests/unit/test_oauth.py"],
     "test_count": 8,
     "summary": "8 tests covering: auth code exchange, PKCE validation, token refresh, "
-               "expired token handling, invalid client error, concurrent refresh lock"
+               "expired token handling, invalid client error, concurrent refresh lock",
+    "turn_count": 15
   }',
   summary="Test-Writer: component-1 — 8 tests written")
 ```
@@ -503,7 +514,8 @@ SendMessage(type="message", recipient="team-lead",
     "passed": 8,
     "failed": 0,
     "errors": 0,
-    "failures": []
+    "failures": [],
+    "turn_count": 4
   }',
   summary="Test-Runner: component-1 — 8/8 passed")
 ```
@@ -524,7 +536,8 @@ SendMessage(type="message", recipient="team-lead",
         "test": "tests/unit/test_oauth.py::test_token_refresh",
         "error": "KeyError: 'refresh_token'\n  File src/auth/oauth.py:95 in refresh()\n    return token[\"refresh_token\"]"
       }
-    ]
+    ],
+    "turn_count": 5
   }',
   summary="Test-Runner: component-1 — 2 failures")
 ```
@@ -1502,7 +1515,9 @@ Review all `skills/*/SKILL.md` files modified during this swarm:
 ### Content Quality
 - All phases are documented with clear actions
 - Agent spawn calls include all required parameters (name, subagent_type, model, team_name, prompt)
+- All agent prompts include the turn counting instruction in the context bundle
 - JSON schemas referenced in the skill exist in `references/communication-schema.md`
+- All structured message examples include `turn_count` field
 - File paths and references are consistent (e.g., `architect-plan.json` not `plan.json`)
 - No placeholder text left unfilled (e.g., `<TODO>`, `[fill this in]`)
 
