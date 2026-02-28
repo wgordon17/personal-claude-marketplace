@@ -221,12 +221,60 @@ Review all changes against the original user request:
 
 Invoke Skill `sc:reflect` for final task reflection and validation.
 
-### Step 9: Preserve Context
+### Step 9: Project Memory and Plan Review
 
-If subagents produced architecture findings, codebase structure, or key decisions:
-- Save to `hack/PROJECT.md` or Serena memories
-- Compaction can happen at any time and will erase unsaved context
-- Update `hack/TODO.md` with completed/new tasks if applicable
+Review all project memory surfaces for accuracy and completeness. Memory that drifts from reality is worse than no memory — it actively misleads future sessions.
+
+**9a. hack/ files (TODO.md, PROJECT.md, SESSIONS.md, NEXT.md)**
+
+Check if `hack/` (or `.local/`, `scratch/`, `.dev/`) exists. If it does:
+
+| File | Review Action |
+|------|---------------|
+| **TODO.md** | Mark completed tasks as `[x]` with today's date. Remove tasks made irrelevant by the current work. Add new tasks discovered during implementation. Verify remaining open tasks are still valid. |
+| **PROJECT.md** | Add decisions, architecture changes, or gotchas discovered during this work. Remove stale entries that no longer apply. Verify documented patterns still match the codebase. |
+| **SESSIONS.md** | Append a 3-5 bullet summary of this session's work. Keep it factual — what changed, why, what's next. No paragraphs. |
+| **NEXT.md** | Update the pointer to reflect the actual next task, not what it was before this session. |
+
+**9b. Plan evaluation (hack/plans/)**
+
+Check for plan files in `hack/plans/` (or `~/.claude/plans/`). For each plan found:
+
+| Status | Action |
+|--------|--------|
+| **Fully implemented** | Delete the plan file. The code is the source of truth now, not the plan. |
+| **Partially implemented** | Update the plan: mark completed steps, note deviations from the original design, flag remaining work. |
+| **Not started** | Leave as-is unless the current work invalidates it — then update or delete. |
+| **Superseded** | Delete. If a newer plan or a different approach was taken, the old plan is misleading. |
+
+**9c. claude-mem observations**
+
+Search claude-mem for observations related to the current work:
+```
+search(query="<topic of current work>", project="<current project>")
+```
+
+For results that reference the current task or files touched:
+- If an observation is now stale or contradicted by the work just completed, note it for the user (claude-mem observations cannot be deleted by agents, only flagged).
+- If the current work produced insights worth preserving cross-session (architectural decisions, non-obvious gotchas, debugging breakthroughs), save a new observation via `save_memory`.
+- Do NOT save routine implementation details — only things a future session would genuinely benefit from knowing.
+
+**9d. Serena memories**
+
+List Serena memories for the active project:
+```
+list_memories(topic="")
+```
+
+For memories that relate to the current work:
+- Read and verify they are still accurate after the changes made.
+- Update any that are now stale using `edit_memory`.
+- If the work produced project knowledge worth persisting (conventions, architecture patterns, integration points), write a new memory.
+- Delete memories that are now irrelevant (requires user confirmation).
+
+**9e. Auto-memory files**
+
+Check for auto-memory at the project memory path (typically `~/.claude/projects/<project>/memory/`). If `MEMORY.md` or topic files exist and relate to the current work, verify their accuracy and update as needed using Edit/Write tools.
 
 ---
 
@@ -259,6 +307,12 @@ AI slop removed: [count]
 Quality: [PASS | NEEDS WORK]
 Completeness: [COMPLETE | GAPS FOUND]
 
+Memory sync:
+  hack/ files updated: [yes/no/N/A]
+  Plans evaluated: [count completed/removed, count updated, count unchanged]
+  Stale memories flagged: [count]
+  New memories saved: [count]
+
 [If gaps: list what's missing]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -271,4 +325,4 @@ Completeness: [COMPLETE | GAPS FOUND]
 |-------|-------------|
 | `verification-before-completion` | Complementary — verifies command output; this verifies code quality |
 | `requesting-code-review` | Use AFTER this skill for external review; this is self-review |
-| `session-end` | Run AFTER this skill for hack/ updates; this handles code quality |
+| `session-end` | Overlaps on hack/ updates — if running both, session-end can skip what Step 9 already handled. This skill reviews memory for *accuracy*; session-end does a final *save*. |
