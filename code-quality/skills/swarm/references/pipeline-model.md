@@ -252,6 +252,25 @@ The Architect persists through Phase 3 to answer clarification questions from th
 and Reviewer. Implementers and Reviewers may message the Architect directly for clarifications
 without routing through the Lead.
 
+### Context Health & Agent Recycling
+
+Pipeline agents are persistent and accumulate context across all components. The Lead monitors
+`turn_count` from each agent's structured messages and proactively recycles agents approaching
+context limits. See `orchestration-playbook.md` Step 3.6 for the full protocol.
+
+Key points for the pipeline:
+- Recycling only happens **between components**, never mid-implementation or mid-review
+- The replacement agent receives the original prompt plus a `HandoffSummary` from the outgoing
+  agent, ensuring continuity of design decisions and file state awareness
+- The pipeline flow is paused during recycling — no new `ComponentAssignment` is sent until the
+  replacement agent is ready
+- Recycling is transparent to other pipeline agents: the Reviewer doesn't know (or care) if it's
+  reviewing work from the original or replacement Implementer
+
+If an agent goes silent (idle without completion message), the Lead follows the silent failure
+detection protocol: status check → recovery spawn → escalate if repeated. See
+`communication-schema.md` for the detection heuristic and recovery schemas.
+
 ### Phase 3 Completion
 
 The pipeline team is done when all components have passed the Test-Runner and all `TestResult`

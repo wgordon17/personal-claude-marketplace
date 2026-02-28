@@ -61,10 +61,11 @@ specialist agent.
 Run the project test suite and record the baseline (pass/fail count, any pre-existing failures).
 Check git status — ensure the working tree is clean, identify the current branch, and determine
 whether a feature branch is needed. If not already on a feature branch, create one from
-`upstream/main` or `origin/main`. Create the audit trail directory at `hack/swarm/YYYY-MM-DD/`
-(append sequence number if the directory already exists). Call `TeamCreate("swarm-impl")`, then
-create all tasks upfront with `addBlockedBy` dependencies so the full task graph is visible from
-the start.
+`upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
+depends on it for reliable agent operation (warn the user if disabled). Create the audit trail
+directory at `hack/swarm/YYYY-MM-DD/` (append sequence number if the directory already exists).
+Call `TeamCreate("swarm-impl")`, then create all tasks upfront with `addBlockedBy` dependencies
+so the full task graph is visible from the start.
 
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
@@ -230,6 +231,14 @@ blocker or a pre-existing issue. Lean toward escalation for ambiguous decisions.
 Monitor the pipeline flow actively. Route handoff messages between agents using the schemas in
 `references/communication-schema.md`. Detect backpressure (see `references/pipeline-model.md`)
 and throttle the Implementer when the Reviewer queue is full.
+
+### Context Health Monitoring
+
+Track `turn_count` from every agent's structured messages. Proactively recycle agents approaching
+context limits (default: 25 turns for Implementer/Test-Writer, 30 for Reviewer) using the
+HandoffRequest → HandoffSummary → shutdown → respawn protocol (see `references/orchestration-playbook.md`
+Step 3.6). Detect silent failures: if a teammate goes idle without completing their task or sending
+a final message, initiate recovery (status check → replacement spawn → escalate if repeated).
 
 ### Feedback Loops
 

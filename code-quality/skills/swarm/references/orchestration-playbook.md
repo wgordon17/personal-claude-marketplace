@@ -145,7 +145,37 @@ Read any plan file whose name or content matches the task description. If found:
 
 If no plan file exists, the architect will decompose the work in Phase 2.
 
-### Step 0.5: Create Audit Trail Directory
+### Step 0.5: Context Health Pre-flight
+
+Verify that auto-compaction is enabled. The /swarm skill depends on Claude Code's automatic
+context compaction to manage agent context windows during long-running phases. Without it,
+agents can silently die when their context fills.
+
+Check for compaction configuration:
+```bash
+# Check if auto-compaction is explicitly disabled
+echo $CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
+```
+
+**If `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` is set to `0`:** Warn the user:
+```
+AskUserQuestion(questions=[{
+  "question": "Auto-compaction appears to be disabled (CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=0). "
+              "The /swarm skill requires auto-compaction for reliable agent operation. "
+              "Without it, agents may silently fail when their context fills. How should we proceed?",
+  "header": "Auto-Compaction Disabled",
+  "options": [
+    {"label": "Proceed anyway", "description": "Risk agent failures — Lead will attempt recovery"},
+    {"label": "Abort", "description": "Stop — re-enable auto-compaction first"}
+  ],
+  "multiSelect": false
+}])
+```
+
+If user proceeds, set an internal flag `compaction_risk = true`. This flag triggers more
+aggressive recycling thresholds in Phase 3 (recycle at 15 turns instead of 25).
+
+### Step 0.6: Create Audit Trail Directory
 
 ```
 {run_dir} = hack/swarm/YYYY-MM-DD
@@ -173,7 +203,7 @@ so the directory is not empty:
 }
 ```
 
-### Step 0.6: TeamCreate
+### Step 0.7: TeamCreate
 
 ```
 TeamCreate(team_name="swarm-impl", description="Full swarm: <task summary>")
@@ -181,7 +211,7 @@ TeamCreate(team_name="swarm-impl", description="Full swarm: <task summary>")
 
 Call this BEFORE creating any tasks — tasks require an active team.
 
-### Step 0.7: Create All Tasks Upfront
+### Step 0.8: Create All Tasks Upfront
 
 Create all tasks in a single batch before spawning any agents. Wire dependencies with `addBlockedBy`.
 
@@ -530,7 +560,102 @@ When test-runner sends a `TestResult` with `status: "failed"`:
 
 Same stash-and-block procedure as rejection protocol. Create blocked task with test output included.
 
-### Step 3.6: Sequential Fallback
+### Step 3.6: Context Health Monitoring & Agent Recycling
+
+The Lead tracks `turn_count` from every structured message received from pipeline agents. This
+is the primary defense against context exhaustion in long-running Phase 3 pipelines.
+
+#### Turn Count Tracking
+
+Maintain a tracking table (in-memory, not written to file):
+
+```
+| Agent | Last turn_count | Components Done | Status |
+|-------|-----------------|-----------------|--------|
+| implementer | 18 | 2 of 5 | active |
+| reviewer | 12 | 1 of 5 | active |
+| test-writer | 8 | 1 of 5 | active |
+| test-runner | 5 | 1 of 5 | active |
+```
+
+Update this table every time you receive a structured message containing `turn_count`.
+
+#### Recycling Thresholds
+
+| Agent | Recycle At | Rationale |
+|-------|-----------|-----------|
+| Implementer | 25 turns | Heaviest context user — reads files, writes code, handles revisions |
+| Test-Writer | 25 turns | Similar to implementer — reads code, writes test files |
+| Reviewer | 30 turns | Read-only but accumulates review context; opus has deeper reasoning |
+| Test-Runner | N/A | Short-lived per execution; rarely exceeds 10 turns |
+
+These thresholds are guidelines. If an agent is mid-component (actively working on a revision or
+fix cycle), wait until the current component cycle completes before recycling.
+
+**If `compaction_risk = true`** (set in Step 0.5 when auto-compaction is disabled), use aggressive
+thresholds: Implementer and Test-Writer at 15 turns, Reviewer at 20 turns.
+
+#### Recycling Protocol
+
+When an agent's `turn_count` exceeds its threshold AND it is between components (not mid-work):
+
+1. **Send HandoffRequest:**
+   ```
+   SendMessage(type="message", recipient="implementer",
+     content='{"schema": "HandoffRequest", "reason": "context_rotation",
+       "message": "You are approaching context limits. Please send a HandoffSummary with your current state so a replacement agent can continue your work."}',
+     summary="Requesting handoff for context rotation")
+   ```
+
+2. **Receive HandoffSummary** from the agent (structured JSON per communication-schema.md).
+
+3. **Shutdown the agent:**
+   ```
+   SendMessage(type="shutdown_request", recipient="implementer",
+     content="Context rotation complete. Thank you.")
+   ```
+
+4. **Spawn replacement** with the same name, type, model, and mode:
+   ```
+   Task(name="implementer", subagent_type="general-purpose", model="sonnet",
+        team_name="swarm-impl", mode="bypassPermissions",
+        prompt="[context bundle]\n\n[implementer prompt from agent-prompts.md]\n\n"
+               "=== CONTINUATION FROM PREVIOUS AGENT ===\n"
+               "<HandoffSummary JSON>\n"
+               "=== END CONTINUATION ===\n\n"
+               "Continue from where the previous agent left off. Do NOT redo completed work.")
+   ```
+
+5. **Log the recycling** to `{run_dir}/errors.log`:
+   ```
+   [RECYCLE] implementer at turn 27 after completing 3/5 components. Replacement spawned.
+   ```
+
+#### Silent Failure Detection
+
+If a teammate goes idle WITHOUT having sent a completion message (ComponentHandoff, ReviewResult,
+TestHandoff, or TestResult) AND their task is not marked complete:
+
+1. **Send a status check** (the agent may just be processing a large file read):
+   ```
+   SendMessage(type="message", recipient="implementer",
+     content="Status check — are you still working? If blocked, send current state.",
+     summary="Status check for silent agent")
+   ```
+2. **If no response after the status check (agent remains idle):**
+   - Run `git diff --name-only` to see what files were changed
+   - Check `{run_dir}/` for any partial output files
+   - Spawn a replacement agent with recovery context (see communication-schema.md)
+   - Log the failure to `{run_dir}/errors.log`
+
+3. **If the same agent role fails silently twice:**
+   Escalate to the user via AskUserQuestion:
+   ```
+   "The {role} agent has failed twice. Possible causes: context exhaustion, tool errors,
+    or task complexity. Options: spawn a fresh agent, simplify the remaining work, or abort."
+   ```
+
+### Step 3.7: Sequential Fallback
 
 In sequential mode, process one component at a time. The pipeline agents are the same; only
 the timing differs. The lead assigns Component A, waits for the full
@@ -539,7 +664,7 @@ implement → review → write-tests → run-tests cycle, commits, then assigns 
 The lead does NOT need to be idle between cycles — it can process TestResult from Component A
 and prepare the ComponentAssignment for Component B simultaneously.
 
-### Step 3.7: Commit Strategy
+### Step 3.8: Commit Strategy
 
 After each component completes successfully (TestResult passes):
 
@@ -981,7 +1106,8 @@ TeamDelete()
 | Reviewer rejects component | Implementer revises and resubmits | 3 per component |
 | Tests fail in pipeline | Implementer fixes; full pipeline re-entry | 2 per component |
 | Tests fail in verification | Spawn targeted fixer; re-verify | 2 total |
-| Agent failure (crash/no output) | Check output file; if missing, note gap, continue | 0 (no retry) |
+| Agent silent failure (idle, no output) | Status check → recovery spawn → escalate if repeated | 1 recovery attempt |
+| Agent context exhaustion | Recycle via HandoffRequest/HandoffSummary protocol | Automatic via turn tracking |
 | Git conflict during commit | Stash, log as blocked, continue | 0 |
 | All components blocked | Report to user; deliver partial implementation | N/A |
 | Baseline tests failing at start | User decides: proceed or abort | N/A (user decides) |

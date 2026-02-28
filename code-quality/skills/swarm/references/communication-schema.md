@@ -114,7 +114,8 @@ Sent when the Implementer completes a component and is ready for review.
   "files_modified": ["string — paths of files that were changed"],
   "summary": "string — what was implemented and any notable decisions",
   "notes": "string | null — anything the Reviewer should pay attention to",
-  "attempt": "integer — 1 for first attempt, 2+ for retries after rejection"
+  "attempt": "integer — 1 for first attempt, 2+ for retries after rejection",
+  "turn_count": "integer — agent's tool-call round count since spawn (for context health tracking)"
 }
 ```
 
@@ -136,7 +137,8 @@ Sent when the Reviewer completes assessment of a component.
       "suggested_fix": "string — specific, actionable fix recommendation"
     }
   ],
-  "notes": "string | null — overall assessment or context for the Implementer"
+  "notes": "string | null — overall assessment or context for the Implementer",
+  "turn_count": "integer — agent's tool-call round count since spawn (for context health tracking)"
 }
 ```
 
@@ -170,7 +172,8 @@ Sent when the Test-Writer completes writing tests for a component.
   "test_files": ["string — paths to the test files written"],
   "test_count": "integer — number of test cases written",
   "coverage": "string — brief description of what scenarios are covered",
-  "run_command": "string — exact command to execute the tests"
+  "run_command": "string — exact command to execute the tests",
+  "turn_count": "integer — agent's tool-call round count since spawn (for context health tracking)"
 }
 ```
 
@@ -206,7 +209,8 @@ Sent after the Test-Runner executes tests for a component.
       "error": "string — failure message or exception"
     }
   ],
-  "run_command": "string — the command that was executed"
+  "run_command": "string — the command that was executed",
+  "turn_count": "integer — agent's tool-call round count since spawn (for context health tracking)"
 }
 ```
 
@@ -342,6 +346,125 @@ The Verifier sends this to the Lead after Phase 7 test execution. Written to
   }
 }
 ```
+
+---
+
+## Agent Health Monitoring Schemas
+
+These schemas support context health tracking and agent recycling during long-running phases.
+
+### Turn Count Field (embedded in all message types)
+
+Every agent includes a `turn_count` field in its structured SendMessage payloads. For agents that
+send multiple messages during their lifecycle (Implementer, Test-Writer, Reviewer in Phase 3),
+each message includes the agent's current turn count so the Lead can track context accumulation.
+
+The `turn_count` is the agent's self-reported count of tool-call rounds it has completed since
+spawning. Agents increment this by counting each time they make a tool call and receive a result.
+
+This field is added to all existing message types — `ComponentHandoff`, `ReviewResult`,
+`TestHandoff`, and `TestResult` all include it:
+
+```json
+{
+  "turn_count": "integer — agent's self-reported tool-call round count since spawn"
+}
+```
+
+Example: a `ComponentHandoff` with turn tracking:
+```json
+{
+  "schema": "ComponentHandoff",
+  "component_id": "auth-middleware",
+  "status": "complete",
+  "files_created": ["src/auth/middleware.py"],
+  "files_modified": ["src/auth/__init__.py"],
+  "summary": "Implemented auth middleware with JWT validation",
+  "notes": null,
+  "attempt": 1,
+  "turn_count": 18
+}
+```
+
+### HandoffRequest (Lead → Agent)
+
+Sent by the Lead when an agent's `turn_count` exceeds the recycling threshold (default: 25
+turns). The agent must respond with a `HandoffSummary` before being shut down.
+
+```json
+{
+  "schema": "HandoffRequest",
+  "reason": "context_rotation",
+  "message": "You are approaching context limits. Please send a HandoffSummary with your current state so a replacement agent can continue your work."
+}
+```
+
+### HandoffSummary (Agent → Lead)
+
+Sent by an agent in response to a `HandoffRequest`. Contains everything a replacement agent
+needs to continue the work.
+
+```json
+{
+  "schema": "HandoffSummary",
+  "agent_role": "string — implementer | reviewer | test-writer",
+  "turn_count": "integer — final turn count",
+  "completed_work": [
+    {
+      "component_id": "string",
+      "status": "complete | in_progress",
+      "files_modified": ["string"],
+      "summary": "string — what was done"
+    }
+  ],
+  "in_progress": {
+    "component_id": "string | null — component currently being worked on",
+    "status": "string — what has been done so far on this component",
+    "files_modified": ["string — files already changed"],
+    "remaining": "string — what still needs to be done",
+    "key_decisions": ["string — important design decisions that must be preserved"]
+  },
+  "context_notes": "string — any important state, gotchas, or reasoning the replacement needs"
+}
+```
+
+**Lead protocol:** After receiving a `HandoffSummary`, the Lead shuts down the agent and spawns
+a replacement with the original prompt plus the `HandoffSummary` content appended as a
+`=== CONTINUATION FROM PREVIOUS AGENT ===` block.
+
+---
+
+## Agent Silent Failure Detection
+
+When a teammate goes idle without having sent a completion message or marked their task as done,
+the Lead treats this as a silent failure. The Lead does NOT receive the specific error message
+(e.g., "Context limit reached") — it only sees silence.
+
+### Detection Heuristic
+
+The Lead maintains a simple tracking table:
+
+```
+| Agent | Last Message Type | Task Complete? | Action |
+|-------|-------------------|----------------|--------|
+| implementer | ComponentHandoff | No | Monitor |
+| reviewer | ReviewResult | No | Monitor |
+| test-writer | TestHandoff | Yes | OK |
+```
+
+**Silent failure = teammate idle + task not completed + no final message.**
+
+### Recovery Protocol
+
+1. **Check what the agent accomplished:** Run `git diff` and `Glob` to see file changes
+2. **Check the audit trail:** Read any files the agent wrote to `{run_dir}/`
+3. **Spawn replacement agent** with:
+   - Original agent prompt
+   - `=== RECOVERY FROM FAILED AGENT ===` block describing what was accomplished
+   - File state summary from `git diff`
+4. **Log the failure** to `{run_dir}/errors.log`
+
+If the same agent role fails twice, escalate to the user via `AskUserQuestion`.
 
 ---
 
