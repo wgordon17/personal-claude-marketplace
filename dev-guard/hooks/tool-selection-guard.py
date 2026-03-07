@@ -309,8 +309,12 @@ _DB_PATH = Path(
     os.environ.get("GUARD_DB_PATH", str(Path.home() / ".claude" / "logs" / "dev-guard.db"))
 )
 _GUARD_LOG_LEVEL = os.environ.get("GUARD_LOG_LEVEL", "actions").lower()
+_UNIFIED_CONFIG_PATH = Path(
+    os.environ.get("DEV_GUARD_CONFIG", str(Path.home() / ".claude" / "dev-guard.json"))
+)
 _session_id = None
 _tool_use_id = None
+_TRUSTED_GIT_DIRS: list[Path] = []
 
 _SECRET_PATTERN = re.compile(
     r"((?:password|token|secret|key|auth|bearer|api[_-]?key|credentials)"
@@ -591,6 +595,42 @@ def _load_extra_rules(
             raw = json.load(f)
         return [entry_to_rule(entry) for entry in raw]
     except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError, re.error):
+        return []  # Fail silently — bad config should not break the guard
+
+
+def _load_unified_config() -> dict:
+    """Load unified dev-guard config from ~/.claude/dev-guard.json (or DEV_GUARD_CONFIG).
+
+    Returns a dict with optional keys: command_rules, url_rules, git_trusted_dirs.
+    Returns empty dict if file doesn't exist or is malformed.
+    """
+    try:
+        with open(_UNIFIED_CONFIG_PATH) as f:
+            raw = json.load(f)
+        if not isinstance(raw, dict):
+            return {}
+        return raw
+    except (OSError, json.JSONDecodeError):
+        return {}  # Missing file or bad JSON — fail silently
+
+
+def _load_trusted_dirs() -> list[Path]:
+    """Load trusted git directories from GIT_TRUSTED_DIRS env var.
+
+    The env var should point to a JSON file containing an array of
+    directory paths. Paths support ~ expansion and are resolved to absolute.
+    Returns an empty list on missing env var or any parse error.
+    """
+    dirs_path = os.environ.get("GIT_TRUSTED_DIRS")
+    if not dirs_path:
+        return []
+    try:
+        with open(dirs_path) as f:
+            raw = json.load(f)
+        if not isinstance(raw, list):
+            return []
+        return [Path(d).expanduser().resolve() for d in raw if isinstance(d, str) and d.strip()]
+    except (OSError, json.JSONDecodeError, TypeError):
         return []  # Fail silently — bad config should not break the guard
 
 
@@ -1049,6 +1089,32 @@ def _parse_branch_creation(cmd: str) -> tuple[str, str | None] | None:
     return None
 
 
+def _check_cd_git_compound(subcmds: list[str], full_command: str) -> None:
+    """Block compound commands that cd into a directory then run git.
+
+    Prevents bare repository attacks where a malicious .git directory
+    could execute hooks when git commands are run from that directory.
+    Redirects to ``git -C <path>`` which is safer and avoids directory changes.
+    """
+    cd_path: str | None = None
+    for subcmd in subcmds:
+        stripped = strip_shell_keyword(subcmd).strip()
+        cd_match = re.match(r"^\s*cd\s+(.+)", stripped)
+        if cd_match:
+            cd_path = cd_match.group(1).strip().strip("\"'")
+            continue
+        if cd_path and re.match(r"^\s*git\s+", strip_env_prefix(stripped)):
+            git_match = re.match(r"^\s*(?:\S+=\S*\s+)*git\s+(.*)", stripped)
+            git_args = git_match.group(1).strip() if git_match else ""
+            _exit_with_decision(
+                f"Compound `cd && git` is blocked — bare repository attack risk.\n"
+                f"Use `git -C` instead: `git -C {cd_path} {git_args}`",
+                "block",
+                rule_name="cd-git-compound",
+                matched_segment=full_command[:200],
+            )
+
+
 _PROTECTED_BRANCHES = frozenset({"main", "master"})
 
 # Safe start points for branch creation (no stacking risk)
@@ -1234,11 +1300,73 @@ GIT_ASK_RULES: list[GitRule] = [
 ]
 
 
+_GIT_C_PATTERN = re.compile(r"\bgit\s+-C\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))")
+
+
+def _extract_git_c_path(cmd: str) -> str | None:
+    """Extract the directory path from ``git -C <path>`` if present."""
+    m = _GIT_C_PATTERN.search(cmd)
+    if m:
+        return m.group(1) or m.group(2) or m.group(3)
+    return None
+
+
+def _is_git_informational(cmd: str) -> bool:
+    """Check if a git command is informational (safe regardless of directory)."""
+    if "--help" in cmd or "--version" in cmd:
+        return True
+    stripped = strip_env_prefix(cmd)
+    return bool(
+        re.match(r"^\s*git\s+help\b", stripped)
+        or re.match(r"^\s*git\s+config\s+--global\b", stripped)
+    )
+
+
+def _check_git_trusted_dirs(cmd: str) -> None:
+    """Block git commands operating outside configured trusted directories.
+
+    Opt-in: does nothing if GIT_TRUSTED_DIRS is not configured.
+    For ``git -C <path>``, resolves the path and checks containment.
+    For plain ``git`` commands, checks the current working directory.
+    """
+    if not _TRUSTED_GIT_DIRS:
+        return
+
+    if not re.search(r"(^|\s)git\s", cmd):
+        return
+
+    if _is_git_informational(cmd):
+        return
+
+    git_c_path = _extract_git_c_path(cmd)
+    effective_dir = Path(git_c_path).expanduser().resolve() if git_c_path else Path.cwd().resolve()
+
+    for trusted in _TRUSTED_GIT_DIRS:
+        try:
+            effective_dir.relative_to(trusted)
+            return  # Within a trusted dir — allow
+        except ValueError:
+            continue
+
+    trusted_display = ", ".join(str(d) for d in _TRUSTED_GIT_DIRS)
+    _exit_with_decision(
+        f"Git operation targets an untrusted directory: {effective_dir}\n"
+        f"Trusted directories: {trusted_display}\n"
+        f"Add this path to git_trusted_dirs in {_UNIFIED_CONFIG_PATH}.",
+        "block",
+        rule_name="git-untrusted-dir",
+        matched_segment=cmd[:200],
+    )
+
+
 def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
     """Check a command against git safety rules. Exits on block or ask match."""
     # Early exit: not a git command
     if not re.search(r"(^|\s)git\s", cmd):
         return
+
+    # Trusted directory check (before other rules — fundamental access control)
+    _check_git_trusted_dirs(cmd)
 
     # DENY rules (block)
     for name, check_fn, message in GIT_DENY_RULES:
@@ -2602,8 +2730,160 @@ def _validate_rules_file(path: str, env_var: str, is_url: bool = False) -> tuple
     return issues, len(raw)
 
 
+def _validate_trusted_dirs_file(path: str) -> tuple[list[str], int]:
+    """Validate a GIT_TRUSTED_DIRS JSON file. Returns (issues, count) tuple."""
+    issues = []
+    env_var = "GIT_TRUSTED_DIRS"
+    if not os.path.exists(path):
+        issues.append(f"{env_var}: file not found: {path}")
+        return issues, 0
+    try:
+        with open(path) as f:
+            raw = json.load(f)
+    except json.JSONDecodeError as e:
+        issues.append(f"{env_var}: invalid JSON: {e}")
+        return issues, 0
+    except OSError as e:
+        issues.append(f"{env_var}: cannot read file: {e}")
+        return issues, 0
+    if not isinstance(raw, list):
+        issues.append(f"{env_var}: expected JSON array, got {type(raw).__name__}")
+        return issues, 0
+    if not raw:
+        issues.append(f"{env_var}: file contains empty array (no directories)")
+        return issues, 0
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, str):
+            issues.append(f"{env_var}[{i}]: expected string path, got {type(entry).__name__}")
+            continue
+        if not entry.strip():
+            issues.append(f"{env_var}[{i}]: empty path")
+            continue
+        resolved = Path(entry).expanduser()
+        if not resolved.is_dir():
+            issues.append(f"{env_var}[{i}]: directory does not exist: {entry}")
+    return issues, len(raw)
+
+
+def _validate_unified_config(path: Path) -> tuple[list[str], list[str]]:
+    """Validate unified dev-guard config file. Returns (issues, loaded_msgs)."""
+    issues: list[str] = []
+    loaded: list[str] = []
+    label = f"dev-guard.json ({path})"
+    try:
+        with open(path) as f:
+            raw = json.load(f)
+    except json.JSONDecodeError as e:
+        issues.append(f"{label}: invalid JSON: {e}")
+        return issues, loaded
+    except OSError:
+        return issues, loaded  # File not found is fine — it's optional
+    if not isinstance(raw, dict):
+        issues.append(f"{label}: expected JSON object, got {type(raw).__name__}")
+        return issues, loaded
+
+    valid_keys = {"command_rules", "url_rules", "git_trusted_dirs"}
+    unknown = set(raw.keys()) - valid_keys
+    if unknown:
+        issues.append(f"{label}: unknown keys: {', '.join(sorted(unknown))}")
+
+    # Validate command_rules section
+    cmd_rules = raw.get("command_rules")
+    if cmd_rules is not None:
+        if not isinstance(cmd_rules, list):
+            issues.append(f"{label}.command_rules: expected array")
+        else:
+            # Reuse existing validator by writing to a temp structure
+            section_issues, count = _validate_rules_entries(cmd_rules, f"{label}.command_rules")
+            issues.extend(section_issues)
+            if not section_issues:
+                loaded.append(f"Command rules: {count} rule(s) from {path}")
+
+    # Validate url_rules section
+    url_rules = raw.get("url_rules")
+    if url_rules is not None:
+        if not isinstance(url_rules, list):
+            issues.append(f"{label}.url_rules: expected array")
+        else:
+            section_issues, count = _validate_rules_entries(
+                url_rules, f"{label}.url_rules", is_url=True
+            )
+            issues.extend(section_issues)
+            if not section_issues:
+                loaded.append(f"URL rules: {count} rule(s) from {path}")
+
+    # Validate git_trusted_dirs section
+    dirs = raw.get("git_trusted_dirs")
+    if dirs is not None:
+        if not isinstance(dirs, list):
+            issues.append(f"{label}.git_trusted_dirs: expected array")
+        elif not dirs:
+            issues.append(f"{label}.git_trusted_dirs: empty array (no directories)")
+        else:
+            for i, entry in enumerate(dirs):
+                pfx = f"{label}.git_trusted_dirs[{i}]"
+                if not isinstance(entry, str):
+                    issues.append(f"{pfx}: expected string, got {type(entry).__name__}")
+                elif not entry.strip():
+                    issues.append(f"{pfx}: empty path")
+                else:
+                    resolved = Path(entry).expanduser()
+                    if not resolved.is_dir():
+                        issues.append(f"{pfx}: directory does not exist: {entry}")
+            if not issues:
+                loaded.append(f"Git trusted dirs: {len(dirs)} path(s) from {path}")
+
+    return issues, loaded
+
+
+def _validate_rules_entries(
+    entries: list, prefix: str, is_url: bool = False
+) -> tuple[list[str], int]:
+    """Validate a list of rule entries (shared logic for file and unified config)."""
+    issues: list[str] = []
+    required = {"name", "pattern", "message"}
+    valid_actions = {"block", "ask", "allow"}
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            issues.append(f"{prefix}[{i}]: expected object, got {type(entry).__name__}")
+            continue
+        name = entry.get("name", f"entry {i}")
+        pfx = f"{prefix}[{i}] ({name!r})"
+        for field in required:
+            if field not in entry:
+                issues.append(f"{pfx}: missing required field '{field}'")
+            elif not isinstance(entry[field], str):
+                issues.append(
+                    f"{pfx}: '{field}' must be a string, got {type(entry[field]).__name__}"
+                )
+        if "pattern" in entry and isinstance(entry["pattern"], str):
+            if not entry["pattern"]:
+                issues.append(f"{pfx}: 'pattern' is empty")
+            else:
+                try:
+                    re.compile(entry["pattern"])
+                except re.error as e:
+                    issues.append(f"{pfx}: invalid regex in 'pattern': {e}")
+        if not is_url and "exception" in entry:
+            exc = entry["exception"]
+            if exc is not None and not isinstance(exc, str):
+                issues.append(f"{pfx}: 'exception' must be a string or null")
+            elif isinstance(exc, str) and exc:
+                try:
+                    re.compile(exc)
+                except re.error as e:
+                    issues.append(f"{pfx}: invalid regex in 'exception': {e}")
+        if "action" in entry:
+            action = entry["action"]
+            if not isinstance(action, str):
+                issues.append(f"{pfx}: 'action' must be a string")
+            elif action not in valid_actions:
+                issues.append(f"{pfx}: 'action' must be 'block', 'ask', or 'allow'")
+    return issues, len(entries)
+
+
 def _validate_config() -> int:
-    """Validate extra rules config files.
+    """Validate all config sources: unified config and env var overrides.
 
     Output channels follow hook conventions:
       - Success (exit 0): stdout (shown in transcript)
@@ -2611,11 +2891,21 @@ def _validate_config() -> int:
     """
     url_path = os.environ.get("URL_GUARD_EXTRA_RULES")
     cmd_path = os.environ.get("COMMAND_GUARD_EXTRA_RULES")
-    if not url_path and not cmd_path:
+    dirs_path = os.environ.get("GIT_TRUSTED_DIRS")
+    has_unified = _UNIFIED_CONFIG_PATH.exists()
+    if not url_path and not cmd_path and not dirs_path and not has_unified:
         return 0  # Nothing configured, nothing to validate
 
-    all_issues = []
-    loaded = []
+    all_issues: list[str] = []
+    loaded: list[str] = []
+
+    # Validate unified config first
+    if has_unified:
+        issues, msgs = _validate_unified_config(_UNIFIED_CONFIG_PATH)
+        all_issues.extend(issues)
+        loaded.extend(msgs)
+
+    # Validate env var overrides
     if url_path:
         issues, count = _validate_rules_file(url_path, "URL_GUARD_EXTRA_RULES", is_url=True)
         if issues:
@@ -2628,6 +2918,12 @@ def _validate_config() -> int:
             all_issues.extend(issues)
         else:
             loaded.append(f"Command rules: {count} rule(s) from {cmd_path}")
+    if dirs_path:
+        issues, count = _validate_trusted_dirs_file(dirs_path)
+        if issues:
+            all_issues.extend(issues)
+        else:
+            loaded.append(f"Git trusted dirs: {count} path(s) from {dirs_path}")
 
     if all_issues:
         # stderr + exit 2: fed back to Claude for explanation
@@ -2706,6 +3002,10 @@ def _handle_bash_command(command: str) -> None:
     _check_fetch_command(command)
 
     subcmds = split_commands(command)
+
+    # Block cd && git compounds before processing individual subcommands
+    _check_cd_git_compound(subcmds, command)
+
     fetch_seen = False
     for subcmd in subcmds:
         fetch_seen = _check_subcmd(subcmd, fetch_seen)
@@ -2743,9 +3043,28 @@ def main() -> None:
     global _session_id, _tool_use_id
 
     # Load user-defined extra rules (deferred from module level to avoid
-    # side effects during import and to keep rule loading in one place)
+    # side effects during import and to keep rule loading in one place).
+    # Unified config (~/.claude/dev-guard.json) loads first, then env vars add on top.
+    config = _load_unified_config()
+    for section, target, converter in [
+        ("command_rules", RULES, _cmd_rule_from_entry),
+        ("url_rules", AUTH_URL_RULES, _url_rule_from_entry),
+    ]:
+        entries = config.get(section)
+        if isinstance(entries, list):
+            for entry in entries:
+                with contextlib.suppress(KeyError, TypeError, AttributeError, re.error):
+                    target.append(converter(entry))  # type: ignore[arg-type]
+    dirs = config.get("git_trusted_dirs")
+    if isinstance(dirs, list):
+        _TRUSTED_GIT_DIRS.extend(
+            Path(d).expanduser().resolve() for d in dirs if isinstance(d, str) and d.strip()
+        )
+
+    # Env var overrides (additive — stacks on top of unified config)
     AUTH_URL_RULES.extend(_load_extra_rules("URL_GUARD_EXTRA_RULES", _url_rule_from_entry))
     RULES.extend(_load_extra_rules("COMMAND_GUARD_EXTRA_RULES", _cmd_rule_from_entry))
+    _TRUSTED_GIT_DIRS.extend(_load_trusted_dirs())
 
     if "--trust" in sys.argv:
         sys.exit(_handle_trust_command(sys.argv))
