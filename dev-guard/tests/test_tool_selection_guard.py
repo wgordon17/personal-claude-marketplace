@@ -3895,3 +3895,418 @@ class TestHookOutputHelper:
         output = _mod._hook_output("allow", reason)
         parsed = json.loads(output)
         assert parsed["hookSpecificOutput"]["permissionDecisionReason"] == reason
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: cd && git compound command blocking
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCdGitCompound:
+    """Block compound commands that cd into a directory then run git."""
+
+    def test_cd_and_git_push_blocked(self):
+        """cd /path && git push is blocked."""
+        result = run_bash("cd /some/repo && git push origin HEAD:main")
+        assert_guard(result, 2, "cd-git-compound", "cd-and-push")
+
+    def test_cd_and_git_commit_blocked(self):
+        """cd /path && git commit is blocked."""
+        result = run_bash("cd /some/repo && git commit -m 'test'")
+        assert_guard(result, 2, "cd-git-compound", "cd-and-commit")
+
+    def test_cd_semicolon_git_blocked(self):
+        """cd /path ; git push is blocked (semicolon separator)."""
+        result = run_bash("cd /some/repo ; git push origin main")
+        assert_guard(result, 2, "cd-git-compound", "cd-semicolon-git")
+
+    def test_cd_and_non_git_allowed(self):
+        """cd /path && make all is allowed (no git involved)."""
+        result = run_bash("cd /some/repo && make all")
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_git_without_cd_allowed(self):
+        """Plain git push is allowed (no cd prefix)."""
+        result = run_bash("git -C /some/repo push origin HEAD:main")
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_cd_and_intervening_cmd_then_git_blocked(self):
+        """cd /path && ls && git push is blocked (cd still in effect)."""
+        result = run_bash("cd /some/repo && ls && git push origin main")
+        assert_guard(result, 2, "cd-git-compound", "cd-ls-git")
+
+    def test_guidance_includes_git_c_suggestion(self):
+        """Guidance message includes git -C alternative."""
+        result = run_bash("cd /my/project && git push origin main")
+        output = result.stderr + result.stdout
+        assert "git -C" in output, f"Expected 'git -C' in output: {output}"
+        assert "/my/project" in output, f"Expected path in output: {output}"
+
+    def test_cd_quoted_path_and_git_blocked(self):
+        """cd with quoted path followed by git is blocked."""
+        result = run_bash('cd "/path with spaces" && git status')
+        assert_guard(result, 2, "cd-git-compound", "cd-quoted-git")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: git trusted directories
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _run_with_trusted_dirs(command, dirs_file):
+    """Run the guard with a custom trusted dirs file (GIT_TRUSTED_DIRS)."""
+    env = os.environ.copy()
+    env["GIT_TRUSTED_DIRS"] = str(dirs_file)
+    return run_guard("Bash", {"command": command}, env=env)
+
+
+class TestGitTrustedDirs:
+    """Block git commands operating outside configured trusted directories."""
+
+    def test_git_c_trusted_dir_allowed(self, tmp_path):
+        """git -C pointing to a trusted directory is allowed."""
+        # Use CWD to avoid /tmp/ triggering the tmp-path rule on Linux CI
+        cwd = os.getcwd()
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps([cwd]))
+        result = _run_with_trusted_dirs(f"git -C {cwd}/subdir push origin main", dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_git_c_untrusted_dir_blocked(self, tmp_path):
+        """git -C pointing outside trusted directories is blocked."""
+        cwd = os.getcwd()
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps([cwd]))
+        result = _run_with_trusted_dirs("git -C /nonexistent/untrusted push origin main", dirs_file)
+        assert_guard(result, 2, "git-untrusted-dir", "untrusted-git-c")
+
+    def test_no_trusted_dirs_allows_all(self):
+        """Without GIT_TRUSTED_DIRS, all git commands are allowed."""
+        result = run_bash("git -C /any/path status")
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_git_version_always_allowed(self, tmp_path):
+        """git --version is informational and always allowed."""
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps(["/nonexistent"]))
+        result = _run_with_trusted_dirs("git --version", dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_git_help_always_allowed(self, tmp_path):
+        """git help is informational and always allowed."""
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps(["/nonexistent"]))
+        result = _run_with_trusted_dirs("git help push", dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_git_config_global_always_allowed(self, tmp_path):
+        """git config --global is allowed (operates on global config, not repo)."""
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps(["/nonexistent"]))
+        result = _run_with_trusted_dirs("git config --global user.name", dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_git_cmd_with_help_flag_allowed(self, tmp_path):
+        """git push --help is informational and always allowed."""
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps(["/nonexistent"]))
+        result = _run_with_trusted_dirs("git push --help", dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_multiple_trusted_dirs(self, tmp_path):
+        """Multiple trusted directories — command in any one is allowed."""
+        # Use CWD to avoid /tmp/ triggering the tmp-path rule on Linux CI
+        cwd = os.getcwd()
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps(["/nonexistent/dir1", cwd]))
+        # In second trusted dir — allowed
+        result = _run_with_trusted_dirs(f"git -C {cwd}/repo status", dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_blocked_message_shows_trusted_dirs(self, tmp_path):
+        """Block message shows the configured trusted directories."""
+        cwd = os.getcwd()
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps([cwd]))
+        result = _run_with_trusted_dirs("git -C /nonexistent/evil push origin main", dirs_file)
+        output = result.stderr + result.stdout
+        assert cwd in output, f"Expected trusted dir in output: {output}"
+
+    def test_tilde_expansion(self, tmp_path):
+        """Paths with ~ are expanded correctly."""
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps(["~"]))
+        # CWD is under home dir — should be allowed
+        result = _run_with_trusted_dirs("git status", dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_git_c_quoted_path(self, tmp_path):
+        """git -C with a quoted path is handled correctly."""
+        # Use CWD to avoid /tmp/ triggering the tmp-path rule on Linux CI
+        cwd = os.getcwd()
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps([cwd]))
+        result = _run_with_trusted_dirs(f'git -C "{cwd}/my repo" status', dirs_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_malformed_json_fails_open(self, tmp_path):
+        """Malformed JSON trusted dirs file fails open (no blocking)."""
+        dirs_file = tmp_path / "bad.json"
+        dirs_file.write_text("not json")
+        result = _run_with_trusted_dirs("git -C /any/path status", dirs_file)
+        assert result.returncode == 0, f"Expected pass (fail-open), stderr: {result.stderr}"
+
+    def test_empty_array_fails_open(self, tmp_path):
+        """Empty array in trusted dirs file fails open (no blocking)."""
+        dirs_file = tmp_path / "empty.json"
+        dirs_file.write_text("[]")
+        result = _run_with_trusted_dirs("git -C /any/path status", dirs_file)
+        assert result.returncode == 0, f"Expected pass (fail-open), stderr: {result.stderr}"
+
+
+class TestGitTrustedDirsValidation:
+    """Validation of GIT_TRUSTED_DIRS config file."""
+
+    def test_validate_valid_dirs(self, tmp_path):
+        """Valid trusted dirs file passes validation."""
+        trusted = tmp_path / "projects"
+        trusted.mkdir()
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps([str(trusted)]))
+        env = os.environ.copy()
+        env["GIT_TRUSTED_DIRS"] = str(dirs_file)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "Git trusted dirs" in result.stdout
+
+    def test_validate_missing_file(self, tmp_path):
+        """Missing trusted dirs file fails validation."""
+        env = os.environ.copy()
+        env["GIT_TRUSTED_DIRS"] = str(tmp_path / "nonexistent.json")
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 2
+        assert "file not found" in result.stderr
+
+    def test_validate_nonexistent_dir(self, tmp_path):
+        """Trusted dirs file with nonexistent directory fails validation."""
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps(["/this/dir/does/not/exist"]))
+        env = os.environ.copy()
+        env["GIT_TRUSTED_DIRS"] = str(dirs_file)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 2
+        assert "does not exist" in result.stderr
+
+    def test_validate_non_string_entry(self, tmp_path):
+        """Trusted dirs file with non-string entry fails validation."""
+        dirs_file = tmp_path / "trusted.json"
+        dirs_file.write_text(json.dumps([123, "/tmp"]))
+        env = os.environ.copy()
+        env["GIT_TRUSTED_DIRS"] = str(dirs_file)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 2
+        assert "expected string" in result.stderr
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: unified dev-guard.json config
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _run_with_unified_config(command, config_file, *, extra_env=None):
+    """Run the guard with a unified config file (DEV_GUARD_CONFIG)."""
+    env = os.environ.copy()
+    env["DEV_GUARD_CONFIG"] = str(config_file)
+    # Clear individual env vars to isolate unified config testing
+    env.pop("COMMAND_GUARD_EXTRA_RULES", None)
+    env.pop("URL_GUARD_EXTRA_RULES", None)
+    env.pop("GIT_TRUSTED_DIRS", None)
+    if extra_env:
+        env.update(extra_env)
+    return run_guard("Bash", {"command": command}, env=env)
+
+
+class TestUnifiedConfig:
+    """Unified ~/.claude/dev-guard.json config file."""
+
+    def test_command_rules_from_unified_config(self, tmp_path):
+        """command_rules section loads and blocks matching commands."""
+        config = {
+            "command_rules": [
+                {
+                    "name": "test-block",
+                    "pattern": r"^\s*dangerous-cmd\b",
+                    "message": "Use safe-cmd instead.",
+                }
+            ]
+        }
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        result = _run_with_unified_config("dangerous-cmd --flag", config_file)
+        assert result.returncode == 2
+        assert "safe-cmd" in result.stderr
+
+    def test_url_rules_from_unified_config(self, tmp_path):
+        """url_rules section loads and blocks matching URLs."""
+        config = {
+            "url_rules": [
+                {
+                    "name": "test-url",
+                    "pattern": r"internal\.corp\.com",
+                    "message": "Use VPN tool instead.",
+                }
+            ]
+        }
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        result = _run_with_unified_config("curl https://internal.corp.com/api", config_file)
+        assert result.returncode == 2
+        assert "VPN tool" in result.stderr
+
+    def test_git_trusted_dirs_from_unified_config(self, tmp_path):
+        """git_trusted_dirs section loads and blocks untrusted git paths."""
+        cwd = os.getcwd()
+        config = {"git_trusted_dirs": [cwd]}
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        # Trusted path — allowed
+        result = _run_with_unified_config(f"git -C {cwd}/sub status", config_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+        # Untrusted path — blocked
+        result = _run_with_unified_config("git -C /nonexistent/evil status", config_file)
+        assert result.returncode == 2
+        assert "git-untrusted-dir" in (result.stderr + result.stdout)
+
+    def test_env_var_overrides_stacks(self, tmp_path):
+        """Env var rules stack on top of unified config (additive)."""
+        # Unified config blocks dangerous-cmd
+        config = {
+            "command_rules": [
+                {
+                    "name": "unified-block",
+                    "pattern": r"^\s*unified-cmd\b",
+                    "message": "Blocked by unified config.",
+                }
+            ]
+        }
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        # Env var adds another rule blocking extra-cmd
+        extra_rules = [
+            {
+                "name": "env-block",
+                "pattern": r"^\s*env-cmd\b",
+                "message": "Blocked by env var.",
+            }
+        ]
+        extra_file = tmp_path / "extra-rules.json"
+        extra_file.write_text(json.dumps(extra_rules))
+        # Both should be blocked
+        result = _run_with_unified_config(
+            "unified-cmd", config_file, extra_env={"COMMAND_GUARD_EXTRA_RULES": str(extra_file)}
+        )
+        assert result.returncode == 2
+        assert "unified config" in result.stderr
+        result = _run_with_unified_config(
+            "env-cmd", config_file, extra_env={"COMMAND_GUARD_EXTRA_RULES": str(extra_file)}
+        )
+        assert result.returncode == 2
+        assert "env var" in result.stderr
+
+    def test_missing_unified_config_is_fine(self, tmp_path):
+        """Missing unified config file is silently ignored."""
+        config_file = tmp_path / "nonexistent.json"
+        result = _run_with_unified_config("git status", config_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+    def test_malformed_unified_config_fails_open(self, tmp_path):
+        """Malformed unified config file is silently ignored."""
+        config_file = tmp_path / "bad.json"
+        config_file.write_text("not json {{{")
+        result = _run_with_unified_config("git status", config_file)
+        assert result.returncode == 0, f"Expected pass (fail-open), stderr: {result.stderr}"
+
+    def test_unknown_keys_ignored_at_runtime(self, tmp_path):
+        """Unknown keys in unified config don't break loading."""
+        config = {"future_feature": True, "git_trusted_dirs": ["~"]}
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        result = _run_with_unified_config("git status", config_file)
+        assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
+
+
+class TestUnifiedConfigValidation:
+    """Validation of unified dev-guard.json config."""
+
+    def test_validate_valid_unified_config(self, tmp_path):
+        """Valid unified config passes validation."""
+        cwd = os.getcwd()
+        config = {
+            "command_rules": [{"name": "test", "pattern": r"^\s*test\b", "message": "Test rule."}],
+            "git_trusted_dirs": [cwd],
+        }
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        env = os.environ.copy()
+        env["DEV_GUARD_CONFIG"] = str(config_file)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "Command rules" in result.stdout
+        assert "Git trusted dirs" in result.stdout
+
+    def test_validate_unknown_keys_warns(self, tmp_path):
+        """Unknown keys in unified config are flagged during validation."""
+        config = {"bogus_key": []}
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        env = os.environ.copy()
+        env["DEV_GUARD_CONFIG"] = str(config_file)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 2
+        assert "unknown keys" in result.stderr
+
+    def test_validate_bad_rule_in_unified(self, tmp_path):
+        """Invalid rule entry in unified config is caught by validation."""
+        config = {"command_rules": [{"name": "test"}]}  # missing pattern, message
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        env = os.environ.copy()
+        env["DEV_GUARD_CONFIG"] = str(config_file)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 2
+        assert "missing required field" in result.stderr
