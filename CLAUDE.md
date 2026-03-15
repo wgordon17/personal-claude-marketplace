@@ -35,7 +35,7 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
    CLAUDECODE="" claude plugin marketplace update personal-claude-marketplace
    CLAUDECODE="" claude plugin update <plugin-name>@personal-claude-marketplace
    ```
-6. **Reload and E2E verify** — Tell user to run `/plugins reload` to pick up the updated plugin without restarting. E2E verification happens after reload.
+6. **Reload and E2E verify** — Tell user to run `/reload-plugins` to pick up the updated plugin without restarting. E2E verification happens after reload.
 
 ## Repository Structure
 
