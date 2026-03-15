@@ -949,32 +949,24 @@ The verifier runs the full test suite and lint. It compares results against the 
 - Fewer passing tests than baseline: FAIL (regression)
 - Same number of failing tests as baseline (pre-existing): note, do not fail
 
-### Step 7.2: Completion Review
+### Step 7.2: Quality Gate
 
 After verifier reports:
 
 ```
-Skill(skill="completion-review")
+Skill(skill="quality-gate")
 ```
 
-The completion-review skill focuses on:
-- Items the architect marked as deferred or risky — were they addressed?
-- Reviewer findings that were categorized as "optional" — are they actually optional?
-- Subagent output validation — did any agent produce suspiciously thin output?
-- AI slop detection — were unnecessary abstractions introduced during implementation?
+The quality-gate skill runs automated multi-pass review:
+- 5 rotating adversarial lenses (Correctness, Completeness, Robustness, Simplicity, Adversarial)
+- Action audit each round — catches identified-but-unactioned items
+- Fresh-context subagent reviews (2 subagents × 2 passes)
+- Blocking memory and artifact gates
+- Serena metacognitive checkpoints
 
-If completion-review identifies gaps, spawn a targeted fix agent before proceeding.
+If quality-gate identifies gaps, fix them before proceeding.
 
-### Step 7.3: Reflect
-
-```
-Skill(skill="sc:reflect")
-```
-
-Final self-check: is the implementation complete? Does it match the task description? Are there
-any loose ends? Does anything feel incomplete or unexpectedly absent?
-
-### Step 7.4: Optional /unfuck Sweep
+### Step 7.3: Optional /unfuck Sweep
 
 For large changes, offer a post-implementation cleanup:
 
@@ -1002,7 +994,7 @@ AskUserQuestion(questions=[{
 
 If user requests it: `Skill(skill="unfuck")` with appropriate flags.
 
-### Step 7.5: Generate Audit Report
+### Step 7.4: Generate Audit Report
 
 Write `{run_dir}/swarm-report.md`:
 
@@ -1068,7 +1060,7 @@ Get line stats:
 git diff --shortstat $(git merge-base HEAD origin/main)..HEAD
 ```
 
-### Step 7.6: Announce Completion
+### Step 7.5: Announce Completion
 
 Report to the user:
 
@@ -1087,7 +1079,7 @@ Next steps:
   - Create PR when ready: gh pr create
 ```
 
-### Step 7.7: Shutdown and Cleanup
+### Step 7.6: Shutdown and Cleanup
 
 ```
 SendMessage(type="shutdown_request", recipient="verifier", content="Swarm complete.")

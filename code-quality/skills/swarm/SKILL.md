@@ -131,9 +131,9 @@ summary. Only update documentation that is actually affected by the implementati
 
 Spawn the Verifier to run the full test suite and lint. Compare results against the Phase 0
 baseline — all tests that passed before must still pass; net-new failures are a blocker. After
-Verifier reports green, invoke the `completion-review` skill to check deferred architect items
-and any findings that were noted but not fixed. Invoke `sc:reflect` to validate completeness
-against the original task. If there are 20 or more modified files, run an `/unfuck` sweep to
+Verifier reports green, invoke the `quality-gate` skill for automated multi-pass review with
+rotating adversarial lenses, fresh-context subagent reviews, and blocking memory/artifact gates.
+If there are 20 or more modified files, run an `/unfuck` sweep to
 catch any issues introduced at scale. Generate the final audit report at
 `hack/swarm/YYYY-MM-DD/swarm-report.md`. Announce completion with a summary and report path.
 Shut down all teammates via `SendMessage(type="shutdown_request")` and call `TeamDelete`.
@@ -194,8 +194,7 @@ Phase 6: Docs & Memory
      v
 Phase 7: Verification & Completion
   +-- Verifier: full test + lint
-  +-- completion-review skill
-  +-- sc:reflect
+  +-- quality-gate skill
   +-- /unfuck sweep (if 20+ files changed)
   +-- Generate swarm-report.md
   +-- Shutdown all teammates, TeamDelete
