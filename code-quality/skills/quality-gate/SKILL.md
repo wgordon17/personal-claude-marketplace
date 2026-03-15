@@ -302,5 +302,7 @@ Overall: [PASS / NEEDS WORK]
 
 ## Stop Hook Safety Net
 
-A global Stop hook catches premature completion claims that bypass this skill.
-See `references/stop-hook-config.md` for installation.
+A global Stop hook in `dev-guard` catches premature completion claims that bypass this skill.
+It fires on every response, verifying tests ran, no unresolved TODOs, all requirements addressed,
+and memories updated. No iteration cap — if Claude can't satisfy the checks, it loops until it
+asks the user for help.
