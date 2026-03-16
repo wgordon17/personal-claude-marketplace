@@ -19,6 +19,9 @@ WORK TYPE: {work_type}
 CHANGES TO REVIEW:
 {git_diff_or_artifact_content}
 
+PROJECT RULES (if CLAUDE.md or CONTRIBUTING.md exists, read it):
+{claude_md_rules_if_any}
+
 REVIEW CHECKLIST:
 1. Read the original request word-by-word. Break it into atomic requirements.
 2. For EACH requirement: is it fully addressed? Not partially — FULLY.
@@ -26,6 +29,7 @@ REVIEW CHECKLIST:
 4. Search for identified-but-unactioned items: "could be improved", "consider", "might want to"
 5. Check for partial implementations: stubs, empty functions, placeholder values
 6. If this is subagent output: check for "I implemented X but not Y" patterns
+7. Check project rules compliance: version bumps, required manifest updates, deployment readiness
 
 For each issue found, report:
 - What requirement or item is affected
@@ -69,6 +73,9 @@ WORK TYPE: {work_type}
 CHANGES TO REVIEW:
 {git_diff_or_artifact_content}
 
+PROJECT RULES (if CLAUDE.md or CONTRIBUTING.md exists, read it):
+{claude_md_rules_if_any}
+
 This work claims to be production-ready. Prove it wrong.
 
 FOCUS AREAS FOR CODE:
@@ -83,6 +90,10 @@ FOCUS AREAS FOR NON-CODE:
 2. LOGIC: Where does the reasoning break down?
 3. GAPS: What failure modes aren't addressed?
 4. ASSUMPTIONS: What implicit assumptions will surprise someone?
+
+FOCUS AREA FOR ALL WORK TYPES:
+- PROJECT RULES: Were version bumps done? Manifests updated? Will this change
+  actually reach users after merge? Any required companion updates missing?
 
 For each issue found, report:
 - The specific problem
