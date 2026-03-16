@@ -15,6 +15,7 @@ import functools
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -316,6 +317,29 @@ _session_id = None
 _tool_use_id = None
 _TRUSTED_GIT_DIRS: list[Path] = []
 
+_RTK_BINARY = shutil.which("rtk")
+_RTK_COMPRESS_RULES: list[tuple[str, re.Pattern[str]]] = [
+    ("cargo-test", re.compile(r"^\s*(uv\s+run\s+)?cargo\s+test\b")),
+    ("cargo-build", re.compile(r"^\s*cargo\s+(build|check)\b")),
+    ("git-log", re.compile(r"^\s*git\s+log\b")),
+    ("git-push", re.compile(r"^\s*git\s+(push|pull|fetch)\b")),
+    ("docker", re.compile(r"^\s*docker\s+(ps|images|logs)\b")),
+    ("kubectl", re.compile(r"^\s*kubectl\s+(get|describe|logs)\b")),
+    ("pytest", re.compile(r"^\s*uv\s+run\s+pytest\b")),
+    ("go-test", re.compile(r"^\s*go\s+test\b")),
+]
+_RTK_SKIP_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"^\s*git\s+(status|diff)\b"),
+    re.compile(r"^\s*cargo\s+clippy\b"),
+]
+_RTK_TEE_DIR = Path.home() / ".local" / "share" / "rtk" / "tee"
+_RTK_OUTPUT_SUFFIX = (
+    "\n---\n"
+    "[RTK] This output was compressed by rtk. If you need the full, "
+    "uncompressed output, use the Read tool on the most recent file in "
+    "~/.local/share/rtk/tee/ (sorted by modification time)."
+)
+
 _SECRET_PATTERN = re.compile(
     r"((?:password|token|secret|key|auth|bearer|api[_-]?key|credentials)"
     r"[\s=:]+)\S{8,}",
@@ -381,6 +405,19 @@ def _init_db() -> sqlite3.Connection | None:
             CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_trust_rule_match_scope
                 ON trusted_rules(rule_name, COALESCE(match_pattern, ''), scope);
+            CREATE TABLE IF NOT EXISTS rtk_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                session_id TEXT,
+                tool_use_id TEXT,
+                command TEXT,
+                rtk_command TEXT,
+                event_type TEXT NOT NULL,
+                tee_path TEXT,
+                detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_rtk_session ON rtk_events(session_id);
+            CREATE INDEX IF NOT EXISTS idx_rtk_type ON rtk_events(event_type);
         """)
         conn.commit()
         os.chmod(str(_DB_PATH), 0o600)  # Owner-only file access
@@ -432,17 +469,75 @@ def _log_event(
         pass
 
 
-def _hook_output(decision: str, reason: str) -> str:
+def _log_rtk_event(
+    event_type: str,
+    *,
+    command: str | None = None,
+    rtk_command: str | None = None,
+    tee_path: str | None = None,
+    detail: object | None = None,
+) -> None:
+    try:
+        conn = _init_db()
+        if conn is None:
+            return
+        detail_str = json.dumps(detail) if detail is not None else None
+        conn.execute(
+            "INSERT INTO rtk_events "
+            "(ts, session_id, tool_use_id, command, rtk_command, event_type, tee_path, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                _session_id,
+                _tool_use_id,
+                command,
+                rtk_command,
+                event_type,
+                tee_path,
+                detail_str,
+            ),
+        )
+        conn.commit()
+    except (sqlite3.Error, OSError):
+        pass
+
+
+def _rtk_rewrite(cmd: str) -> str | None:
+    """Return rtk-rewritten command, or None if cmd should not be compressed."""
+    if os.environ.get("RTK_DISABLED") or _RTK_BINARY is None:
+        return None
+    normalized = strip_env_prefix(cmd)
+    for skip in _RTK_SKIP_PATTERNS:
+        if skip.search(normalized):
+            return None
+    for _name, pattern in _RTK_COMPRESS_RULES:
+        if pattern.search(normalized):
+            env_prefix_len = len(cmd) - len(normalized)
+            if env_prefix_len > 0:
+                env_part = cmd[:env_prefix_len]
+                return f"RTK_TELEMETRY_DISABLED=1 {env_part}rtk --tee {normalized}"
+            return f"RTK_TELEMETRY_DISABLED=1 rtk --tee {cmd}"
+    return None
+
+
+def _hook_output(
+    decision: str,
+    reason: str,
+    *,
+    updated_input: dict | None = None,
+    additional_context: str | None = None,
+) -> str:
     """Build hookSpecificOutput JSON string for PreToolUse decisions."""
-    return json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": _HOOK_EVENT_NAME,
-                "permissionDecision": decision,
-                "permissionDecisionReason": reason,
-            }
-        }
-    )
+    output: dict = {
+        "hookEventName": _HOOK_EVENT_NAME,
+        "permissionDecision": decision,
+        "permissionDecisionReason": reason,
+    }
+    if updated_input is not None:
+        output["updatedInput"] = updated_input
+    if additional_context is not None:
+        output["additionalContext"] = additional_context
+    return json.dumps({"hookSpecificOutput": output})
 
 
 def _exit_with_decision(
@@ -504,6 +599,21 @@ def _exit_with_decision(
         _log_event("guard", "blocked", rule=rule_name, command=matched_segment)
         print(msg, file=sys.stderr)
         sys.exit(2)
+
+
+def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
+    """Exit with an RTK compression rewrite (allow + updatedInput)."""
+    _log_rtk_event("compressed", command=original_cmd, rtk_command=rtk_cmd)
+    _log_event("guard", "allowed", rule="rtk-compress", command=original_cmd[:200])
+    print(
+        _hook_output(
+            "allow",
+            f"RTK compression: {original_cmd[:80]}",
+            updated_input={"command": rtk_cmd},
+            additional_context=_RTK_OUTPUT_SUFFIX,
+        )
+    )
+    sys.exit(0)
 
 
 # ── Category F: Authenticated URL fetch guard ──
@@ -769,6 +879,11 @@ def _handle_post_tool_use(data: dict) -> None:
 
     if tool_name == "Bash":
         command = tool_input.get("command", "")
+        tee_dir_str = str(_RTK_TEE_DIR)
+        if tee_dir_str in command and re.search(r"\b(cat|head|tail|less)\b", command):
+            _log_rtk_event(
+                "full_read", tee_path=tee_dir_str, detail={"via": "bash", "command": command[:200]}
+            )
         normalized = strip_env_prefix(command)
         if not re.match(r"^\s*(curl|wget)\b", normalized):
             return
@@ -792,6 +907,10 @@ def _handle_post_tool_use(data: dict) -> None:
         elif isinstance(tool_response, str):
             response_text = tool_response
         _check_response_for_auth_failure(response_text, url, "WebFetch")
+    elif tool_name == "Read":
+        file_path = tool_input.get("file_path", "")
+        if file_path.startswith(str(_RTK_TEE_DIR)):
+            _log_rtk_event("full_read", tee_path=file_path)
 
 
 # Rules to skip when checking pipe segments — these redirect to native tools
@@ -3005,6 +3124,14 @@ def _handle_bash_command(command: str) -> None:
 
     # Block cd && git compounds before processing individual subcommands
     _check_cd_git_compound(subcmds, command)
+
+    # RTK compression for single, non-piped commands
+    if len(subcmds) == 1 and len(split_pipes(command)) == 1:
+        stripped = strip_env_prefix(strip_shell_keyword(command))
+        check_git_safety(stripped, fetch_seen=bool(_FETCH_PATTERN.search(command)))
+        rtk_cmd = _rtk_rewrite(command)
+        if rtk_cmd is not None:
+            _exit_with_rtk_rewrite(command, rtk_cmd)
 
     fetch_seen = False
     for subcmd in subcmds:
