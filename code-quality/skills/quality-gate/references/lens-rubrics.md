@@ -27,6 +27,8 @@ structure. This file provides the specific questions and techniques for each len
 - What was identified by you or a subagent but not actioned?
 - What was deferred without the user explicitly requesting deferral?
 - Are all code paths covered? All branches implemented?
+- **Project rules:** Re-read CLAUDE.md/CONTRIBUTING.md. Check version bumps, manifest
+  updates, deployment readiness. Will this change actually reach users after merge?
 - **Reasoning:** Use `sequential-thinking` MCP to check each atomic requirement.
 - **First-principles:** "Return to the original request. What are its fundamental parts?
   Is each one fully satisfied?"
@@ -162,6 +164,9 @@ structure. This file provides the specific questions and techniques for each len
 - All required fields present?
 - No placeholder values left?
 - Documentation/comments for non-obvious settings?
+- **Project rules:** Re-read CLAUDE.md/CONTRIBUTING.md. Version bumped in ALL required
+  files? Registry/marketplace entries updated? Will this change reach users after merge,
+  or will caching/versioning prevent delivery?
 
 ### Round 3: Security
 
