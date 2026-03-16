@@ -145,7 +145,21 @@ Execute this protocol for EVERY round:
    - "could be improved" / "might want to" / "consider"
    - "potential issue" / "noted for future" / "TODO"
    - "follow-up" / "out of scope" / "later"
+   - "pre-existing" / "preexisting" / "known issue" / "existing failure"
    - Any issue described without a corresponding fix
+
+   THE "PREEXISTING" TRAP:
+   Labeling something "preexisting" is NOT permission to ignore it.
+   For every issue labeled preexisting or known:
+   - WHY does it exist? Investigate the root cause, don't just note it.
+   - Is it within scope of the current work? If your changes touch the
+     same area, fix it.
+   - Is it ACTUALLY preexisting? Verify by checking the baseline, not
+     by assuming.
+   - Even if truly preexisting and out of scope: document it as a
+     concrete follow-up task, not a hand-wave.
+   "4 pre-existing test failures" repeated without investigation is
+   the same as ignoring 4 bugs.
 
    For EACH identified-but-unactioned item:
    - Can fix now? → Fix it.
@@ -200,32 +214,61 @@ Collect:
 - CLAUDE.md / CONTRIBUTING.md project rules (if they exist) — subagents need these
   to check project convention compliance
 
-### Subagent A: Completeness Reviewer (opus)
+### Subagent Execution (2 passes each — BOTH mandatory)
 
-**Pass 1:** Spawn with diff/artifact + original request.
-Focus: requirements coverage, deferred work, action verification.
-See `references/subagent-prompts.md` for the full prompt template.
+Each subagent runs TWO passes. Pass 2 is NOT optional — it catches issues the subagent
+missed on Pass 1 and verifies your fixes didn't introduce new problems. You MUST save
+the agent ID from Pass 1 to resume for Pass 2.
 
-Fix all findings from Subagent A.
+**Subagent A: Completeness Reviewer (opus)**
 
-**Pass 2:** Resume Subagent A (preserves its context).
-Prompt: "Here are the fixes I made. Review them. Also: what did YOU miss on your
-first pass? You had fresh eyes but still have blind spots. Look again."
+```
+PASS 1:
+  agent_result = Agent(
+    description="Completeness review",
+    model="opus",
+    prompt=<see references/subagent-prompts.md, Subagent A Pass 1>
+  )
+  → Save agent_result.agentId
+  → Fix ALL findings
 
-Fix all findings from Pass 2.
+PASS 2 (MANDATORY — do not skip):
+  Agent(
+    description="Completeness re-review",
+    resume=<saved agentId from Pass 1>,
+    prompt="Here are the fixes I made: {summary_of_fixes}.
+            Review them. Also: what did YOU miss on your first pass?
+            You had fresh eyes but still have blind spots. Look again."
+  )
+  → Fix ALL findings from Pass 2
+```
 
-### Subagent B: Adversarial Reviewer (opus)
+**Subagent B: Adversarial Reviewer (opus)**
 
-**Pass 1:** Spawn with diff/artifact + original request.
-Focus: bugs, security, edge cases, production failures.
-See `references/subagent-prompts.md` for the full prompt template.
+```
+PASS 1:
+  agent_result = Agent(
+    description="Adversarial review",
+    model="opus",
+    prompt=<see references/subagent-prompts.md, Subagent B Pass 1>
+  )
+  → Save agent_result.agentId
+  → Fix ALL findings
 
-Fix all findings from Subagent B.
+PASS 2 (MANDATORY — do not skip):
+  Agent(
+    description="Adversarial re-review",
+    resume=<saved agentId from Pass 1>,
+    prompt="Here are the fixes: {summary_of_fixes}.
+            Verify they're correct. What else breaks in production?"
+  )
+  → Fix ALL findings from Pass 2
+```
 
-**Pass 2:** Resume Subagent B.
-Prompt: "Here are the fixes. Verify they're correct. What else breaks in production?"
-
-Fix all findings from Pass 2.
+**Why Pass 2 matters:** Pass 1 finds issues. You fix them. But fixes can introduce NEW
+issues, and the subagent's first pass always misses something (fresh eyes still have blind
+spots). Pass 2 catches both. Skipping it is like running tests once, making changes, and
+not re-running them.
 
 ---
 
