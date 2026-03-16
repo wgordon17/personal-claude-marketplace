@@ -392,7 +392,8 @@ Overall: [PASS / NEEDS WORK]
 
 ## Stop Hook Safety Net
 
-A global Stop hook in `dev-guard` catches premature completion claims that bypass this skill.
-It fires on every response, verifying tests ran, no unresolved TODOs, all requirements addressed,
-and memories updated. No iteration cap — if Claude can't satisfy the checks, it loops until it
-asks the user for help.
+A global Stop hook in `dev-guard` (`type: agent`) catches premature completion claims that bypass
+this skill. Unlike prompt-type hooks, the agent has tool access — it reads the transcript, greps
+modified files for TODOs, checks git status, and verifies test execution actually happened. It
+adapts checks by work type (code, research, questions, planning) and verifies that factual claims
+were backed by research tool calls. Uses `stop_hook_active` guard to prevent infinite loops.
