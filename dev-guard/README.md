@@ -285,6 +285,61 @@ stdin JSON → parse → session state → hook dispatch (PreToolUse or PostTool
    - Validate kill/killall/pkill targets against Claude session process tree
 8. **Logging:** Audit events recorded to SQLite with category, action, rule, command
 
+## RTK Compression
+
+Automatically compresses verbose CLI output for supported commands using [rtk](https://github.com/fredrikaverpil/rtk). When rtk is installed, commands that would normally be blocked by convention rules (e.g., `cargo test` → "use make target") are compressed instead.
+
+**Prerequisites:** Install rtk (`brew install rtk`). Graceful degradation if absent — convention rules apply as before.
+
+**Compressed commands:**
+
+| Command | Pattern |
+|---------|---------|
+| `cargo test` | `cargo test` (with optional `uv run` prefix) |
+| `cargo build/check` | `cargo build`, `cargo check` |
+| `git log` | `git log` |
+| `git push/pull/fetch` | `git push`, `git pull`, `git fetch` |
+| `docker` | `docker ps`, `docker images`, `docker logs` |
+| `kubectl` | `kubectl get`, `kubectl describe`, `kubectl logs` |
+| `pytest` | `uv run pytest` (bare `pytest` still blocked) |
+| `go test` | `go test` |
+
+**Skipped commands** (known fidelity issues — deny rules apply normally):
+- `git status`, `git diff` — output structure matters
+- `cargo clippy` — diagnostic formatting is important
+
+**How it works:**
+1. RTK check runs in `_handle_bash_command()` for single, non-piped commands
+2. Git safety checks run first — `git push --force` is still blocked
+3. Matching commands are rewritten via `updatedInput` to prepend `RTK_TELEMETRY_DISABLED=1 rtk --tee`
+4. Full uncompressed output is stored in `~/.local/share/rtk/tee/`
+5. Compressed output includes retrieval instructions for the LLM
+
+**Telemetry:** Always disabled (`RTK_TELEMETRY_DISABLED=1` on every invocation).
+
+**Analytics:** RTK events are logged to the `rtk_events` table in `~/.claude/logs/dev-guard.db`:
+
+```sql
+-- Compression vs. full-read rate
+SELECT event_type, COUNT(*) FROM rtk_events GROUP BY event_type;
+
+-- Full-read percentage
+SELECT
+  SUM(CASE WHEN event_type = 'compressed' THEN 1 ELSE 0 END) as compressions,
+  SUM(CASE WHEN event_type = 'full_read' THEN 1 ELSE 0 END) as full_reads,
+  ROUND(100.0 * SUM(CASE WHEN event_type = 'full_read' THEN 1 ELSE 0 END)
+    / MAX(1, SUM(CASE WHEN event_type = 'compressed' THEN 1 ELSE 0 END)), 1)
+    as full_read_pct
+FROM rtk_events;
+
+-- Most compressed commands
+SELECT command, COUNT(*) as times
+FROM rtk_events WHERE event_type = 'compressed'
+GROUP BY command ORDER BY times DESC;
+```
+
+**Disabling:** Set `RTK_DISABLED=1` environment variable to skip all RTK rewrites.
+
 ## oc/kubectl Introspection
 
 Mutating `oc` and `kubectl` commands receive automatic risk assessment based on the resource types being modified, with enhanced prompts showing detected security risks.
