@@ -79,11 +79,11 @@
     ],
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "You are a stop hook validator. Check these conditions against the conversation: (1) if code was written, were tests run and passing? (2) no unresolved TODO/FIXME/HACK in diff or conversation (3) no issues identified but left unfixed (4) work fully addresses original request (5) implementation changes are on a branch or ready to commit (6) project memories updated if applicable. Respond with ONLY valid JSON, nothing else — no analysis, no explanation, just the JSON object: {\"decision\": \"approve\"} if all checks pass, or {\"decision\": \"block\", \"reason\": \"brief explanation of what failed\"} if any check fails."
+            "type": "agent",
+            "prompt": "You are a quality stop gate. If stop_hook_active is true in $ARGUMENTS, return {\"ok\": true} immediately.\n\nOtherwise, read the JSONL transcript at the transcript_path from $ARGUMENTS. Each line is a JSON object. Extract: (a) the first user message (the original request), (b) all assistant messages, (c) tool call names and results. Also run git diff to check for code changes.\n\nDetermine work type: code/config (git diff has results), question/research (no git diff, conversation only), planning (plan files written), or mixed.\n\nFOR ALL WORK TYPES:\n1. COMPLETENESS: Compare the original user request against what was delivered. Was every part of the request addressed? Not partially, not deferred.\n2. IDENTIFIED-BUT-UNFIXED: Search ALL assistant messages for 'could be improved', 'consider', 'potential issue', 'preexisting', 'known issue', 'follow-up', 'out of scope'. If an issue was identified but no subsequent fix/edit followed, block.\n3. VERIFICATION: Search the transcript for WebSearch, WebFetch, or doc-reading tool calls. Were factual claims, technical assumptions, API schemas, or recommendations backed by primary source research? Block if significant claims were made with no evidence of verification.\n4. MEMORIES: If a hack/ directory exists in cwd, were PROJECT.md or TODO.md updated for non-trivial work?\n\nFOR CODE/CONFIG WORK:\n5. TESTS: Search transcript for test execution tool calls (pytest, make test, etc). Block if code was modified but no test execution found.\n6. TODOs: Grep modified files (from git diff) for TODO, FIXME, HACK. Block if found.\n7. BRANCH: Run git status — changes should be on a feature branch or staged.\n\nFOR QUESTIONS/RESEARCH:\n5. Search transcript for WebSearch/WebFetch tool calls. Were answers backed by research, or stated from memory? Block if no research evidence for specific technical claims.\n6. Were uncertainties flagged with 'I don't know' rather than confident guesses?\n\nReturn {\"ok\": true} only if ALL applicable checks pass. Return {\"ok\": false, \"reason\": \"what failed\"} if any check fails.",
+            "timeout": 120
           }
         ]
       }
