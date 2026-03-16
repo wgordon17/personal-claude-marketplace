@@ -4,7 +4,7 @@
 # ///
 """Stop Hook Main -- zero-dependency fast triage for Claude Code Stop events.
 
-Reads Stop hook stdin JSON, manages per-session state in /tmp, performs
+Reads Stop hook stdin JSON, manages per-session state in ~/.claude, performs
 deterministic triage (loop guard, transcript delta, git diff, signal detection,
 question classification, work-type determination), and either exits 0 (allow
 stop) or delegates to stop-hook-llm.py for LLM evaluation.
@@ -13,7 +13,7 @@ Exit codes:
   0 -- allow stop (fast-exit or LLM pass)
   2 -- block stop, Claude should continue (LLM fail)
 
-State file: /tmp/claude-stop-hook-state.json (overridable via STOP_HOOK_STATE_PATH)
+State file: ~/.claude/stop-hook-state.json (overridable via STOP_HOOK_STATE_PATH)
 """
 
 import contextlib
@@ -30,12 +30,15 @@ from typing import NoReturn
 # ── Constants ────────────────────────────────────────────────────────────────
 
 _MAX_INPUT = 10 * 1024 * 1024  # 10 MB
-_STATE_PATH = Path(os.environ.get("STOP_HOOK_STATE_PATH", "/tmp/claude-stop-hook-state.json"))
+_STATE_PATH = Path(
+    os.environ.get("STOP_HOOK_STATE_PATH", str(Path.home() / ".claude" / "stop-hook-state.json"))
+)
 _STATE_TTL_SECONDS = 24 * 3600  # 24 hours
 _GIT_TIMEOUT = 5  # seconds
 _LLM_TIMEOUT = 60  # seconds
 _SHORT_RESPONSE_CHARS = 200
 _RECENT_MESSAGES_LIMIT = 5
+_HACK_RECENT_SECONDS = 300  # 5 minutes
 
 # MCP tool names that are read-only (do NOT trigger write-signal detection)
 _MCP_READ_ONLY = frozenset(
@@ -142,9 +145,12 @@ def _load_state() -> dict:
 
 
 def _save_state(state: dict) -> None:
-    """Save state file. Silently ignores errors."""
+    """Save state file atomically. Silently ignores errors."""
     with contextlib.suppress(OSError):
-        _STATE_PATH.write_text(json.dumps(state))
+        _STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _STATE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state))
+        os.replace(tmp, _STATE_PATH)
 
 
 def _clean_stale_sessions(state: dict) -> dict:
@@ -170,13 +176,15 @@ def _update_session_state(
     state: dict,
     session_id: str,
     diff_hash: str,
-    transcript_line_count: int,
+    transcript_byte_offset: int,
+    first_user_message: str | None = None,
 ) -> dict:
     """Write updated session state and return the full state dict."""
     state[session_id] = {
         "last_diff_hash": diff_hash,
         "last_fire_timestamp": time.time(),
-        "last_transcript_line_count": transcript_line_count,
+        "last_transcript_byte_offset": transcript_byte_offset,
+        "first_user_message": first_user_message,
     }
     return state
 
@@ -205,104 +213,113 @@ def _parse_hook_input() -> dict:
 
 
 def _parse_transcript(
-    transcript_path: str, start_line: int
+    transcript_path: str,
+    start_byte_offset: int,
+    cached_first_user_message: str | None,
 ) -> tuple[list[str], list[str], str | None, str | None, int]:
-    """Parse JSONL transcript from start_line onward.
+    """Parse JSONL transcript, reading only new bytes from start_byte_offset.
+
+    Uses byte offsets instead of line counts for efficient seeking.
+    Caches first_user_message in caller's state to avoid re-scanning.
 
     Returns:
         (new_tool_calls, recent_assistant_messages, latest_user_message,
-         first_user_message, total_line_count)
+         first_user_message, end_byte_offset)
     """
     new_tool_calls: list[str] = []
     assistant_messages: list[str] = []
     latest_user_message: str | None = None
-    first_user_message: str | None = None
-    total_lines = start_line
+    first_user_message = cached_first_user_message
 
     try:
         path = Path(transcript_path)
         if not path.exists():
-            return [], [], None, None, 0
+            return [], [], None, first_user_message, 0
 
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        total_lines = len(lines)
+        file_size = path.stat().st_size
 
-        # Scan all lines for first_user_message (from the beginning)
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if not isinstance(entry, dict):
-                continue
-            role = entry.get("role", "")
-            if role == "user" and first_user_message is None:
-                content = entry.get("content", "")
-                if isinstance(content, str) and content.strip():
-                    first_user_message = content.strip()
-                elif isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            text = block.get("text", "")
-                            if text.strip():
-                                first_user_message = text.strip()
-                                break
+        # No new content since last check
+        if file_size <= start_byte_offset:
+            return [], [], None, first_user_message, start_byte_offset
 
-        # Parse new lines (from start_line onward)
-        for line in lines[start_line:]:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if not isinstance(entry, dict):
-                continue
+        # If first_user_message is not cached, read from beginning to find it;
+        # otherwise seek directly to new content
+        need_first_user = first_user_message is None
+        read_from = 0 if need_first_user else start_byte_offset
 
-            role = entry.get("role", "")
-            msg_type = entry.get("type", "")
+        with open(path, encoding="utf-8", errors="replace") as f:
+            if read_from > 0:
+                f.seek(read_from)
 
-            # Tool use entries (flat format: top-level type == "tool_use")
-            if msg_type == "tool_use":
-                tool_name = entry.get("name", "")
-                if tool_name:
-                    new_tool_calls.append(tool_name)
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if not isinstance(entry, dict):
+                    continue
 
-            # Assistant messages (inline tool_use blocks live here, not in flat tool_use entries)
-            if role == "assistant":
-                content = entry.get("content", "")
-                if isinstance(content, str) and content.strip():
-                    assistant_messages.append(content.strip())
-                elif isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            text = block.get("text", "")
-                            if text.strip():
-                                assistant_messages.append(text.strip())
-                        elif isinstance(block, dict) and block.get("type") == "tool_use":
-                            name = block.get("name", "")
-                            if name:
-                                new_tool_calls.append(name)
+                role = entry.get("role", "")
+                msg_type = entry.get("type", "")
 
-            # User messages (track latest)
-            if role == "user":
-                content = entry.get("content", "")
-                if isinstance(content, str) and content.strip():
-                    latest_user_message = content.strip()
-                elif isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            text = block.get("text", "")
-                            if text.strip():
-                                latest_user_message = text.strip()
-                                break
+                # First user message (only when not cached)
+                if need_first_user and role == "user" and first_user_message is None:
+                    content = entry.get("content", "")
+                    if isinstance(content, str) and content.strip():
+                        first_user_message = content.strip()
+                    elif isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text = block.get("text", "")
+                                if text.strip():
+                                    first_user_message = text.strip()
+                                    break
+
+                # Tool use entries (flat format: top-level type == "tool_use")
+                if msg_type == "tool_use":
+                    tool_name = entry.get("name", "")
+                    if tool_name:
+                        new_tool_calls.append(tool_name)
+
+                # Assistant messages
+                if role == "assistant":
+                    content = entry.get("content", "")
+                    if isinstance(content, str) and content.strip():
+                        assistant_messages.append(content.strip())
+                    elif isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text = block.get("text", "")
+                                if text.strip():
+                                    assistant_messages.append(text.strip())
+                            elif isinstance(block, dict) and block.get("type") == "tool_use":
+                                name = block.get("name", "")
+                                if name:
+                                    new_tool_calls.append(name)
+
+                # User messages (track latest)
+                if role == "user":
+                    content = entry.get("content", "")
+                    if isinstance(content, str) and content.strip():
+                        latest_user_message = content.strip()
+                    elif isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text = block.get("text", "")
+                                if text.strip():
+                                    latest_user_message = text.strip()
+                                    break
+
+            end_offset = f.tell()
 
     except (OSError, UnicodeDecodeError):
-        pass
+        return [], [], None, first_user_message, start_byte_offset
 
     # Deduplicate tool calls while preserving order
     seen: set[str] = set()
@@ -313,7 +330,7 @@ def _parse_transcript(
             deduped_tool_calls.append(tc)
 
     recent = assistant_messages[-_RECENT_MESSAGES_LIMIT:]
-    return deduped_tool_calls, recent, latest_user_message, first_user_message, total_lines
+    return deduped_tool_calls, recent, latest_user_message, first_user_message, end_offset
 
 
 # ── Git Checks ───────────────────────────────────────────────────────────────
@@ -409,7 +426,7 @@ def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:
     """Check if hack/plans/ or hack/research/ files were recently modified."""
     result = {"plans": False, "research": False}
     now = time.time()
-    recent_threshold = 300  # 5 minutes
+    recent_threshold = _HACK_RECENT_SECONDS
     try:
         hack_path = Path(cwd) / "hack"
         if not hack_path.is_dir():
@@ -579,13 +596,14 @@ def main() -> None:
     # ── Fast-exit 2: First fire — initialize state ───────────────────────────
     if session_state is None:
         diff_hash = _git_diff_hash(cwd)
-        # Set line_count to 0 — next invocation will parse from line 0, catching everything
-        state = _update_session_state(state, session_id, diff_hash, 0)
+        # Set byte_offset to 0 — next invocation will parse from byte 0, catching everything
+        state = _update_session_state(state, session_id, diff_hash, 0, None)
         _save_state(state)
         _exit_pass()
 
-    last_transcript_line_count = session_state.get("last_transcript_line_count", 0)
+    last_byte_offset = session_state.get("last_transcript_byte_offset", 0)
     last_diff_hash = session_state.get("last_diff_hash", "")
+    cached_first_user_message = session_state.get("first_user_message")
 
     # ── Parse transcript delta ───────────────────────────────────────────────
     (
@@ -593,13 +611,15 @@ def main() -> None:
         recent_assistant_messages,
         latest_user_message,
         first_user_message,
-        total_lines,
-    ) = _parse_transcript(transcript_path, last_transcript_line_count)
+        end_byte_offset,
+    ) = _parse_transcript(transcript_path, last_byte_offset, cached_first_user_message)
 
-    # ── Fast-exit 3: Zero new transcript lines ───────────────────────────────
-    if total_lines <= last_transcript_line_count:
-        # No new lines — nothing changed, reuse last_diff_hash to avoid git subprocess
-        state = _update_session_state(state, session_id, last_diff_hash, total_lines)
+    # ── Fast-exit 3: No new transcript content ───────────────────────────────
+    if end_byte_offset <= last_byte_offset:
+        # No new content — nothing changed, reuse last_diff_hash to avoid git subprocess
+        state = _update_session_state(
+            state, session_id, last_diff_hash, end_byte_offset, first_user_message
+        )
         _save_state(state)
         _exit_pass()
 
@@ -618,13 +638,17 @@ def main() -> None:
 
     # ── Fast-exit 4: META question ───────────────────────────────────────────
     if question_type == "meta" and not write_signals and not diff_changed:
-        state = _update_session_state(state, session_id, current_diff_hash, total_lines)
+        state = _update_session_state(
+            state, session_id, current_diff_hash, end_byte_offset, first_user_message
+        )
         _save_state(state)
         _exit_pass()
 
     # ── Fast-exit 5: OPINION question ────────────────────────────────────────
     if question_type == "opinion" and not write_signals and not diff_changed:
-        state = _update_session_state(state, session_id, current_diff_hash, total_lines)
+        state = _update_session_state(
+            state, session_id, current_diff_hash, end_byte_offset, first_user_message
+        )
         _save_state(state)
         _exit_pass()
 
@@ -640,13 +664,17 @@ def main() -> None:
         and not has_question_in_message
         and not user_requested_action
     ):
-        state = _update_session_state(state, session_id, current_diff_hash, total_lines)
+        state = _update_session_state(
+            state, session_id, current_diff_hash, end_byte_offset, first_user_message
+        )
         _save_state(state)
         _exit_pass()
 
     # ── Exit-with-guidance: Research + short response ────────────────────────
     if research_used and response_is_short and not write_signals and not diff_changed:
-        state = _update_session_state(state, session_id, current_diff_hash, total_lines)
+        state = _update_session_state(
+            state, session_id, current_diff_hash, end_byte_offset, first_user_message
+        )
         _save_state(state)
         _exit_pass("Research done, verify external claims if any.")
 
@@ -659,7 +687,9 @@ def main() -> None:
         and not new_tool_calls
         and has_question_in_message
     ):
-        state = _update_session_state(state, session_id, current_diff_hash, total_lines)
+        state = _update_session_state(
+            state, session_id, current_diff_hash, end_byte_offset, first_user_message
+        )
         _save_state(state)
         _exit_pass("Answer based on code exploration.")
 
@@ -682,7 +712,9 @@ def main() -> None:
 
     # ── Fast-exit 7: No triggers at all ─────────────────────────────────────
     if not trigger_reasons:
-        state = _update_session_state(state, session_id, current_diff_hash, total_lines)
+        state = _update_session_state(
+            state, session_id, current_diff_hash, end_byte_offset, first_user_message
+        )
         _save_state(state)
         _exit_pass()
 
@@ -708,7 +740,9 @@ def main() -> None:
     decision, findings = _invoke_llm(llm_context, plugin_root)
 
     # ── Update state regardless of decision ─────────────────────────────────
-    state = _update_session_state(state, session_id, current_diff_hash, total_lines)
+    state = _update_session_state(
+        state, session_id, current_diff_hash, end_byte_offset, first_user_message
+    )
     _save_state(state)
 
     # ── Exit based on LLM decision ───────────────────────────────────────────

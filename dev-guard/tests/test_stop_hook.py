@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import textwrap
+import time
 import uuid
 from pathlib import Path
 
@@ -66,19 +67,26 @@ def write_transcript(path: Path, entries: list[dict]) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def transcript_offset(entries: list[dict], seen: int) -> int:
+    """Byte offset after `seen` JSONL entries (matches write_transcript format)."""
+    return sum(len(json.dumps(e)) + 1 for e in entries[:seen])
+
+
 def seed_state(
     state_path: Path,
     session_id: str,
     *,
-    line_count: int = 5,
+    byte_offset: int = 0,
     diff_hash: str = "",
+    first_user_message: str | None = None,
 ) -> None:
     """Write initial state so the hook treats this as a second fire."""
     state = {
         session_id: {
             "last_diff_hash": diff_hash,
-            "last_fire_timestamp": __import__("time").time(),
-            "last_transcript_line_count": line_count,
+            "last_fire_timestamp": time.time(),
+            "last_transcript_byte_offset": byte_offset,
+            "first_user_message": first_user_message,
         }
     }
     state_path.write_text(json.dumps(state))
@@ -150,7 +158,7 @@ class TestFirstFire:
         entry = state[session_id]
         assert "last_diff_hash" in entry
         assert "last_fire_timestamp" in entry
-        assert "last_transcript_line_count" in entry
+        assert "last_transcript_byte_offset" in entry
 
     def test_first_fire_with_corrupt_state_exits_0(self, tmp_path):
         state_path = tmp_path / "state.json"
@@ -172,8 +180,12 @@ class TestZeroNewLines:
             {"role": "assistant", "content": "hi"},
         ]
         write_transcript(transcript, entries)
-        # Seed state at current line count — no new lines since last fire
-        seed_state(tmp_path / "state.json", session_id, line_count=len(entries))
+        # Seed state at end of file — no new content since last fire
+        seed_state(
+            tmp_path / "state.json",
+            session_id,
+            byte_offset=transcript_offset(entries, len(entries)),
+        )
 
         payload = make_payload(session_id=session_id, transcript_path=str(transcript))
         result = run_hook(payload, state_path=tmp_path / "state.json")
@@ -192,7 +204,7 @@ class TestShortResponseFastExit:
             {"role": "assistant", "content": "It is 3pm."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
 
         payload = make_payload(
             session_id=session_id,
@@ -212,7 +224,7 @@ class TestShortResponseFastExit:
             {"role": "assistant", "content": long_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
 
         # No plugin root → LLM fails open → still exits 0, but didn't short-circuit
         payload = make_payload(
@@ -242,7 +254,7 @@ class TestQuestionClassification:
             {"role": "assistant", "content": assistant_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
         payload = make_payload(
             session_id=session_id,
             transcript_path=str(transcript),
@@ -291,7 +303,7 @@ class TestExitWithGuidance:
             {"role": "assistant", "content": "Here is a summary."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
 
         # Pass cwd=tmp_path (non-git dir) so git diff returns empty string,
         # matching the seeded empty diff_hash — otherwise diff_changed=True blocks this path.
@@ -317,7 +329,7 @@ class TestExitWithGuidance:
             {"role": "assistant", "content": "It reads files."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
 
         payload = make_payload(
             session_id=session_id,
@@ -343,7 +355,7 @@ class TestWriteToolSignals:
             {"role": "assistant", "content": "I've completed the fix. The changes are ready."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
         return session_id, transcript, "I've completed the fix. The changes are ready."
 
     def test_edit_tool_triggers_llm_path(self, tmp_path):
@@ -428,7 +440,7 @@ class TestMCPWriteToolSignals:
             {"role": "assistant", "content": assistant_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
         return session_id, transcript
 
     def test_mcp_read_only_tool_does_not_trigger(self, tmp_path):
@@ -497,7 +509,7 @@ class TestCompletionClaims:
             {"role": "assistant", "content": assistant_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
         payload = make_payload(
             session_id=session_id,
             transcript_path=str(transcript),
@@ -551,7 +563,7 @@ class TestLLMSubprocess:
         ]
         write_transcript(transcript, entries)
         state_path = tmp_path / "state.json"
-        seed_state(state_path, session_id, line_count=1)
+        seed_state(state_path, session_id, byte_offset=transcript_offset(entries, 1))
         payload = make_payload(
             session_id=session_id,
             transcript_path=str(transcript),
@@ -615,7 +627,7 @@ class TestStateManagement:
         ]
         write_transcript(transcript, entries)
         state_path = tmp_path / "state.json"
-        seed_state(state_path, session_id, line_count=2)  # saw first 2 lines
+        seed_state(state_path, session_id, byte_offset=transcript_offset(entries, 2))
 
         payload = make_payload(
             session_id=session_id,
@@ -627,20 +639,22 @@ class TestStateManagement:
 
         state = json.loads(state_path.read_text())
         assert session_id in state
-        assert state[session_id]["last_transcript_line_count"] == len(entries)
+        assert state[session_id]["last_transcript_byte_offset"] == transcript_offset(
+            entries, len(entries)
+        )
 
     def test_stale_sessions_pruned(self, tmp_path):
         """Sessions older than 24h are removed from state on next run."""
         state_path = tmp_path / "state.json"
         old_session = "sess-old"
         fresh_session = "sess-fresh"
-        old_time = __import__("time").time() - (25 * 3600)  # 25h ago
+        old_time = time.time() - (25 * 3600)  # 25h ago
 
         state = {
             old_session: {
                 "last_diff_hash": "",
                 "last_fire_timestamp": old_time,
-                "last_transcript_line_count": 0,
+                "last_transcript_byte_offset": 0,
             },
         }
         state_path.write_text(json.dumps(state))
@@ -695,7 +709,7 @@ class TestNonGitDirectory:
             {"role": "assistant", "content": "Hi there."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, line_count=1)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
 
         payload = make_payload(
             session_id=session_id,
@@ -709,7 +723,7 @@ class TestNonGitDirectory:
     def test_missing_transcript_exits_0(self, tmp_path):
         """Missing transcript file → graceful fast exit."""
         session_id = str(uuid.uuid4())
-        seed_state(tmp_path / "state.json", session_id, line_count=0)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=0)
         payload = make_payload(
             session_id=session_id,
             transcript_path="/nonexistent/path/transcript.jsonl",
@@ -734,7 +748,7 @@ class TestAgentToolSignals:
         ]
         write_transcript(transcript, entries)
         state_path = tmp_path / "state.json"
-        seed_state(state_path, session_id, line_count=1)
+        seed_state(state_path, session_id, byte_offset=transcript_offset(entries, 1))
 
         payload = make_payload(
             session_id=session_id,
@@ -777,4 +791,149 @@ class TestMalformedInput:
             text=True,
             env={**os.environ, "STOP_HOOK_STATE_PATH": str(tmp_path / "state.json")},
         )
+        assert result.returncode == 0
+
+
+# ── hack/ directory modification detection ────────────────────────────────────
+
+
+class TestHackDirModified:
+    def test_hack_plans_recently_modified_triggers_llm(self, tmp_path):
+        """Recently modified file in hack/plans/ → planning trigger → LLM invoked."""
+        hack_plans = tmp_path / "hack" / "plans"
+        hack_plans.mkdir(parents=True)
+        (hack_plans / "2026-03-16-test.md").write_text("# Plan")
+
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Planning incomplete."])
+
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Create a plan."},
+            {
+                "role": "assistant",
+                "content": "I've written the plan to hack/plans/. The planning is complete.",
+            },
+        ]
+        write_transcript(transcript, entries)
+        seed_state(
+            tmp_path / "state.json",
+            session_id,
+            byte_offset=transcript_offset(entries, 1),
+        )
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message=(
+                "I've written the plan to hack/plans/. The planning is complete."
+            ),
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # LLM was invoked (not fast-exited) and returned fail
+        assert result.returncode == 2
+        assert "Planning incomplete" in result.stderr
+
+    def test_hack_research_with_websearch_triggers_llm(self, tmp_path):
+        """WebSearch + hack/research/ modified → research trigger → LLM invoked."""
+        hack_research = tmp_path / "hack" / "research"
+        hack_research.mkdir(parents=True)
+        (hack_research / "2026-03-16-test.md").write_text("# Research")
+
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Research incomplete."])
+
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        long_msg = (
+            "I've completed the research and written findings to hack/research/. "
+            "The analysis covers technical feasibility, cost implications, "
+            "and implementation complexity across multiple dimensions. "
+            "All key claims are backed by primary source research. The research is complete."
+        )
+        entries = [
+            {"role": "user", "content": "Research this topic."},
+            {"type": "tool_use", "name": "WebSearch", "id": "t1"},
+            {"role": "assistant", "content": long_msg},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(
+            tmp_path / "state.json",
+            session_id,
+            byte_offset=transcript_offset(entries, 1),
+        )
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message=long_msg,
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 2
+        assert "Research incomplete" in result.stderr
+
+    def test_hack_dir_old_file_does_not_trigger(self, tmp_path):
+        """File in hack/plans/ older than 5 minutes → no planning trigger."""
+        hack_plans = tmp_path / "hack" / "plans"
+        hack_plans.mkdir(parents=True)
+        old_file = hack_plans / "old-plan.md"
+        old_file.write_text("# Old plan")
+        # Set mtime to 10 minutes ago
+        old_mtime = time.time() - 600
+        os.utime(old_file, (old_mtime, old_mtime))
+
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "What time is it?"},
+            {"role": "assistant", "content": "It's 3pm."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(
+            tmp_path / "state.json",
+            session_id,
+            byte_offset=transcript_offset(entries, 1),
+        )
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="It's 3pm.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        # Short response, no signals → fast exit 0
+        assert result.returncode == 0
+
+    def test_no_hack_dir_does_not_trigger(self, tmp_path):
+        """No hack/ directory → no planning/research trigger."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "What time is it?"},
+            {"role": "assistant", "content": "It's 3pm."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(
+            tmp_path / "state.json",
+            session_id,
+            byte_offset=transcript_offset(entries, 1),
+        )
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="It's 3pm.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
