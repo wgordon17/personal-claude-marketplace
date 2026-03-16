@@ -3128,8 +3128,15 @@ def _handle_bash_command(command: str) -> None:
     # Block cd && git compounds before processing individual subcommands
     _check_cd_git_compound(subcmds, command)
 
-    # RTK compression for single, non-piped commands
-    if len(subcmds) == 1 and len(split_pipes(command)) == 1:
+    # RTK compression for single, non-piped, non-subshell commands.
+    # Subshell commands ($(), backticks) fall through to _check_subcmd which
+    # extracts and checks inner commands against deny rules and git safety.
+    if (
+        len(subcmds) == 1
+        and len(split_pipes(command)) == 1
+        and "$(" not in command
+        and "`" not in command
+    ):
         stripped = strip_env_prefix(strip_shell_keyword(command))
         check_git_safety(stripped, fetch_seen=bool(_FETCH_PATTERN.search(command)))
         rtk_cmd = _rtk_rewrite(command)

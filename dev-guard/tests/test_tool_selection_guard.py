@@ -4575,6 +4575,21 @@ class TestRTKIntegration:
             f"Expected exit 2 (grep blocked in pipe), got {result.returncode}"
         )
 
+    def test_rtk_subshell_command_not_rewritten(self, rtk_env):
+        """cargo test $(cmd) is NOT RTK-rewritten (subshell bypasses safety)."""
+        result = run_guard("Bash", {"command": "cargo test $(echo hello)"}, env=rtk_env)
+        # Subshell commands skip RTK and fall through to deny rules.
+        assert result.returncode == 2, (
+            f"Expected exit 2 (cargo-test deny rule), got {result.returncode}"
+        )
+
+    def test_rtk_backtick_command_not_rewritten(self, rtk_env):
+        """cargo test `cmd` is NOT RTK-rewritten (backtick subshell)."""
+        result = run_guard("Bash", {"command": "cargo test `echo hello`"}, env=rtk_env)
+        assert result.returncode == 2, (
+            f"Expected exit 2 (cargo-test deny rule), got {result.returncode}"
+        )
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # RTK Integration: rtk_events DB logging
