@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Before stopping, verify ALL of the following. Return {\"decision\": \"block\", \"reason\": \"...\"} if ANY check fails:\n\n1. If code was written: were tests run and passing?\n2. Search the diff or conversation for TODO, FIXME, HACK, 'later', 'follow-up' — any unresolved?\n3. Were any issues identified but not fixed? (look for 'could be improved', 'consider', 'potential issue')\n4. Does the work fully address the original request? Check each requirement.\n5. If implementation work: are changes on a feature branch or ready to commit?\n6. Were project memories (hack/ files, plans) updated if applicable?\n\nReturn {\"decision\": \"allow\"} ONLY if ALL checks pass."
+            "prompt": "Before stopping, verify ALL of the following. Return {\"decision\": \"block\", \"reason\": \"...\"} if ANY check fails:\n\n1. If code was written: were tests run and passing?\n2. Search the diff or conversation for TODO, FIXME, HACK, 'later', 'follow-up' — any unresolved?\n3. Were any issues identified but not fixed? (look for 'could be improved', 'consider', 'potential issue')\n4. Does the work fully address the original request? Check each requirement.\n5. If implementation work: are changes on a feature branch or ready to commit?\n6. Were project memories (hack/ files, plans) updated if applicable?\n\nReturn {\"decision\": \"approve\"} ONLY if ALL checks pass."
           }
         ]
       }
