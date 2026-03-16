@@ -20,7 +20,10 @@ artifact gates prevent work from being lost.
 **Always after:** implementation tasks, /swarm, /spawn, subagent work, research, planning,
 significant artifact creation.
 
-**Skip when:** pure conversation with no deliverables, single-line trivial fixes, or user opts out.
+**Skip when:** pure conversation with no deliverables, or user explicitly opts out.
+
+**Never skip "because it's trivial."** Small changes cause real failures. Don't rationalize
+your way out of the process.
 
 ---
 
@@ -111,12 +114,32 @@ Execute this protocol for EVERY round:
    break the problem down to fundamental truths and rebuild
    your assessment from the ground up.
 
-3. FIX ALL FINDINGS IMMEDIATELY
+3. PROJECT RULES + CROSS-REFERENCE INTEGRITY (Round 2 only)
+   a) Re-read CLAUDE.md and CONTRIBUTING.md (if they exist).
+      Check every change against project-specific conventions:
+      - Version bump rules (e.g., "always bump plugin versions in both files")
+      - Commit message conventions
+      - Required file updates (changelogs, manifests, registries)
+      - Deployment/delivery requirements (will this change actually reach users?)
+      - Any other project-specific rules that apply to this type of change
+
+   b) Cross-reference integrity: search the ENTIRE codebase for references
+      to things you changed, renamed, or removed. Files you DIDN'T modify
+      can have stale references to things you DID modify. Grep for:
+      - Old names/values you replaced
+      - Functions/skills/tools you renamed or removed
+      - Version numbers that should match across files
+      - Import paths, file references, cross-links
+
+   This catches issues that no generic lens covers — project conventions
+   and cross-file consistency are invisible to single-file review.
+
+4. FIX ALL FINDINGS IMMEDIATELY
    Do not note issues for later. Do not say "could be improved."
    Fix them NOW. Every identified issue must result in an edit or
    a documented, specific blocker.
 
-4. ACTION AUDIT
+5. ACTION AUDIT
    Scan ALL output (yours and any subagent output) for
    identified-but-unactioned items:
    - "could be improved" / "might want to" / "consider"
@@ -136,7 +159,7 @@ Execute this protocol for EVERY round:
    - Cross-reference against actual edits made
    - The delta is "identified-but-unactioned" — fix or justify each one
 
-5. serena::think_about_whether_you_are_done
+6. serena::think_about_whether_you_are_done
    "Did I genuinely address everything this lens covers?"
    If no → fix remaining items before proceeding to next round.
 ```
@@ -157,6 +180,12 @@ tool must confirm.
 Same-context review has an anchoring ceiling. Fresh-context subagents break through it by
 reviewing with no knowledge of your implementation decisions.
 
+**Layer 2 is NEVER optional.** Do not skip it because the change "seems trivial" or subagents
+feel "disproportionate." Small changes cause real failures — the version bump miss that broke
+the Stop hook was a 1-word fix where Layer 2 was skipped as "disproportionate." The subagent
+would have caught it. If the change is truly trivial, the subagents finish quickly — that's
+cheap insurance, not wasted effort.
+
 ### Preparation
 
 ```
@@ -168,6 +197,8 @@ Collect:
 - `git diff` (for code) or artifact content (for non-code)
 - The original user request (verbatim)
 - Work type classification from Step 0
+- CLAUDE.md / CONTRIBUTING.md project rules (if they exist) — subagents need these
+  to check project convention compliance
 
 ### Subagent A: Completeness Reviewer (opus)
 
@@ -222,7 +253,7 @@ Serena memory checks. Pure question with no persistent insights → skip memory 
 
 ## Artifact Gate (BLOCKING)
 
-Ensures work products aren't lost.
+Ensures work products aren't lost AND project conventions are satisfied.
 
 | Work Type | Gate Criteria |
 |-----------|---------------|
@@ -231,6 +262,21 @@ Ensures work products aren't lost.
 | **Research** | Key findings documented persistently (claude-mem, PROJECT.md, or file). |
 | **Config** | Valid syntax. Consistent with existing patterns. Validated. |
 | **Question** | No gate (unless answer revealed something worth persisting). |
+
+**Project-specific checks (all work types) — final re-verification:**
+Round 2 checked project rules during review. This gate re-verifies AFTER all fixes are applied
+(Layer 1 fixes + Layer 2 subagent fixes may have changed the state). Re-read CLAUDE.md:
+- Version bumps in plugin/package manifests (if project requires them)
+- Registry/marketplace entries updated to match
+- Will the change actually reach users after merge? (cache invalidation, version detection)
+- Any required companion files (changelogs, migration guides, etc.)
+
+**Upstream state verification (if a PR exists):**
+Do not assume prior pushes landed or that the PR is still open. Verify:
+- `gh pr view` — is the PR still open, or was it already merged/closed?
+- `git log origin/main..HEAD` — does the branch contain ALL intended commits?
+- If force-pushing to an already-merged branch, commits are silently orphaned
+- After merge: `git log origin/main` — confirm the merge includes your changes
 
 ---
 
@@ -264,6 +310,7 @@ Layer 1 — Self-Review:
   Issues found: [count]
   Issues fixed: [count]
   Identified-but-unactioned caught: [count]
+  Project rules violations caught: [count]
 
 Layer 2 — Subagent Reviews:
   Subagent A (Completeness): [count] findings across 2 passes
