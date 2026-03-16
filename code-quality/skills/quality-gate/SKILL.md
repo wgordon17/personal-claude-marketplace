@@ -38,8 +38,9 @@ digraph quality_gate {
   layer2 [label="Layer 2: Fresh-Context Subagents\n2 subagents x 2 passes"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
+  nodataloss [label="No Data Loss Gate (BLOCKING)"];
   final [label="Final Verification"];
-  detect -> layer1 -> layer2 -> memory -> artifact -> final;
+  detect -> layer1 -> layer2 -> memory -> artifact -> nodataloss -> final;
 }
 ```
 
@@ -194,11 +195,22 @@ tool must confirm.
 Same-context review has an anchoring ceiling. Fresh-context subagents break through it by
 reviewing with no knowledge of your implementation decisions.
 
-**Layer 2 is NEVER optional.** Do not skip it because the change "seems trivial" or subagents
-feel "disproportionate." Small changes cause real failures — the version bump miss that broke
-the Stop hook was a 1-word fix where Layer 2 was skipped as "disproportionate." The subagent
-would have caught it. If the change is truly trivial, the subagents finish quickly — that's
-cheap insurance, not wasted effort.
+**Layer 2 is NEVER optional and NEVER substitutable.** Do not skip it because the change "seems
+trivial" or subagents feel "disproportionate." Do not substitute it with prior review work —
+swarm Phase 4 reviewers, sc:analyze output, or any other earlier review does NOT replace Layer 2.
+
+**Why Layer 2 is distinct from all prior reviews:**
+- **Timing:** Layer 2 reviews the FINAL state — after Layer 1 fixes, after any swarm Phase 5
+  fixes, after everything. Prior reviews examined earlier, now-stale versions of the work.
+- **Lens:** Layer 2 uses holistic lenses (completeness-vs-original-request, adversarial).
+  Domain-specific reviewers (security, performance, QA) cover different ground.
+- **Context:** Layer 2 subagents have zero knowledge of your implementation decisions,
+  rationalizations, or "good enough" compromises. Prior reviewers in the same session share
+  your context ceiling.
+
+If you find yourself writing "SUBSTITUTED by" or "already covered by" for Layer 2, you are
+rationalizing. Stop. Spawn the subagents. If the change is truly trivial, the subagents
+finish quickly — that's cheap insurance, not wasted effort.
 
 ### Preparation
 
@@ -323,6 +335,23 @@ Do not assume prior pushes landed or that the PR is still open. Verify:
 
 ---
 
+## No Data Loss Gate (BLOCKING)
+
+Ensures work artifacts are persisted to a durable, findable location — not just in the
+conversation context. Cannot proceed past this gate without confirming each applicable item.
+
+| Work Type | Persistence Check |
+|-----------|-------------------|
+| **Code** | Changes are committed to a feature branch OR explicitly staged and user is informed. No committed-but-not-pushed-and-forgotten work. |
+| **Planning** | Plan written to `hack/plans/YYYY-MM-DD-<topic>.md`. New tasks added to `hack/TODO.md`. |
+| **Research** | Findings written to `hack/research/YYYY-MM-DD-<topic>.md` (if hack/ exists), otherwise to PROJECT.md or saved to claude-mem. Key claims are not conversation-only. |
+| **All types** | Every significant artifact has a clear, durable home. Nothing important exists only in the conversation. |
+
+**Skip conditions:** Pure question with no artifacts → skip. Work explicitly scoped as
+"conversation only" by the user → skip.
+
+---
+
 ## Final Verification
 
 | Work Type | Verification |
@@ -356,8 +385,9 @@ Layer 1 — Self-Review:
   Project rules violations caught: [count]
 
 Layer 2 — Subagent Reviews:
-  Subagent A (Completeness): [count] findings across 2 passes
-  Subagent B (Adversarial): [count] findings across 2 passes
+  Subagent A (Completeness): [count] findings across 2 passes — agent ID: [id]
+  Subagent B (Adversarial): [count] findings across 2 passes — agent ID: [id]
+  (Layer 2 MUST show agent IDs. "SUBSTITUTED" or "N/A" is NEVER valid here.)
 
 Memory Gate: [PASS / UPDATED]
   hack/ files: [updated / N/A]
@@ -367,6 +397,9 @@ Memory Gate: [PASS / UPDATED]
 
 Artifact Gate: [PASS / N/A]
   [work-type-specific status]
+
+No Data Loss Gate: [PASS / N/A]
+  [artifact persistence status]
 
 Final Verification: [PASS / FAIL]
 
@@ -392,8 +425,11 @@ Overall: [PASS / NEEDS WORK]
 
 ## Stop Hook Safety Net
 
-A global Stop hook in `dev-guard` (`type: agent`) catches premature completion claims that bypass
-this skill. Unlike prompt-type hooks, the agent has tool access — it reads the transcript, greps
-modified files for TODOs, checks git status, and verifies test execution actually happened. It
-adapts checks by work type (code, research, questions, planning) and verifies that factual claims
-were backed by research tool calls. Uses `stop_hook_active` guard to prevent infinite loops.
+A global Stop hook in `dev-guard` (`type: command`) catches premature completion claims that bypass
+this skill. It uses a two-script architecture for speed: `stop-hook.py` (stdlib-only, <200ms)
+performs deterministic triage — loop guard, transcript delta, signal detection (write tools, MCP
+writes, completion claim regex, git diff hash change) — and fast-exits for low-signal cases.
+When signals warrant deeper evaluation, it delegates to `stop-hook-llm.py` which calls
+claude-sonnet-4-6 via Vertex AI with an adaptive prompt based on work type (code, research,
+questions, planning) and trigger reasons. Fails open on any infrastructure error.
+Uses `stop_hook_active` guard to prevent infinite loops.

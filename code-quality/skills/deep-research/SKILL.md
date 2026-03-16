@@ -105,6 +105,16 @@ Include viewpoints from:
 
 ## Output Format
 
+### Output Location
+
+If a `hack/` directory exists in the current working directory, write the research report to a file:
+
+1. Create `hack/research/` if it does not exist
+2. Write the report to `hack/research/YYYY-MM-DD-<topic>.md` (use today's date and a short kebab-case topic slug, e.g. `2026-03-16-vertex-ai-pricing.md`)
+3. After writing, tell the user the file path
+
+If no `hack/` directory exists, deliver the report in the conversation only.
+
 ### Research Report Structure
 
 ```markdown
