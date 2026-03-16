@@ -477,6 +477,9 @@ def _log_rtk_event(
     tee_path: str | None = None,
     detail: object | None = None,
 ) -> None:
+    """Log an RTK compression or retrieval event."""
+    if _GUARD_LOG_LEVEL == "off":
+        return
     try:
         conn = _init_db()
         if conn is None:
