@@ -318,6 +318,11 @@ def _parse_transcript(
 
             end_offset = f.tell()
 
+        # After a full scan, if first_user_message was never found (e.g. image-only
+        # first message), use "" sentinel so we don't re-scan the entire file next time
+        if need_first_user and first_user_message is None:
+            first_user_message = ""
+
     except (OSError, UnicodeDecodeError):
         return [], [], None, first_user_message, start_byte_offset
 

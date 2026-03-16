@@ -168,13 +168,13 @@ class TestFirstFire:
         assert result.returncode == 0
 
 
-# ── Fast-exit: zero new transcript lines ──────────────────────────────────────
+# ── Fast-exit: no new transcript content ──────────────────────────────────────
 
 
-class TestZeroNewLines:
-    def test_zero_new_lines_exits_0(self, tmp_path):
+class TestZeroNewContent:
+    def test_no_new_content_exits_0(self, tmp_path):
         transcript = tmp_path / "transcript.jsonl"
-        session_id = "sess-zero-lines"
+        session_id = "sess-no-new-content"
         entries = [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "hi"},
@@ -616,7 +616,7 @@ class TestLLMSubprocess:
 
 class TestStateManagement:
     def test_state_updated_after_pass(self, tmp_path):
-        """State file reflects new line count after a passing run."""
+        """State file reflects new byte offset after a passing run."""
         transcript = tmp_path / "transcript.jsonl"
         session_id = "sess-state-update"
         entries = [
@@ -937,3 +937,106 @@ class TestHackDirModified:
         )
         result = run_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
+
+
+# ── State migration: old format ───────────────────────────────────────────────
+
+
+class TestStateMigration:
+    def test_old_line_count_state_degrades_gracefully(self, tmp_path):
+        """Old state with last_transcript_line_count is handled via .get() defaults."""
+        state_path = tmp_path / "state.json"
+        session_id = "sess-migration"
+        # Write old-format state (pre-byte-offset migration)
+        old_state = {
+            session_id: {
+                "last_diff_hash": "",
+                "last_fire_timestamp": time.time(),
+                "last_transcript_line_count": 5,  # old key name
+            }
+        }
+        state_path.write_text(json.dumps(old_state))
+
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Hello."},
+            {"role": "assistant", "content": "Hi."},
+        ]
+        write_transcript(transcript, entries)
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="Hi.",
+        )
+        result = run_hook(payload, state_path=state_path)
+        # Old key is ignored, byte_offset defaults to 0 → full re-scan → exit 0
+        assert result.returncode == 0
+
+        # Verify state was rewritten with new schema
+        new_state = json.loads(state_path.read_text())
+        assert "last_transcript_byte_offset" in new_state[session_id]
+        assert "last_transcript_line_count" not in new_state[session_id]
+
+
+# ── Multi-fire integration ────────────────────────────────────────────────────
+
+
+class TestMultiFireIntegration:
+    def test_three_sequential_fires_with_transcript_growth(self, tmp_path):
+        """Fire hook 3 times as transcript grows — verifies byte offset tracking."""
+        transcript = tmp_path / "transcript.jsonl"
+        state_path = tmp_path / "state.json"
+        session_id = "sess-multi-fire"
+
+        # Fire 1: first fire, initializes state
+        entries_v1 = [
+            {"role": "user", "content": "Fix the bug."},
+        ]
+        write_transcript(transcript, entries_v1)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="",
+        )
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0
+        state = json.loads(state_path.read_text())
+        assert state[session_id]["last_transcript_byte_offset"] == 0  # first fire sets 0
+
+        # Fire 2: transcript has grown, hook parses new content
+        entries_v2 = entries_v1 + [
+            {"role": "assistant", "content": "Looking into it."},
+        ]
+        write_transcript(transcript, entries_v2)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="Looking into it.",
+        )
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0
+        state = json.loads(state_path.read_text())
+        fire2_offset = state[session_id]["last_transcript_byte_offset"]
+        assert fire2_offset > 0
+        # first_user_message should now be cached
+        assert state[session_id]["first_user_message"] == "Fix the bug."
+
+        # Fire 3: transcript grows again, only new bytes parsed
+        entries_v3 = entries_v2 + [
+            {"role": "user", "content": "Is it done yet?"},
+            {"role": "assistant", "content": "Almost."},
+        ]
+        write_transcript(transcript, entries_v3)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="Almost.",
+        )
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0
+        state = json.loads(state_path.read_text())
+        fire3_offset = state[session_id]["last_transcript_byte_offset"]
+        assert fire3_offset > fire2_offset
+        # first_user_message stays cached
+        assert state[session_id]["first_user_message"] == "Fix the bug."
