@@ -147,7 +147,22 @@ Execute this protocol for EVERY round:
    - "potential issue" / "noted for future" / "TODO"
    - "follow-up" / "out of scope" / "later"
    - "pre-existing" / "preexisting" / "known issue" / "existing failure"
+   - "should be verified" / "needs to be confirmed" / "you should check"
+   - "verify against your" / "please verify" / "you may want to update"
    - Any issue described without a corresponding fix
+
+   THE "DEFERRAL-TO-USER" TRAP:
+   Saying "should be verified" or "you should check" is an admission that
+   work needs doing — and a confession that you didn't do it. If it should
+   be verified, verify it. If it needs checking, check it. If it needs
+   confirming, confirm it. The user asked you to do the work, not to
+   generate a checklist of work for them to do.
+   - "The field ID should be verified against your instance" → Look it up.
+   - "You may want to update the config" → Update it.
+   - "This should be tested with..." → Test it.
+   - "Needs to be confirmed" → Confirm it.
+   Every "should be" is either done or documented as a specific blocker
+   with why you couldn't do it yourself.
 
    THE "PREEXISTING" TRAP:
    Labeling something "preexisting" is NOT permission to ignore it.

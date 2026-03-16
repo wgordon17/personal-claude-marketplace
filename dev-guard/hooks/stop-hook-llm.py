@@ -130,7 +130,12 @@ def _build_prompt(ctx: dict) -> str:
     criteria.append(
         "IDENTIFIED-BUT-UNFIXED: Did the assistant mention issues ('could be improved', "
         "'consider', 'potential issue', 'follow-up', 'out of scope') without fixing them? "
-        "If yes, that is incomplete work."
+        "If yes, that is incomplete work. "
+        "DEFERRAL-TO-USER is the same failure: phrases like 'should be verified', "
+        "'needs to be confirmed', 'you should check', 'verify against your', "
+        "'please verify', 'you may want to update' mean the assistant identified "
+        "work that needs doing and punted it. If it should be verified, verify it. "
+        "If it needs checking, check it. Do not defer work to the user."
     )
 
     if work_type in ("code_config", "mixed"):
