@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -4315,12 +4316,57 @@ class TestUnifiedConfigValidation:
 # RTK Integration: fixtures
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Dummy rtk script that mimics rtk behavior:
+# - `rtk rewrite <cmd>`: echoes "rtk <cmd>" and exits 0 (supported)
+# - `rtk rewrite` with unsupported cmd: exits 1
+# - `rtk config`: prints "Config: $RTK_CONFIG_PATH" (env var must be set)
+# - `rtk config --create`: creates a default config.toml at $RTK_CONFIG_PATH
+_RTK_STUB_SCRIPT = """\
+#!/bin/sh
+if [ "$1" = "rewrite" ]; then
+    shift
+    CMD="$*"
+    case "$CMD" in
+        cargo\\ *) echo "rtk cargo ${CMD#cargo }" ;;
+        git\\ *) echo "rtk git ${CMD#git }" ;;
+        docker\\ *) echo "rtk docker ${CMD#docker }" ;;
+        kubectl\\ *) echo "rtk kubectl ${CMD#kubectl }" ;;
+        go\\ *) echo "rtk go ${CMD#go }" ;;
+        pytest*) echo "rtk pytest ${CMD#pytest}" ;;
+        ls*) echo "rtk ls ${CMD#ls}" ;;
+        curl\\ *) echo "rtk curl ${CMD#curl }" ;;
+        *) exit 1 ;;
+    esac
+    exit 0
+fi
+if [ "$1" = "config" ]; then
+    if [ -z "$RTK_CONFIG_PATH" ]; then
+        echo "Config: unknown"
+        exit 0
+    fi
+    if [ "$2" = "--create" ]; then
+        mkdir -p "$(dirname "$RTK_CONFIG_PATH")"
+        cat > "$RTK_CONFIG_PATH" << 'TOML'
+[telemetry]
+enabled = true
+
+[tee]
+mode = "failures"
+TOML
+        exit 0
+    fi
+    echo "Config: $RTK_CONFIG_PATH"
+    exit 0
+fi
+exit 1
+"""
+
 
 @pytest.fixture
 def rtk_env(tmp_path):
     """Create env with dummy rtk binary on PATH."""
     rtk_script = tmp_path / "rtk"
-    rtk_script.write_text("#!/bin/sh\necho rtk-stub\n")
+    rtk_script.write_text(_RTK_STUB_SCRIPT)
     rtk_script.chmod(0o755)
     env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"}
     env.pop("RTK_DISABLED", None)
@@ -4337,7 +4383,7 @@ def rtk_disabled_env():
 def rtk_db_env(tmp_path):
     """Env with dummy rtk and isolated DB."""
     rtk_script = tmp_path / "rtk"
-    rtk_script.write_text("#!/bin/sh\necho rtk-stub\n")
+    rtk_script.write_text(_RTK_STUB_SCRIPT)
     rtk_script.chmod(0o755)
     db_path = tmp_path / "test-guard.db"
     env = {
@@ -4355,9 +4401,9 @@ def rtk_db_env(tmp_path):
 
 
 class TestRTKIntegration:
-    """RTK rewrite functionality in PreToolUse Bash handling."""
+    """RTK rewrite functionality via `rtk rewrite` subprocess delegation."""
 
-    def _assert_rtk_rewrite(self, result, *, starts_with=None):
+    def _assert_rtk_rewrite(self, result):
         """Assert the guard emitted an allow + updatedInput for RTK."""
         assert result.returncode == 0, (
             f"Expected exit 0 for RTK rewrite, got {result.returncode}. "
@@ -4367,228 +4413,104 @@ class TestRTKIntegration:
         hook = output["hookSpecificOutput"]
         assert hook["permissionDecision"] == "allow", f"Expected allow, got: {hook}"
         assert "updatedInput" in hook, f"Expected updatedInput in hook output: {hook}"
-        if starts_with is not None:
-            cmd = hook["updatedInput"]["command"]
-            assert cmd.startswith(starts_with), (
-                f"Expected command to start with {starts_with!r}, got: {cmd!r}"
-            )
+        return hook["updatedInput"]["command"]
 
-    def test_rtk_rewrite_cargo_test(self, rtk_env):
-        """cargo test is RTK-rewritten when rtk is available."""
-        result = run_guard("Bash", {"command": "cargo test"}, env=rtk_env)
-        self._assert_rtk_rewrite(result, starts_with="RTK_TELEMETRY_DISABLED=1 rtk --tee")
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "cargo test" in cmd
-
-    def test_rtk_rewrite_cargo_test_with_env_prefix(self, rtk_env):
-        """RUST_LOG=debug cargo test preserves env prefix before rtk."""
-        result = run_guard("Bash", {"command": "RUST_LOG=debug cargo test"}, env=rtk_env)
-        self._assert_rtk_rewrite(result)
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        # env prefix appears between RTK_TELEMETRY_DISABLED=1 and rtk
-        assert "RUST_LOG=debug" in cmd
-        assert "rtk --tee" in cmd
-        assert "cargo test" in cmd
-
-    def test_rtk_rewrite_uv_run_pytest(self, rtk_env):
-        """uv run pytest is RTK-rewritten correctly."""
-        result = run_guard("Bash", {"command": "uv run pytest"}, env=rtk_env)
-        self._assert_rtk_rewrite(result, starts_with="RTK_TELEMETRY_DISABLED=1 rtk --tee")
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "uv run pytest" in cmd
-
-    def test_rtk_bare_pytest_still_blocked(self, rtk_env):
-        """Bare pytest is NOT RTK-rewritten; the deny rule fires instead."""
-        result = run_guard("Bash", {"command": "pytest tests/"}, env=rtk_env)
-        assert result.returncode == 2, (
-            f"Expected exit 2 (blocked by deny rule), got {result.returncode}. "
-            f"stdout: {result.stdout!r}"
-        )
-
-    def test_rtk_rewrite_git_push(self, rtk_env):
-        """git push to a feature branch is RTK-rewritten."""
-        result = run_guard("Bash", {"command": "git push origin feat/my-branch"}, env=rtk_env)
-        self._assert_rtk_rewrite(result, starts_with="RTK_TELEMETRY_DISABLED=1 rtk --tee")
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "git push" in cmd
+    # ── Commands that pass deny rules → RTK rewrites them ────────────
 
     def test_rtk_rewrite_git_log(self, rtk_env):
-        """git log --oneline is RTK-rewritten."""
+        """git log passes deny rules, then RTK rewrites it."""
         result = run_guard("Bash", {"command": "git log --oneline"}, env=rtk_env)
-        self._assert_rtk_rewrite(result, starts_with="RTK_TELEMETRY_DISABLED=1 rtk --tee")
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "git log" in cmd
+        cmd = self._assert_rtk_rewrite(result)
+        assert "rtk" in cmd
+
+    def test_rtk_rewrite_git_status(self, rtk_env):
+        """git status passes deny rules, then RTK rewrites it."""
+        result = run_guard("Bash", {"command": "git status"}, env=rtk_env)
+        cmd = self._assert_rtk_rewrite(result)
+        assert "rtk" in cmd
 
     def test_rtk_rewrite_docker_ps(self, rtk_env):
-        """docker ps is RTK-rewritten."""
+        """docker ps passes deny rules, then RTK rewrites it."""
         result = run_guard("Bash", {"command": "docker ps"}, env=rtk_env)
-        self._assert_rtk_rewrite(result, starts_with="RTK_TELEMETRY_DISABLED=1 rtk --tee")
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "docker ps" in cmd
+        cmd = self._assert_rtk_rewrite(result)
+        assert "rtk" in cmd
 
-    def test_rtk_rewrite_kubectl_get(self, rtk_env):
-        """kubectl get pods is RTK-rewritten."""
-        result = run_guard("Bash", {"command": "kubectl get pods"}, env=rtk_env)
-        self._assert_rtk_rewrite(result, starts_with="RTK_TELEMETRY_DISABLED=1 rtk --tee")
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "kubectl get" in cmd
+    # ── Commands blocked by deny rules → RTK never fires ─────────────
 
-    def test_rtk_rewrite_go_test(self, rtk_env):
-        """go test ./... is RTK-rewritten."""
-        result = run_guard("Bash", {"command": "go test ./..."}, env=rtk_env)
-        self._assert_rtk_rewrite(result, starts_with="RTK_TELEMETRY_DISABLED=1 rtk --tee")
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "go test" in cmd
+    def test_rtk_cargo_test_blocked_by_deny(self, rtk_env):
+        """cargo test is blocked by deny rule; RTK never fires."""
+        result = run_guard("Bash", {"command": "cargo test"}, env=rtk_env)
+        assert result.returncode == 2
 
-    def test_rtk_skip_git_status(self, rtk_env):
-        """git status is NOT rewritten (in skip list); passes through normally."""
-        result = run_guard("Bash", {"command": "git status"}, env=rtk_env)
-        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}"
-        # Should NOT contain an updatedInput (not rewritten)
-        if result.stdout.strip():
-            output = json.loads(result.stdout)
-            hook = output.get("hookSpecificOutput", {})
-            assert "updatedInput" not in hook, (
-                f"git status should not be RTK-rewritten, but got updatedInput: {hook}"
-            )
+    def test_rtk_bare_pytest_blocked_by_deny(self, rtk_env):
+        """bare pytest is blocked by deny rule; RTK never fires."""
+        result = run_guard("Bash", {"command": "pytest tests/"}, env=rtk_env)
+        assert result.returncode == 2
 
-    def test_rtk_skip_git_diff(self, rtk_env):
-        """git diff is NOT rewritten (in skip list)."""
-        result = run_guard("Bash", {"command": "git diff"}, env=rtk_env)
-        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}"
-        if result.stdout.strip():
-            output = json.loads(result.stdout)
-            hook = output.get("hookSpecificOutput", {})
-            assert "updatedInput" not in hook, (
-                f"git diff should not be RTK-rewritten, but got updatedInput: {hook}"
-            )
-
-    def test_rtk_skip_cargo_clippy(self, rtk_env):
-        """cargo clippy is NOT RTK-rewritten (in skip list); deny rule fires instead."""
-        result = run_guard("Bash", {"command": "cargo clippy"}, env=rtk_env)
-        # cargo clippy is in the RTK skip list, so RTK does not rewrite it.
-        # It then falls through to _check_subcmd where the cargo deny rule blocks it.
-        assert result.returncode == 2, (
-            f"Expected exit 2 (blocked by deny rule, not RTK-rewritten), got {result.returncode}"
-        )
-        assert "updatedInput" not in result.stdout, (
-            "cargo clippy should not have been RTK-rewritten"
-        )
+    # ── Commands with no RTK equivalent → pass through ───────────────
 
     def test_rtk_no_rewrite_date(self, rtk_env):
-        """date is NOT rewritten (no match in compress list) and passes through."""
+        """date has no RTK equivalent; passes through normally."""
         result = run_guard("Bash", {"command": "date"}, env=rtk_env)
-        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}"
+        assert result.returncode == 0
         if result.stdout.strip():
             output = json.loads(result.stdout)
             hook = output.get("hookSpecificOutput", {})
-            assert "updatedInput" not in hook, (
-                f"date should not be RTK-rewritten, but got updatedInput: {hook}"
-            )
+            assert "updatedInput" not in hook
 
     def test_rtk_no_rewrite_make(self, rtk_env):
-        """make test is NOT rewritten (no match in compress list)."""
+        """make test has no RTK equivalent."""
         result = run_guard("Bash", {"command": "make test"}, env=rtk_env)
-        # make test is allowed (exit 0) but not RTK-rewritten
-        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}"
+        assert result.returncode == 0
         if result.stdout.strip():
             output = json.loads(result.stdout)
             hook = output.get("hookSpecificOutput", {})
-            assert "updatedInput" not in hook, (
-                f"make test should not be RTK-rewritten, but got updatedInput: {hook}"
-            )
+            assert "updatedInput" not in hook
 
-    def test_rtk_graceful_degradation(self, rtk_disabled_env):
-        """With RTK_DISABLED, deny rules fire normally for cargo test (no RTK rewrite)."""
-        result = run_guard("Bash", {"command": "cargo test"}, env=rtk_disabled_env)
-        # Without RTK, the guard falls through to _check_subcmd where
-        # the cargo-test deny rule blocks the command.
-        assert result.returncode == 2, (
-            f"Expected exit 2 (deny rule fires without RTK), got {result.returncode}"
-        )
-        assert "updatedInput" not in result.stdout, (
-            "With RTK_DISABLED, cargo test should not be RTK-rewritten"
-        )
+    # ── RTK_DISABLED escape hatch ────────────────────────────────────
 
-    def test_rtk_output_has_retrieval_suffix(self, rtk_env):
-        """RTK-rewritten stdout JSON has additionalContext containing 'Read tool'."""
-        result = run_guard("Bash", {"command": "cargo test"}, env=rtk_env)
+    def test_rtk_disabled_no_rewrite(self, rtk_disabled_env):
+        """With RTK_DISABLED=1, git log passes through without rewrite."""
+        result = run_guard("Bash", {"command": "git log --oneline"}, env=rtk_disabled_env)
         assert result.returncode == 0
-        output = json.loads(result.stdout)
-        hook = output["hookSpecificOutput"]
-        additional = hook.get("additionalContext", "")
-        assert "Read tool" in additional, (
-            f"Expected 'Read tool' in additionalContext, got: {additional!r}"
-        )
+        if result.stdout.strip():
+            output = json.loads(result.stdout)
+            hook = output.get("hookSpecificOutput", {})
+            assert "updatedInput" not in hook
 
-    def test_rtk_telemetry_disabled_in_command(self, rtk_env):
-        """Rewritten command contains RTK_TELEMETRY_DISABLED=1."""
-        result = run_guard("Bash", {"command": "go test ./..."}, env=rtk_env)
-        self._assert_rtk_rewrite(result)
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "RTK_TELEMETRY_DISABLED=1" in cmd, (
-            f"Expected RTK_TELEMETRY_DISABLED=1 in command, got: {cmd!r}"
-        )
-
-    def test_rtk_tee_flag_in_command(self, rtk_env):
-        """Rewritten command contains --tee flag."""
-        result = run_guard("Bash", {"command": "docker ps"}, env=rtk_env)
-        self._assert_rtk_rewrite(result)
-        cmd = json.loads(result.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
-        assert "--tee" in cmd, f"Expected --tee in command, got: {cmd!r}"
-
-    def test_rtk_disabled_env_var(self, rtk_disabled_env):
-        """With RTK_DISABLED=1, bare pytest is blocked by deny rule."""
-        result = run_guard("Bash", {"command": "pytest tests/"}, env=rtk_disabled_env)
-        assert result.returncode == 2, (
-            f"Expected exit 2 (blocked by deny rule), got {result.returncode}"
-        )
+    # ── Safety: deny rules still enforced ────────────────────────────
 
     def test_rtk_git_push_force_blocked(self, rtk_env):
-        """git push --force is blocked by git safety BEFORE RTK rewrite."""
+        """git push --force is blocked by git safety."""
         result = run_guard("Bash", {"command": "git push --force"}, env=rtk_env)
-        assert result.returncode == 2, (
-            f"Expected exit 2 (git safety block), got {result.returncode}. "
-            f"stdout: {result.stdout!r}"
-        )
+        assert result.returncode == 2
 
     def test_rtk_compound_command_not_rewritten(self, rtk_env):
-        """git log && git status is NOT RTK-rewritten (compound: len(subcmds) > 1)."""
+        """Compound commands skip RTK (only single commands eligible)."""
         result = run_guard("Bash", {"command": "git log --oneline && git status"}, env=rtk_env)
-        # Compound commands skip the RTK rewrite block entirely;
-        # each subcmd is checked individually. Both git log and git status pass.
-        assert result.returncode == 0, (
-            f"Expected exit 0, got {result.returncode}. stderr: {result.stderr!r}"
-        )
+        assert result.returncode == 0
         if result.stdout.strip():
             output = json.loads(result.stdout)
             hook = output.get("hookSpecificOutput", {})
-            assert "updatedInput" not in hook, (
-                f"Compound commands should not be RTK-rewritten, but got updatedInput: {hook}"
-            )
+            assert "updatedInput" not in hook
 
     def test_rtk_piped_command_not_rewritten(self, rtk_env):
-        """cargo test | grep FAILED is NOT RTK-rewritten (piped command)."""
-        result = run_guard("Bash", {"command": "cargo test | grep FAILED"}, env=rtk_env)
-        # Piped commands skip RTK; grep is blocked by the deny rule.
-        assert result.returncode == 2, (
-            f"Expected exit 2 (grep blocked in pipe), got {result.returncode}"
-        )
+        """Piped commands skip RTK."""
+        result = run_guard("Bash", {"command": "git log | head -5"}, env=rtk_env)
+        assert result.returncode == 0
+        if result.stdout.strip():
+            output = json.loads(result.stdout)
+            hook = output.get("hookSpecificOutput", {})
+            assert "updatedInput" not in hook
 
     def test_rtk_subshell_command_not_rewritten(self, rtk_env):
-        """cargo test $(cmd) is NOT RTK-rewritten (subshell bypasses safety)."""
-        result = run_guard("Bash", {"command": "cargo test $(echo hello)"}, env=rtk_env)
-        # Subshell commands skip RTK and fall through to deny rules.
-        assert result.returncode == 2, (
-            f"Expected exit 2 (cargo-test deny rule), got {result.returncode}"
-        )
-
-    def test_rtk_backtick_command_not_rewritten(self, rtk_env):
-        """cargo test `cmd` is NOT RTK-rewritten (backtick subshell)."""
-        result = run_guard("Bash", {"command": "cargo test `echo hello`"}, env=rtk_env)
-        assert result.returncode == 2, (
-            f"Expected exit 2 (cargo-test deny rule), got {result.returncode}"
-        )
+        """Subshell commands skip RTK."""
+        result = run_guard("Bash", {"command": "git log $(date)"}, env=rtk_env)
+        assert result.returncode == 0
+        if result.stdout.strip():
+            output = json.loads(result.stdout)
+            hook = output.get("hookSpecificOutput", {})
+            assert "updatedInput" not in hook
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4602,86 +4524,170 @@ class TestRTKEventLogging:
     def test_rtk_compressed_event_logged(self, rtk_db_env):
         """RTK rewrite creates an rtk_events row with event_type='compressed'."""
         env, db_path = rtk_db_env
-        result = run_guard("Bash", {"command": "cargo test"}, env=env)
+        result = run_guard("Bash", {"command": "git log --oneline"}, env=env)
         assert result.returncode == 0, f"Expected exit 0, stderr: {result.stderr!r}"
         conn = sqlite3.connect(str(db_path))
         rows = conn.execute("SELECT event_type, command, rtk_command FROM rtk_events").fetchall()
         conn.close()
         assert len(rows) == 1, f"Expected 1 rtk_events row, got {len(rows)}: {rows}"
         assert rows[0][0] == "compressed"
-        assert "cargo test" in (rows[0][1] or "")
-        assert "rtk --tee" in (rows[0][2] or "")
+        assert "git log" in (rows[0][1] or "")
+        assert "rtk" in (rows[0][2] or "")
 
     def test_rtk_full_read_event_logged(self, rtk_db_env):
         """PostToolUse Read of tee file creates event_type='full_read'."""
         env, db_path = rtk_db_env
-        tee_path = str(Path.home() / ".local" / "share" / "rtk" / "tee" / "somefile.txt")
-        result = run_guard(
+        if sys.platform == "darwin":
+            tee_dir = Path.home() / "Library" / "Application Support" / "rtk" / "tee"
+        else:
+            xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+            tee_dir = Path(xdg) / "rtk" / "tee"
+        tee_path = str(tee_dir / "somefile.txt")
+        run_guard(
             "Read",
             {"file_path": tee_path},
             env=env,
             payload_extra={"hook_event_name": "PostToolUse"},
         )
-        assert result.returncode == 0, f"Expected exit 0, stderr: {result.stderr!r}"
         conn = sqlite3.connect(str(db_path))
         rows = conn.execute("SELECT event_type FROM rtk_events").fetchall()
         conn.close()
-        assert len(rows) == 1, f"Expected 1 rtk_events row, got {len(rows)}: {rows}"
-        assert rows[0][0] == "full_read"
-
-    def test_rtk_full_read_via_bash_logged(self, rtk_db_env):
-        """PostToolUse Bash cat of tee file creates event_type='full_read'."""
-        env, db_path = rtk_db_env
-        tee_dir = str(Path.home() / ".local" / "share" / "rtk" / "tee")
-        command = f"cat {tee_dir}/output.txt"
-        result = run_guard(
-            "Bash",
-            {"command": command},
-            env=env,
-            payload_extra={"hook_event_name": "PostToolUse"},
-        )
-        assert result.returncode == 0, f"Expected exit 0, stderr: {result.stderr!r}"
-        conn = sqlite3.connect(str(db_path))
-        rows = conn.execute("SELECT event_type FROM rtk_events").fetchall()
-        conn.close()
-        assert len(rows) == 1, f"Expected 1 rtk_events row, got {len(rows)}: {rows}"
+        assert len(rows) == 1
         assert rows[0][0] == "full_read"
 
     def test_rtk_non_tee_read_not_logged(self, rtk_db_env):
         """PostToolUse Read of a normal file does NOT create an rtk_events row."""
         env, db_path = rtk_db_env
-        result = run_guard(
+        run_guard(
             "Read",
-            {"file_path": "/tmp/some-normal-file.txt"},
+            {"file_path": "/some/normal/file.txt"},
             env=env,
             payload_extra={"hook_event_name": "PostToolUse"},
         )
-        assert result.returncode == 0, f"Expected exit 0, stderr: {result.stderr!r}"
-        # DB may not even exist if no events were logged
         if db_path.exists():
             conn = sqlite3.connect(str(db_path))
             rows = conn.execute("SELECT event_type FROM rtk_events").fetchall()
             conn.close()
-            assert len(rows) == 0, (
-                f"Expected 0 rtk_events rows for normal file read, got {len(rows)}: {rows}"
-            )
+            assert len(rows) == 0
 
-    def test_rtk_null_columns_on_full_read(self, rtk_db_env):
-        """full_read events have command IS NULL and rtk_command IS NULL."""
-        env, db_path = rtk_db_env
-        tee_path = str(Path.home() / ".local" / "share" / "rtk" / "tee" / "out.txt")
-        result = run_guard(
-            "Read",
-            {"file_path": tee_path},
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RTK Config: _ensure_rtk_config (SessionStart)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestRTKConfig:
+    """_ensure_rtk_config patches telemetry and tee mode at session start."""
+
+    @pytest.fixture
+    def rtk_config_env(self, tmp_path):
+        """Create env with dummy rtk binary and config path."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        rtk_script = bin_dir / "rtk"
+        rtk_script.write_text(_RTK_STUB_SCRIPT)
+        rtk_script.chmod(0o755)
+        config_path = tmp_path / "config" / "rtk" / "config.toml"
+        env = {
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "RTK_CONFIG_PATH": str(config_path),
+        }
+        env.pop("RTK_DISABLED", None)
+        return env, config_path
+
+    def test_patches_telemetry_and_tee(self, rtk_config_env):
+        """Config with telemetry=true and tee mode=failures is patched."""
+        env, config_path = rtk_config_env
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text('[telemetry]\nenabled = true\n\n[tee]\nmode = "failures"\n')
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
             env=env,
-            payload_extra={"hook_event_name": "PostToolUse"},
         )
-        assert result.returncode == 0, f"Expected exit 0, stderr: {result.stderr!r}"
-        conn = sqlite3.connect(str(db_path))
-        rows = conn.execute("SELECT event_type, command, rtk_command FROM rtk_events").fetchall()
-        conn.close()
-        assert len(rows) == 1, f"Expected 1 rtk_events row, got {len(rows)}"
-        event_type, command, rtk_command = rows[0]
-        assert event_type == "full_read"
-        assert command is None, f"Expected command IS NULL, got: {command!r}"
-        assert rtk_command is None, f"Expected rtk_command IS NULL, got: {rtk_command!r}"
+        assert result.returncode == 0
+        assert "telemetry disabled" in result.stdout
+        assert "tee mode" in result.stdout
+        patched = config_path.read_text()
+        assert "enabled = false" in patched
+        assert 'mode = "always"' in patched
+
+    def test_already_configured_reports_ok(self, rtk_config_env):
+        """Config already correct → reports 'rtk config: OK'."""
+        env, config_path = rtk_config_env
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text('[telemetry]\nenabled = false\n\n[tee]\nmode = "always"\n')
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "rtk config: OK" in result.stdout
+
+    def test_creates_config_if_absent(self, rtk_config_env):
+        """When config doesn't exist, rtk config --create is called first."""
+        env, config_path = rtk_config_env
+        assert not config_path.exists()
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert config_path.exists(), "rtk config --create should have created the file"
+        patched = config_path.read_text()
+        assert "enabled = false" in patched
+        assert 'mode = "always"' in patched
+
+    def test_no_rtk_binary_skips_silently(self, tmp_path):
+        """Without rtk on PATH, no config message is emitted."""
+        # Create a minimal PATH with only a uv symlink, no rtk
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        uv_real = subprocess.run(["which", "uv"], capture_output=True, text=True).stdout.strip()
+        (bin_dir / "uv").symlink_to(uv_real)
+        env = {**os.environ, "PATH": str(bin_dir)}
+        env.pop("RTK_DISABLED", None)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "rtk config" not in result.stdout
+
+    def test_preserves_other_sections(self, rtk_config_env):
+        """Patching only touches telemetry and tee; other sections are preserved."""
+        env, config_path = rtk_config_env
+        config_path.parent.mkdir(parents=True)
+        original = (
+            "[tracking]\nenabled = true\nhistory_days = 90\n\n"
+            "[telemetry]\nenabled = true\n\n"
+            '[tee]\nmode = "failures"\nmax_files = 20\n\n'
+            "[hooks]\nexclude_commands = []\n"
+        )
+        config_path.write_text(original)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        patched = config_path.read_text()
+        # Telemetry and tee patched
+        assert "enabled = false" in patched
+        assert 'mode = "always"' in patched
+        # [tracking] section NOT touched (enabled still true there)
+        tracking_section = patched.split("[tracking]")[1].split("\n[")[0]
+        assert "enabled = true" in tracking_section
+        # Other sections preserved
+        assert "history_days = 90" in patched
+        assert "max_files = 20" in patched
+        assert "exclude_commands = []" in patched

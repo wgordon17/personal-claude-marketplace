@@ -102,6 +102,15 @@ Flag anything that needs human attention:
 - Features requiring external service configuration
 - Anything you'd want a human to decide before the team starts coding
 
+**CRITICAL — Do NOT reduce scope.** You are the Architect, not the product owner. If a task
+component looks high-risk, complex, or architecturally difficult:
+- Add it to `questions` for the user to decide
+- Include it as a component with the risks clearly documented
+- Do NOT silently defer, omit, or "recommend deferring" any part of the requested work
+
+If the task description says "implement X, Y, and Z," your plan MUST include components for
+X, Y, and Z. If Z is scary, say so in `questions` and `risks` — but include it.
+
 ## Output Format
 
 Write your plan to `{run_dir}/architect-plan.json` using the Architect Plan Schema from
@@ -111,9 +120,8 @@ with `id`, `name`, `description`, `files_to_create`, `files_to_modify`, `depende
 `component_dependency_graph`, `pipeline_feasible`, `pipeline_notes`, `global_risks`,
 `data_model_changes`, `api_changes`.
 
-Additionally include these fields for lead routing:
+Additionally include this field for lead routing:
 - `questions`: array of strings — any open questions that need user input before implementation
-- `deferred`: array of strings — items explicitly deferred to after the swarm
 
 If `questions` is non-empty, the lead will present these to the user before implementation begins.
 

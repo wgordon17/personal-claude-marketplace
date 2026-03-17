@@ -84,9 +84,17 @@ The architect analyzes the codebase, designs the solution, and decomposes the wo
 independent components suitable for pipelined implementation. Output is a structured JSON plan
 written to `hack/swarm/YYYY-MM-DD/architect-plan.json` (see schema in `references/communication-schema.md`).
 The architect also identifies global risks, data model changes, and API surface changes. After
-receiving the plan, the Lead reviews it for quality and feasibility. Raise any unclear or risky
-items to the user via `AskUserQuestion` before proceeding to Phase 3. The Architect remains
-active through Phase 3 to answer clarification questions from the Implementer and Reviewer.
+receiving the plan, the Lead MUST:
+
+1. Read `architect-plan.json` and check the `questions` array
+2. If `questions` is non-empty, present EVERY question to the user via `AskUserQuestion`
+3. Verify scope: compare the plan's components against the original task — if any requested
+   work is missing from the plan, add it back or ask the user via `AskUserQuestion`
+4. Raise any high-severity risks to the user before proceeding
+
+Do NOT proceed to Phase 3 until all architect questions are resolved and scope is verified.
+The Architect remains active through Phase 3 to answer clarification questions from the
+Implementer and Reviewer.
 
 ### Phase 3: Pipelined Implementation
 
@@ -114,10 +122,17 @@ Fixer in Phase 5. Low/informational findings are recorded in the audit trail but
 
 Skip this phase if ALL reviews report clean (zero critical or high findings). Otherwise, spawn
 the Fixer with the consolidated critical/high findings and full context of the implementation.
-The Fixer addresses each finding with targeted, minimal changes. After the Fixer completes, spawn
-the Code-Simplifier for a post-fix pass — it looks for over-engineering, unnecessary abstractions,
-and complexity introduced during implementation or fixing. Skip Code-Simplifier if the Fixer made
-no changes. Re-run affected tests after any fixes to confirm nothing regressed.
+The Fixer addresses each finding with targeted, minimal changes. After the Fixer completes,
+check its output for `deferred` items — findings it couldn't resolve. For each deferred item:
+1. Create a `TaskCreate` entry marked as blocked with the reason (visible in task list throughout)
+2. Add to the "Scope Accountability" section of `swarm-report.md` (permanent record)
+3. If any deferred item is critical or high severity, use `AskUserQuestion` to notify the user
+   before proceeding — do NOT silently continue past critical unresolved findings
+
+Then spawn the Code-Simplifier
+for a post-fix pass — it looks for over-engineering, unnecessary abstractions, and complexity
+introduced during implementation or fixing. Skip Code-Simplifier if the Fixer made no changes.
+Re-run affected tests after any fixes to confirm nothing regressed.
 
 ### Phase 6: Docs & Memory
 

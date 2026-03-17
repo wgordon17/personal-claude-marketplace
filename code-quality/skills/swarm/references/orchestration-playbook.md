@@ -342,11 +342,12 @@ After Step 1.3 approval, commit to full autonomy. The ONLY allowed interruptions
 
 1. **Architect raises blockers** — unclear/risky design decisions (Phase 2)
 2. **Error escalation after max retries** — a component is permanently blocked (Phase 3/5/7)
-3. **Final completion report** — announcing the swarm is done (Phase 7)
+3. **Critical/high Fixer deferrals** — findings the Fixer could NOT resolve (Phase 5)
+4. **Final completion report** — announcing the swarm is done (Phase 7)
 
 Do NOT interrupt the user for:
 - Implementation decisions the architect covered
-- Review findings that fall within the fixer's scope
+- Review findings that the fixer successfully resolved
 - Test failures that haven't exceeded retry limits
 - Docs/memory updates
 
@@ -816,9 +817,21 @@ Task(name="fixer", subagent_type="general-purpose", model="sonnet",
 Fixer addresses must-fix first, then should-fix. It sends a `FixSummary` message to the lead
 when done.
 
+### Step 5.2.1: Handle Fixer Deferrals
+
+After the Fixer completes, check its FixSummary for deferred items (`deferred`, `findings_deferred`,
+or `deferred_items` fields — check all three due to naming inconsistency). For each deferred item:
+
+1. `TaskCreate` with the finding ID, reason, and recommended action (visible in task list)
+2. Add to the "Scope Accountability" section of swarm-report.md
+3. If the deferred item is critical or high severity: `AskUserQuestion` to notify the user.
+   Do NOT silently continue past critical unresolved findings.
+
+If no deferred items exist, skip this step.
+
 ### Step 5.3: Code-Simplifier Pass
 
-After fixer completes, spawn code-simplifier:
+After fixer completes (and deferrals are handled), spawn code-simplifier:
 
 ```
 Task(name="code-simplifier", subagent_type="code-simplifier:code-simplifier", model="sonnet",
@@ -1049,6 +1062,19 @@ Run directory: {run_dir}
 | ghi9012 | fix: address review findings from security/QA/performance review |
 | jkl3456 | docs: update documentation for OAuth integration |
 
+## Scope Accountability
+
+Original request: <verbatim user request>
+
+| Requested Item | Status | Notes |
+|---------------|--------|-------|
+| auth-service | Delivered | Component C1 |
+| token-refresh | Delivered | Component C2 |
+| session-cleanup | BLOCKED | Rejected 3x, stashed |
+
+Items NOT in plan that were requested: [none / list any gaps]
+Fixer deferred items: [none / list with reasons]
+
 ## Remaining Tech Debt
 
 - [ ] session-cleanup blocked — needs manual implementation
@@ -1062,7 +1088,8 @@ git diff --shortstat $(git merge-base HEAD origin/main)..HEAD
 
 ### Step 7.5: Announce Completion
 
-Report to the user:
+Report to the user. The completion announcement MUST surface deferred/blocked items directly
+in the output — do NOT just point to the report file. Users may not read the file.
 
 ```
 Swarm complete. Branch: <branch-name>
@@ -1071,13 +1098,19 @@ Components: N implemented, M blocked.
 Files: N modified, +N/-N lines. Tests: N added.
 Findings fixed: N (security: N, QA: N, performance: N).
 
-Full report: {run_dir}/swarm-report.md
+[IF any blocked/deferred items exist, list them HERE — not just in the report:]
+Unresolved items:
+  - <item>: <reason>
+  - <item>: <reason>
 
-Next steps:
-  - Review: git diff origin/main..<branch>
-  - Blocked items in report: M (if any)
-  - Create PR when ready: gh pr create
+Full report: {run_dir}/swarm-report.md
 ```
+
+**Persistence requirement:** The Lead (not the Docs agent) MUST write blocked and deferred
+items to `hack/TODO.md` (or the project's task tracking file) in this step. The Docs agent
+doesn't know about deferred items — only the Lead has this context from Step 5.2.1 TaskCreate
+entries. Use `- [ ] <item>: <reason> (swarm YYYY-MM-DD)` format. A swarm-report.md in a dated
+directory is not discoverable by future agents — project memory files are.
 
 ### Step 7.6: Shutdown and Cleanup
 

@@ -24,6 +24,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
+try:
+    import tomllib
+except ImportError:
+    tomllib = None  # type: ignore[assignment]  # Python 3.10 fallback
+
 
 class CommandRule(NamedTuple):
     name: str
@@ -318,27 +323,12 @@ _tool_use_id = None
 _TRUSTED_GIT_DIRS: list[Path] = []
 
 _RTK_BINARY = shutil.which("rtk")
-_RTK_COMPRESS_RULES: list[tuple[str, re.Pattern[str]]] = [
-    ("cargo-test", re.compile(r"^\s*(uv\s+run\s+)?cargo\s+test\b")),
-    ("cargo-build", re.compile(r"^\s*cargo\s+(build|check)\b")),
-    ("git-log", re.compile(r"^\s*git\s+log\b")),
-    ("git-push", re.compile(r"^\s*git\s+(push|pull|fetch)\b")),
-    ("docker", re.compile(r"^\s*docker\s+(ps|images|logs)\b")),
-    ("kubectl", re.compile(r"^\s*kubectl\s+(get|describe|logs)\b")),
-    ("pytest", re.compile(r"^\s*uv\s+run\s+pytest\b")),
-    ("go-test", re.compile(r"^\s*go\s+test\b")),
-]
-_RTK_SKIP_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"^\s*git\s+(status|diff)\b"),
-    re.compile(r"^\s*cargo\s+clippy\b"),
-]
-_RTK_TEE_DIR = Path.home() / ".local" / "share" / "rtk" / "tee"
-_RTK_OUTPUT_SUFFIX = (
-    "\n---\n"
-    "[RTK] This output was compressed by rtk. If you need the full, "
-    "uncompressed output, use the Read tool on the most recent file in "
-    "~/.local/share/rtk/tee/ (sorted by modification time)."
-)
+# rtk (Rust dirs crate) uses platform-specific data dirs
+if sys.platform == "darwin":
+    _RTK_TEE_DIR = Path.home() / "Library" / "Application Support" / "rtk" / "tee"
+else:
+    _xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    _RTK_TEE_DIR = Path(_xdg) / "rtk" / "tee"
 
 _SECRET_PATTERN = re.compile(
     r"((?:password|token|secret|key|auth|bearer|api[_-]?key|credentials)"
@@ -506,20 +496,20 @@ def _log_rtk_event(
 
 
 def _rtk_rewrite(cmd: str) -> str | None:
-    """Return rtk-rewritten command, or None if cmd should not be compressed."""
+    """Return rtk-rewritten command via `rtk rewrite`, or None if unsupported."""
     if os.environ.get("RTK_DISABLED") or _RTK_BINARY is None:
         return None
-    normalized = strip_env_prefix(cmd)
-    for skip in _RTK_SKIP_PATTERNS:
-        if skip.search(normalized):
-            return None
-    for _name, pattern in _RTK_COMPRESS_RULES:
-        if pattern.search(normalized):
-            env_prefix_len = len(cmd) - len(normalized)
-            if env_prefix_len > 0:
-                env_part = cmd[:env_prefix_len]
-                return f"RTK_TELEMETRY_DISABLED=1 {env_part}rtk --tee {normalized}"
-            return f"RTK_TELEMETRY_DISABLED=1 rtk --tee {cmd}"
+    try:
+        result = subprocess.run(
+            [_RTK_BINARY, "rewrite", cmd],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, OSError):
+        pass
     return None
 
 
@@ -613,7 +603,6 @@ def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
             "allow",
             f"RTK compression: {original_cmd[:80]}",
             updated_input={"command": rtk_cmd},
-            additional_context=_RTK_OUTPUT_SUFFIX,
         )
     )
     sys.exit(0)
@@ -882,10 +871,13 @@ def _handle_post_tool_use(data: dict) -> None:
 
     if tool_name == "Bash":
         command = tool_input.get("command", "")
+        # Track reads of rtk tee files (before curl/wget early return)
         tee_dir_str = str(_RTK_TEE_DIR)
         if tee_dir_str in command and re.search(r"\b(cat|head|tail|less)\b", command):
             _log_rtk_event(
-                "full_read", tee_path=tee_dir_str, detail={"via": "bash", "command": command[:200]}
+                "full_read",
+                tee_path=tee_dir_str,
+                detail={"via": "bash", "command": command[:200]},
             )
         normalized = strip_env_prefix(command)
         if not re.match(r"^\s*(curl|wget)\b", normalized):
@@ -3016,7 +3008,11 @@ def _validate_config() -> int:
     dirs_path = os.environ.get("GIT_TRUSTED_DIRS")
     has_unified = _UNIFIED_CONFIG_PATH.exists()
     if not url_path and not cmd_path and not dirs_path and not has_unified:
-        return 0  # Nothing configured, nothing to validate
+        # Still set up rtk config even when no guard rules are configured
+        rtk_msg = _ensure_rtk_config()
+        if rtk_msg:
+            print(rtk_msg)
+        return 0
 
     all_issues: list[str] = []
     loaded: list[str] = []
@@ -3059,7 +3055,91 @@ def _validate_config() -> int:
     # stdout + exit 0: shown in transcript
     for msg in loaded:
         print(f"Custom guard rules — {msg}")
+    # Ensure rtk config is set up (telemetry off, tee always)
+    rtk_msg = _ensure_rtk_config()
+    if rtk_msg:
+        print(rtk_msg)
     return 0
+
+
+def _ensure_rtk_config() -> str | None:
+    """Ensure rtk config.toml has telemetry disabled and tee mode 'always'.
+
+    Creates the default config via `rtk config --create` if absent, then
+    patches telemetry and tee settings. Returns a status message or None.
+    """
+    if _RTK_BINARY is None:
+        return None
+    try:
+        # Get config path from `rtk config`
+        result = subprocess.run([_RTK_BINARY, "config"], capture_output=True, text=True, timeout=5)
+        first_line = result.stdout.strip().split("\n")[0]
+        if not first_line.startswith("Config: "):
+            return None
+        config_path = Path(first_line[len("Config: ") :].strip())
+
+        # Create default config if absent
+        if not config_path.exists():
+            subprocess.run(
+                [_RTK_BINARY, "config", "--create"],
+                capture_output=True,
+                timeout=5,
+            )
+        if not config_path.exists():
+            return None
+
+        content = config_path.read_text()
+
+        # Determine what needs patching
+        patch_telemetry = False
+        patch_tee = False
+        if tomllib is not None:
+            try:
+                parsed = tomllib.loads(content)
+                patch_telemetry = parsed.get("telemetry", {}).get("enabled") is True
+                patch_tee = parsed.get("tee", {}).get("mode", "") != "always"
+            except Exception:
+                return None  # Unparseable config — don't patch blindly
+        else:
+            # Python 3.10 fallback: string-based detection
+            patch_telemetry = "[telemetry]" in content and "enabled = true" in content
+            patch_tee = 'mode = "failures"' in content
+
+        changes = []
+
+        # Patch via regex scoped to TOML sections. The [^\[]*? approach assumes
+        # simple key-value lines between the section header and target key (no
+        # arrays or comments containing '[').  This matches rtk's default config
+        # format; a full TOML writer would be needed for arbitrary configs.
+        if patch_telemetry:
+            content, n = re.subn(
+                r"(\[telemetry\][^\[]*?)enabled\s*=\s*true",
+                r"\1enabled = false",
+                content,
+                count=1,
+                flags=re.DOTALL,
+            )
+            if n:
+                changes.append("telemetry disabled")
+
+        # Patch tee mode — scoped to [tee] section via regex
+        if patch_tee:
+            content, n = re.subn(
+                r'(\[tee\][^\[]*?)mode\s*=\s*"[^"]*"',
+                r'\1mode = "always"',
+                content,
+                count=1,
+                flags=re.DOTALL,
+            )
+            if n:
+                changes.append('tee mode → "always"')
+
+        if changes:
+            config_path.write_text(content)
+            return f"rtk config: {', '.join(changes)}"
+        return "rtk config: OK"
+    except (subprocess.TimeoutExpired, OSError):
+        return None
 
 
 def _parse_hook_input() -> dict:
@@ -3128,24 +3208,23 @@ def _handle_bash_command(command: str) -> None:
     # Block cd && git compounds before processing individual subcommands
     _check_cd_git_compound(subcmds, command)
 
-    # RTK compression for single, non-piped, non-subshell commands.
-    # Subshell commands ($(), backticks) fall through to _check_subcmd which
-    # extracts and checks inner commands against deny rules and git safety.
+    fetch_seen = False
+    for subcmd in subcmds:
+        fetch_seen = _check_subcmd(subcmd, fetch_seen)
+
+    # ── RTK compression: rewrite commands that passed all deny rules ──
+    # Runs AFTER deny rules so blocked commands never reach RTK.
+    # Only for simple commands (single, non-piped, non-subshell).
     if (
         len(subcmds) == 1
         and len(split_pipes(command)) == 1
         and "$(" not in command
         and "`" not in command
+        and "\n" not in command
     ):
-        stripped = strip_env_prefix(strip_shell_keyword(command))
-        check_git_safety(stripped, fetch_seen=bool(_FETCH_PATTERN.search(command)))
         rtk_cmd = _rtk_rewrite(command)
         if rtk_cmd is not None:
             _exit_with_rtk_rewrite(command, rtk_cmd)
-
-    fetch_seen = False
-    for subcmd in subcmds:
-        fetch_seen = _check_subcmd(subcmd, fetch_seen)
 
     # Multiline commands that pass all guard checks: emit an explicit "allow"
     # decision.  Without this, a plain exit(0) means "no opinion" and Claude
