@@ -300,9 +300,9 @@ Automatically compresses CLI output using [rtk](https://github.com/rtk-ai/rtk) f
 
 **Supported commands:** RTK supports 40+ command families including git, cargo, docker, kubectl, pytest, go, ruff, curl, ls, grep, and more. See `rtk --help` for the full list. Dev-guard delegates to `rtk rewrite` which is the single source of truth.
 
-**Config:** On session start, dev-guard creates/patches `~/.config/rtk/config.toml`:
+**Config:** On session start, dev-guard creates/patches rtk's `config.toml` (path from `rtk config`):
 - `[telemetry] enabled = false` — telemetry disabled
-- `[tee] mode = "always"` — full uncompressed output always saved to `~/.local/share/rtk/tee/`
+- `[tee] mode = "always"` — full uncompressed output always saved to rtk's tee directory (`~/Library/Application Support/rtk/tee/` on macOS, `~/.local/share/rtk/tee/` on Linux)
 
 **Full output access:** When rtk compresses output, agents can read the uncompressed version from the tee directory. PostToolUse hooks on Read and Bash track when tee files are accessed (logged to `rtk_events` table).
 

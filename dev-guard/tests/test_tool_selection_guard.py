@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -4536,7 +4537,12 @@ class TestRTKEventLogging:
     def test_rtk_full_read_event_logged(self, rtk_db_env):
         """PostToolUse Read of tee file creates event_type='full_read'."""
         env, db_path = rtk_db_env
-        tee_path = str(Path.home() / ".local" / "share" / "rtk" / "tee" / "somefile.txt")
+        if sys.platform == "darwin":
+            tee_dir = Path.home() / "Library" / "Application Support" / "rtk" / "tee"
+        else:
+            xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+            tee_dir = Path(xdg) / "rtk" / "tee"
+        tee_path = str(tee_dir / "somefile.txt")
         run_guard(
             "Read",
             {"file_path": tee_path},
@@ -4678,6 +4684,9 @@ class TestRTKConfig:
         # Telemetry and tee patched
         assert "enabled = false" in patched
         assert 'mode = "always"' in patched
+        # [tracking] section NOT touched (enabled still true there)
+        tracking_section = patched.split("[tracking]")[1].split("\n[")[0]
+        assert "enabled = true" in tracking_section
         # Other sections preserved
         assert "history_days = 90" in patched
         assert "max_files = 20" in patched

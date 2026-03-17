@@ -323,7 +323,12 @@ _tool_use_id = None
 _TRUSTED_GIT_DIRS: list[Path] = []
 
 _RTK_BINARY = shutil.which("rtk")
-_RTK_TEE_DIR = Path.home() / ".local" / "share" / "rtk" / "tee"
+# rtk (Rust dirs crate) uses platform-specific data dirs
+if sys.platform == "darwin":
+    _RTK_TEE_DIR = Path.home() / "Library" / "Application Support" / "rtk" / "tee"
+else:
+    _xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    _RTK_TEE_DIR = Path(_xdg) / "rtk" / "tee"
 
 _SECRET_PATTERN = re.compile(
     r"((?:password|token|secret|key|auth|bearer|api[_-]?key|credentials)"
@@ -3094,8 +3099,7 @@ def _ensure_rtk_config() -> str | None:
                 patch_telemetry = parsed.get("telemetry", {}).get("enabled") is True
                 patch_tee = parsed.get("tee", {}).get("mode", "") != "always"
             except Exception:
-                patch_telemetry = False
-                patch_tee = False
+                return None  # Unparseable config — don't patch blindly
         else:
             # Python 3.10 fallback: string-based detection
             patch_telemetry = "[telemetry]" in content and "enabled = true" in content
@@ -3103,7 +3107,10 @@ def _ensure_rtk_config() -> str | None:
 
         changes = []
 
-        # Patch telemetry — scoped to [telemetry] section via regex
+        # Patch via regex scoped to TOML sections. The [^\[]*? approach assumes
+        # simple key-value lines between the section header and target key (no
+        # arrays or comments containing '[').  This matches rtk's default config
+        # format; a full TOML writer would be needed for arbitrary configs.
         if patch_telemetry:
             content, n = re.subn(
                 r"(\[telemetry\][^\[]*?)enabled\s*=\s*true",
