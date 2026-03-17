@@ -24,6 +24,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
+try:
+    import tomllib
+except ImportError:
+    tomllib = None  # type: ignore[assignment]  # Python 3.10 fallback
+
 
 class CommandRule(NamedTuple):
     name: str
@@ -2998,7 +3003,11 @@ def _validate_config() -> int:
     dirs_path = os.environ.get("GIT_TRUSTED_DIRS")
     has_unified = _UNIFIED_CONFIG_PATH.exists()
     if not url_path and not cmd_path and not dirs_path and not has_unified:
-        return 0  # Nothing configured, nothing to validate
+        # Still set up rtk config even when no guard rules are configured
+        rtk_msg = _ensure_rtk_config()
+        if rtk_msg:
+            print(rtk_msg)
+        return 0
 
     all_issues: list[str] = []
     loaded: list[str] = []
@@ -3075,20 +3084,48 @@ def _ensure_rtk_config() -> str | None:
             return None
 
         content = config_path.read_text()
+
+        # Determine what needs patching
+        patch_telemetry = False
+        patch_tee = False
+        if tomllib is not None:
+            try:
+                parsed = tomllib.loads(content)
+                patch_telemetry = parsed.get("telemetry", {}).get("enabled") is True
+                patch_tee = parsed.get("tee", {}).get("mode", "") != "always"
+            except Exception:
+                patch_telemetry = False
+                patch_tee = False
+        else:
+            # Python 3.10 fallback: string-based detection
+            patch_telemetry = "[telemetry]" in content and "enabled = true" in content
+            patch_tee = 'mode = "failures"' in content
+
         changes = []
 
-        # Patch telemetry: enabled = true → false (only in [telemetry] section)
-        if "[telemetry]" in content:
-            parts = content.split("[telemetry]")
-            if len(parts) == 2 and "enabled = true" in parts[1].split("\n[")[0]:
-                parts[1] = parts[1].replace("enabled = true", "enabled = false", 1)
-                content = "[telemetry]".join(parts)
+        # Patch telemetry — scoped to [telemetry] section via regex
+        if patch_telemetry:
+            content, n = re.subn(
+                r"(\[telemetry\][^\[]*?)enabled\s*=\s*true",
+                r"\1enabled = false",
+                content,
+                count=1,
+                flags=re.DOTALL,
+            )
+            if n:
                 changes.append("telemetry disabled")
 
-        # Patch tee mode: "failures" → "always"
-        if 'mode = "failures"' in content:
-            content = content.replace('mode = "failures"', 'mode = "always"')
-            changes.append('tee mode → "always"')
+        # Patch tee mode — scoped to [tee] section via regex
+        if patch_tee:
+            content, n = re.subn(
+                r'(\[tee\][^\[]*?)mode\s*=\s*"[^"]*"',
+                r'\1mode = "always"',
+                content,
+                count=1,
+                flags=re.DOTALL,
+            )
+            if n:
+                changes.append('tee mode → "always"')
 
         if changes:
             config_path.write_text(content)

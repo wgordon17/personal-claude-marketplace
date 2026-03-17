@@ -4315,9 +4315,11 @@ class TestUnifiedConfigValidation:
 # RTK Integration: fixtures
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Dummy rtk script that mimics `rtk rewrite` behavior:
+# Dummy rtk script that mimics rtk behavior:
 # - `rtk rewrite <cmd>`: echoes "rtk <cmd>" and exits 0 (supported)
 # - `rtk rewrite` with unsupported cmd: exits 1
+# - `rtk config`: prints "Config: $RTK_CONFIG_PATH" (env var must be set)
+# - `rtk config --create`: creates a default config.toml at $RTK_CONFIG_PATH
 _RTK_STUB_SCRIPT = """\
 #!/bin/sh
 if [ "$1" = "rewrite" ]; then
@@ -4334,6 +4336,25 @@ if [ "$1" = "rewrite" ]; then
         curl\\ *) echo "rtk curl ${CMD#curl }" ;;
         *) exit 1 ;;
     esac
+    exit 0
+fi
+if [ "$1" = "config" ]; then
+    if [ -z "$RTK_CONFIG_PATH" ]; then
+        echo "Config: unknown"
+        exit 0
+    fi
+    if [ "$2" = "--create" ]; then
+        mkdir -p "$(dirname "$RTK_CONFIG_PATH")"
+        cat > "$RTK_CONFIG_PATH" << 'TOML'
+[telemetry]
+enabled = true
+
+[tee]
+mode = "failures"
+TOML
+        exit 0
+    fi
+    echo "Config: $RTK_CONFIG_PATH"
     exit 0
 fi
 exit 1
@@ -4542,3 +4563,122 @@ class TestRTKEventLogging:
             rows = conn.execute("SELECT event_type FROM rtk_events").fetchall()
             conn.close()
             assert len(rows) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RTK Config: _ensure_rtk_config (SessionStart)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestRTKConfig:
+    """_ensure_rtk_config patches telemetry and tee mode at session start."""
+
+    @pytest.fixture
+    def rtk_config_env(self, tmp_path):
+        """Create env with dummy rtk binary and config path."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        rtk_script = bin_dir / "rtk"
+        rtk_script.write_text(_RTK_STUB_SCRIPT)
+        rtk_script.chmod(0o755)
+        config_path = tmp_path / "config" / "rtk" / "config.toml"
+        env = {
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "RTK_CONFIG_PATH": str(config_path),
+        }
+        env.pop("RTK_DISABLED", None)
+        return env, config_path
+
+    def test_patches_telemetry_and_tee(self, rtk_config_env):
+        """Config with telemetry=true and tee mode=failures is patched."""
+        env, config_path = rtk_config_env
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text('[telemetry]\nenabled = true\n\n[tee]\nmode = "failures"\n')
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "telemetry disabled" in result.stdout
+        assert "tee mode" in result.stdout
+        patched = config_path.read_text()
+        assert "enabled = false" in patched
+        assert 'mode = "always"' in patched
+
+    def test_already_configured_reports_ok(self, rtk_config_env):
+        """Config already correct → reports 'rtk config: OK'."""
+        env, config_path = rtk_config_env
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text('[telemetry]\nenabled = false\n\n[tee]\nmode = "always"\n')
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "rtk config: OK" in result.stdout
+
+    def test_creates_config_if_absent(self, rtk_config_env):
+        """When config doesn't exist, rtk config --create is called first."""
+        env, config_path = rtk_config_env
+        assert not config_path.exists()
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert config_path.exists(), "rtk config --create should have created the file"
+        patched = config_path.read_text()
+        assert "enabled = false" in patched
+        assert 'mode = "always"' in patched
+
+    def test_no_rtk_binary_skips_silently(self, tmp_path):
+        """Without rtk on PATH, no config message is emitted."""
+        # Create a minimal PATH with only a uv symlink, no rtk
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        uv_real = subprocess.run(["which", "uv"], capture_output=True, text=True).stdout.strip()
+        (bin_dir / "uv").symlink_to(uv_real)
+        env = {**os.environ, "PATH": str(bin_dir)}
+        env.pop("RTK_DISABLED", None)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "rtk config" not in result.stdout
+
+    def test_preserves_other_sections(self, rtk_config_env):
+        """Patching only touches telemetry and tee; other sections are preserved."""
+        env, config_path = rtk_config_env
+        config_path.parent.mkdir(parents=True)
+        original = (
+            "[tracking]\nenabled = true\nhistory_days = 90\n\n"
+            "[telemetry]\nenabled = true\n\n"
+            '[tee]\nmode = "failures"\nmax_files = 20\n\n'
+            "[hooks]\nexclude_commands = []\n"
+        )
+        config_path.write_text(original)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        patched = config_path.read_text()
+        # Telemetry and tee patched
+        assert "enabled = false" in patched
+        assert 'mode = "always"' in patched
+        # Other sections preserved
+        assert "history_days = 90" in patched
+        assert "max_files = 20" in patched
+        assert "exclude_commands = []" in patched
