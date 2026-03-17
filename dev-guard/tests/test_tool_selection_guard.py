@@ -3927,8 +3927,14 @@ class TestCdGitCompound:
         assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
 
     def test_git_without_cd_allowed(self):
-        """Plain git push is allowed (no cd prefix)."""
-        result = run_bash("git -C /some/repo push origin HEAD:main")
+        """Plain git -C push is allowed (no cd prefix, cd-git-compound doesn't fire)."""
+        # Use CWD (which is trusted) to avoid git-untrusted-dir blocking
+        cwd = os.getcwd()
+        result = run_guard(
+            "Bash",
+            {"command": f"git -C {cwd} push origin HEAD:main"},
+            env={**os.environ, "DEV_GUARD_CONFIG": "/nonexistent"},
+        )
         assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
 
     def test_cd_and_intervening_cmd_then_git_blocked(self):
@@ -3955,9 +3961,14 @@ class TestCdGitCompound:
 
 
 def _run_with_trusted_dirs(command, dirs_file):
-    """Run the guard with a custom trusted dirs file (GIT_TRUSTED_DIRS)."""
+    """Run the guard with a custom trusted dirs file (GIT_TRUSTED_DIRS).
+
+    Clears the unified config so only the env var file is used.
+    """
     env = os.environ.copy()
     env["GIT_TRUSTED_DIRS"] = str(dirs_file)
+    # Override unified config to prevent ~/.claude/dev-guard.json from interfering
+    env["DEV_GUARD_CONFIG"] = str(dirs_file.parent / "nonexistent-config.json")
     return run_guard("Bash", {"command": command}, env=env)
 
 
@@ -3982,8 +3993,10 @@ class TestGitTrustedDirs:
         assert_guard(result, 2, "git-untrusted-dir", "untrusted-git-c")
 
     def test_no_trusted_dirs_allows_all(self):
-        """Without GIT_TRUSTED_DIRS, all git commands are allowed."""
-        result = run_bash("git -C /any/path status")
+        """Without GIT_TRUSTED_DIRS or unified config, all git commands are allowed."""
+        env = {**os.environ, "DEV_GUARD_CONFIG": "/nonexistent"}
+        env.pop("GIT_TRUSTED_DIRS", None)
+        result = run_guard("Bash", {"command": "git -C /any/path status"}, env=env)
         assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
 
     def test_git_version_always_allowed(self, tmp_path):

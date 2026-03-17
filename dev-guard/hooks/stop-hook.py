@@ -610,11 +610,13 @@ def _log_stop_event(
 def _invoke_llm(
     context: dict,
     plugin_root: str,
-) -> tuple[str, list[str] | None]:
+) -> tuple[str, list[str] | None, bool]:
     """Invoke stop-hook-llm.py subprocess.
 
-    Returns (decision, findings) where decision is 'pass' or 'fail'.
-    Falls back to 'pass' (fail-open) on any error.
+    Returns (decision, findings, error) where:
+      decision: 'pass' or 'fail'
+      findings: list of finding strings, or None
+      error: True if the LLM was unreachable/broken (fail-open)
     """
     llm_script = Path(plugin_root) / "hooks" / "stop-hook-llm.py"
 
@@ -626,20 +628,19 @@ def _invoke_llm(
             timeout=_LLM_TIMEOUT,
         )
         if result.returncode not in (0, 2):
-            # Unexpected exit code — fail-open
-            return "pass", None
+            return "pass", None, True
 
         stdout = result.stdout.strip()
         if not stdout:
-            return "pass", None
+            return "pass", None, True
 
         try:
             response = json.loads(stdout)
         except (json.JSONDecodeError, ValueError):
-            return "pass", None
+            return "pass", None, True
 
         if not isinstance(response, dict):
-            return "pass", None
+            return "pass", None, True
 
         decision = response.get("decision", "pass")
         if decision not in ("pass", "fail"):
@@ -649,11 +650,10 @@ def _invoke_llm(
         if not isinstance(findings, list):
             findings = None
 
-        return decision, findings
+        return decision, findings, False
 
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        # Fail-open: any infrastructure error → allow stop
-        return "pass", None
+        return "pass", None, True
 
 
 # ── Exit Helpers ─────────────────────────────────────────────────────────────
@@ -842,17 +842,16 @@ def main() -> None:
     # ── Invoke LLM ───────────────────────────────────────────────────────────
     plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
     t0 = time.monotonic()
-    decision, findings = _invoke_llm(llm_context, plugin_root)
+    decision, findings, llm_error = _invoke_llm(llm_context, plugin_root)
     llm_ms = int((time.monotonic() - t0) * 1000)
 
     # ── Log the outcome ──────────────────────────────────────────────────────
-    if decision == "fail":
-        outcome = "llm_fail"
-        detail = json.dumps(findings) if findings else None
-    elif findings is None and llm_ms < 500:
-        # _invoke_llm returns (pass, None) on errors — if it's too fast, likely an error
+    if llm_error:
         outcome = "llm_error"
         detail = None
+    elif decision == "fail":
+        outcome = "llm_fail"
+        detail = json.dumps(findings) if findings else None
     else:
         outcome = "llm_pass"
         detail = None

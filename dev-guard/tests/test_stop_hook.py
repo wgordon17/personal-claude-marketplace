@@ -48,6 +48,8 @@ def run_hook(
     env = os.environ.copy()
     if state_path is not None:
         env["STOP_HOOK_STATE_PATH"] = str(state_path)
+        # Isolate DB writes so tests don't pollute real guard stats
+        env["GUARD_DB_PATH"] = str(state_path.parent / "test-guard.db")
     if plugin_root:
         env["CLAUDE_PLUGIN_ROOT"] = plugin_root
     if extra_env:

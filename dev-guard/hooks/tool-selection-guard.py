@@ -2996,6 +2996,66 @@ def _validate_rules_entries(
     return issues, len(entries)
 
 
+def _session_start_tracking() -> None:
+    """Store session CWD mapping and surface unresolved stop hook findings."""
+    try:
+        raw = sys.stdin.buffer.read(_MAX_INPUT_BYTES)
+        data = json.loads(raw) if raw else {}
+    except (json.JSONDecodeError, EOFError, ValueError):
+        data = {}
+
+    session_id = data.get("session_id", "")
+    cwd = data.get("cwd", "")
+    if not session_id:
+        return
+
+    conn = _init_db()
+    if not conn:
+        return
+
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        # Store session → CWD mapping and update last_session_id
+        conn.execute(
+            "INSERT OR REPLACE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
+            (_SESSION_ID_KEY, session_id, ts),
+        )
+        if cwd:
+            conn.execute(
+                "INSERT OR REPLACE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
+                (f"cwd:{session_id}", cwd, ts),
+            )
+        # Initialize tool call counter (OR IGNORE: don't reset on plugin reload)
+        conn.execute(
+            "INSERT OR IGNORE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
+            (f"tools:{session_id}", "0", ts),
+        )
+        conn.commit()
+    except (sqlite3.Error, OSError):
+        pass
+
+    # Surface unresolved stop hook findings from sessions in the same CWD
+    if cwd:
+        try:
+            cutoff = (
+                datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+            ).isoformat()
+            # Join through session_state to find sessions with matching CWD
+            row = conn.execute(
+                "SELECT e.detail FROM stop_hook_events e "
+                "JOIN session_state s ON s.key = 'cwd:' || e.session_id "
+                "WHERE e.outcome = 'llm_fail' AND e.ts > ? AND s.value = ? "
+                "ORDER BY e.ts DESC LIMIT 1",
+                (cutoff, cwd),
+            ).fetchone()
+            if row and row[0]:
+                findings = json.loads(row[0])
+                if isinstance(findings, list) and findings:
+                    print(f"Previous stop hook finding: {findings[0]}")
+        except (sqlite3.Error, json.JSONDecodeError, OSError):
+            pass
+
+
 def _validate_config() -> int:
     """Validate all config sources: unified config and env var overrides.
 
@@ -3003,6 +3063,9 @@ def _validate_config() -> int:
       - Success (exit 0): stdout (shown in transcript)
       - Failure (exit 2): stderr (fed back to Claude)
     """
+    # Track session CWD and surface unresolved findings
+    _session_start_tracking()
+
     url_path = os.environ.get("URL_GUARD_EXTRA_RULES")
     cmd_path = os.environ.get("COMMAND_GUARD_EXTRA_RULES")
     dirs_path = os.environ.get("GIT_TRUSTED_DIRS")
@@ -3059,6 +3122,72 @@ def _validate_config() -> int:
     rtk_msg = _ensure_rtk_config()
     if rtk_msg:
         print(rtk_msg)
+    return 0
+
+
+def _handle_session_end() -> int:
+    """Compute and store session summary at session end."""
+    try:
+        raw = sys.stdin.buffer.read(_MAX_INPUT_BYTES)
+        data = json.loads(raw) if raw else {}
+    except (json.JSONDecodeError, EOFError, ValueError):
+        data = {}
+
+    session_id = data.get("session_id", "")
+    if not session_id:
+        return 0
+
+    conn = _init_db()
+    if not conn:
+        return 0
+
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        # Get tool call count
+        row = conn.execute(
+            "SELECT value FROM session_state WHERE key = ?", (f"tools:{session_id}",)
+        ).fetchone()
+        tool_count = int(row[0]) if row else 0
+
+        # Get event breakdown for this session
+        breakdown = {}
+        for action, count in conn.execute(
+            "SELECT action, COUNT(*) FROM events WHERE session_id = ? GROUP BY action",
+            (session_id,),
+        ):
+            breakdown[action] = count
+
+        # Get CWD
+        row = conn.execute(
+            "SELECT value FROM session_state WHERE key = ?", (f"cwd:{session_id}",)
+        ).fetchone()
+        cwd = row[0] if row else None
+
+        summary = {
+            "tool_calls": tool_count,
+            "blocked": breakdown.get("blocked", 0),
+            "asked": breakdown.get("ask", 0),
+            "bypassed": breakdown.get("bypassed", 0),
+            "cwd": cwd,
+        }
+
+        conn.execute(
+            "INSERT OR REPLACE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
+            (f"summary:{session_id}", json.dumps(summary), ts),
+        )
+        conn.commit()
+
+        # Prune old session keys (older than 30 days)
+        cutoff = (
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+        ).isoformat()
+        conn.execute(
+            "DELETE FROM session_state WHERE updated_ts < ? AND key != ?", (cutoff, _SESSION_ID_KEY)
+        )
+        conn.commit()
+    except (sqlite3.Error, OSError, ValueError, TypeError):
+        pass
+
     return 0
 
 
@@ -3288,6 +3417,9 @@ def main() -> None:
     if "--validate" in sys.argv:
         sys.exit(_validate_config())
 
+    if "--session-end" in sys.argv:
+        sys.exit(_handle_session_end())
+
     data = _parse_hook_input()
 
     # Extract session/tool context for logging
@@ -3315,6 +3447,25 @@ def main() -> None:
     if hook_event == "PostToolUse":
         _handle_post_tool_use(data)
         sys.exit(0)
+
+    # Increment tool call counter (PreToolUse only — Post hooks don't count)
+    if _session_id:
+        try:
+            conn = _init_db()
+            if conn:
+                conn.execute(
+                    "INSERT INTO session_state (key, value, updated_ts) "
+                    "VALUES (?, '1', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET "
+                    "value = CAST(value AS INTEGER) + 1, updated_ts = excluded.updated_ts",
+                    (
+                        f"tools:{_session_id}",
+                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    ),
+                )
+                conn.commit()
+        except (sqlite3.Error, OSError):
+            pass
 
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
