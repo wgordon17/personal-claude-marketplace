@@ -67,12 +67,16 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
   "pipeline_notes": "string — explains why pipeline is or is not feasible",
   "global_risks": ["string — risks affecting the whole implementation"],
   "data_model_changes": "string | null — description of schema/model changes, or null",
-  "api_changes": "string | null — description of public API surface changes, or null"
+  "api_changes": "string | null — description of public API surface changes, or null",
+  "questions": ["string — open questions requiring user decision before implementation begins"]
 }
 ```
 
 **Note:** If `pipeline_feasible` is `false`, the Lead runs Phase 3 in sequential mode using the
 same agents and protocol — just no parallelism. See `references/pipeline-model.md`.
+
+**Note:** If `questions` is non-empty, the Lead MUST present every question to the user via
+`AskUserQuestion` before proceeding to Phase 3. Do NOT start implementation with unresolved questions.
 
 ---
 

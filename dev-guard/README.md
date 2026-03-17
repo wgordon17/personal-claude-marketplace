@@ -287,55 +287,31 @@ stdin JSON → parse → session state → hook dispatch (PreToolUse or PostTool
 
 ## RTK Compression
 
-Automatically compresses verbose CLI output for supported commands using [rtk](https://github.com/fredrikaverpil/rtk). When rtk is installed, commands that would normally be blocked by convention rules (e.g., `cargo test` → "use make target") are compressed instead.
+Automatically compresses CLI output using [rtk](https://github.com/rtk-ai/rtk) for commands that pass all guard rules. Deny rules fire first — blocked commands never reach RTK.
 
-**Prerequisites:** Install rtk (`brew install rtk`). Graceful degradation if absent — convention rules apply as before.
-
-**Compressed commands:**
-
-| Command | Pattern |
-|---------|---------|
-| `cargo test` | `cargo test` (with optional `uv run` prefix) |
-| `cargo build/check` | `cargo build`, `cargo check` |
-| `git log` | `git log` |
-| `git push/pull/fetch` | `git push`, `git pull`, `git fetch` |
-| `docker` | `docker ps`, `docker images`, `docker logs` |
-| `kubectl` | `kubectl get`, `kubectl describe`, `kubectl logs` |
-| `pytest` | `uv run pytest` (bare `pytest` still blocked) |
-| `go test` | `go test` |
-
-**Skipped commands** (known fidelity issues — deny rules apply normally):
-- `git status`, `git diff` — output structure matters
-- `cargo clippy` — diagnostic formatting is important
+**Prerequisites:** `brew install fredrikaverpil/tap/rtk`. Graceful degradation if absent.
 
 **How it works:**
-1. RTK check runs in `_handle_bash_command()` for single, non-piped commands
-2. Git safety checks run first — `git push --force` is still blocked
-3. Matching commands are rewritten via `updatedInput` to prepend `RTK_TELEMETRY_DISABLED=1 rtk --tee`
-4. Full uncompressed output is stored in `~/.local/share/rtk/tee/`
-5. Compressed output includes retrieval instructions for the LLM
+1. All deny rules, git safety, and convention checks run first
+2. Commands that pass all checks are sent to `rtk rewrite` for rewrite detection
+3. If rtk supports the command, `updatedInput` rewrites it (e.g., `git log` → `rtk git log`)
+4. If rtk doesn't support it, the command passes through unchanged
+5. Only single, non-piped, non-subshell, non-multiline commands are eligible
 
-**Telemetry:** Always disabled (`RTK_TELEMETRY_DISABLED=1` on every invocation).
+**Supported commands:** RTK supports 40+ command families including git, cargo, docker, kubectl, pytest, go, ruff, curl, ls, grep, and more. See `rtk --help` for the full list. Dev-guard delegates to `rtk rewrite` which is the single source of truth.
 
-**Analytics:** RTK events are logged to the `rtk_events` table in `~/.claude/logs/dev-guard.db`:
+**Config:** On session start, dev-guard creates/patches `~/.config/rtk/config.toml`:
+- `[telemetry] enabled = false` — telemetry disabled
+- `[tee] mode = "always"` — full uncompressed output always saved to `~/.local/share/rtk/tee/`
+
+**Full output access:** When rtk compresses output, agents can read the uncompressed version from the tee directory. PostToolUse hooks on Read and Bash track when tee files are accessed (logged to `rtk_events` table).
+
+**Analytics:** RTK compression events are logged to `rtk_events` in `~/.claude/logs/dev-guard.db`:
 
 ```sql
--- Compression vs. full-read rate
 SELECT event_type, COUNT(*) FROM rtk_events GROUP BY event_type;
-
--- Full-read percentage
-SELECT
-  SUM(CASE WHEN event_type = 'compressed' THEN 1 ELSE 0 END) as compressions,
-  SUM(CASE WHEN event_type = 'full_read' THEN 1 ELSE 0 END) as full_reads,
-  ROUND(100.0 * SUM(CASE WHEN event_type = 'full_read' THEN 1 ELSE 0 END)
-    / MAX(1, SUM(CASE WHEN event_type = 'compressed' THEN 1 ELSE 0 END)), 1)
-    as full_read_pct
-FROM rtk_events;
-
--- Most compressed commands
-SELECT command, COUNT(*) as times
-FROM rtk_events WHERE event_type = 'compressed'
-GROUP BY command ORDER BY times DESC;
+SELECT command, COUNT(*) as n FROM rtk_events
+  WHERE event_type = 'compressed' GROUP BY command ORDER BY n DESC;
 ```
 
 **Disabling:** Set `RTK_DISABLED=1` environment variable to skip all RTK rewrites.

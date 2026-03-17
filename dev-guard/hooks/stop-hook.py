@@ -265,12 +265,25 @@ def _parse_transcript(
                 if not isinstance(entry, dict):
                     continue
 
-                role = entry.get("role", "")
                 msg_type = entry.get("type", "")
 
-                # First user message (only when not cached)
-                if need_first_user and role == "user" and first_user_message is None:
+                # Resolve role and content from either format:
+                #   Real transcript: {"type": "user", "message": {"role": "user", "content": ...}}
+                #   Test format:     {"role": "user", "content": ...}
+                message = entry.get("message")
+                if isinstance(message, dict):
+                    role = message.get("role", "")
+                    content = message.get("content", "")
+                else:
+                    role = entry.get("role", "")
                     content = entry.get("content", "")
+
+                # Route by msg_type first (covers both formats), fall back to role
+                is_user = msg_type == "user" or role == "user"
+                is_assistant = msg_type == "assistant" or role == "assistant"
+
+                # First user message (only when not cached)
+                if need_first_user and is_user and first_user_message is None:
                     if isinstance(content, str) and content.strip():
                         first_user_message = content.strip()
                     elif isinstance(content, list):
@@ -287,9 +300,8 @@ def _parse_transcript(
                     if tool_name:
                         new_tool_calls.append(tool_name)
 
-                # Assistant messages
-                if role == "assistant":
-                    content = entry.get("content", "")
+                # Assistant messages — extract text and tool_use from content blocks
+                if is_assistant:
                     if isinstance(content, str) and content.strip():
                         assistant_messages.append(content.strip())
                     elif isinstance(content, list):
@@ -304,8 +316,7 @@ def _parse_transcript(
                                     new_tool_calls.append(name)
 
                 # User messages (track latest)
-                if role == "user":
-                    content = entry.get("content", "")
+                if is_user:
                     if isinstance(content, str) and content.strip():
                         latest_user_message = content.strip()
                     elif isinstance(content, list):

@@ -327,7 +327,7 @@ Ensures work products aren't lost AND project conventions are satisfied.
 
 | Work Type | Gate Criteria |
 |-----------|---------------|
-| **Code** | Tests pass. Changes on a feature branch (or ready to commit — do not commit without user request). |
+| **Code** | Tests pass. Changes committed, pushed, and PR created (or ready to — do not commit without user request). "In the working tree" is not sufficient. |
 | **Planning** | Plan file written. Tasks concrete and actionable. No hand-waving. |
 | **Research** | Key findings documented persistently (claude-mem, PROJECT.md, or file). |
 | **Config** | Valid syntax. Consistent with existing patterns. Validated. |
@@ -352,15 +352,28 @@ Do not assume prior pushes landed or that the PR is still open. Verify:
 
 ## No Data Loss Gate (BLOCKING)
 
-Ensures work artifacts are persisted to a durable, findable location — not just in the
-conversation context. Cannot proceed past this gate without confirming each applicable item.
+Ensures work artifacts are persisted to a **durable, externally-trackable location** — not just
+in the conversation context or the local working tree. Cannot proceed past this gate without
+confirming each applicable item.
+
+**THE WORKING TREE TRAP:**
+"Changes are in the working tree" is NOT a durable location. Working tree changes are:
+- Lost on `git checkout`, `git stash`, branch switches, or worktree cleanup
+- Invisible to other sessions, agents, or future conversations
+- Not findable by anyone searching git history, PRs, or project memory
+- Equivalent to "I wrote it on a sticky note" — it exists, but nobody will find it
+
+Durable means: **another agent in a fresh session can find the work without being told where
+to look.** PRs show up in `gh pr list`. Commits show up in `git log`. Plan files show up in
+`hack/plans/`. Project decisions show up in `hack/PROJECT.md`. Conversation-only knowledge
+and working-tree-only changes fail this test.
 
 | Work Type | Persistence Check |
 |-----------|-------------------|
-| **Code** | Changes are committed to a feature branch OR explicitly staged and user is informed. No committed-but-not-pushed-and-forgotten work. |
-| **Planning** | Plan written to `hack/plans/YYYY-MM-DD-<topic>.md`. New tasks added to `hack/TODO.md`. |
-| **Research** | Findings written to `hack/research/YYYY-MM-DD-<topic>.md` (if hack/ exists), otherwise to PROJECT.md or saved to claude-mem. Key claims are not conversation-only. |
-| **All types** | Every significant artifact has a clear, durable home. Nothing important exists only in the conversation. |
+| **Code** | Changes are on a **pushed feature branch with a PR** (verifiable via `gh pr view`). Not just committed locally — pushed and PR-visible. Uncommitted or committed-but-not-pushed work is NOT durable. |
+| **Planning** | Plan written to `hack/plans/YYYY-MM-DD-<topic>.md`. New tasks added to `hack/TODO.md`. Decisions documented in `hack/PROJECT.md`. |
+| **Research** | Findings written to `hack/research/YYYY-MM-DD-<topic>.md` (if hack/ exists), or to `hack/PROJECT.md`, or saved to claude-mem. Key findings must survive session end. |
+| **All types** | For each significant artifact, state WHERE it is persisted and HOW a future agent finds it. "It's in the working tree" or "it's in the conversation" fails this gate. |
 
 **Skip conditions:** Pure question with no artifacts → skip. Work explicitly scoped as
 "conversation only" by the user → skip.
