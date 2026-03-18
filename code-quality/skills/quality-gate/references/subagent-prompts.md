@@ -122,23 +122,23 @@ Report any remaining issues.
 
 ## Spawning Instructions
 
-### Subagent A
+### Subagent A (Pass 1)
 
 ```
 Agent(
+  name="completeness-reviewer",
   description="Completeness review of changes",
-  subagent_type="general-purpose",
   model="opus",
   prompt=<pass_1_prompt_above>
 )
 ```
 
-### Subagent B
+### Subagent B (Pass 1)
 
 ```
 Agent(
+  name="adversarial-reviewer",
   description="Adversarial review of changes",
-  subagent_type="general-purpose",
   model="opus",
   prompt=<pass_1_prompt_above>
 )
@@ -146,10 +146,19 @@ Agent(
 
 ### Resuming for Pass 2
 
+Use `SendMessage` to resume the stopped subagent. The agent auto-resumes in the
+background with its full conversation history preserved.
+
 ```
-Agent(
-  description="Second-pass review verification",
-  resume=<agent_id_from_pass_1>,
-  prompt=<pass_2_prompt_above>
+SendMessage(
+  to="completeness-reviewer",
+  message=<pass_2_prompt_above>,
+  summary="Pass 2 completeness re-review"
+)
+
+SendMessage(
+  to="adversarial-reviewer",
+  message=<pass_2_prompt_above>,
+  summary="Pass 2 adversarial re-review"
 )
 ```

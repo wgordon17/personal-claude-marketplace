@@ -244,28 +244,28 @@ Collect:
 ### Subagent Execution (2 passes each — BOTH mandatory)
 
 Each subagent runs TWO passes. Pass 2 is NOT optional — it catches issues the subagent
-missed on Pass 1 and verifies your fixes didn't introduce new problems. You MUST save
-the agent ID from Pass 1 to resume for Pass 2.
+missed on Pass 1 and verifies your fixes didn't introduce new problems. Give each agent
+a `name` in Pass 1 so you can resume it with `SendMessage` in Pass 2.
 
 **Subagent A: Completeness Reviewer (opus)**
 
 ```
 PASS 1:
-  agent_result = Agent(
+  Agent(
+    name="completeness-reviewer",
     description="Completeness review",
     model="opus",
     prompt=<see references/subagent-prompts.md, Subagent A Pass 1>
   )
-  → Save agent_result.agentId
   → Fix ALL findings
 
 PASS 2 (MANDATORY — do not skip):
-  Agent(
-    description="Completeness re-review",
-    resume=<saved agentId from Pass 1>,
-    prompt="Here are the fixes I made: {summary_of_fixes}.
-            Review them. Also: what did YOU miss on your first pass?
-            You had fresh eyes but still have blind spots. Look again."
+  SendMessage(
+    to="completeness-reviewer",
+    message="Here are the fixes I made: {summary_of_fixes}.
+             Review them. Also: what did YOU miss on your first pass?
+             You had fresh eyes but still have blind spots. Look again.",
+    summary="Pass 2 completeness re-review"
   )
   → Fix ALL findings from Pass 2
 ```
@@ -274,20 +274,20 @@ PASS 2 (MANDATORY — do not skip):
 
 ```
 PASS 1:
-  agent_result = Agent(
+  Agent(
+    name="adversarial-reviewer",
     description="Adversarial review",
     model="opus",
     prompt=<see references/subagent-prompts.md, Subagent B Pass 1>
   )
-  → Save agent_result.agentId
   → Fix ALL findings
 
 PASS 2 (MANDATORY — do not skip):
-  Agent(
-    description="Adversarial re-review",
-    resume=<saved agentId from Pass 1>,
-    prompt="Here are the fixes: {summary_of_fixes}.
-            Verify they're correct. What else breaks in production?"
+  SendMessage(
+    to="adversarial-reviewer",
+    message="Here are the fixes: {summary_of_fixes}.
+             Verify they're correct. What else breaks in production?",
+    summary="Pass 2 adversarial re-review"
   )
   → Fix ALL findings from Pass 2
 ```
