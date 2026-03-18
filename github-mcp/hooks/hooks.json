@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'You have access to a GitHub MCP server. Prefer GitHub MCP tools (mcp__github__*) over the gh CLI for GitHub operations (PRs, issues, actions, code security). Use gh CLI only for operations the MCP server does not support. For raw.githubusercontent.com URLs, use the mcp__github__get_file_contents tool instead of WebFetch.'"
+            "command": "echo 'You have access to a read-only GitHub MCP server (mcp__github__*). Use MCP tools for reading GitHub data (PRs, issues, actions, code security, notifications, discussions). Use the gh CLI for write operations (creating PRs, merging, creating issues). For raw.githubusercontent.com URLs, use the mcp__github__get_file_contents tool instead of WebFetch.'"
           }
         ]
       }
