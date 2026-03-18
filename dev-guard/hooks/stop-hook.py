@@ -531,6 +531,7 @@ def _get_db() -> sqlite3.Connection | None:
     global _db_conn
     if _db_conn is not None:
         return _db_conn
+    conn = None
     try:
         _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         old_umask = os.umask(0o177)
@@ -557,6 +558,8 @@ def _get_db() -> sqlite3.Connection | None:
         _db_conn = conn
         return conn
     except (OSError, sqlite3.Error):
+        if conn is not None:
+            conn.close()
         return None
 
 
