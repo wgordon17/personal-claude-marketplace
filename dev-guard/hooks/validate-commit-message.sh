@@ -64,21 +64,21 @@ fi
 # --- Meta-Commentary Detection ---
 
 # Check for any Co-authored-by (block — attribution trailers are not permitted)
-if echo "$COMMIT_MSG" | grep -qiE "^co-authored-by:"; then
+if echo "$COMMIT_MSG" | grep -qiE "^[[:space:]]*co-authored-by:"; then
     echo "ERROR: Commit contains Co-authored-by trailer"
     echo "Remove all Co-authored-by trailers. Attribution trailers are not permitted."
     exit 2
 fi
 
 # Check for Signed-off-by referencing AI/Claude/Anthropic
-if echo "$COMMIT_MSG" | grep -qiE "^signed-off-by:.*\b(claude|anthropic|ai|llm|gpt|copilot|assistant)\b"; then
+if echo "$COMMIT_MSG" | grep -qiE "^[[:space:]]*signed-off-by:.*\b(claude|anthropic|ai|llm|gpt|copilot|assistant)\b"; then
     echo "ERROR: Commit contains AI/Claude Signed-off-by attribution"
     echo "Remove 'Signed-off-by' lines referencing AI assistants or Anthropic."
     exit 2
 fi
 
 # Check for any Assisted-by trailer
-if echo "$COMMIT_MSG" | grep -qiE "^assisted-by:"; then
+if echo "$COMMIT_MSG" | grep -qiE "^[[:space:]]*assisted-by:"; then
     echo "ERROR: Commit contains Assisted-by trailer"
     echo "Remove all Assisted-by trailers. Attribution trailers are not permitted."
     exit 2

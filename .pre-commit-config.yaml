@@ -13,4 +13,4 @@ repos:
         language: system
         entry: uvx claudelint --strict
         pass_filenames: false
-        files: \.(json|md)$
+        files: \.(json|md|yaml)$

@@ -34,8 +34,8 @@ detect_mainline() {
         # Uses polling loop (bash 3.2 compatible — no wait -n, no GNU timeout)
         # TMPFILE created at script level with mktemp; cleaned up by EXIT trap
         git ls-remote --symref origin HEAD >"$TMPFILE" 2>/dev/null &
-        LS_PID=$!
-        TIMEOUT=5
+        local LS_PID=$!
+        local TIMEOUT=5
         while [ $TIMEOUT -gt 0 ]; do
             if ! kill -0 $LS_PID 2>/dev/null; then break; fi
             sleep 1
@@ -81,7 +81,12 @@ detect_fork() {
         # Also handles ssh://git@github.com/owner/repo.git
         owner=$(echo "$upstream_url" | sed 's|.*/\([^/]*\)/[^/]*$|\1|')
     fi
-    echo "$owner"
+    # Validate owner contains only safe characters
+    if echo "$owner" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
+        echo "$owner"
+    else
+        echo ""
+    fi
 }
 
 detect_conventions() {
@@ -318,8 +323,8 @@ PR_WORKFLOW
 if [ "$IS_FORK" -eq 1 ]; then
     cat <<FORK_PR
    **Fork repo — PR targets upstream:**
-   Use \`mcp__github__create_pull_request\` with \`owner="${UPSTREAM_OWNER}"\` to target the upstream repo.
-   Fallback if MCP unavailable: \`gh pr create --repo ${UPSTREAM_OWNER}/<repo>\`
+   Use \`mcp__github__create_pull_request\` with \`owner="${UPSTREAM_OWNER}"\` and \`repo="<repo-name>"\` to target the upstream repo.
+   Fallback if MCP unavailable: \`gh pr create --repo ${UPSTREAM_OWNER}/<repo-name>\`
 
 FORK_PR
 else
