@@ -2996,7 +2996,7 @@ def _validate_rules_entries(
     return issues, len(entries)
 
 
-def _session_start_tracking() -> None:
+def _handle_session_start() -> None:
     """Store session CWD mapping and surface unresolved stop hook findings."""
     try:
         raw = sys.stdin.buffer.read(_MAX_INPUT_BYTES)
@@ -3064,7 +3064,7 @@ def _validate_config() -> int:
       - Failure (exit 2): stderr (fed back to Claude)
     """
     # Track session CWD and surface unresolved findings
-    _session_start_tracking()
+    _handle_session_start()
 
     url_path = os.environ.get("URL_GUARD_EXTRA_RULES")
     cmd_path = os.environ.get("COMMAND_GUARD_EXTRA_RULES")
