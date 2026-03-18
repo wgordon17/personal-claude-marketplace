@@ -39,7 +39,7 @@ _STATE_TTL_SECONDS = 24 * 3600  # 24 hours
 _GIT_TIMEOUT = 5  # seconds
 _LLM_TIMEOUT = 60  # seconds
 _SHORT_RESPONSE_CHARS = 200
-_RECENT_MESSAGES_LIMIT = 5
+_RECENT_MESSAGES_LIMIT = 10
 _HACK_RECENT_SECONDS = 300  # 5 minutes
 _DB_PATH = Path(
     os.environ.get("GUARD_DB_PATH", str(Path.home() / ".claude" / "logs" / "dev-guard.db"))
