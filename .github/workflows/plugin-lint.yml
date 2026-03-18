@@ -1,0 +1,32 @@
+name: Plugin Lint
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.json'
+      - '**.md'
+      - '**/.mcp.json'
+      - '**/hooks.json'
+      - '**/plugin.json'
+      - '**/SKILL.md'
+      - '.claudelint.yaml'
+      - '.github/workflows/plugin-lint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin-lint:
+    name: Plugin Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+      - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7
+      - run: uvx claudelint --strict

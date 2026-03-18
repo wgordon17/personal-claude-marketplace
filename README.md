@@ -1,6 +1,6 @@
 # Personal Claude Marketplace
 
-Personal Claude Code plugins: LSP servers, code quality agents, development utilities, and git tools.
+Personal Claude Code plugins: LSP servers, code quality agents, development utilities, git tools, and GitHub MCP integration.
 
 ## Plugins
 
@@ -68,6 +68,24 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/git-tools:review-commits` - AI-assisted commit review for PRs
 - `/git-tools:contributing` - Generate/update CONTRIBUTING.md
 
+### GitHub MCP
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| github-mcp | GitHub MCP server with full toolsets for repository management, code security, and workflow automation | MCP server + SessionStart hint | [README](github-mcp/README.md) |
+
+Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__github__*` tools for PRs, issues, actions, code security, and more. Prefer MCP tools over `gh` CLI for GitHub operations.
+
+**Enabled toolsets:** `default`, `actions`, `orgs`, `labels`, `notifications`, `discussions`, `gists`, `projects`, `code_security`, `secret_protection`, `dependabot`, `security_advisories`, `github_support_docs_search`
+
+### CMUX Integration
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| cmux-integration | Bridges Claude Code hook events to CMUX terminal's CLI API | 6 hooks | [README](cmux-integration/README.md) |
+
+Requires [CMUX](https://github.com/wgordon17/cmux) terminal. Provides desktop notifications, sidebar status, and activity logging.
+
 ### Development Guard
 
 | Plugin | Description | Components | Docs |
@@ -92,6 +110,8 @@ claude plugin install dev-guard@personal-claude-marketplace
 claude plugin install code-quality@personal-claude-marketplace
 claude plugin install dev-essentials@personal-claude-marketplace
 claude plugin install git-tools@personal-claude-marketplace
+claude plugin install github-mcp@personal-claude-marketplace
+claude plugin install cmux-integration@personal-claude-marketplace  # Optional: requires CMUX terminal
 
 # Install LSP plugins (pick what you need)
 claude plugin install pyright-uvx@personal-claude-marketplace
@@ -106,6 +126,10 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 ### For All Non-LSP Plugins
 
 - **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), dev-essentials (test-runner, uv-python), and git-tools (hook installation)
+
+### For GitHub MCP
+
+- **GITHUB_PERSONAL_ACCESS_TOKEN**: Set in your environment — Required for MCP server authentication. Needs `repo`, `workflow`, `read:org` scopes (or broader) depending on toolsets used.
 
 ### For LSP Plugins
 
@@ -198,6 +222,7 @@ These MCP servers enhance functionality but are not required for core operation 
 
 | MCP Server | Plugin | Dependency | Purpose |
 |------------|--------|------------|---------|
+| **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
 | **[Serena](https://github.com/Agentic-Coding/serena)** | dev-essentials | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1. Alternative tools work. |
@@ -218,6 +243,8 @@ Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** =
 | **dev-essentials** | HARD | -- | HARD | -- | soft | soft | soft | soft | soft | -- | soft |
 | **git-tools** | -- | -- | -- | soft | -- | -- | -- | HARD | HARD | HARD | -- |
 | **dev-guard** | -- | -- | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **cmux-integration** | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 | **LSP plugins** | -- | -- | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.

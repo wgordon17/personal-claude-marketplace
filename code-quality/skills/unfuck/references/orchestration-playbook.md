@@ -716,7 +716,7 @@ Cleanup plan: {run_dir}/cleanup-plan.md
 Next steps:
 - Review the branch diff: git diff main..cleanup/comprehensive-YYYY-MM-DD
 - Check blocked items in the report (if any)
-- Create a PR when satisfied: gh pr create
+- Create a PR when satisfied: `gh pr create`
 ```
 
 ---

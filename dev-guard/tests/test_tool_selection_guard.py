@@ -557,15 +557,15 @@ class TestURLFetchGuard:
         "command, expected_exit, expected_msg",
         [
             # BLOCKED: GitHub API
-            ("curl https://api.github.com/repos/org/repo", 2, "gh"),
-            ("curl -s https://api.github.com/repos/org/repo/pulls", 2, "gh"),
-            ("wget https://api.github.com/user", 2, "gh"),
+            ("curl https://api.github.com/repos/org/repo", 2, "mcp__github__"),
+            ("curl -s https://api.github.com/repos/org/repo/pulls", 2, "mcp__github__"),
+            ("wget https://api.github.com/user", 2, "mcp__github__"),
             # BLOCKED: GitHub auth-gated content
-            ("curl https://github.com/org/repo/settings", 2, "gh"),
-            ("curl https://github.com/org/repo/pulls", 2, "gh"),
-            ("curl https://github.com/org/repo/issues", 2, "gh"),
-            ("curl https://github.com/org/repo/actions", 2, "gh"),
-            ("curl https://github.com/org/repo/security", 2, "gh"),
+            ("curl https://github.com/org/repo/settings", 2, "mcp__github__"),
+            ("curl https://github.com/org/repo/pulls", 2, "mcp__github__"),
+            ("curl https://github.com/org/repo/issues", 2, "mcp__github__"),
+            ("curl https://github.com/org/repo/actions", 2, "mcp__github__"),
+            ("curl https://github.com/org/repo/security", 2, "mcp__github__"),
             # BLOCKED: GitLab public API/raw
             ("curl https://gitlab.com/api/v4/projects", 2, "glab"),
             ("curl https://gitlab.com/org/repo/-/raw/main/f.py", 2, "glab"),
@@ -601,7 +601,7 @@ class TestURLFetchGuard:
             (
                 "curl https://api.github.com/repos/org/repo | jq .",
                 2,
-                "gh",
+                "mcp__github__",
             ),
         ],
         ids=[
@@ -652,13 +652,13 @@ class TestWebFetchGuard:
         "url, expected_exit, expected_msg",
         [
             # BLOCKED
-            ("https://api.github.com/repos/org/repo", 2, "gh"),
+            ("https://api.github.com/repos/org/repo", 2, "mcp__github__"),
             ("https://docs.google.com/document/d/abc/edit", 2, "Google"),
             ("https://myorg.atlassian.net/rest/api/3/issue/KEY-1", 2, "Atlassian"),
             ("https://myorg.atlassian.net/wiki/spaces/TEAM/page", 2, "Atlassian"),
             ("https://hooks.slack.com/services/T00/B00/xxx", 2, "Slack"),
             ("https://api.slack.com/api/test", 2, "Slack"),
-            ("https://github.com/org/repo/settings", 2, "gh"),
+            ("https://github.com/org/repo/settings", 2, "mcp__github__"),
             ("https://gitlab.com/api/v4/projects/123", 2, "glab"),
             ("https://drive.google.com/file/d/abc/view", 2, "Google"),
             # ALLOWED

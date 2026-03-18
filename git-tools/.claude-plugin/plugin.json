@@ -1,6 +1,6 @@
 {
   "name": "git-tools",
-  "description": "Git workflow tools: history manipulation, commit review, and CONTRIBUTING.md generation",
-  "version": "2.0.0",
+  "description": "Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation",
+  "version": "2.1.0",
   "author": { "name": "wgordon17" }
 }

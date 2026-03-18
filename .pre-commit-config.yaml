@@ -5,3 +5,12 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: claudelint
+        name: claudelint
+        language: system
+        entry: uvx claudelint --strict
+        pass_filenames: false
+        files: \.(json|md|yaml)$
