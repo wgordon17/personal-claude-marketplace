@@ -75,6 +75,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-push-review.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py"
+          }
+        ]
       }
     ],
     "Stop": [

@@ -24,6 +24,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
+sys.path.insert(0, str(Path(__file__).parent))
+from mcp_constants import MCP_READ_ONLY as _MCP_READ_ONLY  # noqa: E402
+from mcp_constants import MCP_THINK_PREFIX as _MCP_THINK_PREFIX  # noqa: E402
+from mcp_constants import mcp_key as _mcp_key  # noqa: E402
+
 try:
     import tomllib
 except ImportError:
@@ -3486,6 +3491,18 @@ def main() -> None:
 
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
+
+    # MCP tool auto-approval: known read-only tools bypass permission system
+    # Uses server-qualified keys to prevent cross-server name spoofing
+    if tool_name.startswith("mcp__"):
+        key = _mcp_key(tool_name)
+        if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
+            _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
+            print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
+            sys.exit(0)
+        # Unknown MCP tools: passthrough to settings.json permissions
+        _log_event("guard", "mcp-passthrough", rule="mcp-unknown", command=tool_name)
+        sys.exit(0)
 
     if tool_name != "Bash":
         sys.exit(0)

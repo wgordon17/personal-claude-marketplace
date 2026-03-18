@@ -4986,3 +4986,162 @@ class TestGuardStats:
         )
         assert result.returncode == 0
         assert "last 1 days" in result.stdout
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MCP tool auto-approval guard
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestMCPKeyFunction:
+    """Tests for the mcp_key() extraction helper in mcp_constants.py."""
+
+    def test_serena_tool(self):
+        from mcp_constants import mcp_key
+
+        assert mcp_key("mcp__serena__find_symbol") == "serena__find_symbol"
+
+    def test_github_mcp_tool(self):
+        from mcp_constants import mcp_key
+
+        assert (
+            mcp_key("mcp__plugin_github-mcp_github__actions_get")
+            == "plugin_github-mcp_github__actions_get"
+        )
+
+    def test_claude_mem_tool(self):
+        from mcp_constants import mcp_key
+
+        assert (
+            mcp_key("mcp__plugin_claude-mem_mcp-search__search")
+            == "plugin_claude-mem_mcp-search__search"
+        )
+
+    def test_jira_tool(self):
+        from mcp_constants import mcp_key
+
+        assert (
+            mcp_key("mcp__plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__getJiraIssue")
+            == "plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__getJiraIssue"
+        )
+
+    def test_short_name_returns_empty(self):
+        from mcp_constants import mcp_key
+
+        assert mcp_key("mcp__serena") == ""
+
+    def test_empty_returns_empty(self):
+        from mcp_constants import mcp_key
+
+        assert mcp_key("") == ""
+
+
+class TestMCPReadOnlyFrozenset:
+    """Spot-check that key tools are in the frozenset with correct server qualification."""
+
+    def test_serena_read_tool_present(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert "serena__find_symbol" in MCP_READ_ONLY
+
+    def test_github_read_tool_present(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert "plugin_github-mcp_github__actions_get" in MCP_READ_ONLY
+
+    def test_jira_read_tool_present(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert (
+            "plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__getJiraIssue" in MCP_READ_ONLY
+        )
+
+    def test_serena_write_tool_absent(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert "serena__write_memory" not in MCP_READ_ONLY
+
+    def test_jira_write_tool_absent(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert (
+            "plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__createJiraIssue"
+            not in MCP_READ_ONLY
+        )
+
+    def test_bare_name_not_present(self):
+        """Bare function names should NOT match — must be server-qualified."""
+        from mcp_constants import MCP_READ_ONLY
+
+        assert "find_symbol" not in MCP_READ_ONLY
+        assert "actions_get" not in MCP_READ_ONLY
+
+    def test_cross_server_spoofing_blocked(self):
+        """An evil server reusing a known function name should NOT match."""
+        from mcp_constants import MCP_READ_ONLY, mcp_key
+
+        evil_tool = "mcp__evil-server__find_symbol"
+        key = mcp_key(evil_tool)
+        assert key == "evil-server__find_symbol"
+        assert key not in MCP_READ_ONLY
+
+
+class TestMCPGuardIntegration:
+    """Integration tests: run the guard with MCP tool names and verify output."""
+
+    def test_known_readonly_mcp_tool_approved(self, session_db):
+        """A known read-only GitHub MCP tool should get permissionDecision: allow."""
+        env, _ = session_db
+        result = run_guard(
+            "mcp__plugin_github-mcp_github__get_me",
+            {},
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "permissionDecision" in result.stdout
+        assert '"allow"' in result.stdout
+
+    def test_serena_readonly_tool_approved(self, session_db):
+        """A known read-only Serena tool should get permissionDecision: allow."""
+        env, _ = session_db
+        result = run_guard(
+            "mcp__serena__find_symbol",
+            {"name_path": "Foo"},
+            env=env,
+        )
+        assert result.returncode == 0
+        assert '"allow"' in result.stdout
+
+    def test_serena_think_tool_approved(self, session_db):
+        """think_about_* tools should get permissionDecision: allow."""
+        env, _ = session_db
+        result = run_guard(
+            "mcp__serena__think_about_task_adherence",
+            {"query": "Am I on track?"},
+            env=env,
+        )
+        assert result.returncode == 0
+        assert '"allow"' in result.stdout
+
+    def test_unknown_mcp_tool_passthrough(self, session_db):
+        """An unknown MCP tool should passthrough (exit 0, no permissionDecision)."""
+        env, _ = session_db
+        result = run_guard(
+            "mcp__serena__write_memory",
+            {"name": "test"},
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "permissionDecision" not in result.stdout
+
+    def test_evil_server_spoofing_passthrough(self, session_db):
+        """A tool from an unknown server using a known name should NOT get allow."""
+        env, _ = session_db
+        result = run_guard(
+            "mcp__evil-server__find_symbol",
+            {},
+            env=env,
+        )
+        assert result.returncode == 0
+        # Should NOT get permissionDecision: allow (server not recognized)
+        assert '"allow"' not in result.stdout

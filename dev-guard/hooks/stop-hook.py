@@ -29,6 +29,9 @@ import time
 from pathlib import Path
 from typing import NoReturn
 
+sys.path.insert(0, str(Path(__file__).parent))
+from mcp_constants import MCP_READ_ONLY, MCP_THINK_PREFIX, mcp_key  # noqa: E402
+
 # ── Constants ────────────────────────────────────────────────────────────────
 
 _MAX_INPUT = 10 * 1024 * 1024  # 10 MB
@@ -47,28 +50,10 @@ _DB_PATH = Path(
 _LOG_RETENTION_DAYS = 30
 _db_conn: sqlite3.Connection | None = None
 
-# MCP tool names that are read-only (do NOT trigger write-signal detection)
-_MCP_READ_ONLY = frozenset(
-    {
-        "find_symbol",
-        "get_symbols_overview",
-        "search_for_pattern",
-        "list_dir",
-        "list_memories",
-        "read_memory",
-        "check_onboarding_performed",
-        "resolve-library-id",
-        "query-docs",
-        "sequentialthinking",
-        "browser_snapshot",
-        "browser_console_messages",
-        "browser_network_requests",
-        "browser_tabs",
-    }
-)
-
-# think_about_* prefix — checked separately
-_MCP_THINK_PREFIX = "think_about_"
+# MCP read-only tools and think prefix — imported from shared module
+_MCP_READ_ONLY = MCP_READ_ONLY
+_MCP_THINK_PREFIX = MCP_THINK_PREFIX
+_mcp_key = mcp_key
 
 # Write tool names (native Claude tools)
 _WRITE_TOOLS = frozenset({"Edit", "Write", "NotebookEdit"})
@@ -399,12 +384,11 @@ def _is_mcp_write_tool(tool_name: str) -> bool:
     """Return True if this MCP tool call represents a write operation."""
     if not tool_name.startswith("mcp__"):
         return False
-    # Strip mcp__<server>__ prefix to get the function name
-    parts = tool_name.split("__", 2)
-    func_name = parts[2] if len(parts) >= 3 else ""
-    if func_name in _MCP_READ_ONLY:
+    # Use server-qualified key to prevent cross-server name spoofing
+    key = _mcp_key(tool_name)
+    if key in _MCP_READ_ONLY:
         return False
-    return not func_name.startswith(_MCP_THINK_PREFIX)
+    return not key.startswith(_MCP_THINK_PREFIX)
 
 
 def _detect_write_signals(tool_calls: list[str]) -> list[str]:
