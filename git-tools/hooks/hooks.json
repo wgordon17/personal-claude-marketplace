@@ -1,0 +1,16 @@
+{
+  "description": "git-tools: dynamic git workflow instructions at SessionStart",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/git-instructions.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -343,7 +343,7 @@ Round 2 checked project rules during review. This gate re-verifies AFTER all fix
 
 **Upstream state verification (if a PR exists):**
 Do not assume prior pushes landed or that the PR is still open. Verify:
-- `gh pr view` — is the PR still open, or was it already merged/closed?
+- `gh pr view` (or `mcp__github__get_pull_request`) — is the PR still open, or was it already merged/closed?
 - `git log origin/main..HEAD` — does the branch contain ALL intended commits?
 - If force-pushing to an already-merged branch, commits are silently orphaned
 - After merge: `git log origin/main` — confirm the merge includes your changes

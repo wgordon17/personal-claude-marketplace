@@ -26,7 +26,8 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 
 1. **Develop and test locally** — Run `make all` before committing.
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits. Show the PR link to the user.
-3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. CI only triggers on `*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, and `.github/workflows/ci.yml` changes. If no checks appear (JSON-only, markdown-only, or skill-only PRs), merge after local `make all` passes.
+3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, plugin files). If no checks appear, merge after local `make all` passes.
+   For PR creation, prefer GitHub MCP tools (`mcp__github__create_pull_request`) if available. Use `gh pr create` as fallback.
 4. **Merge** — `gh pr merge <number> --merge`.
 5. **Update local plugin** — After merge, run these commands (do not hand them to the user).
    Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:
@@ -39,13 +40,15 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 
 ## Repository Structure
 
-Personal Claude Code plugin marketplace with 8 plugins. Master registry: `.claude-plugin/marketplace.json`.
+Personal Claude Code plugin marketplace with 11 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
 - **dev-guard/** — Tool selection guard, commit validation, pre-push review (only plugin with tests)
 - **code-quality/** — Architecture, security, QA, performance agents + audit and orchestration skills
 - **dev-essentials/** — LSP navigation, uv-python, test execution, planning, session management
-- **git-tools/** — Git history, hooks, commit review, contributing guide
+- **git-tools/** — Git history, hooks, commit review, contributing guide; SessionStart git instructions
+- **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
+- **cmux-integration/** — Bridges Claude Code hook events to CMUX terminal (notifications, sidebar, activity log)
 
 Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 

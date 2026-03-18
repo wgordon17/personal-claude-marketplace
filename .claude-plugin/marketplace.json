@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "2.4.0"
+    "version": "2.5.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -66,7 +66,7 @@
     },
     {
       "name": "dev-guard",
-      "version": "1.38.0",
+      "version": "1.39.0",
       "source": "./dev-guard",
       "description": "Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard, trust management, oc/kubectl introspection",
       "category": "quality",
@@ -99,7 +99,7 @@
     },
     {
       "name": "git-tools",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "source": "./git-tools",
       "description": "Git workflow tools: history manipulation, commit review, and CONTRIBUTING.md generation",
       "category": "productivity",
@@ -115,6 +115,17 @@
       "description": "Bridges Claude Code hook events to CMUX terminal's CLI API: notifications, sidebar status, and activity logging",
       "category": "productivity",
       "tags": ["cmux", "hooks", "notifications", "terminal"],
+      "author": {
+        "name": "wgordon17"
+      }
+    },
+    {
+      "name": "github-mcp",
+      "version": "1.0.0",
+      "source": "./github-mcp",
+      "description": "GitHub MCP server with full toolsets for repository management, code security, and workflow automation",
+      "category": "productivity",
+      "tags": ["github", "mcp", "issues", "pull-requests", "code-security"],
       "author": {
         "name": "wgordon17"
       }
