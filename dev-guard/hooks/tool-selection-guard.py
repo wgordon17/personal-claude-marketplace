@@ -408,6 +408,17 @@ def _init_db() -> sqlite3.Connection | None:
             );
             CREATE INDEX IF NOT EXISTS idx_rtk_session ON rtk_events(session_id);
             CREATE INDEX IF NOT EXISTS idx_rtk_type ON rtk_events(event_type);
+            CREATE TABLE IF NOT EXISTS stop_hook_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                session_id TEXT,
+                outcome TEXT NOT NULL,
+                trigger_reasons TEXT,
+                work_type TEXT,
+                llm_duration_ms INTEGER,
+                detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_stop_ts ON stop_hook_events(ts);
         """)
         conn.commit()
         os.chmod(str(_DB_PATH), 0o600)  # Owner-only file access

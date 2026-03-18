@@ -217,7 +217,7 @@ def _session_summaries(conn: sqlite3.Connection, since: str) -> None:
         except (json.JSONDecodeError, TypeError):
             continue
 
-    print(f"  Sessions: {len(rows)}   Tool calls: {total_tools:,}")
+    print(f"  Sessions: {len(rows)}   Guarded tool calls: {total_tools:,}")
     print(f"  Blocked: {total_blocked:,}   Asked: {total_asked:,}")
     if total_tools > 0:
         friction = 100 * (total_blocked + total_asked) // total_tools
