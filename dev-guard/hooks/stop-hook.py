@@ -17,10 +17,12 @@ State file: ~/.claude/stop-hook-state.json (overridable via STOP_HOOK_STATE_PATH
 """
 
 import contextlib
+import datetime
 import hashlib
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import time
@@ -37,8 +39,13 @@ _STATE_TTL_SECONDS = 24 * 3600  # 24 hours
 _GIT_TIMEOUT = 5  # seconds
 _LLM_TIMEOUT = 60  # seconds
 _SHORT_RESPONSE_CHARS = 200
-_RECENT_MESSAGES_LIMIT = 5
+_RECENT_MESSAGES_LIMIT = 10
 _HACK_RECENT_SECONDS = 300  # 5 minutes
+_DB_PATH = Path(
+    os.environ.get("GUARD_DB_PATH", str(Path.home() / ".claude" / "logs" / "dev-guard.db"))
+)
+_LOG_RETENTION_DAYS = 30
+_db_conn: sqlite3.Connection | None = None
 
 # MCP tool names that are read-only (do NOT trigger write-signal detection)
 _MCP_READ_ONLY = frozenset(
@@ -516,17 +523,103 @@ def _determine_work_type(
     return "mixed"
 
 
+# ── Audit Logging ────────────────────────────────────────────────────────────
+
+
+def _get_db() -> sqlite3.Connection | None:
+    """Get or create SQLite connection to the shared guard DB."""
+    global _db_conn
+    if _db_conn is not None:
+        return _db_conn
+    conn = None
+    try:
+        _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        old_umask = os.umask(0o177)
+        try:
+            conn = sqlite3.connect(str(_DB_PATH), timeout=2)
+        finally:
+            os.umask(old_umask)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=1000")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS stop_hook_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                session_id TEXT,
+                outcome TEXT NOT NULL,
+                trigger_reasons TEXT,
+                work_type TEXT,
+                llm_duration_ms INTEGER,
+                detail TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stop_ts ON stop_hook_events(ts)")
+        conn.commit()
+        _db_conn = conn
+        return conn
+    except (OSError, sqlite3.Error):
+        if conn is not None:
+            conn.close()
+        return None
+
+
+def _log_stop_event(
+    session_id: str,
+    outcome: str,
+    *,
+    trigger_reasons: list[str] | None = None,
+    work_type: str | None = None,
+    llm_duration_ms: int | None = None,
+    detail: str | None = None,
+) -> None:
+    """Log a stop hook event. Prunes old rows periodically."""
+    conn = _get_db()
+    if conn is None:
+        return
+    try:
+        ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO stop_hook_events "
+            "(ts, session_id, outcome, trigger_reasons, work_type, llm_duration_ms, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                ts,
+                session_id,
+                outcome,
+                json.dumps(trigger_reasons) if trigger_reasons else None,
+                work_type,
+                llm_duration_ms,
+                detail,
+            ),
+        )
+        conn.commit()
+        # Prune rows older than retention period (1-in-20 chance to avoid overhead)
+        import random
+
+        if random.randint(1, 20) == 1:
+            cutoff = (
+                datetime.datetime.now(datetime.timezone.utc)
+                - datetime.timedelta(days=_LOG_RETENTION_DAYS)
+            ).isoformat()
+            conn.execute("DELETE FROM stop_hook_events WHERE ts < ?", (cutoff,))
+            conn.commit()
+    except (sqlite3.Error, OSError):
+        pass
+
+
 # ── LLM Delegation ───────────────────────────────────────────────────────────
 
 
 def _invoke_llm(
     context: dict,
     plugin_root: str,
-) -> tuple[str, list[str] | None]:
+) -> tuple[str, list[str] | None, bool]:
     """Invoke stop-hook-llm.py subprocess.
 
-    Returns (decision, findings) where decision is 'pass' or 'fail'.
-    Falls back to 'pass' (fail-open) on any error.
+    Returns (decision, findings, error) where:
+      decision: 'pass' or 'fail'
+      findings: list of finding strings, or None
+      error: True if the LLM was unreachable/broken (fail-open)
     """
     llm_script = Path(plugin_root) / "hooks" / "stop-hook-llm.py"
 
@@ -538,20 +631,19 @@ def _invoke_llm(
             timeout=_LLM_TIMEOUT,
         )
         if result.returncode not in (0, 2):
-            # Unexpected exit code — fail-open
-            return "pass", None
+            return "pass", None, True
 
         stdout = result.stdout.strip()
         if not stdout:
-            return "pass", None
+            return "pass", None, True
 
         try:
             response = json.loads(stdout)
         except (json.JSONDecodeError, ValueError):
-            return "pass", None
+            return "pass", None, True
 
         if not isinstance(response, dict):
-            return "pass", None
+            return "pass", None, True
 
         decision = response.get("decision", "pass")
         if decision not in ("pass", "fail"):
@@ -561,11 +653,10 @@ def _invoke_llm(
         if not isinstance(findings, list):
             findings = None
 
-        return decision, findings
+        return decision, findings, False
 
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        # Fail-open: any infrastructure error → allow stop
-        return "pass", None
+        return "pass", None, True
 
 
 # ── Exit Helpers ─────────────────────────────────────────────────────────────
@@ -753,7 +844,28 @@ def main() -> None:
 
     # ── Invoke LLM ───────────────────────────────────────────────────────────
     plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
-    decision, findings = _invoke_llm(llm_context, plugin_root)
+    t0 = time.monotonic()
+    decision, findings, llm_error = _invoke_llm(llm_context, plugin_root)
+    llm_ms = int((time.monotonic() - t0) * 1000)
+
+    # ── Log the outcome ──────────────────────────────────────────────────────
+    if llm_error:
+        outcome = "llm_error"
+        detail = None
+    elif decision == "fail":
+        outcome = "llm_fail"
+        detail = json.dumps(findings) if findings else None
+    else:
+        outcome = "llm_pass"
+        detail = None
+    _log_stop_event(
+        session_id,
+        outcome,
+        trigger_reasons=trigger_reasons,
+        work_type=work_type,
+        llm_duration_ms=llm_ms,
+        detail=detail,
+    )
 
     # ── Update state regardless of decision ─────────────────────────────────
     state = _update_session_state(

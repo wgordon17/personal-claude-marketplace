@@ -3927,8 +3927,14 @@ class TestCdGitCompound:
         assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
 
     def test_git_without_cd_allowed(self):
-        """Plain git push is allowed (no cd prefix)."""
-        result = run_bash("git -C /some/repo push origin HEAD:main")
+        """Plain git -C push is allowed (no cd prefix, cd-git-compound doesn't fire)."""
+        # Use CWD (which is trusted) to avoid git-untrusted-dir blocking
+        cwd = os.getcwd()
+        result = run_guard(
+            "Bash",
+            {"command": f"git -C {cwd} push origin HEAD:main"},
+            env={**os.environ, "DEV_GUARD_CONFIG": "/nonexistent"},
+        )
         assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
 
     def test_cd_and_intervening_cmd_then_git_blocked(self):
@@ -3955,9 +3961,14 @@ class TestCdGitCompound:
 
 
 def _run_with_trusted_dirs(command, dirs_file):
-    """Run the guard with a custom trusted dirs file (GIT_TRUSTED_DIRS)."""
+    """Run the guard with a custom trusted dirs file (GIT_TRUSTED_DIRS).
+
+    Clears the unified config so only the env var file is used.
+    """
     env = os.environ.copy()
     env["GIT_TRUSTED_DIRS"] = str(dirs_file)
+    # Override unified config to prevent ~/.claude/dev-guard.json from interfering
+    env["DEV_GUARD_CONFIG"] = str(dirs_file.parent / "nonexistent-config.json")
     return run_guard("Bash", {"command": command}, env=env)
 
 
@@ -3982,8 +3993,10 @@ class TestGitTrustedDirs:
         assert_guard(result, 2, "git-untrusted-dir", "untrusted-git-c")
 
     def test_no_trusted_dirs_allows_all(self):
-        """Without GIT_TRUSTED_DIRS, all git commands are allowed."""
-        result = run_bash("git -C /any/path status")
+        """Without GIT_TRUSTED_DIRS or unified config, all git commands are allowed."""
+        env = {**os.environ, "DEV_GUARD_CONFIG": "/nonexistent"}
+        env.pop("GIT_TRUSTED_DIRS", None)
+        result = run_guard("Bash", {"command": "git -C /any/path status"}, env=env)
         assert result.returncode == 0, f"Expected pass, stderr: {result.stderr}"
 
     def test_git_version_always_allowed(self, tmp_path):
@@ -4691,3 +4704,285 @@ class TestRTKConfig:
         assert "history_days = 90" in patched
         assert "max_files = 20" in patched
         assert "exclude_commands = []" in patched
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Session Tracking: SessionStart, SessionEnd, Tool Counter
+# ═══════════════════════════════════════════════════════════════════════════════
+
+GUARD_STATS_SCRIPT = os.path.join(os.path.dirname(__file__), os.pardir, "hooks", "guard-stats.py")
+
+
+@pytest.fixture
+def session_db(tmp_path):
+    """Isolated DB + env for session tracking tests."""
+    db_path = tmp_path / "test-guard.db"
+    env = {
+        **os.environ,
+        "GUARD_DB_PATH": str(db_path),
+        "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent.json"),
+    }
+    env.pop("RTK_DISABLED", None)
+    return env, db_path
+
+
+def _run_session_start(env, session_id="test-session", cwd="/test/project"):
+    """Run --validate (SessionStart) with session data on stdin."""
+    payload = json.dumps({"session_id": session_id, "cwd": cwd})
+    return subprocess.run(
+        ["uv", "run", SCRIPT, "--validate"],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def _run_session_end(env, session_id="test-session"):
+    """Run --session-end with session data on stdin."""
+    payload = json.dumps({"session_id": session_id})
+    return subprocess.run(
+        ["uv", "run", SCRIPT, "--session-end"],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+class TestSessionStart:
+    """SessionStart hook stores CWD and initializes tool counter."""
+
+    def test_stores_cwd(self, session_db):
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1", cwd="/my/project")
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM session_state WHERE key = 'cwd:s1'").fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "/my/project"
+
+    def test_initializes_tool_counter(self, session_db):
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1")
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM session_state WHERE key = 'tools:s1'").fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "0"
+
+    def test_updates_last_session_id(self, session_db):
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1")
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT value FROM session_state WHERE key = 'last_session_id'"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "s1"
+
+    def test_tool_counter_not_reset_on_second_start(self, session_db):
+        """INSERT OR IGNORE: counter survives plugin reload."""
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1")
+        # Simulate tool calls by manually setting counter
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("UPDATE session_state SET value = '42' WHERE key = 'tools:s1'")
+        conn.commit()
+        conn.close()
+        # Second SessionStart (plugin reload) should NOT reset counter
+        _run_session_start(env, session_id="s1")
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM session_state WHERE key = 'tools:s1'").fetchone()
+        conn.close()
+        assert row[0] == "42"
+
+
+class TestToolCounter:
+    """Tool call counter increments on PreToolUse, not PostToolUse."""
+
+    def test_increments_on_pre_tool_use(self, session_db):
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1")
+        # Run a PreToolUse guard check
+        run_guard(
+            "Bash",
+            {"command": "date"},
+            env=env,
+            payload_extra={"session_id": "s1"},
+        )
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM session_state WHERE key = 'tools:s1'").fetchone()
+        conn.close()
+        assert int(row[0]) >= 1
+
+    def test_no_increment_on_post_tool_use(self, session_db):
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1")
+        # Run a PostToolUse event
+        run_guard(
+            "Read",
+            {"file_path": "/some/file.txt"},
+            env=env,
+            payload_extra={"session_id": "s1", "hook_event_name": "PostToolUse"},
+        )
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM session_state WHERE key = 'tools:s1'").fetchone()
+        conn.close()
+        assert row[0] == "0"
+
+
+class TestSessionEnd:
+    """SessionEnd computes and stores session summary."""
+
+    def test_stores_summary(self, session_db):
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1", cwd="/my/project")
+        # Simulate some tool calls
+        for _ in range(3):
+            run_guard(
+                "Bash",
+                {"command": "date"},
+                env=env,
+                payload_extra={"session_id": "s1"},
+            )
+        _run_session_end(env, session_id="s1")
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM session_state WHERE key = 'summary:s1'").fetchone()
+        conn.close()
+        assert row is not None
+        summary = json.loads(row[0])
+        assert summary["tool_calls"] >= 3
+        assert summary["cwd"] == "/my/project"
+        assert "blocked" in summary
+        assert "asked" in summary
+
+    def test_summary_counts_blocked_events(self, session_db):
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1")
+        # Trigger a blocked command (grep is blocked by deny rule)
+        run_guard(
+            "Bash",
+            {"command": "grep foo bar.txt"},
+            env=env,
+            payload_extra={"session_id": "s1"},
+        )
+        _run_session_end(env, session_id="s1")
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM session_state WHERE key = 'summary:s1'").fetchone()
+        conn.close()
+        summary = json.loads(row[0])
+        assert summary["blocked"] >= 1
+
+    def test_no_session_id_is_noop(self, session_db):
+        """SessionEnd with no session_id exits cleanly."""
+        env, _db_path = session_db
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--session-end"],
+            input="{}",
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Guard Stats Script
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestGuardStats:
+    """guard-stats.py query and formatting tests."""
+
+    def test_empty_db(self, session_db):
+        """Stats on an empty DB produces header but no crash."""
+        env, db_path = session_db
+        # Create the DB with tables by running a guard check
+        run_guard(
+            "Bash",
+            {"command": "date"},
+            env=env,
+            payload_extra={"session_id": "s1"},
+        )
+        result = subprocess.run(
+            ["uv", "run", GUARD_STATS_SCRIPT, "1"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "Dev Guard Stats" in result.stdout
+
+    def test_shows_guard_decisions(self, session_db):
+        """Stats shows guard decisions after some blocked commands."""
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1")
+        # Generate some blocks
+        for cmd in ["grep foo", "cat file.txt", "grep bar"]:
+            run_guard(
+                "Bash",
+                {"command": cmd},
+                env=env,
+                payload_extra={"session_id": "s1"},
+            )
+        result = subprocess.run(
+            ["uv", "run", GUARD_STATS_SCRIPT],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "Guard Decisions" in result.stdout
+        assert "Blocked" in result.stdout
+
+    def test_shows_session_summaries(self, session_db):
+        """Stats shows session summaries after SessionEnd."""
+        env, db_path = session_db
+        _run_session_start(env, session_id="s1", cwd="/my/project")
+        run_guard(
+            "Bash",
+            {"command": "date"},
+            env=env,
+            payload_extra={"session_id": "s1"},
+        )
+        _run_session_end(env, session_id="s1")
+        result = subprocess.run(
+            ["uv", "run", GUARD_STATS_SCRIPT],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "Session Summaries" in result.stdout
+        assert "Guarded tool calls" in result.stdout
+
+    def test_no_db_file(self, tmp_path):
+        """Stats with no DB file exits gracefully."""
+        env = {
+            **os.environ,
+            "GUARD_DB_PATH": str(tmp_path / "nonexistent.db"),
+        }
+        result = subprocess.run(
+            ["uv", "run", GUARD_STATS_SCRIPT],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "No guard database" in result.stdout
+
+    def test_negative_days_clamped(self, session_db):
+        """Negative days argument is clamped to 1."""
+        env, _db_path = session_db
+        # Create DB by running a guard check
+        run_guard("Bash", {"command": "date"}, env=env, payload_extra={"session_id": "s1"})
+        result = subprocess.run(
+            ["uv", "run", GUARD_STATS_SCRIPT, "-5"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "last 1 days" in result.stdout

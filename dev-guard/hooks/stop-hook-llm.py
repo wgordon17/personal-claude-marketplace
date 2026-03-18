@@ -88,7 +88,6 @@ def _build_prompt(ctx: dict) -> str:
     diff_stat = ctx.get("git_diff_stat")
     trigger_reasons = ctx.get("trigger_reasons") or []
     work_type = ctx.get("work_type", "conversation")
-
     # Build context section
     lines = [
         "You are a quality gate for a Claude Code session. "
@@ -112,10 +111,8 @@ def _build_prompt(ctx: dict) -> str:
 
     if recent_msgs:
         lines += ["", "## Recent Assistant Messages"]
-        for i, msg in enumerate(recent_msgs[-3:], 1):
-            # Truncate very long messages for prompt efficiency
-            preview = msg[:800] + "..." if len(msg) > 800 else msg
-            lines += [f"**Message {i}:**", preview, ""]
+        for i, msg in enumerate(recent_msgs, 1):
+            lines += [f"**Message {i}:**", msg, ""]
 
     # Add work-type-specific evaluation criteria
     lines += ["", "## Evaluation Criteria"]
@@ -145,7 +142,8 @@ def _build_prompt(ctx: dict) -> str:
         )
         criteria.append(
             "BRANCH SAFETY: Are changes on a feature branch (not main/master) "
-            "or appropriately staged?"
+            "or appropriately staged? Note: --force-with-lease on feature branches "
+            "is safe and expected (it fails if the remote has commits you haven't seen)."
         )
 
     if work_type in ("research", "mixed") or "research" in trigger_reasons:
