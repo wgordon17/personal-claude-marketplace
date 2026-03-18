@@ -101,7 +101,7 @@
       "name": "git-tools",
       "version": "2.1.0",
       "source": "./git-tools",
-      "description": "Git workflow tools: history manipulation, commit review, and CONTRIBUTING.md generation",
+      "description": "Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation",
       "category": "productivity",
       "tags": ["git", "hooks", "commits", "history"],
       "author": {

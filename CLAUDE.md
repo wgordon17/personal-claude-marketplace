@@ -54,4 +54,4 @@ Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.jso
 
 ## CI
 
-GitHub Actions on PRs to main. Runs `make all`. Uses `uv sync --group dev`.
+GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx claudelint --strict`).

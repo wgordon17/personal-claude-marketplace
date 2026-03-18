@@ -63,7 +63,7 @@ detect_mainline() {
 }
 
 detect_fork() {
-    # Returns "owner/repo" of upstream if fork, empty string otherwise
+    # Returns owner of upstream remote if fork, empty string otherwise
     local upstream_url
     upstream_url=$(git remote get-url upstream 2>/dev/null || echo "")
     if [ -z "$upstream_url" ]; then
@@ -71,13 +71,14 @@ detect_fork() {
         return
     fi
 
-    # Extract owner from SSH or HTTPS URL
+    # Extract owner from SSH (SCP-style or ssh://), HTTPS URL
     local owner=""
-    # SSH: git@github.com:owner/repo.git
-    if echo "$upstream_url" | grep -q "git@"; then
+    if echo "$upstream_url" | grep -q "git@.*:"; then
+        # SCP-style SSH: git@github.com:owner/repo.git
         owner=$(echo "$upstream_url" | sed 's|.*:\([^/]*\)/.*|\1|')
     else
-        # HTTPS: https://github.com/owner/repo.git
+        # HTTPS or ssh:// style: https://github.com/owner/repo.git
+        # Also handles ssh://git@github.com/owner/repo.git
         owner=$(echo "$upstream_url" | sed 's|.*/\([^/]*\)/[^/]*$|\1|')
     fi
     echo "$owner"
@@ -107,7 +108,7 @@ detect_conventions() {
         if echo "$msg" | grep -qE "^(feat|fix|docs|chore|refactor|test|perf|style|build|ci)(\(.+\))?!?:[[:space:]].+"; then
             matching=$((matching + 1))
         fi
-    done < <(git log --oneline -10 --format="%s" 2>/dev/null || true)
+    done < <(git log -10 --format="%s" 2>/dev/null || true)
 
     if [ "$total" -eq 0 ]; then
         echo "no"
