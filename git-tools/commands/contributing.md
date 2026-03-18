@@ -214,9 +214,8 @@ git push  # Auto-sets up tracking
 git fetch upstream
 git rebase upstream/main
 
-# Create PR (prefer GitHub MCP tools if available)
-# mcp__github__create_pull_request  ← preferred
-gh pr create                         # fallback if MCP unavailable
+# Create PR
+gh pr create
 \`\`\`
 
 After PR merges, delete the branch and sync main.

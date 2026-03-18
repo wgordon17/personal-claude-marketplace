@@ -27,7 +27,6 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 1. **Develop and test locally** — Run `make all` before committing.
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits. Show the PR link to the user.
 3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, plugin files). If no checks appear, merge after local `make all` passes.
-   For PR creation, prefer GitHub MCP tools (`mcp__github__create_pull_request`) if available. Use `gh pr create` as fallback.
 4. **Merge** — `gh pr merge <number> --merge`.
 5. **Update local plugin** — After merge, run these commands (do not hand them to the user).
    Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:

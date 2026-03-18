@@ -316,21 +316,19 @@ cat <<PR_WORKFLOW
    git push -u origin <branch-name>
    \`\`\`
 
-3. **Create PR** — prefer GitHub MCP tools over \`gh\` CLI:
+3. **Create PR** via \`gh\` CLI:
 
 PR_WORKFLOW
 
 if [ "$IS_FORK" -eq 1 ]; then
     cat <<FORK_PR
    **Fork repo — PR targets upstream:**
-   Use \`mcp__github__create_pull_request\` with \`owner="${UPSTREAM_OWNER}"\` and \`repo="<repo-name>"\` to target the upstream repo.
-   Fallback if MCP unavailable: \`gh pr create --repo ${UPSTREAM_OWNER}/<repo-name>\`
+   \`gh pr create --repo ${UPSTREAM_OWNER}/<repo-name>\`
 
 FORK_PR
 else
     cat <<'NONFORK_PR'
-   Use `mcp__github__create_pull_request` (GitHub MCP tool).
-   Fallback if MCP unavailable: `gh pr create`
+   `gh pr create`
 
 NONFORK_PR
 fi
@@ -389,6 +387,33 @@ AFTER_MERGE
 # ============================================================================
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+
+# Include CONTRIBUTING guide if present (commit scopes, conventions)
+# Check common community locations: root, .github/, docs/
+CONTRIBUTING_FILE=""
+for candidate in \
+    "$REPO_ROOT/CONTRIBUTING.md" \
+    "$REPO_ROOT/contributing.md" \
+    "$REPO_ROOT/.github/CONTRIBUTING.md" \
+    "$REPO_ROOT/.github/contributing.md" \
+    "$REPO_ROOT/docs/CONTRIBUTING.md" \
+    "$REPO_ROOT/docs/contributing.md"; do
+    if [ -f "$candidate" ]; then
+        CONTRIBUTING_FILE="$candidate"
+        break
+    fi
+done
+
+if [ -n "$CONTRIBUTING_FILE" ]; then
+    echo ""
+    echo "# Project Contributing Guidelines"
+    echo ""
+    echo "Follow the commit conventions and scopes from this project's contributing guide."
+    echo ""
+    cat "$CONTRIBUTING_FILE"
+fi
+
+# Include project-specific git overrides if present
 if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/hack/git-instructions.md" ]; then
     echo ""
     echo "# Project-Specific Git Instructions"
