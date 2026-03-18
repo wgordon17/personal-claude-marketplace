@@ -3166,7 +3166,7 @@ def _handle_session_end() -> int:
         summary = {
             "tool_calls": tool_count,
             "blocked": breakdown.get("blocked", 0),
-            "asked": breakdown.get("ask", 0),
+            "asked": breakdown.get("ask", 0) + breakdown.get("asked", 0),
             "bypassed": breakdown.get("bypassed", 0),
             "cwd": cwd,
         }

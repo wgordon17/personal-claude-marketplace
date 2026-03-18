@@ -112,7 +112,9 @@ def _build_prompt(ctx: dict) -> str:
     if recent_msgs:
         lines += ["", "## Recent Assistant Messages"]
         for i, msg in enumerate(recent_msgs, 1):
-            lines += [f"**Message {i}:**", msg, ""]
+            # Cap at 4000 chars per message to bound prompt size/cost
+            preview = msg[:4000] + "\n[...truncated]" if len(msg) > 4000 else msg
+            lines += [f"**Message {i}:**", preview, ""]
 
     # Add work-type-specific evaluation criteria
     lines += ["", "## Evaluation Criteria"]
@@ -143,7 +145,7 @@ def _build_prompt(ctx: dict) -> str:
         criteria.append(
             "BRANCH SAFETY: Are changes on a feature branch (not main/master) "
             "or appropriately staged? Note: --force-with-lease on feature branches "
-            "is safe and expected (it prevents overwriting others' work)."
+            "is safe and expected (it fails if the remote has commits you haven't seen)."
         )
 
     if work_type in ("research", "mixed") or "research" in trigger_reasons:

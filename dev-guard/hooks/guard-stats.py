@@ -9,6 +9,7 @@ specific changes to rules, CLAUDE.md, or infrastructure.
 """
 
 import contextlib
+import datetime
 import json
 import os
 import sqlite3
@@ -21,7 +22,7 @@ _DB_PATH = Path(
 
 # Default to 7 days; accept days as first CLI argument
 try:
-    _DAYS = int(sys.argv[1]) if len(sys.argv) > 1 else 7
+    _DAYS = max(1, int(sys.argv[1])) if len(sys.argv) > 1 else 7
 except (ValueError, OverflowError):
     _DAYS = 7
 
@@ -38,8 +39,6 @@ def _connect() -> sqlite3.Connection | None:
 
 
 def _cutoff() -> str:
-    import datetime
-
     return (
         datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=_DAYS)
     ).isoformat()
