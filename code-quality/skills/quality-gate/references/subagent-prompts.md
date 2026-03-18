@@ -126,7 +126,6 @@ Report any remaining issues.
 
 ```
 Agent(
-  name="completeness-reviewer",
   description="Completeness review of changes",
   model="opus",
   prompt=<pass_1_prompt_above>
@@ -137,27 +136,29 @@ Agent(
 
 ```
 Agent(
-  name="adversarial-reviewer",
   description="Adversarial review of changes",
   model="opus",
   prompt=<pass_1_prompt_above>
 )
 ```
 
-### Resuming for Pass 2
+### Pass 2 (Resume via SendMessage)
 
-Use `SendMessage` to resume the stopped subagent. The agent auto-resumes in the
-background with its full conversation history preserved.
+Resume each stopped subagent using `SendMessage` with the **agent ID** (not the name).
+The agent auto-resumes in the background with its full Pass 1 conversation history.
+
+**IMPORTANT:** Use the agent ID returned in the Pass 1 result (e.g., `a73950bb8e403961f`).
+Using the agent name routes to a team inbox and silently fails to resume the agent.
 
 ```
 SendMessage(
-  to="completeness-reviewer",
+  to=<agentId from Pass 1>,
   message=<pass_2_prompt_above>,
   summary="Pass 2 completeness re-review"
 )
 
 SendMessage(
-  to="adversarial-reviewer",
+  to=<agentId from Pass 1>,
   message=<pass_2_prompt_above>,
   summary="Pass 2 adversarial re-review"
 )

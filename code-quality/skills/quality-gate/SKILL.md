@@ -244,24 +244,27 @@ Collect:
 ### Subagent Execution (2 passes each — BOTH mandatory)
 
 Each subagent runs TWO passes. Pass 2 is NOT optional — it catches issues the subagent
-missed on Pass 1 and verifies your fixes didn't introduce new problems. Give each agent
-a `name` in Pass 1 so you can resume it with `SendMessage` in Pass 2.
+missed on Pass 1 and verifies your fixes didn't introduce new problems.
+
+Pass 2 resumes the Pass 1 agent via `SendMessage` using the **agent ID** (not the name).
+This preserves the agent's full conversation history from Pass 1. You MUST use the agent
+ID returned in the Pass 1 result — using the agent name routes to a team inbox instead.
 
 **Subagent A: Completeness Reviewer (opus)**
 
 ```
 PASS 1:
-  Agent(
-    name="completeness-reviewer",
+  pass1_result = Agent(
     description="Completeness review",
     model="opus",
     prompt=<see references/subagent-prompts.md, Subagent A Pass 1>
   )
+  → Save pass1_result.agentId
   → Fix ALL findings
 
 PASS 2 (MANDATORY — do not skip):
   SendMessage(
-    to="completeness-reviewer",
+    to=<agentId from Pass 1>,
     message="Here are the fixes I made: {summary_of_fixes}.
              Review them. Also: what did YOU miss on your first pass?
              You had fresh eyes but still have blind spots. Look again.",
@@ -274,17 +277,17 @@ PASS 2 (MANDATORY — do not skip):
 
 ```
 PASS 1:
-  Agent(
-    name="adversarial-reviewer",
+  pass1_result = Agent(
     description="Adversarial review",
     model="opus",
     prompt=<see references/subagent-prompts.md, Subagent B Pass 1>
   )
+  → Save pass1_result.agentId
   → Fix ALL findings
 
 PASS 2 (MANDATORY — do not skip):
   SendMessage(
-    to="adversarial-reviewer",
+    to=<agentId from Pass 1>,
     message="Here are the fixes: {summary_of_fixes}.
              Verify they're correct. What else breaks in production?",
     summary="Pass 2 adversarial re-review"
