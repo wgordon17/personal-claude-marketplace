@@ -112,9 +112,7 @@ def _build_prompt(ctx: dict) -> str:
     if recent_msgs:
         lines += ["", "## Recent Assistant Messages"]
         for i, msg in enumerate(recent_msgs, 1):
-            # Cap at 4000 chars per message to bound prompt size/cost
-            preview = msg[:4000] + "\n[...truncated]" if len(msg) > 4000 else msg
-            lines += [f"**Message {i}:**", preview, ""]
+            lines += [f"**Message {i}:**", msg, ""]
 
     # Add work-type-specific evaluation criteria
     lines += ["", "## Evaluation Criteria"]
