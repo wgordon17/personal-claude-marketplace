@@ -628,13 +628,13 @@ AUTH_URL_RULES: list[URLRule] = [
         "github-api",
         re.compile(r"api\.github\.com"),
         "This URL targets the GitHub API which requires authentication. "
-        "Use GitHub MCP tools (mcp__github__*) or `gh api` instead.",
+        "Use GitHub MCP tools (mcp__github__*) instead.",
     ),
     URLRule(
         "github-auth-content",
         re.compile(r"github\.com/[^/]+/[^/]+/(settings|pulls|issues|actions|security)"),
         "This GitHub URL requires authentication to return useful content. "
-        "Use GitHub MCP tools (mcp__github__*) or `gh` CLI instead.",
+        "Use GitHub MCP tools (mcp__github__*) instead.",
     ),
     # GitLab (public)
     URLRule(
