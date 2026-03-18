@@ -145,7 +145,8 @@ def _build_prompt(ctx: dict) -> str:
         )
         criteria.append(
             "BRANCH SAFETY: Are changes on a feature branch (not main/master) "
-            "or appropriately staged?"
+            "or appropriately staged? Note: --force-with-lease on feature branches "
+            "is safe and expected (it prevents overwriting others' work)."
         )
 
     if work_type in ("research", "mixed") or "research" in trigger_reasons:
