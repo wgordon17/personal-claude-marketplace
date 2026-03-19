@@ -1280,42 +1280,116 @@ Steps 2 and 3 check docs→code ("do documented claims match reality?"). This st
 inverse: **do features on disk have corresponding documentation?** This catches the common
 failure mode where new features are added but never documented.
 
-1. **Discover registrable components on disk:**
-   ```
-   Glob("**/skills/*/SKILL.md")        # Skills
-   Glob("**/.claude-plugin/agents.json") OR Glob("**/agents/*/AGENT.md")  # Agents
-   Glob("**/commands/*/COMMAND.md")     # Commands
-   Glob("**/hooks/hooks.json")          # Hooks
-   ```
-   Also check for language-specific patterns:
-   ```
-   Grep(pattern="app\\.route|@router|@app\\.", ...)   # API endpoints
-   Grep(pattern="@click\\.command|argparse", ...)      # CLI commands
-   Grep(pattern="def\\s+test_", type="py", ...)        # Test coverage of public API
-   ```
+Adapt the component discovery to the project's ecosystem. Not all patterns apply to every project.
 
-2. **Discover documentation surfaces:**
-   ```
-   Glob("**/README.md")
-   Glob("**/plugin.json")
-   Glob("**/marketplace.json")
-   Glob("**/package.json")
-   Glob("**/CONTRIBUTING.md")
-   ```
+#### 2b.1: Discover registrable components on disk
 
-3. **Cross-reference components against documentation:**
-   For each documentation surface, extract listed components (parse tables, lists, descriptions)
-   and compare against what exists on disk:
-   - Count skills on disk vs skills in README table → must match
-   - Count agents on disk vs agents in README table → must match
-   - Plugin.json description mentions all component types → verify
-   - Marketplace.json description matches plugin.json description → verify
-   - Root README component counts match plugin README → verify
-   - If a component exists on disk but isn't in ANY documentation surface → HIGH severity finding
+Detect the project type from files present, then apply relevant discovery patterns:
 
-4. **Check for orphaned documentation:**
-   For each documented component, verify it still exists on disk. A README listing a skill that
-   was deleted is the reverse of this step's primary concern but equally important.
+**Python projects** (`pyproject.toml`, `setup.py`, `setup.cfg`):
+```
+Grep(pattern="def\\s+\\w+", path="src/", type="py")      # Public functions/classes in src/
+Grep(pattern="@click\\.command|@click\\.group", ...)       # CLI commands (Click)
+Grep(pattern="@app\\.command|def\\s+\\w+.*typer", ...)     # CLI commands (Typer)
+Grep(pattern="argparse\\.ArgumentParser|add_subparsers", ...)  # CLI commands (argparse)
+Grep(pattern="@app\\.route|@router\\.", ...)               # API endpoints (Flask/FastAPI)
+Grep(pattern="class.*APIView|class.*ViewSet", ...)         # API views (Django REST)
+Grep(pattern="\\[project\\.scripts\\]|\\[tool\\.poetry\\.scripts\\]", path="pyproject.toml")  # Entry points
+```
+
+**Rust projects** (`Cargo.toml`):
+```
+Grep(pattern="^pub fn|^pub struct|^pub enum|^pub trait", type="rust")  # Public API
+Grep(pattern="\\[\\[bin\\]\\]|name\\s*=", path="Cargo.toml")          # Binary targets
+Grep(pattern="#\\[command|#\\[clap", type="rust")                       # CLI commands (clap)
+Grep(pattern="pub mod", path="src/lib.rs")                              # Module exports
+```
+
+**Node/TypeScript projects** (`package.json`, `tsconfig.json`):
+```
+Grep(pattern="\"bin\":|\"exports\":|\"main\":", path="package.json")   # Entry points
+Grep(pattern="export (default |const |function |class )", type="ts")   # Public exports
+Grep(pattern="app\\.(get|post|put|delete|patch)\\(|router\\.", ...)    # API endpoints (Express)
+Grep(pattern="@Controller|@Get|@Post", type="ts")                      # API endpoints (NestJS)
+Grep(pattern="\\.command\\(|program\\.", ...)                           # CLI commands (Commander)
+```
+
+**Go projects** (`go.mod`):
+```
+Grep(pattern="^func [A-Z]", type="go")                    # Exported functions
+Grep(pattern="http\\.Handle|mux\\.", type="go")            # HTTP handlers
+Grep(pattern="cobra\\.Command|flag\\.", type="go")         # CLI commands
+```
+
+**Frontend projects** (`*.tsx`, `*.vue`, `*.svelte`):
+```
+Glob("**/components/**/*.{tsx,vue,svelte}")                # UI components
+Glob("**/pages/**/*.{tsx,vue,svelte}")                     # Pages/routes
+Grep(pattern="export default|export const", glob="*.tsx")  # Exported components
+```
+
+**Shell/CLI tools** (`*.sh`, `Makefile`, `*.nix`):
+```
+Glob("bin/*")                                              # Executable scripts
+Grep(pattern="^[a-z_-]+:", path="Makefile")                # Make targets
+Grep(pattern="function\\s+\\w+|\\w+\\(\\)", glob="*.sh")  # Shell functions
+Glob("*.nix")                                              # Nix expressions
+```
+
+**Claude Code plugins** (`.claude-plugin/plugin.json`):
+```
+Glob("**/skills/*/SKILL.md")                               # Skills
+Glob("**/agents/*/AGENT.md")                               # Agents
+Glob("**/commands/*/COMMAND.md")                            # Commands
+Glob("**/hooks/hooks.json")                                # Hooks
+```
+
+**Generic patterns** (apply to any project):
+```
+Grep(pattern="def\\s+test_|it\\(|describe\\(|#\\[test\\]", ...)  # Test coverage
+Glob("**/examples/**/*")                                          # Examples
+Glob("**/*.proto")                                                # Protobuf schemas
+Glob("**/*.graphql|**/*.gql")                                     # GraphQL schemas
+Glob("**/migrations/**/*")                                        # DB migrations
+```
+
+#### 2b.2: Discover documentation surfaces
+
+```
+Glob("**/README.md")
+Glob("**/CONTRIBUTING.md")
+Glob("**/CHANGELOG.md") OR Glob("**/HISTORY.md") OR Glob("**/CHANGES.md")
+Glob("**/docs/**/*.md")
+Glob("**/plugin.json")
+Glob("**/marketplace.json")
+Glob("**/package.json")
+Glob("**/Cargo.toml")                    # Rust package metadata
+Glob("**/pyproject.toml")               # Python package metadata
+Glob("**/*.cabal") OR Glob("**/go.mod") # Other package manifests
+```
+
+#### 2b.3: Cross-reference components against documentation
+
+For each documentation surface, extract listed components (parse tables, lists, descriptions,
+package metadata) and compare against what exists on disk:
+
+- Count public modules/packages on disk vs what's listed in README → must match
+- Count API endpoints/routes vs what's documented in API docs → must match
+- Count CLI commands/subcommands vs what's documented in usage docs → must match
+- Package manifest descriptions (pyproject.toml, Cargo.toml, package.json) → verify they
+  mention all major features/components
+- Registry/manifest entries match README descriptions → verify
+- If a significant component exists on disk but isn't in ANY documentation surface → HIGH finding
+
+**What counts as "significant":** Public API functions, exported modules, CLI commands, API
+endpoints, UI pages/routes, configuration options, entry points. Internal helpers, test utilities,
+and private functions do NOT need README entries.
+
+#### 2b.4: Check for orphaned documentation
+
+For each documented component, verify it still exists on disk. A README listing a CLI command
+that was deleted, an API doc describing a removed endpoint, or a tutorial referencing a renamed
+function are all orphaned documentation.
 
 ### Step 3: Internal Link Verification
 

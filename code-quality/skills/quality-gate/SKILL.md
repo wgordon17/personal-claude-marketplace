@@ -460,10 +460,10 @@ Round 2 checks docs→code (do documented claims match reality). This gate check
 
 | Check | Action |
 |-------|--------|
-| **Component inventory** | Count registrable components on disk (skills, agents, commands, hooks) via Glob. Compare counts against README tables, plugin.json descriptions, marketplace.json entries. Mismatches are blocking. |
-| **Description accuracy** | Read plugin.json and marketplace.json description fields. Do they mention all component types that exist? Are counts/lists accurate? |
+| **Component inventory** | Count registrable components on disk via Glob/Grep — adapt to project type: public modules, API endpoints, CLI commands, exported components, entry points, skills/agents (for plugin projects). Compare counts against README tables, package manifest descriptions, registry entries. Mismatches are blocking. |
+| **Description accuracy** | Read package manifests (plugin.json, package.json, pyproject.toml, Cargo.toml, etc.) and registry entries. Do descriptions mention all major component types that exist? Are counts/lists accurate? |
 | **Feature coverage** | For each user-facing change in this work: is there a corresponding documentation entry? New skill without README row = fail. Removed feature with stale references = fail. |
-| **Cross-surface consistency** | Do README tables, plugin.json descriptions, marketplace.json entries, and root README all agree on component names, counts, and descriptions? |
+| **Cross-surface consistency** | Do README tables, package manifests, registry entries, and root-level documentation all agree on component names, counts, and descriptions? |
 
 **Skip conditions:** Pure internal refactor with no user-facing component changes (no new/removed/
 renamed skills, agents, commands, features, or public APIs). When in doubt, run the check.

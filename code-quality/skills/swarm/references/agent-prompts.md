@@ -1633,11 +1633,14 @@ Independent of the architect's list, verify documentation completeness:
    ```
 
 2. **Count on-disk components vs documented components:**
-   ```
-   Glob("**/skills/*/SKILL.md")        # Skills
-   Glob("**/agents/*/AGENT.md")        # Agents (if applicable)
-   Glob("**/commands/*/COMMAND.md")    # Commands (if applicable)
-   ```
+   Adapt to the project type — detect from files present (pyproject.toml, Cargo.toml,
+   package.json, .claude-plugin/, go.mod, etc.):
+   - Python: public modules, CLI commands (click/typer/argparse), API endpoints
+   - Rust: public API, binary targets, CLI commands
+   - Node/TS: exports, API routes, CLI commands
+   - Go: exported functions, HTTP handlers
+   - Frontend: components, pages/routes
+   - Claude Code plugins: skills, agents, commands, hooks
    Compare counts against README tables. They must match.
 
 3. **Check for stale references:**

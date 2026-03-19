@@ -107,9 +107,10 @@ specific questions — not generic ones.
 - Search **claude-mem** MCP for relevant past work, decisions, and learnings
 - Use **Serena** MCP `get_symbols_overview` for component-level understanding (if applicable)
 - Use **sequential-thinking** MCP to reason about scope boundaries
-- **Discover documentation surfaces** — Glob for READMEs, manifests, registries, plugin.json,
-  marketplace.json, CONTRIBUTING.md, and any other user-facing documentation. Note which
-  surfaces exist and what they document. This inventory feeds Phase 4 and Phase 5.
+- **Discover documentation surfaces** — Glob for READMEs, CONTRIBUTING.md, changelogs,
+  docs/ directories, and package manifests (plugin.json, package.json, pyproject.toml,
+  Cargo.toml, go.mod, etc.). Note which surfaces exist and what they document. This
+  inventory feeds Phase 4 and Phase 5.
 
 ### Chat Output
 
