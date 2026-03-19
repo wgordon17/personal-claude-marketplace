@@ -2,10 +2,11 @@
 name: swarm
 description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
-  of 13+ specialized agents (Architect, Implementer, Reviewer, Test-Writer,
-  Test-Runner, Security, QA, Code-Reviewer, Performance, Fixer, Code-Simplifier,
-  Docs, Verifier) with structured JSON communication, audit trails, and early
-  user checkpoint. Use when asked to "swarm this", "full team", "agent team",
+  of 15+ specialized agents (Architect, Security Design Reviewer, Implementer,
+  Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer, Performance,
+  Fixer, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
+  communication, Cynefin domain classification, audit trails, and early user
+  checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
   Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion, TeamCreate, TeamDelete,
@@ -29,6 +30,7 @@ specialist agent.
 |-------|------|------------|-------|----------|---------|
 | 0 | Lead (YOU) | — | — | No | Orchestration, routing, judgment |
 | 2 | Architect | code-quality:architect | opus | No | Design, decomposition, risk analysis |
+| 2.5 | Security Design | code-quality:security | opus | No | Pre-implementation threat surface review |
 | 3 | Implementer | general-purpose | sonnet | Yes | Write code, component by component |
 | 3 | Reviewer | general-purpose | opus | No | Review each component before testing |
 | 3 | Test-Writer | general-purpose | sonnet | Yes | Write tests for reviewed components |
@@ -40,6 +42,7 @@ specialist agent.
 | 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
 | 5 | Code-Simplifier | code-simplifier:code-simplifier | sonnet | Yes | Post-fix simplification pass |
 | 6 | Docs | general-purpose | haiku | Yes | Update repo docs and hack/ memory |
+| 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |
 | 7 | Verifier | dev-essentials:test-runner | haiku | No | Final test suite + lint verification |
 
 ### Optional Domain Reviewers (auto-detected in Phase 1)
@@ -80,21 +83,60 @@ further checkpoints. The user can walk away after Phase 1 approval.
 ### Phase 2: Architect (opus)
 
 Spawn the architect agent with the full task description, codebase context, and audit trail path.
-The architect analyzes the codebase, designs the solution, and decomposes the work into
-independent components suitable for pipelined implementation. Output is a structured JSON plan
-written to `hack/swarm/YYYY-MM-DD/architect-plan.json` (see schema in `references/communication-schema.md`).
-The architect also identifies global risks, data model changes, and API surface changes. After
-receiving the plan, the Lead MUST:
+The architect begins by classifying the task using the Cynefin framework
+(see `references/cynefin-reference.md`), then designs the solution accordingly:
+
+- **Clear / Complicated:** Standard decomposition into independent components with dependency graph.
+- **Complex:** Probe design — experiments and signals rather than a full plan. Smaller components
+  with explicit checkpoints. Phase 2.5 Security Design Review is mandatory regardless of surface area.
+- **Chaotic:** Stabilization brief only — immediate action plan to stop the bleeding. Phase 2.5
+  is deferred until stabilization completes. Single Implementer, no pipeline parallelism.
+- **Disorder:** Investigation plan first; classify domain before committing to implementation.
+
+The Cynefin classification (`cynefin_domain` and `domain_justification`) is written to
+`architect-plan.json` and is advisory — it informs how phases run, never whether mandatory phases
+run. The Lead reads the classification to inform Phase 2.5 skip decisions.
+
+Output is a structured JSON plan written to `hack/swarm/YYYY-MM-DD/architect-plan.json`
+(see schema in `references/communication-schema.md`). The architect also identifies global risks,
+data model changes, and API surface changes. After receiving the plan, the Lead MUST:
 
 1. Read `architect-plan.json` and check the `questions` array
 2. If `questions` is non-empty, present EVERY question to the user via `AskUserQuestion`
 3. Verify scope: compare the plan's components against the original task — if any requested
    work is missing from the plan, add it back or ask the user via `AskUserQuestion`
 4. Raise any high-severity risks to the user before proceeding
+5. Note the `cynefin_domain` — use it to inform Phase 2.5 skip decision and pipeline mode
 
 Do NOT proceed to Phase 3 until all architect questions are resolved and scope is verified.
 The Architect remains active through Phase 3 to answer clarification questions from the
 Implementer and Reviewer.
+
+### Phase 2.5: Security Design Review (conditional)
+
+Skip this phase when: task is config-only, docs-only, or test-only AND does not touch
+authentication, authorization, data storage, network, or API surface. Clear-domain tasks
+(per `cynefin_domain` in architect-plan.json) that don't touch auth, data, network, or API
+surfaces can also skip this phase. When in doubt, run the review.
+
+Spawn the `code-quality:security` agent (opus model) with the architect's plan as input.
+The agent reviews architect-plan.json for:
+- Attack surface introduced or modified
+- STRIDE threat categories (Spoofing, Tampering, Repudiation, Information Disclosure,
+  Denial of Service, Elevation of Privilege)
+- Trust boundary violations
+- Security constraints the implementer must respect
+
+Output: SecurityDesignReview JSON written to `{run_dir}/security-design-review.json`
+(see schema in `references/communication-schema.md`).
+
+**Routing:**
+- Critical/High findings → Route back to Architect (Phase 2) with security feedback for
+  redesign. Architect revises plan, re-run Phase 2.5. Maximum 2 Architect↔Security iterations.
+- Medium/Low/None → Append security constraints to architect-plan.json as
+  `security_constraints` array and proceed to Phase 3.
+- If 2 iterations exhausted with unresolved Critical findings → Escalate to human via
+  AskUserQuestion.
 
 ### Phase 3: Pipelined Implementation
 
@@ -117,6 +159,26 @@ completed implementation. Each writes structured JSON findings to `hack/swarm/YY
 (see schema in `references/communication-schema.md`). The Lead collects all findings, filters by
 severity, and synthesizes into a consolidated view. Critical and high-severity findings go to the
 Fixer in Phase 5. Low/informational findings are recorded in the audit trail but not acted on.
+
+**Escalation Routing (before proceeding to Phase 5):**
+
+After synthesizing findings, classify each critical/high finding by type and route accordingly:
+
+| Finding Type | Examples | Routing |
+|---|---|---|
+| Design-level | Architecture mismatch, wrong abstraction, missing component entirely | Route back to Architect — respawn Phase 2, then re-run Phase 2.5, then re-implement Phase 3 |
+| Security design | Trust boundary violation in architecture, missing auth layer, new attack surface from design decision | Route to Phase 2.5 Security Design Review for design-level fix |
+| Scope creep | Feature implemented that was not in the plan, undiscussed behavior introduced | Escalate to human via AskUserQuestion — do not fix silently |
+| Implementation | Bugs, quality issues, code-level security vulnerabilities, performance bottlenecks | Route to Phase 5 Fixer (existing flow) |
+
+**Escalation counter:** Track a `design_escalation_count` across the swarm run. Each time findings
+trigger a return to Phase 2 (design-level) or Phase 2.5 (security design), increment the counter.
+Maximum 2 total design/security escalations per swarm run — if this cap is reached with unresolved
+findings, escalate to the human via AskUserQuestion rather than re-running again. This caps
+Phase 3 re-implementations at 2 regardless of escalation type.
+
+All escalation events are recorded in `{run_dir}/escalations.json`
+(see schema in `references/orchestration-playbook.md` Step 4.5).
 
 ### Phase 5: Fix & Simplify (conditional)
 
@@ -141,6 +203,21 @@ agent updates affected README files, API documentation, and inline docs. It also
 project's memory directory (`hack/`, `.local/`, `scratch/`, `.dev/`) and updates PROJECT.md with
 architectural decisions, TODO.md with completed and new items, and SESSIONS.md with a 3-5 bullet
 summary. Only update documentation that is actually affected by the implementation.
+
+After the Docs agent completes, spawn a separate **Lessons Extractor** agent (sonnet model). This
+agent scans the swarm run's audit trail and extracts principle-level lessons to `hack/LESSONS.md`
+(creating the file if it does not exist). It reads:
+- `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged
+- `{run_dir}/reviews/` — recurring finding patterns across reviewers
+- `{run_dir}/escalations.json` — escalation events (if the file exists)
+- `{run_dir}/fix-summary.json` — what the Fixer had to address (if the file exists)
+- Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
+
+Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
+format from `dev-essentials/skills/incremental-planning/references/lessons-template.md`:
+`- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
+
+The Lessons Extractor runs after Docs completes to avoid audit trail races.
 
 ### Phase 7: Verification & Completion
 
@@ -181,6 +258,14 @@ Phase 2: Architect (opus)
   +-- Lead reviews --> AskUserQuestion if risky
      |
      v
+Phase 2.5: Security Design Review (conditional, opus)
+  +-- Reviews architect-plan.json for threat surface
+  +-- STRIDE analysis of proposed architecture
+  +-- Critical/High findings --> back to Architect (max 2 iterations)
+  +-- Medium/Low/None --> append security_constraints, proceed
+  +-- Unresolved Critical after 2 iterations --> AskUserQuestion
+     |
+     v
 Phase 3: Pipelined Implementation
   +-------------------------------------------------------+
   | Implementer --> Reviewer --> Test-Writer --> Test-Runner |
@@ -205,6 +290,7 @@ Phase 5: Fix & Simplify (if findings exist)
      v
 Phase 6: Docs & Memory
   +-- Docs agent: repo docs + hack/ updates
+  +-- Lessons Extractor: audit trail → hack/LESSONS.md
      |
      v
 Phase 7: Verification & Completion
@@ -266,6 +352,7 @@ and report to the user with full context.
 Write all structured outputs to `hack/swarm/YYYY-MM-DD/`:
 - `architect-plan.json` — architect's component plan
 - `reviews/security.json`, `reviews/qa.json`, etc. — review findings
+- `escalations.json` — escalation events for Lessons extraction
 - `swarm-report.md` — final completion report
 
 ### Escalation Protocol
@@ -294,6 +381,7 @@ After escalation, wait for user input before proceeding.
 
 | Phase / Agent | Skip When |
 |---------------|-----------|
+| Phase 2.5: Security Design Review | Config-only, docs-only, or test-only changes that don't touch auth/data/network/API surfaces. Clear-domain tasks without auth/data/network/API involvement. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
 | Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
 | Phase 5: Fix | ALL review agents report zero critical or high findings |
@@ -306,7 +394,7 @@ After escalation, wait for user input before proceeding.
 
 ## Cost Awareness
 
-This skill spawns 13+ agents, each with their own context and API calls. Use it only when the
+This skill spawns 15+ agents, each with their own context and API calls. Use it only when the
 task genuinely warrants maximum rigor. For smaller tasks, use a targeted subagent or invoke
 specific skills directly.
 
@@ -326,7 +414,7 @@ specific skills directly.
 | Model | Cost | Used For |
 |-------|------|---------|
 | opus | Expensive | Architect, Reviewer, Security, QA — judgment-heavy tasks |
-| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier |
+| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier, Lessons Extractor |
 | haiku | Cheap | Test-Runner, Docs, Verifier — execution-only tasks |
 
 Minimize opus usage to the phases where nuanced judgment is genuinely required.
@@ -338,6 +426,7 @@ Minimize opus usage to the phases where nuanced judgment is genuinely required.
 | File | Content |
 |------|---------|
 | `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, TeamCreate config, and git workflow |
-| `references/agent-prompts.md` | Full prompt templates for all 13+ agents — role, boundaries, communication protocol, output format |
+| `references/agent-prompts.md` | Full prompt templates for all 15+ agents — role, boundaries, communication protocol, output format |
 | `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
+| `references/cynefin-reference.md` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |

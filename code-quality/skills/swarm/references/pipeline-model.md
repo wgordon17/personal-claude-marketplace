@@ -312,14 +312,16 @@ Lead spawns sequentially:
 These two run sequentially: Fixer first, Code-Simplifier after Fixer completes. Shut down both
 before Phase 6.
 
-### Phase 6: Docs Agent
+### Phase 6: Docs & Lessons
 
 ```
-Lead spawns:
-  docs  (general-purpose, haiku)  -- updates docs and hack/ memory
+Lead spawns sequentially:
+  docs               (general-purpose, haiku)   -- updates docs and hack/ memory
+  lessons-extractor  (general-purpose, sonnet)  -- extracts principle-level lessons from swarm run
 ```
 
-Single agent, shut down after it reports completion.
+Two agents, run sequentially. Docs agent completes first, then Lessons Extractor reads the
+audit trail and writes to `hack/LESSONS.md`. Shut down each after it reports completion.
 
 ### Phase 7: Verifier
 
@@ -337,10 +339,11 @@ Single agent, shut down after it sends `VerificationResult`.
 | 0 | Lead only | 1 |
 | 1 | Lead only | 1 |
 | 2 | Architect | 2 |
+| 2.5 | Security Design Reviewer | 2 |
 | 3 | Architect (standby) + Implementer, Reviewer, Test-Writer, Test-Runner | 6 (5 + Lead) |
 | 4 | Security, QA, Code-Reviewer, Performance (+ optionals) | 5-10 + Lead |
 | 5 | Fixer, then Code-Simplifier | 2 + Lead |
-| 6 | Docs | 2 |
+| 6 | Docs, then Lessons Extractor | 2 (sequential) |
 | 7 | Verifier | 2 |
 
 Phases never overlap. The Lead shuts down each phase's agents before spawning the next phase.

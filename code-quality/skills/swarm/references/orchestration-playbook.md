@@ -13,10 +13,11 @@ point is documented here.
 | 0 | Pre-flight & Setup | Lead direct | None |
 | 1 | Clarify & Checkpoint | Lead direct | None (AskUserQuestion) |
 | 2 | Architect | Single agent | architect (opus) |
+| 2.5 | Security Design Review | Single agent (conditional) | security-design (opus) |
 | 3 | Pipelined Implementation | Persistent team | implementer, reviewer, test-writer, test-runner |
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
-| 6 | Docs & Memory | Single agent | docs (haiku) |
+| 6 | Docs & Memory | Sequential pair | docs (haiku), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
 ---
@@ -204,6 +205,14 @@ so the directory is not empty:
 }
 ```
 
+Also initialize the escalation tracking file:
+
+```
+Write {run_dir}/escalations.json with: []
+```
+
+Initialize `design_escalation_count = 0` as tracked Lead state (used in Phase 4 escalation routing).
+
 ### Step 0.7: TeamCreate
 
 ```
@@ -222,8 +231,10 @@ t1 = TaskCreate("Phase 1: Clarify & checkpoint", "User approval for swarm compos
                 activeForm="Clarifying requirements")
 t2 = TaskCreate("Phase 2: Architect designs solution", "Spawn architect, review plan",
                 activeForm="Architecting solution") → addBlockedBy: [t1]
+t2_5 = TaskCreate("Phase 2.5: Security design review", "STRIDE analysis of architect plan",
+                activeForm="Security design review") → addBlockedBy: [t2]
 t3 = TaskCreate("Phase 3: Pipelined implementation", "All components through pipeline",
-                activeForm="Implementing components") → addBlockedBy: [t2]
+                activeForm="Implementing components") → addBlockedBy: [t2_5]
 t4 = TaskCreate("Phase 4: Parallel review", "Security, QA, code-review, performance",
                 activeForm="Running parallel review") → addBlockedBy: [t3]
 t5 = TaskCreate("Phase 5: Fix & simplify", "Fixer + code-simplifier",
@@ -434,6 +445,88 @@ SendMessage(type="message", recipient="architect",
 ```
 
 The Architect will be shut down at the END of Phase 3, after all components complete.
+
+---
+
+## Phase 2.5: Security Design Review (conditional)
+
+### Step 2.5.0: Skip Decision
+
+Evaluate whether this phase applies before spawning any agent:
+
+| Condition | Decision |
+|-----------|----------|
+| Task is config-only, docs-only, or test-only AND no auth/data/network/API surface touched | Skip — proceed to Phase 3 |
+| Clear-domain task (per `cynefin_domain` in architect-plan.json) AND no auth/data/network/API surface touched | Skip — proceed to Phase 3 |
+| architect-plan.json touches auth, authorization, data storage, network, or API surface | Run Phase 2.5 |
+| architect-plan.json introduces new trust boundaries or external integrations | Run Phase 2.5 |
+| When in doubt | Run Phase 2.5 |
+
+If skipping: note the reason in the audit trail and proceed to Phase 3. Do NOT spawn a security-design agent.
+
+### Step 2.5.1: Spawn Security Design Agent
+
+```
+Task(
+  name="security-design",
+  subagent_type="code-quality:security",
+  model="opus",
+  team_name="swarm-impl",
+  prompt="[context bundle from communication-schema.md]\n\n[security design prompt from agent-prompts.md]"
+)
+```
+
+The agent reads `{run_dir}/architect-plan.json`, performs a STRIDE-based threat model of the
+proposed architecture, and writes its findings to `{run_dir}/security-design-review.json`.
+
+### Step 2.5.2: Receive and Route Findings
+
+After the security-design agent reports completion, read `{run_dir}/security-design-review.json`.
+Check the `verdict` field:
+
+**`proceed`** (no Critical/High findings):
+- Append the `security_constraints` array from the review to `architect-plan.json` as a
+  top-level `security_constraints` field
+- Notify the Architect of the constraints so they are available for Phase 3 clarification questions
+- Proceed to Phase 3
+
+**`revise`** (Critical or High findings present):
+- Send findings to the Architect:
+  ```
+  SendMessage(type="message", recipient="architect",
+    content="Security design review found Critical/High issues requiring plan revision.\n\n"
+            "Findings: {run_dir}/security-design-review.json\n\n"
+            "Please revise {run_dir}/architect-plan.json to address these findings and "
+            "send an updated summary when done.",
+    summary="Security design: plan revision requested (iteration N)")
+  ```
+- After Architect revises the plan, increment iteration counter and re-run Phase 2.5.1
+- **Maximum 2 Architect↔Security iterations total**
+
+**`escalate`** (unresolvable Critical findings after 2 iterations):
+- Present to user via AskUserQuestion before proceeding:
+  ```
+  AskUserQuestion(questions=[{
+    "question": "Security design review found Critical issues that could not be resolved "
+                "after 2 architect revisions. Details: {run_dir}/security-design-review.json\n\n"
+                "How should we proceed?",
+    "header": "Security Design: Unresolved Critical Findings",
+    "options": [
+      {"label": "Proceed anyway", "description": "Accept the risk and continue to implementation"},
+      {"label": "Abort", "description": "Stop — I will redesign the approach"}
+    ],
+    "multiSelect": false
+  }])
+  ```
+
+### Step 2.5.3: Audit Trail
+
+Write a summary entry to `{run_dir}/.swarm-run` noting:
+- Whether Phase 2.5 was run or skipped (and why)
+- Iteration count if run
+- Final verdict
+
+Shut down the security-design agent after findings are routed.
 
 ---
 
@@ -790,7 +883,118 @@ Build a consolidated findings list for the fixer. Group by file when possible.
 
 If ALL reviews report zero critical and zero high findings, set a flag: `skip_fixer = true`.
 
-### Step 4.5: Shutdown Reviewers
+### Step 4.5: Escalation Routing
+
+Before shutting down reviewers or proceeding to Phase 5, classify all critical and high findings
+by type and route accordingly.
+
+#### Finding Classification Rules
+
+| Finding Type | Classification Signals | Target |
+|---|---|---|
+| **Design-level** | Wrong abstraction layer chosen; component missing entirely from implementation; core data model inconsistent with plan; inter-component contract broken | Phase 2 (Architect respawn) |
+| **Security design** | Trust boundary crossed without validation in the *architecture* (not code-level); auth layer structurally absent; attack surface created by the design decision itself | Phase 2.5 (Security Design re-run) |
+| **Scope creep** | Behavior implemented that was not in `architect-plan.json` components; feature added beyond specified scope | Human escalation via AskUserQuestion |
+| **Implementation** | Code-level bugs, injection vulnerabilities, naming/quality issues, performance bottlenecks — addressable with targeted code changes | Phase 5 Fixer (existing flow) |
+
+**Classification rule of thumb:** If the fix requires changing the architect's plan, it is design-level or security design. If the fix is a code change within the existing plan, it is implementation. When ambiguous, classify as implementation (Fixer is cheaper than re-running Phase 3).
+
+#### Escalation Counter Management
+
+The lead maintains a `design_escalation_count` (initialized to 0 in Phase 0). Increment by 1 each
+time any finding is routed to Phase 2 or Phase 2.5 (design-level or security design escalations).
+
+| Counter Value | Action |
+|---|---|
+| 0–1 | Route normally per classification rules above |
+| 2 | **Cap reached.** Do NOT route back to Phase 2 or 2.5 again. Escalate remaining design/security findings to human via AskUserQuestion. Route implementation findings to Fixer as normal. |
+
+#### Design-Level Escalation (→ Phase 2)
+
+If any finding is classified as **design-level** AND `design_escalation_count < 2`:
+
+1. Increment `design_escalation_count`
+2. Log to `{run_dir}/escalations.json` (append entry — see format below)
+3. Shut down all Phase 4 reviewers
+4. Respawn Architect with the findings:
+   ```
+   Task(name="architect", subagent_type="code-quality:architect", model="opus",
+        team_name="swarm-impl",
+        prompt="[context bundle]\n\n[architect prompt from agent-prompts.md]\n\n"
+               "=== DESIGN ESCALATION FROM PHASE 4 ===\n"
+               "The following findings from Phase 4 review indicate a design-level issue "
+               "that requires plan revision:\n\n"
+               "<list of design-level findings with IDs, descriptions>\n"
+               "=== END ESCALATION ===\n\n"
+               "Please revise {run_dir}/architect-plan.json to address these issues. "
+               "The previous implementation will be discarded after plan revision.")
+   ```
+5. After Architect revises the plan, re-run Phase 2.5 (security design review of revised plan)
+6. After Phase 2.5 completes, re-run Phase 3 (full pipelined implementation of revised plan)
+7. After Phase 3 completes, re-run Phase 4 (full parallel review of new implementation)
+
+#### Security Design Escalation (→ Phase 2.5)
+
+If any finding is classified as **security design** AND `design_escalation_count < 2`:
+
+1. Increment `design_escalation_count`
+2. Log to `{run_dir}/escalations.json` (append entry)
+3. Shut down all Phase 4 reviewers
+4. Re-run Phase 2.5 with the escalation context added to the security-design agent prompt:
+   ```
+   "=== ESCALATION FROM PHASE 4 REVIEW ===\n"
+   "Phase 4 security review found findings classified as design-level security issues "
+   "(trust boundary violations, structural auth gaps). These require architectural remediation, "
+   "not code-level fixes. Review the following findings alongside architect-plan.json:\n\n"
+   "<security design findings>\n"
+   "=== END ESCALATION ==="
+   ```
+5. After Phase 2.5 resolves the design issues (architect revises plan), re-run Phase 3 and Phase 4
+
+#### Scope Creep Escalation (→ Human)
+
+If any finding is classified as **scope creep**, immediately escalate to the user regardless of
+`design_escalation_count`:
+
+```
+AskUserQuestion(questions=[{
+  "question": "Phase 4 review found behavior that was not in the implementation plan:\n\n"
+              "<scope creep finding descriptions>\n\n"
+              "How should we proceed?",
+  "header": "Scope Creep Detected",
+  "options": [
+    {"label": "Remove the extra behavior",
+     "description": "Route to Fixer to strip the unplanned behavior"},
+    {"label": "Accept it",
+     "description": "The behavior is correct — add it to the plan retroactively and continue"},
+    {"label": "Abort",
+     "description": "Stop — I'll redefine the scope and restart"}
+  ],
+  "multiSelect": false
+}])
+```
+
+#### escalations.json Format
+
+Create or append to `{run_dir}/escalations.json`. The file is an array of escalation events:
+
+```json
+[
+  {
+    "type": "design | security_design | scope_creep | human",
+    "finding_id": "string — finding ID from review (e.g. SEC-003, QA-007)",
+    "target_phase": "2 | 2.5 | human",
+    "iteration": "integer — value of design_escalation_count at time of escalation",
+    "timestamp": "string — ISO 8601 datetime",
+    "description": "string — one-sentence summary of why this was escalated"
+  }
+]
+```
+
+Write an empty array `[]` to this file in Phase 0 so it always exists in the audit trail.
+Append entries rather than overwriting — multiple escalation events accumulate in the same file.
+
+### Step 4.6: Shutdown Reviewers
 
 ```
 SendMessage(type="shutdown_request", recipient="security-reviewer", content="Review synthesis complete.")
@@ -920,6 +1124,7 @@ If found, update:
 | `PROJECT.md` | Architectural decisions made during this swarm; new patterns introduced; gotchas discovered |
 | `TODO.md` | Mark completed items with `[x]`; add any new follow-up tasks discovered |
 | `SESSIONS.md` | 3-5 bullet summary of this swarm session (log, not documentation) |
+| `LESSONS.md` | Written by Lessons Extractor agent (Step 6.6) — do NOT write lessons here; the Extractor handles it |
 
 **SESSIONS.md format:** Bullets only, past tense, no paragraphs. Example:
 ```markdown
@@ -938,10 +1143,34 @@ git commit -m "docs: update documentation for <feature>"
 
 If no doc changes were made (pure internal refactor with no user-facing changes), skip this commit.
 
-### Step 6.5: Shutdown
+### Step 6.5: Shutdown Docs Agent
 
 ```
 SendMessage(type="shutdown_request", recipient="docs", content="Documentation phase complete.")
+```
+
+### Step 6.6: Spawn Lessons Extractor
+
+After Docs agent is shut down, spawn the Lessons Extractor:
+
+```
+Task(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
+     team_name="swarm-impl", mode="bypassPermissions",
+     prompt="[context bundle]\n\n[lessons-extractor prompt from agent-prompts.md]\n\n"
+            "Run directory: {run_dir}\n"
+            "Swarm date: {YYYY-MM-DD}\n"
+            "Task: {original_task_description}")
+```
+
+The Lessons Extractor reads the swarm audit trail and writes principle-level lessons to
+`hack/LESSONS.md` (or equivalent memory directory). It does NOT touch PROJECT.md, SESSIONS.md,
+or TODO.md — those are the Docs agent's responsibility.
+
+### Step 6.7: Shutdown Lessons Extractor
+
+```
+SendMessage(type="shutdown_request", recipient="lessons-extractor",
+  content="Lessons extraction complete.")
 ```
 
 ---

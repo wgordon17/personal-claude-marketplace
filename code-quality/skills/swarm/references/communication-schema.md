@@ -39,6 +39,8 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
 
 ```json
 {
+  "cynefin_domain": "Clear | Complicated | Complex | Chaotic | Disorder",
+  "domain_justification": "string — 2-4 sentences explaining the classification and its implications for how the pipeline should run",
   "goal": "string — one-sentence description of what this implementation achieves",
   "components": [
     {
@@ -77,6 +79,49 @@ same agents and protocol — just no parallelism. See `references/pipeline-model
 
 **Note:** If `questions` is non-empty, the Lead MUST present every question to the user via
 `AskUserQuestion` before proceeding to Phase 3. Do NOT start implementation with unresolved questions.
+
+---
+
+## Security Design Review Schema
+
+Written by the Phase 2.5 security-design agent to `{run_dir}/security-design-review.json`.
+
+```json
+{
+  "schema": "SecurityDesignReview",
+  "reviewer": "security-design",
+  "timestamp": "string — ISO 8601 datetime",
+  "iteration": "integer — 1 for first review, 2 for re-review after architect revision",
+  "threat_surface": {
+    "new_attack_vectors": ["string — new attack surfaces introduced by the proposed design"],
+    "modified_trust_boundaries": ["string — trust boundaries changed by the proposed design"],
+    "exposed_data_flows": ["string — sensitive data flows added or modified"]
+  },
+  "stride_findings": [
+    {
+      "category": "Spoofing | Tampering | Repudiation | InformationDisclosure | DenialOfService | ElevationOfPrivilege",
+      "severity": "critical | high | medium | low",
+      "component_id": "string — affected component ID from architect plan",
+      "description": "string — threat description",
+      "mitigation": "string — recommended mitigation"
+    }
+  ],
+  "security_constraints": [
+    {
+      "constraint": "string — security requirement the implementer must respect",
+      "rationale": "string — why this constraint exists",
+      "applies_to": ["string — component IDs this constraint applies to"]
+    }
+  ],
+  "verdict": "proceed | revise | escalate",
+  "verdict_rationale": "string — justification for the verdict"
+}
+```
+
+**Verdict semantics:**
+- `proceed` — No Critical or High findings. Security constraints (if any) are appended to architect-plan.json and the pipeline continues.
+- `revise` — Critical or High findings require architect plan revision before implementation. Lead routes findings back to Architect.
+- `escalate` — Unresolvable Critical findings after 2 Architect↔Security iterations. Lead escalates to human via AskUserQuestion.
 
 ---
 
@@ -314,6 +359,26 @@ The Fixer sends this to the Lead after completing Phase 5 work. Written to
 
 ---
 
+## Escalation Events Schema
+
+The Lead writes escalation events to `{run_dir}/escalations.json` during Phase 4 escalation
+routing. Initialized as `[]` in Phase 0. The Lessons Extractor reads this file in Phase 6.
+
+```json
+[
+  {
+    "type": "design | security_design | scope_creep | human",
+    "finding_id": "string — ID of the finding that triggered escalation (e.g. CR-001)",
+    "target_phase": "string — phase routed to (e.g. 'Phase 2', 'Phase 2.5', 'human')",
+    "iteration": "integer — which escalation this is (1 or 2)",
+    "timestamp": "string — ISO 8601 datetime",
+    "description": "string — one-sentence summary of why this was escalated"
+  }
+]
+```
+
+---
+
 ## Verification Result Schema
 
 The Verifier sends this to the Lead after Phase 7 test execution. Written to
@@ -481,6 +546,8 @@ date append a sequence number.
 hack/swarm/
 └── YYYY-MM-DD/               # or YYYY-MM-DD-2, YYYY-MM-DD-3 for multiple runs
     ├── architect-plan.json         # Architect's component decomposition plan
+    ├── security-design-review.json # Security design review (Phase 2.5, if run)
+    ├── escalations.json            # Escalation events (Phase 4, always present)
     ├── fix-summary.json            # Fixer's summary (Phase 5, if run)
     ├── verification-result.json    # Verifier's final test results (Phase 7)
     ├── swarm-report.md             # Human-readable completion report

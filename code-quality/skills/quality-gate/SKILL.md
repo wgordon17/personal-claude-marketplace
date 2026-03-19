@@ -317,10 +317,12 @@ Memory that drifts from reality is worse than no memory.
 | **claude-mem** | Search for related observations. Flag stale ones. Save new cross-session insights. |
 | **Serena memories** | List, verify accuracy, update stale, write new project knowledge. |
 | **Auto-memory** | Check project memory path, verify and update if relevant. |
+| **hack/LESSONS.md** | Check if current work produced principle-level lessons worth capturing. If human corrections or rejected approaches occurred, extract and write lessons before proceeding. |
 
 **Skip conditions:** hack/ doesn't exist → skip hack/ checks. No plans directory → skip plan
 checks. claude-mem MCP unavailable → skip claude-mem checks. Serena MCP unavailable → skip
 Serena memory checks. Pure question with no persistent insights → skip memory saves.
+hack/LESSONS.md doesn't exist → skip LESSONS check.
 
 ---
 
