@@ -374,7 +374,7 @@ Do NOT interrupt the user for:
 ### Step 2.1: Spawn Architect
 
 ```
-Task(
+Agent(
   name="architect",
   subagent_type="code-quality:architect",
   model="opus",
@@ -480,7 +480,7 @@ If skipping: note the reason in the audit trail and proceed to Phase 3. Do NOT s
 ### Step 2.5.1: Spawn Security Design Agent
 
 ```
-Task(
+Agent(
   name="security-design",
   subagent_type="code-quality:security",
   model="opus",
@@ -644,12 +644,12 @@ Maximum 3 competitors in the swarm context (cost constraint).
 For each contested component, spawn competitor agents simultaneously:
 
 ```
-Task(name="competitor-1", subagent_type="general-purpose", model="sonnet",
+Agent(name="competitor-1", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      isolation="worktree",
      prompt="[speculative context bundle]\n\n[competitor prompt — see below]")
 
-Task(name="competitor-2", subagent_type="general-purpose", model="sonnet",
+Agent(name="competitor-2", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      isolation="worktree",
      prompt="[speculative context bundle]\n\n[competitor prompt — see below]")
@@ -694,7 +694,7 @@ finished:
 Spawn a single judge agent after all competitors have submitted:
 
 ```
-Task(name="speculative-judge", subagent_type="general-purpose", model="opus",
+Agent(name="speculative-judge", subagent_type="general-purpose", model="opus",
      team_name="swarm-impl",
      prompt="[speculative context bundle]\n\n[judge prompt from speculative skill agent-prompts.md]")
 ```
@@ -812,19 +812,19 @@ components — do NOT shut them down between components. Also spawn the Architec
 (it was already running from Phase 2, remaining on standby).
 
 ```
-Task(name="implementer", subagent_type="general-purpose", model="sonnet",
+Agent(name="implementer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[implementer prompt from agent-prompts.md]")
 
-Task(name="reviewer", subagent_type="general-purpose", model="opus",
+Agent(name="reviewer", subagent_type="general-purpose", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[reviewer prompt from agent-prompts.md]")
 
-Task(name="test-writer", subagent_type="general-purpose", model="sonnet",
+Agent(name="test-writer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[test-writer prompt from agent-prompts.md]")
 
-Task(name="test-runner", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="test-runner", subagent_type="dev-essentials:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[test-runner prompt from agent-prompts.md]")
 ```
@@ -1002,7 +1002,7 @@ When an agent's `turn_count` exceeds its threshold AND it is between components 
 
 4. **Spawn replacement** with the same name, type, model, and mode:
    ```
-   Task(name="implementer", subagent_type="general-purpose", model="sonnet",
+   Agent(name="implementer", subagent_type="general-purpose", model="sonnet",
         team_name="swarm-impl", mode="bypassPermissions",
         prompt="[context bundle]\n\n[implementer prompt from agent-prompts.md]\n\n"
                "=== CONTINUATION FROM PREVIOUS AGENT ===\n"
@@ -1092,42 +1092,42 @@ Spawn ALL reviewers simultaneously in a SINGLE message. Do not spawn them sequen
 
 **Core reviewers (always spawn):**
 ```
-Task(name="security-reviewer", subagent_type="code-quality:security", model="opus",
+Agent(name="security-reviewer", subagent_type="code-quality:security", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[security-reviewer prompt from agent-prompts.md]")
 
-Task(name="qa-reviewer", subagent_type="code-quality:qa", model="opus",
+Agent(name="qa-reviewer", subagent_type="code-quality:qa", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[qa-reviewer prompt from agent-prompts.md]")
 
-Task(name="code-reviewer", subagent_type="superpowers:code-reviewer", model="sonnet",
+Agent(name="code-reviewer", subagent_type="superpowers:code-reviewer", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[code-reviewer prompt from agent-prompts.md]")
 
-Task(name="performance-reviewer", subagent_type="code-quality:performance", model="sonnet",
+Agent(name="performance-reviewer", subagent_type="code-quality:performance", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[performance-reviewer prompt from agent-prompts.md]")
 ```
 
 **Optional reviewers (spawn if auto-detected or user-requested in Phase 1):**
 ```
-Task(name="ui-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="ui-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[ui-reviewer prompt from agent-prompts.md]")
 
-Task(name="api-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="api-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[api-reviewer prompt from agent-prompts.md]")
 
-Task(name="db-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="db-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[db-reviewer prompt from agent-prompts.md]")
 
-Task(name="plugin-validator", subagent_type="general-purpose", model="sonnet",
+Agent(name="plugin-validator", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[plugin-validator prompt — include plugin validation checklist]")
 
-Task(name="skill-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="skill-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[skill-reviewer prompt — include skill validation checklist]")
 ```
@@ -1208,7 +1208,7 @@ If any finding is classified as **design-level** AND `design_escalation_count < 
 3. Shut down all Phase 4 reviewers
 4. Respawn Architect with the findings:
    ```
-   Task(name="architect", subagent_type="code-quality:architect", model="opus",
+   Agent(name="architect", subagent_type="code-quality:architect", model="opus",
         team_name="swarm-impl",
         prompt="[context bundle]\n\n[architect prompt from agent-prompts.md]\n\n"
                "=== DESIGN ESCALATION FROM PHASE 4 ===\n"
@@ -1304,11 +1304,11 @@ that individual file-by-file reviews miss.
 Spawn both analysts simultaneously after Phase 4 escalation routing completes:
 
 ```
-Task(name="structural-concurrency", subagent_type="general-purpose", model="opus",
+Agent(name="structural-concurrency", subagent_type="general-purpose", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[structural-concurrency analyst prompt from agent-prompts.md]")
 
-Task(name="structural-integration", subagent_type="general-purpose", model="opus",
+Agent(name="structural-integration", subagent_type="general-purpose", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[structural-integration analyst prompt from agent-prompts.md]")
 ```
@@ -1371,7 +1371,7 @@ Phase 5 task as completed with note "No findings — skipped." Proceed to Phase 
 ### Step 5.2: Spawn Fixer
 
 ```
-Task(name="fixer", subagent_type="general-purpose", model="sonnet",
+Agent(name="fixer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[fixer prompt from agent-prompts.md]\n\n"
             "CONSOLIDATED FINDINGS:\n<JSON findings from synthesis>")
@@ -1397,7 +1397,7 @@ If no deferred items exist, skip this step.
 After fixer completes (and deferrals are handled), spawn code-simplifier:
 
 ```
-Task(name="code-simplifier", subagent_type="code-simplifier:code-simplifier", model="sonnet",
+Agent(name="code-simplifier", subagent_type="code-simplifier:code-simplifier", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[code-simplifier prompt from agent-prompts.md]")
 ```
@@ -1448,7 +1448,7 @@ SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simpl
 ### Step 6.1: Spawn Docs Agent
 
 ```
-Task(name="docs", subagent_type="general-purpose", model="haiku",
+Agent(name="docs", subagent_type="general-purpose", model="haiku",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[docs prompt from agent-prompts.md]\n\n"
             "FILES MODIFIED THIS SWARM:\n<git diff --name-only from branch start>")
@@ -1512,7 +1512,7 @@ SendMessage(type="shutdown_request", recipient="docs", content="Documentation ph
 After Docs agent is shut down, spawn the Lessons Extractor:
 
 ```
-Task(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
+Agent(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[lessons-extractor prompt from agent-prompts.md]\n\n"
             "Run directory: {run_dir}\n"
@@ -1538,7 +1538,7 @@ SendMessage(type="shutdown_request", recipient="lessons-extractor",
 ### Step 7.1: Spawn Verifier
 
 ```
-Task(name="verifier", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="verifier", subagent_type="dev-essentials:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[verifier prompt from agent-prompts.md]\n\n"
             "BASELINE: {baseline from Phase 0.1}")

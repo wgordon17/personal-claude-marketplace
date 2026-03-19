@@ -350,11 +350,11 @@ Need to run pre-commit?
 
 ## When to Use Test-Runner Agent
 
-For complex test workflows, consider launching the test-runner agent via Task tool:
+For complex test workflows, consider launching the test-runner agent via Agent tool:
 
 ```python
 # Launch agent for test execution and failure reporting
-Task(
+Agent(
   subagent_type="dev-essentials:test-runner",
   prompt="Run pre-commit and pytest, report any failures with specific test paths"
 )

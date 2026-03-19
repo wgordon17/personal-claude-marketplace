@@ -6,10 +6,10 @@ This document contains the prompt template for spawning single-file analyzer age
 
 ## Usage
 
-When spawning a file analyzer, use the Task tool with this prompt:
+When spawning a file analyzer, use the Agent tool with this prompt:
 
 ```python
-Task(
+Agent(
     subagent_type="general-purpose",
     prompt=generate_analyzer_prompt(file_path, project_context),
     description=f"Analyze {file_path}"
@@ -362,7 +362,7 @@ prompt = ANALYZER_TEMPLATE.format(
     NOTES_MD_SUMMARY=project_memory.get("notes", "No NOTES.md found")
 )
 
-result = Task(
+result = Agent(
     subagent_type="general-purpose",
     prompt=prompt,
     description=f"Analyze {file_path}"

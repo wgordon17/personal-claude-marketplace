@@ -92,8 +92,8 @@ IF total_files <= 20 (or /map-reduce unavailable):
     REPEAT until queue empty:
         1. Get next batch of 3-5 "pending" files
         2. Mark batch as "in_progress", save queue
-        3. Spawn 3-5 Task agents IN PARALLEL:
-           Task(
+        3. Spawn 3-5 agents IN PARALLEL:
+           Agent(
              subagent_type="general-purpose",
              prompt=analyzer_prompt(file_path, project_memory)
            )
