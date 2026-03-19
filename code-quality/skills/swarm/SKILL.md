@@ -45,6 +45,7 @@ specialist agent.
 | 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
 | 5 | Code-Simplifier | code-simplifier:code-simplifier | sonnet | Yes | Post-fix simplification pass |
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
+| 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |
 | 7 | Verifier | dev-essentials:test-runner | haiku | No | Final test suite + lint verification |
 
@@ -316,7 +317,28 @@ Only skip documentation updates for purely internal refactors with no public API
 behavior, feature, or component changes. When in doubt, run the docs pass — the cost of a
 no-op docs check is low; the cost of missing documentation is high.
 
-After the Docs agent completes, spawn a separate **Lessons Extractor** agent (sonnet model). This
+After the Docs agent completes, spawn a **Docs Reviewer** agent (sonnet, read-only) to verify
+the Docs agent's work. The Docs Reviewer receives:
+- The architect's `documentation_impact` array from `architect-plan.json`
+- The Docs agent's completion report (surfaces updated, counts, gaps found)
+- `git diff` of documentation changes made by the Docs agent
+
+The Docs Reviewer checks:
+1. **Impact coverage** — Was every entry in `documentation_impact` addressed? If the architect
+   flagged a surface and the Docs agent didn't touch it, that's a finding.
+2. **Accuracy** — Are the doc changes factually correct? Do component counts match on-disk
+   reality? Do descriptions accurately describe the implemented features?
+3. **Consistency** — Do all documentation surfaces agree with each other after the Docs agent's
+   edits? (README ↔ manifest ↔ registry ↔ root README)
+4. **Completeness** — Did the Docs agent miss any documentation surface the Reviewer can
+   discover independently via Glob?
+
+Findings are written to `{run_dir}/reviews/docs-review.json` using the standard ReviewFindings
+schema with `DOC-R` prefix. Critical/High findings are routed back to the Docs agent for fixes
+(max 1 iteration — the Docs Reviewer re-reviews after fixes). Low/Medium findings are recorded
+in the audit trail.
+
+After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
 agent scans the swarm run's audit trail and extracts principle-level lessons to `hack/LESSONS.md`
 (creating the file if it does not exist). It reads:
 - `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged

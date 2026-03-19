@@ -19,7 +19,7 @@ point is documented here.
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
 | 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
-| 6 | Docs & Memory | Sequential pair | docs (sonnet), then lessons-extractor (sonnet) |
+| 6 | Docs & Memory | Sequential trio | docs (sonnet), docs-reviewer (sonnet), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
 ---
@@ -1510,13 +1510,33 @@ git commit -m "docs: update documentation for <feature>"
 
 If no doc changes were made (pure internal refactor with no user-facing changes), skip this commit.
 
-### Step 6.5: Shutdown Docs Agent
+### Step 6.5: Spawn Docs Reviewer
+
+After the Docs agent commits, spawn the Docs Reviewer to verify the work:
+
+```
+Agent(name="docs-reviewer", subagent_type="general-purpose", model="sonnet",
+     team_name="swarm-impl", mode="default",
+     prompt="[context bundle]\n\n[docs-reviewer prompt from agent-prompts.md]\n\n"
+            "DOCUMENTATION IMPACT (from architect):\n<documentation_impact JSON>\n\n"
+            "DOCS AGENT REPORT:\n<docs agent completion summary>")
+```
+
+The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it reports
+Critical/High findings:
+1. Route findings back to the Docs agent (still alive)
+2. Docs agent fixes, re-commits
+3. Docs Reviewer re-reviews (max 1 iteration)
+
+If clean or only Low/Medium findings, proceed.
+
+### Step 6.6: Shutdown Docs Agent
 
 ```
 SendMessage(type="shutdown_request", recipient="docs", content="Documentation phase complete.")
 ```
 
-### Step 6.6: Spawn Lessons Extractor
+### Step 6.7: Spawn Lessons Extractor
 
 After Docs agent is shut down, spawn the Lessons Extractor:
 
@@ -1828,6 +1848,8 @@ TeamCreate:
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | code-simplifier | code-simplifier:code-simplifier | sonnet | bypassPermissions | Yes |
 | 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
+| 6 | docs-reviewer | general-purpose | sonnet | default | No |
+| 6 | lessons-extractor | general-purpose | sonnet | bypassPermissions | Yes |
 | 7 | verifier | dev-essentials:test-runner | haiku | default | No |
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
