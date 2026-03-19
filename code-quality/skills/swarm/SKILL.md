@@ -9,7 +9,7 @@ description: >-
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
   Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion, TeamCreate, TeamDelete,
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, TeamCreate, TeamDelete,
   SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, Skill]
 ---
 
@@ -149,15 +149,21 @@ is the architect explicitly flagging `speculative_fork_recommended: true` in
 `architect-plan.json`, OR the Lead identifying 2+ incompatible design choices in the plan that
 would significantly affect outcomes.
 
-When triggered, invoke the `/speculative` skill as a sub-orchestration for the contested
-component(s) only. The swarm Lead acts as the speculative orchestrator:
+When triggered, the Lead presents the competing approaches to the user via `AskUserQuestion`:
+"The architect identified N competing approaches for [component] (all vetted by security review).
+Want to run /speculative to compare them, or pick one directly?"
+
+If the user chooses `/speculative`, the Lead acts as the speculative orchestrator:
 
 1. Extract the contested component(s) from `architect-plan.json`
 2. Define evaluation criteria based on the architect's stated trade-offs
-3. Run `/speculative` Phases 1–3 (competitors fork in isolated worktrees, judge selects winner)
+3. Run `/speculative` Phases 1–3 (competitors fork in isolated worktrees, judge evaluates,
+   winning approach merged back)
 4. The winning approach is written back into `architect-plan.json` as the implementation spec
    for that component, replacing the ambiguous description
 5. Proceed to Phase 3 with the now-resolved plan
+
+If the user picks one approach directly, skip /speculative and continue to Phase 3 as normal.
 
 **Scope:** Only the contested component(s) go through the speculative fork. Uncontested
 components proceed directly to Phase 3 without waiting (if pipeline-feasible).
@@ -166,7 +172,9 @@ components proceed directly to Phase 3 without waiting (if pipeline-feasible).
 run Phase 3.5 of the speculative skill (synthesis agent) before continuing to swarm Phase 3.
 Note it in the audit trail.
 
-When the architect classifies the domain as Complex AND competing approaches exist, proactively recommend /speculative even if `speculative_fork_recommended` is not explicitly set — Complex-domain tasks benefit most from speculative execution.
+When the architect classifies the domain as Complex AND competing approaches exist,
+proactively recommend /speculative even if `speculative_fork_recommended` is not explicitly
+set — Complex-domain tasks benefit most from speculative execution.
 
 **Never trigger Phase 2.7 for:**
 - Clear-domain tasks where the architect chose one approach without hesitation

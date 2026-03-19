@@ -562,6 +562,17 @@ Evaluate whether this phase applies before spawning any agents:
 
 If skipping: note the reason in the audit trail (`.swarm-run` entry) and proceed to Phase 3.
 
+### Step 2.7.0.5: User Checkpoint
+
+Present the competing approaches to the user via `AskUserQuestion`:
+
+"The architect identified N competing approaches for [component(s)] (all vetted by security
+review in Phase 2.5). Want to run /speculative to compare them, or pick one directly?"
+
+- If user chooses `/speculative`: proceed to Step 2.7.1.
+- If user picks one approach directly: update `architect-plan.json` with the chosen approach,
+  skip the rest of Phase 2.7, and proceed to Phase 3.
+
 ### Step 2.7.1: Identify Contested Components
 
 Read `architect-plan.json`. Extract the component(s) that are contested:
