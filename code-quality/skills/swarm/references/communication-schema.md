@@ -359,6 +359,25 @@ The Fixer sends this to the Lead after completing Phase 5 work. Written to
 
 ---
 
+## Escalation Events Schema
+
+The Lead writes escalation events to `{run_dir}/escalations.json` during Phase 4 escalation
+routing. Initialized as `[]` in Phase 0. The Lessons Extractor reads this file in Phase 6.
+
+```json
+[
+  {
+    "type": "design-level | security-design | scope-creep",
+    "finding_id": "string — ID of the finding that triggered escalation (e.g. CR-001)",
+    "target_phase": "string — phase routed to (e.g. 'Phase 2', 'Phase 2.5', 'human')",
+    "iteration": "integer — which escalation this is (1 or 2)",
+    "timestamp": "string — ISO 8601 datetime"
+  }
+]
+```
+
+---
+
 ## Verification Result Schema
 
 The Verifier sends this to the Lead after Phase 7 test execution. Written to

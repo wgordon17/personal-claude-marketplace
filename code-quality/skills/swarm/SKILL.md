@@ -177,7 +177,7 @@ findings, escalate to the human via AskUserQuestion rather than re-running again
 Phase 3 re-implementations at 2 regardless of escalation type.
 
 All escalation events are recorded in `{run_dir}/escalations.json`
-(see schema in Audit Trail section below).
+(see schema in `references/orchestration-playbook.md` Step 4.5).
 
 ### Phase 5: Fix & Simplify (conditional)
 
@@ -290,6 +290,7 @@ Phase 5: Fix & Simplify (if findings exist)
      v
 Phase 6: Docs & Memory
   +-- Docs agent: repo docs + hack/ updates
+  +-- Lessons Extractor: audit trail → hack/LESSONS.md
      |
      v
 Phase 7: Verification & Completion
@@ -428,3 +429,4 @@ Minimize opus usage to the phases where nuanced judgment is genuinely required.
 | `references/agent-prompts.md` | Full prompt templates for all 13+ agents — role, boundaries, communication protocol, output format |
 | `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
+| `references/cynefin-reference.md` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |

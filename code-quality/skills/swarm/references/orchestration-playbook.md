@@ -17,7 +17,7 @@ point is documented here.
 | 3 | Pipelined Implementation | Persistent team | implementer, reviewer, test-writer, test-runner |
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
-| 6 | Docs & Memory | Single agent | docs (haiku) |
+| 6 | Docs & Memory | Sequential pair | docs (haiku), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
 ---
@@ -455,6 +455,7 @@ Evaluate whether this phase applies before spawning any agent:
 | Condition | Decision |
 |-----------|----------|
 | Task is config-only, docs-only, or test-only AND no auth/data/network/API surface touched | Skip — proceed to Phase 3 |
+| Clear-domain task (per `cynefin_domain` in architect-plan.json) AND no auth/data/network/API surface touched | Skip — proceed to Phase 3 |
 | architect-plan.json touches auth, authorization, data storage, network, or API surface | Run Phase 2.5 |
 | architect-plan.json introduces new trust boundaries or external integrations | Run Phase 2.5 |
 | When in doubt | Run Phase 2.5 |

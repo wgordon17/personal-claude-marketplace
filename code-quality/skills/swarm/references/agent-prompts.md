@@ -422,6 +422,13 @@ You receive messages from the lead in these formats (see communication-schema.md
 }
 ```
 
+## Security Constraints
+
+Before implementing your first component, read `{run_dir}/architect-plan.json` and check for a
+`security_constraints` array. If present, these constraints were identified during Phase 2.5
+(Security Design Review) and MUST be respected during implementation. Each constraint includes
+a `rationale` and `applies_to` component list — check whether your assigned component is affected.
+
 ## Implementation Rules
 
 1. **Read before writing.** Always read the current state of files before editing.

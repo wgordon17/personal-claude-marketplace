@@ -220,55 +220,67 @@ solvable as stated?
 
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
-| Phase 1: Lead Analysis | Yes | Brief. Confirm scope is truly bounded. |
-| Phase 2: Architecture | Yes | Can be short. Single-pass decomposition. |
+| Phase 0: Pre-flight & Setup | Yes | Brief. |
+| Phase 1: Clarify & Checkpoint | Yes | Confirm scope is truly bounded. |
+| Phase 2: Architect | Yes | Can be short. Single-pass decomposition. |
 | Phase 2.5: Security Design Review | Optional | Skip unless auth/data/external API is involved. |
-| Phase 3: Implementation | Yes | Standard pipeline. |
-| Phase 4: Review | Yes | Standard. |
-| Phase 5: Quality Gate | Yes | Standard. |
+| Phase 3: Pipelined Implementation | Yes | Standard pipeline. |
+| Phase 4: Parallel Review | Yes | Standard. |
+| Phase 5: Fix & Simplify | Conditional | Only if Phase 4 finds critical/high issues. |
+| Phase 6: Docs & Memory | Yes | Standard. |
+| Phase 7: Verification & Completion | Yes | Standard. Quality-gate invoked here. |
 
 ### Complicated Domain
 
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
-| Phase 1: Lead Analysis | Yes | Confirm scope and identify expert needs. |
-| Phase 2: Architecture | Yes | Full decomposition with dependency graph. |
+| Phase 0: Pre-flight & Setup | Yes | Standard. |
+| Phase 1: Clarify & Checkpoint | Yes | Confirm scope and identify expert needs. |
+| Phase 2: Architect | Yes | Full decomposition with dependency graph. |
 | Phase 2.5: Security Design Review | Conditional | Mandatory if auth/data/external API involved. |
-| Phase 3: Implementation | Yes | Standard pipeline. Parallel where possible. |
-| Phase 4: Review | Yes | Standard. May require domain expert reviewer. |
-| Phase 5: Quality Gate | Yes | Standard. |
+| Phase 3: Pipelined Implementation | Yes | Standard pipeline. Parallel where possible. |
+| Phase 4: Parallel Review | Yes | Standard. May require domain expert reviewer. |
+| Phase 5: Fix & Simplify | Conditional | Only if Phase 4 finds critical/high issues. |
+| Phase 6: Docs & Memory | Yes | Standard. |
+| Phase 7: Verification & Completion | Yes | Standard. Quality-gate invoked here. |
 
 ### Complex Domain
 
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
-| Phase 1: Lead Analysis | Yes | Flag complexity. Set probe objectives. |
-| Phase 2: Architecture | Yes | Probe design output, not full plan. Define signals. |
+| Phase 0: Pre-flight & Setup | Yes | Standard. |
+| Phase 1: Clarify & Checkpoint | Yes | Flag complexity. Set probe objectives. |
+| Phase 2: Architect | Yes | Probe design output, not full plan. Define signals. |
 | Phase 2.5: Security Design Review | Yes | Always mandatory for Complex tasks. |
-| Phase 3: Implementation | Yes | Smaller components. Explicit checkpoints between. |
-| Phase 4: Review | Yes | Reviewer assesses probe results, not just correctness. |
-| Phase 5: Quality Gate | Yes | Standard. Include re-classification assessment. |
+| Phase 3: Pipelined Implementation | Yes | Smaller components. Explicit checkpoints between. |
+| Phase 4: Parallel Review | Yes | Reviewer assesses probe results, not just correctness. |
+| Phase 5: Fix & Simplify | Conditional | Only if Phase 4 finds critical/high issues. |
+| Phase 6: Docs & Memory | Yes | Standard. |
+| Phase 7: Verification & Completion | Yes | Quality-gate invoked here. Include re-classification assessment. |
 
 ### Chaotic Domain
 
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
-| Phase 1: Lead Analysis | Yes | Emergency triage only. Identify stabilization target. |
-| Phase 2: Architecture | Yes | Stabilization brief only. No full decomposition. |
+| Phase 0: Pre-flight & Setup | Yes | Emergency triage only. |
+| Phase 1: Clarify & Checkpoint | Yes | Identify stabilization target. |
+| Phase 2: Architect | Yes | Stabilization brief only. No full decomposition. |
 | Phase 2.5: Security Design Review | Deferred | Resume after stabilization. |
-| Phase 3: Implementation | Yes | Single implementer. Stabilization action only. |
-| Phase 4: Review | Yes | Lightweight. Verify stabilization works. |
-| Phase 5: Quality Gate | Yes | Must re-classify domain after stabilization. |
+| Phase 3: Pipelined Implementation | Yes | Single implementer. Stabilization action only. |
+| Phase 4: Parallel Review | Yes | Lightweight. Verify stabilization works. |
+| Phase 5: Fix & Simplify | Conditional | Standard. |
+| Phase 6: Docs & Memory | Yes | Standard. |
+| Phase 7: Verification & Completion | Yes | Quality-gate invoked here. Must re-classify domain after stabilization. |
 
 ### Disorder Domain
 
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
-| Phase 1: Lead Analysis | Yes | Identify what information is missing. |
-| Phase 2: Architecture | Yes | Investigation plan, not implementation plan. |
+| Phase 0: Pre-flight & Setup | Yes | Standard. |
+| Phase 1: Clarify & Checkpoint | Yes | Identify what information is missing. |
+| Phase 2: Architect | Yes | Investigation plan, not implementation plan. |
 | Phase 2.5: Security Design Review | Deferred | Re-evaluate after classification. |
-| Phase 3: Implementation | Conditional | Only after domain is determined. |
-| Phase 4-5 | Conditional | Follow phase map for determined domain. |
+| Phase 3-7 | Conditional | Only after domain is determined. Follow phase map for determined domain. |
 
 ---
 
