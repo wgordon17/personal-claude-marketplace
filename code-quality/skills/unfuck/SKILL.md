@@ -47,6 +47,11 @@ Phase 4 verifies everything passes and generates a report.
 
 ### Phase 1: Discovery (7 parallel agents)
 
+**Phase 1 and Phase 2 use /map-reduce for structured discovery and synthesis** — each discovery
+agent is a mapper, and the synthesis agent is the reducer. This provides formal chunk tracking,
+retry-on-failure for individual discovery agents, and structured ReductionResult output.
+If /map-reduce skill is unavailable, fall back to direct parallel agents as described below.
+
 All agents run simultaneously in background. Each writes structured JSON findings to
 `hack/unfuck/YYYY-MM-DD/discovery/`. Full prompts in `references/discovery-agents.md`.
 
@@ -68,9 +73,14 @@ manually using LSP, Grep, and file reading. See `references/external-tools.md` f
 
 ### Phase 2: Synthesis & Planning
 
-A dedicated **opus synthesis teammate** (not the orchestrator) performs synthesis to avoid filling the lead agent's context:
-1. Reads all 7 discovery JSON files
-2. Deduplicates overlapping findings across agents
+A dedicated **opus synthesis teammate** (not the orchestrator) performs synthesis to avoid
+filling the lead agent's context. When using /map-reduce, this agent acts as the reducer —
+receiving all 7 ChunkResults and producing a ReductionResult before writing the cleanup plan.
+When falling back to direct approach, it reads the raw discovery JSON files directly.
+
+1. Reads all 7 discovery JSON files (or ChunkResults if /map-reduce was used)
+2. Deduplicates overlapping findings across agents (via /map-reduce cross-chunk validation
+   if available, or manual dedup otherwise)
 3. Cross-references compound patterns (dead + divergent = safe to remove)
 4. Prioritizes: security → dead code → duplicates → AI slop → complexity → architecture → docs
 5. Writes `hack/unfuck/YYYY-MM-DD/cleanup-plan.md` with per-finding detail

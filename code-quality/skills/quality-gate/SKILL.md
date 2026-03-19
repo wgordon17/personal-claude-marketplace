@@ -34,13 +34,14 @@ digraph quality_gate {
   rankdir=TB;
   node [shape=box];
   detect [label="Step 0: Detect work type"];
-  layer1 [label="Layer 1: Self-Review Loop\n5 rounds, rotating lenses"];
+  layer1 [label="Layer 1: Self-Review Loop\n6 rounds, rotating lenses"];
+  layer1_5 [label="Layer 1.5: Domain Expert Review\n4 parallel reviewers (code/mixed only)"];
   layer2 [label="Layer 2: Fresh-Context Subagents\n2 subagents x 2 passes"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
   nodataloss [label="No Data Loss Gate (BLOCKING)"];
   final [label="Final Verification"];
-  detect -> layer1 -> layer2 -> memory -> artifact -> nodataloss -> final;
+  detect -> layer1 -> layer1_5 -> layer2 -> memory -> artifact -> nodataloss -> final;
 }
 ```
 
@@ -65,7 +66,7 @@ Select the lens set for the detected type (see `references/lens-rubrics.md`).
 
 ## Layer 1: Self-Review Loop
 
-**5 rounds maximum. Exit early if a round produces zero findings AND the action audit is clean.**
+**6 rounds maximum (Round 6: Structural applies to Code/Mixed only). Exit early if a round produces zero findings AND the action audit is clean.**
 
 Each round uses a different adversarial lens. Rotating lenses prevent anchoring fatigue and ensure
 comprehensive coverage from different angles.
@@ -79,6 +80,7 @@ comprehensive coverage from different angles.
 | 3 | **Robustness** | How does this fail? Bad input, missing deps, concurrent access, edge cases? |
 | 4 | **Simplicity** | What's over-engineered? What could be deleted? What's AI slop? |
 | 5 | **Adversarial** | You are a hostile reviewer. The author claims this is done. Prove them wrong. |
+| 6 | **Structural** | What design flaws, race conditions, or failure modes exist in this system's architecture — not just in the current change, but in how it integrates? (Code/Mixed only) |
 
 Table shows code lenses. Other work types adapt lens names — e.g., planning uses "Feasibility"
 for Round 1, Q&A uses a reduced 3-round review. See `references/lens-rubrics.md` for all
@@ -202,6 +204,82 @@ catch categorically different issues — a clean Round 1 says nothing about Roun
 Starting from Round 4: if a round produces zero findings AND the action audit is clean, skip
 remaining rounds. Do NOT exit early just because you "feel done" — the `think_about_whether_you_are_done`
 tool must confirm.
+
+**Note on Round 6 (Structural):** Only applies to Code and Mixed work types. Skip for all
+other types. Structural lens focuses on integration architecture, not the current change in
+isolation — it may find issues even when Rounds 1-5 were clean.
+
+---
+
+## Layer 1.5: Domain Expert Review
+
+**Applies to: Code and Mixed work types only.** Skip for Research, Planning, Config, and
+Question work types.
+
+Domain reviewers catch categories of issues that self-review lenses systematically miss:
+security vulnerabilities require dedicated adversarial security reasoning; performance issues
+require cost-model thinking; QA issues require test coverage analysis; code review issues
+require holistic style and maintainability assessment. Layer 1 cannot replicate these because
+each domain has its own expert heuristics.
+
+**Layer 1.5 is NOT optional for code work.** Do not skip it because Layer 1 "seemed thorough."
+
+### Trigger
+
+Work type is **Code** or **Mixed** (with a code component).
+
+### Reviewer Spawning (4 in parallel)
+
+```
+Spawn all 4 reviewers simultaneously:
+
+Reviewer 1 — Security (code-quality:security):
+  Agent(
+    description="Security domain review",
+    model="sonnet",
+    prompt=<see references/subagent-prompts.md, Domain Reviewer: Security>
+  )
+
+Reviewer 2 — QA (code-quality:qa):
+  Agent(
+    description="QA domain review",
+    model="sonnet",
+    prompt=<see references/subagent-prompts.md, Domain Reviewer: QA>
+  )
+
+Reviewer 3 — Performance (code-quality:performance):
+  Agent(
+    description="Performance domain review",
+    model="sonnet",
+    prompt=<see references/subagent-prompts.md, Domain Reviewer: Performance>
+  )
+
+Reviewer 4 — Code Review (superpowers:code-reviewer):
+  Agent(
+    description="Code style and maintainability review",
+    model="sonnet",
+    prompt=<see references/subagent-prompts.md, Domain Reviewer: Code-Reviewer>
+  )
+```
+
+Each reviewer receives:
+- `git diff` of all changes
+- The original user request (verbatim)
+- CLAUDE.md / CONTRIBUTING.md project rules (if they exist)
+
+### Synthesis Protocol
+
+After all 4 reviewers complete, synthesize findings by severity:
+
+1. **Collect** all findings across the 4 reviewers
+2. **Classify** each finding: CRITICAL / HIGH / MEDIUM / LOW
+3. **Fix all CRITICAL and HIGH findings** before proceeding to Layer 2.
+   These are blocking. Do not carry them forward.
+4. **Record MEDIUM and LOW findings** — include them in the output report, fix if
+   straightforward, document as follow-up if genuinely deferred.
+
+**The synthesis step is not optional.** If you find yourself writing "domain review skipped"
+or "findings noted for later," stop. Fix the critical/high findings now.
 
 ---
 
@@ -411,11 +489,19 @@ QUALITY GATE
 Work type: [code / research / plan / config / question / mixed]
 
 Layer 1 — Self-Review:
-  Rounds completed: [N/5]
+  Rounds completed: [N/6]
   Issues found: [count]
   Issues fixed: [count]
   Identified-but-unactioned caught: [count]
   Project rules violations caught: [count]
+
+Layer 1.5 — Domain Expert Review: [N/A for non-code | COMPLETE]
+  Security reviewer: [count] findings ([critical/high/medium/low breakdown])
+  QA reviewer: [count] findings ([critical/high/medium/low breakdown])
+  Performance reviewer: [count] findings ([critical/high/medium/low breakdown])
+  Code-reviewer: [count] findings ([critical/high/medium/low breakdown])
+  Critical/High fixed before Layer 2: [count]
+  Medium/Low recorded: [count]
 
 Layer 2 — Subagent Reviews:
   Subagent A (Completeness): [count] findings across 2 passes — agent ID: [id]
@@ -450,6 +536,10 @@ Overall: [PASS / NEEDS WORK]
 | `sc:analyze` | Invoked in Round 1 (Correctness lens) for code files. |
 | `sc:improve` | Invoked in Round 4 (Simplicity lens) for dead code removal. |
 | `sc:reflect` | Replaced by Serena metacognitive tools (more targeted). |
+| `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `code-quality:qa` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `code-quality:performance` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `superpowers:code-reviewer` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `verification-before-completion` | Embedded in Final Verification step. |
 | `session-end` | Complementary — quality-gate reviews accuracy; session-end does final save. |
 | `swarm` Phase 7 | Invokes quality-gate as the final validation step. |

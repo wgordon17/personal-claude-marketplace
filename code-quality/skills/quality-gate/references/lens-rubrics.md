@@ -60,6 +60,46 @@ structure. This file provides the specific questions and techniques for each len
 - **First-principles:** "State the fundamental purpose in one sentence. Review against that
   purpose, not the structure you created."
 
+### Round 6: Structural (Code/Mixed only)
+
+Core question: "What design flaws, race conditions, or failure modes exist in this system's
+architecture — not just in the current change, but in how it integrates?"
+
+This lens examines the change in its system context, not as an isolated unit. Correctness
+(Round 1) checks whether the code does what it says. Structural checks whether what it does
+is safe and coherent when integrated into the larger system.
+
+**Focus areas:**
+
+- **Concurrency issues:** Are there race conditions between this change and concurrent
+  callers? Shared mutable state accessed without synchronization? TOCTOU (time-of-check
+  time-of-use) windows? Are locks acquired in consistent order to prevent deadlock?
+
+- **State management gaps:** Does the change introduce state that can become inconsistent?
+  Are state transitions explicit and complete (no missing transitions or illegal states)?
+  Is initialization ordering guaranteed? Are cleanup paths symmetric with setup paths?
+
+- **Error propagation paths:** When this component fails, how does the failure propagate?
+  Does it fail loudly (crash, panic, exception) or silently (nil return, wrong result)?
+  Are callers equipped to handle the error signals this code produces? Does the failure
+  mode change under concurrent access?
+
+- **API contract violations:** Does this change break the implicit or explicit contract
+  of the interfaces it implements or calls? Are preconditions documented and enforced?
+  Do postconditions still hold after the change? Are invariants maintained across the
+  call boundary?
+
+- **Dependency ordering assumptions:** Does this code assume initialization order of
+  external dependencies? What happens if a dependency initializes after this code runs?
+  Are there circular dependencies introduced by this change? Does the code assume
+  availability of infrastructure (network, filesystem, database) without verifying?
+
+**First-principles:** "If this component were a black box, what contracts would callers
+rely on? Does this change honor those contracts under all observable conditions — including
+failure, concurrency, and abnormal load?"
+
+**Tool:** Use `sequential-thinking` MCP to trace each integration path step-by-step.
+
 ---
 
 ## Research Lenses
