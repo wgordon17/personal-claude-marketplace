@@ -231,7 +231,7 @@ Do NOT begin implementing. Your job is to plan and clarify. The pipeline team im
 
 > **DISTINCT FROM Phase 4 Security Reviewer.** This agent reviews the architect's *design plan*
 > before any code is written. The Phase 4 security agent reviews *implemented code*. This agent
-> performs threat modeling — it never reads source code files (none exist yet at Phase 2.5).
+> performs threat modeling — it never reads implementation code (none has been written yet at Phase 2.5). It may read existing codebase files to understand the security posture.
 
 ```markdown
 # Security Design Reviewer — Swarm Phase 2.5 Agent

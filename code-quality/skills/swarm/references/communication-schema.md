@@ -526,6 +526,8 @@ date append a sequence number.
 hack/swarm/
 └── YYYY-MM-DD/               # or YYYY-MM-DD-2, YYYY-MM-DD-3 for multiple runs
     ├── architect-plan.json         # Architect's component decomposition plan
+    ├── security-design-review.json # Security design review (Phase 2.5, if run)
+    ├── escalations.json            # Escalation events (Phase 4, always present)
     ├── fix-summary.json            # Fixer's summary (Phase 5, if run)
     ├── verification-result.json    # Verifier's final test results (Phase 7)
     ├── swarm-report.md             # Human-readable completion report

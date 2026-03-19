@@ -205,6 +205,14 @@ so the directory is not empty:
 }
 ```
 
+Also initialize the escalation tracking file:
+
+```
+Write {run_dir}/escalations.json with: []
+```
+
+Initialize `design_escalation_count = 0` as tracked Lead state (used in Phase 4 escalation routing).
+
 ### Step 0.7: TeamCreate
 
 ```
