@@ -9,8 +9,8 @@ description: >-
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
   Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion, TeamCreate, TeamDelete,
-  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, Skill]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete,
+  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill]
 ---
 
 # /swarm — Full Agent Swarm Implementation
@@ -31,6 +31,8 @@ specialist agent.
 | 0 | Lead (YOU) | — | — | No | Orchestration, routing, judgment |
 | 2 | Architect | code-quality:architect | opus | No | Design, decomposition, risk analysis |
 | 2.5 | Security Design | code-quality:security | opus | No | Pre-implementation threat surface review |
+| 2.7 | Speculative Competitors (×N) | general-purpose | sonnet | Yes | Competing implementations in isolated worktrees (conditional) |
+| 2.7 | Speculative Judge | general-purpose | opus | No | Evaluate competitors, select winner (conditional) |
 | 3 | Implementer | general-purpose | sonnet | Yes | Write code, component by component |
 | 3 | Reviewer | general-purpose | opus | No | Review each component before testing |
 | 3 | Test-Writer | general-purpose | sonnet | Yes | Write tests for reviewed components |
@@ -39,6 +41,7 @@ specialist agent.
 | 4 | QA | code-quality:qa | opus | No | Patterns, conventions, code quality |
 | 4 | Code-Reviewer | superpowers:code-reviewer | sonnet | No | Broader review, complements QA |
 | 4 | Performance | code-quality:performance | sonnet | No | Bottlenecks, N+1, memory issues |
+| 4.5 | Structural Analyst (×2) | general-purpose | opus | No | Adversarial structural design review |
 | 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
 | 5 | Code-Simplifier | code-simplifier:code-simplifier | sonnet | Yes | Post-fix simplification pass |
 | 6 | Docs | general-purpose | haiku | Yes | Update repo docs and hack/ memory |
@@ -138,18 +141,66 @@ Output: SecurityDesignReview JSON written to `{run_dir}/security-design-review.j
 - If 2 iterations exhausted with unresolved Critical findings → Escalate to human via
   AskUserQuestion.
 
+### Phase 2.7: Speculative Fork (conditional)
+
+Skip this phase unless the architect's plan signals genuine implementation uncertainty — multiple
+viable approaches with real trade-offs where "try both and compare" beats guessing. The trigger
+is the architect explicitly flagging `speculative_fork_recommended: true` in
+`architect-plan.json`, OR the Lead identifying 2+ incompatible design choices in the plan that
+would significantly affect outcomes.
+
+When triggered, the Lead presents the competing approaches to the user via `AskUserQuestion`:
+"The architect identified N competing approaches for [component] (all vetted by security review).
+Want to run /speculative to compare them, or pick one directly?"
+
+If the user chooses `/speculative`, the Lead acts as the speculative orchestrator:
+
+1. Extract the contested component(s) from `architect-plan.json`
+2. Define evaluation criteria based on the architect's stated trade-offs
+3. Run `/speculative` Phases 1–3 (competitors fork in isolated worktrees, judge evaluates,
+   winning approach merged back)
+4. The winning approach is written back into `architect-plan.json` as the implementation spec
+   for that component, replacing the ambiguous description
+5. Proceed to Phase 3 with the now-resolved plan
+
+If the user picks one approach directly, skip /speculative and continue to Phase 3 as normal.
+
+**Scope:** Only the contested component(s) go through the speculative fork. Uncontested
+components proceed directly to Phase 3 without waiting (if pipeline-feasible).
+
+**Watchdog:** CronDelete the Phase 2.7 watchdog after all competitors complete (or are timed
+out/failed) and before merging the winning approach back into architect-plan.json. Delete on
+all paths including abort — never leave orphaned cron jobs at phase boundaries.
+
+**Escalation:** If the judge recommends hybrid AND the Lead agrees it's genuinely better,
+run Phase 3.5 of the speculative skill (synthesis agent) before continuing to swarm Phase 3.
+Note it in the audit trail.
+
+When the architect classifies the domain as Complex AND competing approaches exist,
+proactively recommend /speculative even if `speculative_fork_recommended` is not explicitly
+set — Complex-domain tasks benefit most from speculative execution.
+
+**Never trigger Phase 2.7 for:**
+- Clear-domain tasks where the architect chose one approach without hesitation
+- Tasks with a single component and no stated approach trade-offs
+- Tasks where the user specified an explicit implementation approach in Phase 1
+
 ### Phase 3: Pipelined Implementation
 
-Spawn the full pipeline team at once: Implementer, Reviewer, Test-Writer, and Test-Runner. The
-Lead routes work through the pipeline using structured JSON messages — components flow from
-Implementer to Reviewer to Test-Writer to Test-Runner, with the Implementer moving to the next
-component while earlier ones advance through the pipeline. Each handoff uses a typed JSON message
-(see `references/communication-schema.md`). If the Reviewer rejects a component, the Lead routes
-specific feedback back to the Implementer for targeted fixes and re-submission (max 3 iterations
-per component). If Test-Runner reports failures, the Lead routes the failure details back to the
-Implementer for fixes, then re-submits through Review and Test stages. See
-`references/pipeline-model.md` for full parallelism rules, backpressure handling, and fallback
-to sequential mode.
+Before spawning pipeline agents, the Lead creates a CronCreate watchdog (60-second interval) to
+monitor agent idle status. The watchdog reports to the Lead — it never intervenes directly. The
+Lead then spawns the full pipeline team at once: Implementer, Reviewer, Test-Writer, and
+Test-Runner. The Lead routes work through the pipeline using structured JSON messages — components
+flow from Implementer to Reviewer to Test-Writer to Test-Runner, with the Implementer moving to
+the next component while earlier ones advance through the pipeline. Each agent sends a
+ContextAcknowledgment immediately upon receiving an assignment (see
+`references/communication-schema.md`). Each handoff uses a typed JSON message. If the Reviewer
+rejects a component, the Lead routes specific feedback back to the Implementer for targeted fixes
+and re-submission (max 3 iterations per component). If Test-Runner reports failures, the Lead
+routes the failure details back to the Implementer for fixes, then re-submits through Review and
+Test stages. The watchdog is torn down (CronDelete) when Phase 3 completes or on any abort path.
+See `references/pipeline-model.md` for full parallelism rules, backpressure handling, and
+fallback to sequential mode.
 
 ### Phase 4: Parallel Review
 
@@ -178,11 +229,42 @@ findings, escalate to the human via AskUserQuestion rather than re-running again
 Phase 3 re-implementations at 2 regardless of escalation type.
 
 All escalation events are recorded in `{run_dir}/escalations.json`
-(see schema in `references/orchestration-playbook.md` Step 4.5).
+(see schema in `references/communication-schema.md` under "Escalation Events Schema").
+
+### Phase 4.5: Structural Design Review
+
+This phase always runs after Phase 4 escalation routing completes. It is not conditional on
+whether Phase 4 found issues — it is a mandatory adversarial pass that reviews the full
+implementation as a system.
+
+Spawn 2 adversarial structural analysts simultaneously (both `general-purpose`, opus model):
+
+- **Analyst 1: Concurrency & State** — race conditions, state management gaps, error propagation
+  across component boundaries, dependency ordering issues, shared mutable state
+- **Analyst 2: Integration & Contract** — API contract violations, cross-component assumptions,
+  data flow integrity, failure cascading between components, contract drift from architect plan
+
+Both analysts review the entire implementation as a system, not file-by-file. They look for
+structural problems that emerge from the *combination* of components, not issues within a single
+component (those are covered by Phase 4 reviewers).
+
+Findings use the existing `ReviewFindings` schema with the `STRUCT` prefix (STRUCT-001, etc.)
+and are written to `{run_dir}/reviews/structural-concurrency.json` and
+`{run_dir}/reviews/structural-integration.json`.
+
+**Routing:**
+- Critical/High STRUCT findings follow the Phase 4 escalation routing rules
+- STRUCT escalations count toward the cumulative `design_escalation_count` cap (max 2 total
+  re-implementations before human escalation)
+- STRUCT escalation events are logged to `{run_dir}/escalations.json`
+
+If Phase 4 escalation routing triggers a return to Phase 2, Phase 4.5 runs on the re-implemented version after the next Phase 4 completes — not on the current (superseded) implementation.
+
+Phase 5 receives findings from both Phase 4 AND Phase 4.5 in its consolidated findings list.
 
 ### Phase 5: Fix & Simplify (conditional)
 
-Skip this phase if ALL reviews report clean (zero critical or high findings). Otherwise, spawn
+Skip this phase if ALL reviews (Phases 4 and 4.5) report clean (zero critical or high findings). Otherwise, spawn
 the Fixer with the consolidated critical/high findings and full context of the implementation.
 The Fixer addresses each finding with targeted, minimal changes. After the Fixer completes,
 check its output for `deferred` items — findings it couldn't resolve. For each deferred item:
@@ -266,6 +348,16 @@ Phase 2.5: Security Design Review (conditional, opus)
   +-- Unresolved Critical after 2 iterations --> AskUserQuestion
      |
      v
+Phase 2.7: Speculative Fork (conditional)
+  +-- Triggered by speculative_fork_recommended: true in architect-plan.json
+  +-- OR Lead identifies 2+ incompatible design choices with real trade-offs
+  +-- Spawn N competitors (sonnet, isolated worktrees) for contested components
+  +-- CronCreate watchdog (60s interval)
+  +-- Spawn judge (opus) --> JudgmentResult selects winner
+  +-- Winning approach written back into architect-plan.json
+  +-- (optional) Phase 3.5 synthesis if hybrid recommended and approved
+     |
+     v
 Phase 3: Pipelined Implementation
   +-------------------------------------------------------+
   | Implementer --> Reviewer --> Test-Writer --> Test-Runner |
@@ -283,7 +375,12 @@ Phase 4: Parallel Review
   +-- Optional: UI / API / DB reviewers -------------+
      |
      v
-Phase 5: Fix & Simplify (if findings exist)
+Phase 4.5: Structural Design Review (always runs)
+  +-- Analyst 1: Concurrency & State (opus) ---------+
+  +-- Analyst 2: Integration & Contract (opus) -------+--> Lead merges STRUCT findings
+     |
+     v
+Phase 5: Fix & Simplify (if Phase 4 or 4.5 findings exist)
   +-- Fixer: critical/high findings
   +-- Code-Simplifier: post-fix pass
      |
@@ -331,6 +428,14 @@ blocker or a pre-existing issue. Lean toward escalation for ambiguous decisions.
 Monitor the pipeline flow actively. Route handoff messages between agents using the schemas in
 `references/communication-schema.md`. Detect backpressure (see `references/pipeline-model.md`)
 and throttle the Implementer when the Reviewer queue is full.
+
+### Watchdog Monitoring
+
+Create a CronCreate watchdog (60-second interval) in Phase 3 Step 3.0 before spawning pipeline
+agents. On each tick, check `TaskList` for `in_progress` tasks and cross-reference with agent
+message timestamps. If any agent has been idle for 2+ consecutive checks, alert yourself and
+trigger Silent Failure Detection (Step 3.6). Always CronDelete the watchdog when Phase 3 ends
+or on any abort path — do not leave orphaned cron jobs.
 
 ### Context Health Monitoring
 
@@ -382,13 +487,14 @@ After escalation, wait for user input before proceeding.
 | Phase / Agent | Skip When |
 |---------------|-----------|
 | Phase 2.5: Security Design Review | Config-only, docs-only, or test-only changes that don't touch auth/data/network/API surfaces. Clear-domain tasks without auth/data/network/API involvement. |
+| Phase 2.7: Speculative Fork | Architect did NOT flag `speculative_fork_recommended: true` AND Lead does not identify 2+ incompatible approach choices. Skip for single-component tasks and tasks where the user specified an approach. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
 | Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
-| Phase 5: Fix | ALL review agents report zero critical or high findings |
+| Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero critical or high findings |
 | Code-Simplifier | Fixer made no changes in Phase 5 |
 | Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
 | /unfuck sweep | Fewer than 20 files modified and not an architectural change |
-| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 7 (Verifier) |
+| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
 
 ---
 
@@ -408,6 +514,9 @@ specific skills directly.
 | Codebase-wide cleanup | `/unfuck` |
 | Security audit only | `code-quality:security` directly |
 | Test coverage only | `dev-essentials:test-runner` directly |
+| Codebase-wide analysis or bulk transformation (20+ files) | `/map-reduce` |
+| Multiple viable approaches, need to compare | `/speculative` |
+| Architectural analysis (cross-cutting concerns) | Single agent (NOT /map-reduce) |
 
 ### Model Cost Hierarchy
 

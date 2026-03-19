@@ -5,7 +5,7 @@ description: >-
   "I'm going to report bugs", "let's hunt bugs", "investigate these issues", or describes
   wanting to report issues one-by-one while agents investigate in parallel. Also activates
   when the user reports a bug/issue and a BUGS.md file exists or was recently created.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion]
 ---
 
 # Bug Investigation Workflow
@@ -99,7 +99,7 @@ Assign the next sequential BUG-NNN ID. Track the counter internally.
 
 ### 2. Spawn a Background Investigation Agent
 
-Use the Task tool with these parameters:
+Use the Agent tool with these parameters:
 - `subagent_type: "general-purpose"`
 - `run_in_background: true`
 - `description: "BUG-NNN: <short title>"`
@@ -159,7 +159,7 @@ what you found and what remains unclear.
 ### 4. Batch Multiple Bugs
 
 If the user reports multiple bugs in a single message, launch ALL investigation agents
-in parallel (single message, multiple Task tool calls). Each gets its own sequential
+in parallel (single message, multiple Agent tool calls). Each gets its own sequential
 BUG-NNN ID.
 
 ### 5. Acknowledge Briefly
@@ -267,7 +267,7 @@ Mitigation strategies:
 ### Per Bug
 ```
 1. Assign BUG-NNN
-2. Task(subagent_type="general-purpose", run_in_background=true, description="BUG-NNN: title")
+2. Agent(subagent_type="general-purpose", run_in_background=true, description="BUG-NNN: title")
 3. Acknowledge: "BUG-NNN launched — investigating [title]"
 ```
 

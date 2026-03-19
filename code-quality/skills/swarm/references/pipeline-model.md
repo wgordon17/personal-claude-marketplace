@@ -340,13 +340,15 @@ Single agent, shut down after it sends `VerificationResult`.
 | 1 | Lead only | 1 |
 | 2 | Architect | 2 |
 | 2.5 | Security Design Reviewer | 2 |
+| 2.7 | Speculative Competitors + Judge (conditional) | 2-5 + Lead |
 | 3 | Architect (standby) + Implementer, Reviewer, Test-Writer, Test-Runner | 6 (5 + Lead) |
 | 4 | Security, QA, Code-Reviewer, Performance (+ optionals) | 5-10 + Lead |
+| 4.5 | Structural Analyst ×2 | 3 (2 + Lead) |
 | 5 | Fixer, then Code-Simplifier | 2 + Lead |
 | 6 | Docs, then Lessons Extractor | 2 (sequential) |
 | 7 | Verifier | 2 |
 
 Phases never overlap. The Lead shuts down each phase's agents before spawning the next phase.
 This keeps the active teammate count bounded and prevents context cross-contamination between
-phases. The maximum active count at any point is 8 (Lead + up to 7 Phase 4 reviewers with all
+phases. The maximum active count at any point is 11 (Lead + up to 10 Phase 4 reviewers with all
 optional domain reviewers).

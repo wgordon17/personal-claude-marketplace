@@ -4,7 +4,7 @@ description: |
   Use when user requests deep research, comprehensive analysis, or thorough investigation.
   Triggers on: "research X thoroughly", "deep dive into", "comprehensive analysis of",
   "investigate X exhaustively", "compare X options", "evaluate alternatives for"
-allowed-tools: [WebSearch, WebFetch, Read, Glob, Grep, Task]
+allowed-tools: [WebSearch, WebFetch, Read, Write, Glob, Grep, Agent]
 ---
 
 # deep-research — 5-Hop Deep Research Mode

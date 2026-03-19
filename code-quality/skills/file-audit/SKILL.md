@@ -8,7 +8,7 @@ description: |
   - "Validate library usage"
   - "Review the entire project"
   Analyzes files in parallel with LSP and Context7, detecting issues, duplicates, and documentation drift.
-allowed-tools: [LSP, Read, Grep, Glob, Task, Write, Bash, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs]
+allowed-tools: [LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, mcp__context7__resolve-library-id, mcp__context7__query-docs]
 ---
 
 # file-audit
@@ -75,18 +75,31 @@ else:
 
 ### Step 2: Parallel Processing Loop
 
+**For large projects (20+ files), use /map-reduce for structured parallel analysis:**
+
 ```
-REPEAT until queue empty:
-    1. Get next batch of 3-5 "pending" files
-    2. Mark batch as "in_progress", save queue
-    3. Spawn 3-5 Task agents IN PARALLEL:
-       Task(
-         subagent_type="general-purpose",
-         prompt=analyzer_prompt(file_path, project_memory)
-       )
-    4. Wait for all agents to complete
-    5. Collect result JSONs + extracted patterns
-    6. Mark batch as "completed", save queue
+IF total_files > 20:
+    Invoke /map-reduce with by-directory or by-batch split:
+    - Mapper prompt = single-file analyzer prompt (adapted for multi-file chunks)
+    - Reducer = post-analysis deduplication + cross-referencing (see Phase 3)
+    - Each ChunkAssignment contains: list of files for that chunk, analyzer instructions,
+      cross-reference manifest of exported symbols from other chunks
+    - ChunkResults contain findings with confidence: "verified" or "chunk-local"
+    - Reducer cross-validates chunk-local findings before producing final output
+    - Fallback: if /map-reduce skill is unavailable, proceed with direct approach below
+
+IF total_files <= 20 (or /map-reduce unavailable):
+    REPEAT until queue empty:
+        1. Get next batch of 3-5 "pending" files
+        2. Mark batch as "in_progress", save queue
+        3. Spawn 3-5 agents IN PARALLEL:
+           Agent(
+             subagent_type="general-purpose",
+             prompt=analyzer_prompt(file_path, project_memory)
+           )
+        4. Wait for all agents to complete
+        5. Collect result JSONs + extracted patterns
+        6. Mark batch as "completed", save queue
 ```
 
 ### Step 3: Post-Analysis Duplicate Detection
@@ -337,6 +350,8 @@ When LSP is unavailable for a file type:
 3. **Review todos first**: Generated TODOs are prioritized by severity
 4. **Trust but verify**: Issues are evidence-based but review before bulk fixes
 5. **Update project memory**: If drift detected, decide whether to update code or docs
+6. **Large projects**: For 20+ files, /map-reduce provides structured chunk tracking, retry-on-failure
+   for individual mapper agents, and reducer-based deduplication of cross-chunk findings
 
 ---
 

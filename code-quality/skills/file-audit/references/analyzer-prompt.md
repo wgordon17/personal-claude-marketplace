@@ -6,10 +6,10 @@ This document contains the prompt template for spawning single-file analyzer age
 
 ## Usage
 
-When spawning a file analyzer, use the Task tool with this prompt:
+When spawning a file analyzer, use the Agent tool with this prompt:
 
 ```python
-Task(
+Agent(
     subagent_type="general-purpose",
     prompt=generate_analyzer_prompt(file_path, project_context),
     description=f"Analyze {file_path}"
@@ -109,7 +109,7 @@ For each external library used:
 
 1. **Resolve library ID:**
    ```
-   mcp__plugin_context7_context7__resolve-library-id(
+   mcp__context7__resolve-library-id(
      libraryName="<library_name>",
      query="<function_name> usage"
    )
@@ -117,7 +117,7 @@ For each external library used:
 
 2. **Query documentation:**
    ```
-   mcp__plugin_context7_context7__query-docs(
+   mcp__context7__query-docs(
      libraryId="<resolved_id>",
      query="is <function_name> deprecated, correct usage, common mistakes"
    )
@@ -362,7 +362,7 @@ prompt = ANALYZER_TEMPLATE.format(
     NOTES_MD_SUMMARY=project_memory.get("notes", "No NOTES.md found")
 )
 
-result = Task(
+result = Agent(
     subagent_type="general-purpose",
     prompt=prompt,
     description=f"Analyze {file_path}"

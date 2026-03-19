@@ -6,7 +6,7 @@ description: >-
   "how should we implement", or before any multi-file implementation task. Asks clarifying
   questions first, writes plan to file incrementally, provides research context and summaries
   in chat for feedback. Never displays full plan content in chat.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
 ---
 
 # Incremental Planning

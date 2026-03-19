@@ -14,8 +14,10 @@ point is documented here.
 | 1 | Clarify & Checkpoint | Lead direct | None (AskUserQuestion) |
 | 2 | Architect | Single agent | architect (opus) |
 | 2.5 | Security Design Review | Single agent (conditional) | security-design (opus) |
+| 2.7 | Speculative Fork | N competitors + judge (conditional) | competitor-N (sonnet, worktree), judge (opus) |
 | 3 | Pipelined Implementation | Persistent team | implementer, reviewer, test-writer, test-runner |
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
+| 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
 | 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
 | 6 | Docs & Memory | Sequential pair | docs (haiku), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
@@ -233,8 +235,10 @@ t2 = TaskCreate("Phase 2: Architect designs solution", "Spawn architect, review 
                 activeForm="Architecting solution") → addBlockedBy: [t1]
 t2_5 = TaskCreate("Phase 2.5: Security design review", "STRIDE analysis of architect plan",
                 activeForm="Security design review") → addBlockedBy: [t2]
+t2_7 = TaskCreate("Phase 2.7: Speculative fork (conditional)", "Competing implementations for contested components — skip if not triggered",
+                activeForm="Running speculative fork") → addBlockedBy: [t2_5]
 t3 = TaskCreate("Phase 3: Pipelined implementation", "All components through pipeline",
-                activeForm="Implementing components") → addBlockedBy: [t2_5]
+                activeForm="Implementing components") → addBlockedBy: [t2_7]
 t4 = TaskCreate("Phase 4: Parallel review", "Security, QA, code-review, performance",
                 activeForm="Running parallel review") → addBlockedBy: [t3]
 t5 = TaskCreate("Phase 5: Fix & simplify", "Fixer + code-simplifier",
@@ -370,7 +374,7 @@ Do NOT interrupt the user for:
 ### Step 2.1: Spawn Architect
 
 ```
-Task(
+Agent(
   name="architect",
   subagent_type="code-quality:architect",
   model="opus",
@@ -398,6 +402,10 @@ Validate the plan:
 
 **If architect flagged risks or open questions** (check `plan.risks` and `plan.questions` fields):
 Present to user via AskUserQuestion. This is an allowed interruption.
+
+**If architect set `speculative_fork_recommended: true`:** Note the contested component IDs from
+`plan.speculative_components`. Phase 2.7 will run for these components after Phase 2.5 completes.
+No user interruption needed — proceed autonomously.
 
 **If plan quality is poor** (missing files, circular deps, vague descriptions):
 Send feedback to architect and request one revision:
@@ -428,6 +436,11 @@ Record the decision in the context bundle as `pipeline_mode: true/false`.
 
 Pipeline mode: implementer starts Component B while reviewer reviews Component A, etc.
 Sequential mode: each component completes fully before next begins.
+
+**Note:** If Phase 2.7 (speculative fork) will run for some components, defer the final pipeline
+decision for those components until Phase 2.7 resolves. The winning approach may change the
+component's file scope, which affects dependency ordering. Re-evaluate after Phase 2.7 writes
+the winner back into `architect-plan.json`.
 
 ### Step 2.4: Keep Architect Available Through Phase 3
 
@@ -467,7 +480,7 @@ If skipping: note the reason in the audit trail and proceed to Phase 3. Do NOT s
 ### Step 2.5.1: Spawn Security Design Agent
 
 ```
-Task(
+Agent(
   name="security-design",
   subagent_type="code-quality:security",
   model="opus",
@@ -530,7 +543,267 @@ Shut down the security-design agent after findings are routed.
 
 ---
 
+## Phase 2.7: Speculative Fork (conditional)
+
+### Step 2.7.0: Skip Decision
+
+Evaluate whether this phase applies before spawning any agents:
+
+| Condition | Decision |
+|-----------|----------|
+| `architect-plan.json` contains `speculative_fork_recommended: true` | Run Phase 2.7 |
+| Lead identifies 2+ components with incompatible approach choices and real trade-offs | Run Phase 2.7 |
+| Architect classified domain as Complex AND `competing_approaches` entries exist | Run Phase 2.7 — Complex-domain tasks benefit most from speculative execution |
+| User specified a concrete implementation approach in Phase 1 | Skip — proceed to Phase 3 |
+| Task has a single component with no stated approach uncertainty | Skip — proceed to Phase 3 |
+| Architect classified domain as Chaotic (stabilization brief only) | Skip — proceed to Phase 3 |
+| Architect classified domain as Clear (best practice, no real alternatives) | Skip — proceed to Phase 3 |
+| When in doubt | Skip — speculative adds cost, require a positive signal |
+
+If skipping: note the reason in the audit trail (`.swarm-run` entry) and proceed to Phase 3.
+
+### Step 2.7.0.5: User Checkpoint
+
+Present the competing approaches to the user via `AskUserQuestion`:
+
+"The architect identified N competing approaches for [component(s)] (all vetted by security
+review in Phase 2.5). Want to run /speculative to compare them, or pick one directly?"
+
+- If user chooses `/speculative`: proceed to Step 2.7.1.
+- If user picks one approach directly: update `architect-plan.json` with the chosen approach,
+  skip the rest of Phase 2.7, and proceed to Phase 3.
+
+### Step 2.7.1: Identify Contested Components
+
+Read `architect-plan.json`. Extract the component(s) that are contested:
+
+- If `speculative_fork_recommended: true` is set, read the `speculative_components` field (array
+  of component IDs) to identify which components are contested. If the field is absent, treat all
+  components with `estimated_complexity: "high"` and multiple stated `risks` as contested.
+- If the Lead triggered Phase 2.7 independently (without the flag), identify the contested
+  component(s) from the plan's `risks` and `questions` fields.
+
+**Scope rule:** Only contested component(s) enter the speculative fork. All other components
+proceed to Phase 3 directly after Phase 2.7 resolves. Do NOT fork the entire implementation.
+
+### Step 2.7.2: Define Evaluation Criteria
+
+Based on the architect's stated trade-offs for the contested component(s), define weighted
+evaluation criteria. Use the `SpeculativeSpec` schema from the `/speculative` skill:
+
+```json
+{
+  "success_criteria": [
+    {
+      "criterion": "Correctness",
+      "weight": 0.35,
+      "description": "Handles all specified cases correctly, matches architect's component spec"
+    },
+    {
+      "criterion": "Maintainability",
+      "weight": 0.30,
+      "description": "Clear, readable, matches codebase patterns"
+    },
+    {
+      "criterion": "Performance",
+      "weight": 0.20,
+      "description": "Efficient for expected load — no unnecessary overhead"
+    },
+    {
+      "criterion": "Simplicity",
+      "weight": 0.15,
+      "description": "Minimum necessary complexity — no over-engineering"
+    }
+  ]
+}
+```
+
+Adjust weights based on the architect's stated priorities for the contested component.
+Weights must sum to 1.0.
+
+### Step 2.7.3: Create Speculative Run Directory
+
+```
+{speculative_run_dir} = hack/speculative/YYYY-MM-DD
+```
+
+If that directory already exists (a separate /speculative run happened today), append a sequence
+number: `hack/speculative/YYYY-MM-DD-2`.
+
+Create the directory structure:
+```
+{speculative_run_dir}/
+{speculative_run_dir}/implementations/
+```
+
+### Step 2.7.4: Spawn Competitors
+
+Default to 2 competitors unless the architect described 3+ meaningfully distinct approaches.
+Maximum 3 competitors in the swarm context (cost constraint).
+
+For each contested component, spawn competitor agents simultaneously:
+
+```
+Agent(name="competitor-1", subagent_type="general-purpose", model="sonnet",
+     team_name="swarm-impl", mode="bypassPermissions",
+     isolation="worktree",
+     prompt="[speculative context bundle]\n\n[competitor prompt — see below]")
+
+Agent(name="competitor-2", subagent_type="general-purpose", model="sonnet",
+     team_name="swarm-impl", mode="bypassPermissions",
+     isolation="worktree",
+     prompt="[speculative context bundle]\n\n[competitor prompt — see below]")
+```
+
+Each competitor receives a `SpeculativeSpec` with:
+- `problem`: the component description from `architect-plan.json`
+- `success_criteria`: from Step 2.7.2
+- `approach_hint`: the specific approach for that competitor (from architect's stated alternatives),
+  or null if the competitor should choose freely
+- `competitor_id`: "competitor-1", "competitor-2", etc.
+- `worktree_path`: its isolated worktree path
+- `output_path`: `{speculative_run_dir}/implementations/competitor-{id}.json`
+
+**Watchdog:** After spawning competitors, create a CronCreate watchdog (60-second interval) to
+monitor competitor idle status. Record `speculative_watchdog_cron_id`. CronDelete when all
+competitors have submitted results.
+
+```
+CronCreate(
+  schedule="*/1 * * * *",
+  command="swarm-speculative-watchdog",
+  description="Phase 2.7 speculative competitor watchdog"
+)
+```
+
+### Step 2.7.5: Receive Competitor Results
+
+Wait for all competitors to submit `ImplementationResult` messages. Each competitor writes its
+result to `{speculative_run_dir}/implementations/competitor-{id}.json`.
+
+**Timeout handling:** If one competitor is idle (no messages, no task update) while others have
+finished:
+1. Send one status check via SendMessage
+2. If no response, log as timed-out and proceed with remaining results
+3. A run with 1 of 2 competitors can proceed — note in audit trail
+
+**CronDelete watchdog** once all expected results are received (or timeout is declared). CronDelete the watchdog BEFORE declaring timeout or transitioning to Phase 3. Never leave orphaned cron jobs at phase boundaries.
+
+### Step 2.7.6: Spawn Judge
+
+Spawn a single judge agent after all competitors have submitted:
+
+```
+Agent(name="speculative-judge", subagent_type="general-purpose", model="opus",
+     team_name="swarm-impl",
+     prompt="[speculative context bundle]\n\n[judge prompt from speculative skill agent-prompts.md]")
+```
+
+The judge receives a `JudgmentRequest` with all `ImplementationResult` objects, the
+`SpeculativeSpec`, and `output_path: {speculative_run_dir}/judgment.json`.
+
+The judge writes its `JudgmentResult` to `{speculative_run_dir}/judgment.json`.
+
+### Step 2.7.7: Apply Winner to Architect Plan
+
+After receiving the judge's result, read `{speculative_run_dir}/judgment.json`.
+
+**If winner is a single competitor:**
+1. Read the winning competitor's `ImplementationResult` (approach, files, design decisions)
+2. Update `architect-plan.json` — replace the contested component's `description` with the
+   winner's `approach` field, and update `files_to_create`/`files_to_modify` if they differ
+3. Add a `speculative_fork_resolved` field to `architect-plan.json`:
+   ```json
+   {
+     "speculative_fork_resolved": {
+       "component_id": "string — contested component ID",
+       "winner": "competitor-1",
+       "rationale": "string — judge's rationale (brief)",
+       "run_dir": "{speculative_run_dir}"
+     }
+   }
+   ```
+
+**If winner is "hybrid":**
+- If hybrid is genuinely better AND the complexity is justified: spawn the `/speculative` Phase 3.5
+  synthesis agent to combine the specified elements. The synthesis agent writes to the main worktree.
+- After synthesis, update `architect-plan.json` with the synthesized approach as the component spec.
+- If hybrid adds complexity without clear benefit: override to the highest-scoring single competitor.
+  Log the override decision in the audit trail.
+
+**Shutdown judge and all competitor agents:**
+```
+SendMessage(type="shutdown_request", recipient="speculative-judge", content="Judgment complete.")
+SendMessage(type="shutdown_request", recipient="competitor-1", content="Phase 2.7 complete.")
+SendMessage(type="shutdown_request", recipient="competitor-2", content="Phase 2.7 complete.")
+```
+
+### Step 2.7.8: Audit Trail
+
+Write a summary entry to `{run_dir}/.swarm-run` noting:
+- Whether Phase 2.7 was run or skipped (and why)
+- Contested component(s)
+- Number of competitors
+- Winner and rationale summary
+- Whether hybrid synthesis was triggered
+
+The full speculative run record is at `{speculative_run_dir}/`. The swarm's run_dir audit trail
+only contains the summary reference.
+
+---
+
 ## Phase 3: Pipelined Implementation
+
+### Step 3.0: Watchdog Setup
+
+After receiving Phase 2.5 results and before spawning pipeline agents, create a CronCreate
+watchdog job to monitor pipeline agent health:
+
+```
+CronCreate(
+  schedule="*/1 * * * *",   ← every 60 seconds
+  command="swarm-watchdog-check",
+  description="Swarm Phase 3 watchdog: monitor pipeline agent idle status"
+)
+```
+
+Record the cron job ID in Lead state as `watchdog_cron_id` (returned by CronCreate).
+
+**What the watchdog checks (Lead evaluates on each 60-second tick):**
+
+1. Call `TaskList` and identify any tasks currently in `in_progress` state
+2. Cross-reference with the last received message timestamp for each pipeline agent
+3. If any agent has been idle for 2+ consecutive watchdog checks with an active `in_progress`
+   task, send a status ping to the lead's own context as an alert:
+
+```
+[WATCHDOG] <agent-role> has been idle for 2+ checks on <component_id>.
+Last message type: <last-message-type>. Initiating status check.
+```
+
+4. Trigger Step 3.6 Silent Failure Detection for the idle agent
+
+**What the watchdog does NOT do:**
+- Does NOT directly message pipeline agents (the Lead does that via Step 3.6)
+- Does NOT kill or restart agents itself
+- Does NOT modify any files
+- Reports only — the Lead makes all intervention decisions
+
+**Watchdog teardown:**
+
+When Phase 3 completes (all components through the pipeline), CronDelete the watchdog BEFORE declaring Phase 3 complete or transitioning to Phase 4. Never leave orphaned cron jobs at phase boundaries.
+
+```
+CronDelete(id=watchdog_cron_id)
+```
+
+Also delete the watchdog BEFORE any of these transitions:
+- Phase 3 error escalation (50%+ components blocked → AskUserQuestion)
+- Design-level escalation routing back to Phase 2 (Step 4.5)
+- Any AskUserQuestion abort path
+
+Do NOT leave orphaned cron jobs. If the Lead is about to stop pipeline execution for any
+reason, always CronDelete before transitioning to the next phase or stopping.
 
 ### Step 3.1: Spawn Persistent Pipeline Team
 
@@ -539,25 +812,42 @@ components — do NOT shut them down between components. Also spawn the Architec
 (it was already running from Phase 2, remaining on standby).
 
 ```
-Task(name="implementer", subagent_type="general-purpose", model="sonnet",
+Agent(name="implementer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[implementer prompt from agent-prompts.md]")
 
-Task(name="reviewer", subagent_type="general-purpose", model="opus",
+Agent(name="reviewer", subagent_type="general-purpose", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[reviewer prompt from agent-prompts.md]")
 
-Task(name="test-writer", subagent_type="general-purpose", model="sonnet",
+Agent(name="test-writer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[test-writer prompt from agent-prompts.md]")
 
-Task(name="test-runner", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="test-runner", subagent_type="dev-essentials:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[test-runner prompt from agent-prompts.md]")
 ```
 
 Note: reviewer and test-runner are read-only — no bypassPermissions needed. Only implementer
 and test-writer (which write code/tests) use bypassPermissions.
+
+### Step 3.1.5: Acknowledgment Wait
+
+After sending each ComponentAssignment, the Lead waits for a `ContextAcknowledgment` from the
+receiving agent before marking that component as "in progress." See `communication-schema.md`
+for the schema.
+
+**If `clarifications_needed` is non-empty:** Answer all clarifications via SendMessage before
+the agent begins work. Only then does the agent start implementation.
+
+**If no acknowledgment after 2+ minutes of agent idle:**
+1. Re-send the ComponentAssignment once (first retry)
+2. If second attempt also fails, log to `{run_dir}/errors.log`:
+   ```
+   [ACK-FAIL] <agent-role>: no ContextAcknowledgment after 2 attempts for <component_id>. Spawning replacement.
+   ```
+3. Spawn a replacement agent with the same assignment
 
 ### Step 3.2: Pipeline Flow
 
@@ -712,7 +1002,7 @@ When an agent's `turn_count` exceeds its threshold AND it is between components 
 
 4. **Spawn replacement** with the same name, type, model, and mode:
    ```
-   Task(name="implementer", subagent_type="general-purpose", model="sonnet",
+   Agent(name="implementer", subagent_type="general-purpose", model="sonnet",
         team_name="swarm-impl", mode="bypassPermissions",
         prompt="[context bundle]\n\n[implementer prompt from agent-prompts.md]\n\n"
                "=== CONTINUATION FROM PREVIOUS AGENT ===\n"
@@ -802,42 +1092,42 @@ Spawn ALL reviewers simultaneously in a SINGLE message. Do not spawn them sequen
 
 **Core reviewers (always spawn):**
 ```
-Task(name="security-reviewer", subagent_type="code-quality:security", model="opus",
+Agent(name="security-reviewer", subagent_type="code-quality:security", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[security-reviewer prompt from agent-prompts.md]")
 
-Task(name="qa-reviewer", subagent_type="code-quality:qa", model="opus",
+Agent(name="qa-reviewer", subagent_type="code-quality:qa", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[qa-reviewer prompt from agent-prompts.md]")
 
-Task(name="code-reviewer", subagent_type="superpowers:code-reviewer", model="sonnet",
+Agent(name="code-reviewer", subagent_type="superpowers:code-reviewer", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[code-reviewer prompt from agent-prompts.md]")
 
-Task(name="performance-reviewer", subagent_type="code-quality:performance", model="sonnet",
+Agent(name="performance-reviewer", subagent_type="code-quality:performance", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[performance-reviewer prompt from agent-prompts.md]")
 ```
 
 **Optional reviewers (spawn if auto-detected or user-requested in Phase 1):**
 ```
-Task(name="ui-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="ui-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[ui-reviewer prompt from agent-prompts.md]")
 
-Task(name="api-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="api-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[api-reviewer prompt from agent-prompts.md]")
 
-Task(name="db-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="db-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[db-reviewer prompt from agent-prompts.md]")
 
-Task(name="plugin-validator", subagent_type="general-purpose", model="sonnet",
+Agent(name="plugin-validator", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[plugin-validator prompt — include plugin validation checklist]")
 
-Task(name="skill-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="skill-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[skill-reviewer prompt — include skill validation checklist]")
 ```
@@ -918,7 +1208,7 @@ If any finding is classified as **design-level** AND `design_escalation_count < 
 3. Shut down all Phase 4 reviewers
 4. Respawn Architect with the findings:
    ```
-   Task(name="architect", subagent_type="code-quality:architect", model="opus",
+   Agent(name="architect", subagent_type="code-quality:architect", model="opus",
         team_name="swarm-impl",
         prompt="[context bundle]\n\n[architect prompt from agent-prompts.md]\n\n"
                "=== DESIGN ESCALATION FROM PHASE 4 ===\n"
@@ -1003,17 +1293,85 @@ SendMessage(type="shutdown_request", recipient="security-reviewer", content="Rev
 
 ---
 
+## Phase 4.5: Structural Design Review
+
+This phase always runs — it is not conditional on Phase 4 findings. It spawns adversarial
+structural analysts to review the implementation as a system, catching cross-component issues
+that individual file-by-file reviews miss.
+
+### Step 4.5.1: Spawn Structural Analysts
+
+Spawn both analysts simultaneously after Phase 4 escalation routing completes:
+
+```
+Agent(name="structural-concurrency", subagent_type="general-purpose", model="opus",
+     team_name="swarm-impl",
+     prompt="[context bundle]\n\n[structural-concurrency analyst prompt from agent-prompts.md]")
+
+Agent(name="structural-integration", subagent_type="general-purpose", model="opus",
+     team_name="swarm-impl",
+     prompt="[context bundle]\n\n[structural-integration analyst prompt from agent-prompts.md]")
+```
+
+### Step 4.5.2: Structural Analyst Outputs
+
+Each analyst writes a `ReviewFindings` JSON to the audit trail and sends a summary to the lead:
+
+| Analyst | Output File |
+|---------|-------------|
+| structural-concurrency | `{run_dir}/reviews/structural-concurrency.json` |
+| structural-integration | `{run_dir}/reviews/structural-integration.json` |
+
+Finding IDs use the `STRUCT` prefix (STRUCT-001, STRUCT-002, etc.).
+
+### Step 4.5.3: Lead Synthesis and Routing
+
+Read both structural review files. Apply the same escalation routing rules as Phase 4:
+
+**Classification rules for STRUCT findings:**
+
+| Finding Type | Routing |
+|---|---|
+| Cross-component design flaw (race condition in shared state, wrong dependency order by design) | Phase 2 (design-level escalation) |
+| Trust boundary issue spanning multiple components | Phase 2.5 (security design escalation) |
+| Contract violation addressable in code (wrong data passed, missing validation at boundary) | Phase 5 Fixer |
+| Scope creep across components | Human escalation via AskUserQuestion |
+
+**Escalation counter:** STRUCT escalations count toward the same `design_escalation_count` cap
+(max 2 total across Phase 4 and Phase 4.5). If the cap is reached, escalate to human.
+
+Log all STRUCT escalation events to `{run_dir}/escalations.json` using the same format as
+Phase 4 escalation events.
+
+### Step 4.5.4: Merge Into Phase 5 Consolidated Findings
+
+Add all actionable STRUCT findings to the consolidated findings list that Phase 5 Fixer receives.
+Phase 5 treats STRUCT findings identically to Phase 4 findings — same severity triage, same fix
+protocol.
+
+If ALL structural findings are clean (zero critical or high), note this in the audit trail and
+skip_fixer remains unchanged from Phase 4's determination.
+
+### Step 4.5.5: Shutdown Structural Analysts
+
+```
+SendMessage(type="shutdown_request", recipient="structural-concurrency", content="Structural review complete.")
+SendMessage(type="shutdown_request", recipient="structural-integration", content="Structural review complete.")
+```
+
+---
+
 ## Phase 5: Fix & Simplify
 
 ### Step 5.1: Skip Check
 
-If `skip_fixer = true` (all reviews clean): skip Phase 5 entirely. Mark Phase 5 task as completed
-with note "No findings — skipped." Proceed to Phase 6.
+If `skip_fixer = true` (all Phase 4 AND Phase 4.5 reviews clean): skip Phase 5 entirely. Mark
+Phase 5 task as completed with note "No findings — skipped." Proceed to Phase 6.
 
 ### Step 5.2: Spawn Fixer
 
 ```
-Task(name="fixer", subagent_type="general-purpose", model="sonnet",
+Agent(name="fixer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[fixer prompt from agent-prompts.md]\n\n"
             "CONSOLIDATED FINDINGS:\n<JSON findings from synthesis>")
@@ -1039,7 +1397,7 @@ If no deferred items exist, skip this step.
 After fixer completes (and deferrals are handled), spawn code-simplifier:
 
 ```
-Task(name="code-simplifier", subagent_type="code-simplifier:code-simplifier", model="sonnet",
+Agent(name="code-simplifier", subagent_type="code-simplifier:code-simplifier", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[code-simplifier prompt from agent-prompts.md]")
 ```
@@ -1090,7 +1448,7 @@ SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simpl
 ### Step 6.1: Spawn Docs Agent
 
 ```
-Task(name="docs", subagent_type="general-purpose", model="haiku",
+Agent(name="docs", subagent_type="general-purpose", model="haiku",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[docs prompt from agent-prompts.md]\n\n"
             "FILES MODIFIED THIS SWARM:\n<git diff --name-only from branch start>")
@@ -1154,7 +1512,7 @@ SendMessage(type="shutdown_request", recipient="docs", content="Documentation ph
 After Docs agent is shut down, spawn the Lessons Extractor:
 
 ```
-Task(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
+Agent(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[lessons-extractor prompt from agent-prompts.md]\n\n"
             "Run directory: {run_dir}\n"
@@ -1180,7 +1538,7 @@ SendMessage(type="shutdown_request", recipient="lessons-extractor",
 ### Step 7.1: Spawn Verifier
 
 ```
-Task(name="verifier", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="verifier", subagent_type="dev-essentials:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[verifier prompt from agent-prompts.md]\n\n"
             "BASELINE: {baseline from Phase 0.1}")
@@ -1456,6 +1814,8 @@ TeamCreate:
 | 4 | db-reviewer (optional) | general-purpose | sonnet | default | No |
 | 4 | plugin-validator (optional) | general-purpose | sonnet | default | No |
 | 4 | skill-reviewer (optional) | general-purpose | sonnet | default | No |
+| 4.5 | structural-concurrency | general-purpose | opus | default | No |
+| 4.5 | structural-integration | general-purpose | opus | default | No |
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | code-simplifier | code-simplifier:code-simplifier | sonnet | bypassPermissions | Yes |
 | 6 | docs | general-purpose | haiku | bypassPermissions | Yes |
@@ -1463,8 +1823,8 @@ TeamCreate:
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 18 (13 core + 5 optional domain reviewers).
-Minimum agent count: 13 (all domain reviewers skipped).
+Maximum agent count: 22 (17 core + 5 optional domain reviewers).
+Minimum agent count: 17 (all domain reviewers skipped, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.

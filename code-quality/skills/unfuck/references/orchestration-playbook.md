@@ -158,7 +158,7 @@ Spawn **ALL 7 agents** as TeamCreate teammates in a **single message** (7 parall
 
 Each teammate runs in its own independent context window, writes its JSON findings to disk, and sends a brief summary to the team lead via `SendMessage`. This avoids context pressure on the orchestrator — the orchestrator never calls `TaskOutput` or reads full agent transcripts.
 
-**Why teammates, not background Tasks:** Background `Task(run_in_background=true)` agents dump their full output into the orchestrator's context when checked via `TaskOutput`. With 7 agents producing detailed findings, this causes context overflow. TeamCreate teammates have independent context windows and communicate via short `SendMessage` summaries.
+**Why teammates, not background Agents:** Background `Agent(run_in_background=true)` agents dump their full output into the orchestrator's context when checked via `TaskOutput`. With 7 agents producing detailed findings, this causes context overflow. TeamCreate teammates have independent context windows and communicate via short `SendMessage` summaries.
 
 **CRITICAL:** All 7 agents MUST be launched in the SAME message. Do not conditionally skip agents. The orchestrator should wait for all 7 completion summaries before proceeding to Phase 2.
 
@@ -181,31 +181,31 @@ Each teammate runs in its own independent context window, writes its JSON findin
 In a single message, issue 7 parallel Task calls with `team_name` to spawn as teammates:
 
 ```
-Task(name="dead-code-hunter", subagent_type="general-purpose", model="sonnet",
+Agent(name="dead-code-hunter", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 1 prompt from discovery-agents.md]")
 
-Task(name="duplicate-detector", subagent_type="general-purpose", model="sonnet",
+Agent(name="duplicate-detector", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 2 prompt from discovery-agents.md]")
 
-Task(name="security-auditor", subagent_type="general-purpose", model="sonnet",
+Agent(name="security-auditor", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 3 prompt from discovery-agents.md]")
 
-Task(name="architecture-reviewer", subagent_type="general-purpose", model="sonnet",
+Agent(name="architecture-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 4 prompt from discovery-agents.md]")
 
-Task(name="ai-slop-detector", subagent_type="general-purpose", model="opus",
+Agent(name="ai-slop-detector", subagent_type="general-purpose", model="opus",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 5 prompt from discovery-agents.md]")
 
-Task(name="complexity-auditor", subagent_type="general-purpose", model="sonnet",
+Agent(name="complexity-auditor", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 6 prompt from discovery-agents.md]")
 
-Task(name="documentation-auditor", subagent_type="general-purpose", model="sonnet",
+Agent(name="documentation-auditor", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 7 prompt from discovery-agents.md]")
 ```
@@ -261,7 +261,7 @@ This frees resources before Phase 3 implementation agents are spawned.
 Spawn a single `synthesis-planner` teammate using opus:
 
 ```
-Task(name="synthesis-planner", subagent_type="general-purpose", model="opus",
+Agent(name="synthesis-planner", subagent_type="general-purpose", model="opus",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Full synthesis instructions below]\n\nRun directory: {run_dir}")
 ```
@@ -444,19 +444,19 @@ Spawn a **single persistent collaborative team** that works through all categori
 Spawn 4 persistent teammates in a single message. They collaborate on each category together:
 
 ```
-Task(name="impl-writer", subagent_type="general-purpose", model="sonnet",
+Agent(name="impl-writer", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the WRITER on the implementation team. You implement fixes from the cleanup plan.\nYour teammates are: impl-qa (reviews your changes), impl-tester (runs tests), impl-docs (updates docs).\n\nWait for the team lead to assign you a category. For each category:\n1. Read the category's findings from {run_dir}/cleanup-plan.md\n2. Apply fixes using the strategies from references/implementation-agents.md\n3. When done with a category, message impl-qa to review your changes\n4. After QA approval and tests pass, commit the category\n5. Message the team lead that the category is complete\n\n[Full implementation agent shared rules from references/implementation-agents.md]")
 
-Task(name="impl-qa", subagent_type="general-purpose", model="opus",
+Agent(name="impl-qa", subagent_type="general-purpose", model="opus",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are QA on the implementation team. You review changes made by impl-writer.\n\nWhen impl-writer messages you that a category is ready for review:\n1. Read the modified files (git diff)\n2. Verify changes match the cleanup plan findings\n3. Check for regressions, broken imports, missing error handling\n4. Use LSP findReferences to verify no callers are broken\n5. If issues found, message impl-writer with specific feedback\n6. If clean, message impl-tester to run the test suite\n\nApply code-review rigor: no assumptions, verify everything.")
 
-Task(name="impl-tester", subagent_type="general-purpose", model="sonnet",
+Agent(name="impl-tester", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the TESTER on the implementation team. You run tests and formatters.\n\nWhen impl-qa messages you that changes are reviewed:\n1. Run the project's test suite (auto-detect: make test / uv run pytest / npm test / etc.)\n2. Run the formatter (make format / uvx ruff format / etc.)\n3. If tests pass: message impl-writer to commit\n4. If tests fail: message impl-writer with the failure details for rollback\n\nAuto-detect test commands from Makefile, pyproject.toml, or package.json.")
 
-Task(name="impl-docs", subagent_type="general-purpose", model="sonnet",
+Agent(name="impl-docs", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Follow docs-sync patterns: match existing style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nDo NOT create new documentation files. Only update existing ones.")
 ```
@@ -545,7 +545,7 @@ Categories execute sequentially because:
 Run the complete test suite one final time. This catches any cross-category regressions that individual category tests might miss.
 
 ```
-Task(name="final-verification", subagent_type="dev-essentials:test-runner",
+Agent(name="final-verification", subagent_type="dev-essentials:test-runner",
      prompt="Run the full test suite. Report all pass/fail results.")
 ```
 
@@ -568,7 +568,7 @@ git diff --name-only $(git merge-base HEAD main)..HEAD
 Spawn a code quality review agent:
 
 ```
-Task(name="quality-review", subagent_type="general-purpose",
+Agent(name="quality-review", subagent_type="general-purpose",
      prompt="Review these files for code quality issues introduced during cleanup:\n<file list>\n\nCheck for:\n- Broken imports after dead code removal\n- Inconsistent naming after duplicate consolidation\n- Missing error handling after simplification\n- Incomplete refactoring (half-done changes)")
 ```
 

@@ -70,9 +70,21 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
   "global_risks": ["string — risks affecting the whole implementation"],
   "data_model_changes": "string | null — description of schema/model changes, or null",
   "api_changes": "string | null — description of public API surface changes, or null",
-  "questions": ["string — open questions requiring user decision before implementation begins"]
+  "questions": ["string — open questions requiring user decision before implementation begins"],
+  "speculative_fork_recommended": "boolean | null — true if the architect identifies multiple viable approaches with real trade-offs for one or more components. Omit or null if not applicable.",
+  "speculative_components": ["string — component IDs the architect recommends for speculative fork (only present when speculative_fork_recommended is true)"],
+  "competing_approaches": [
+    {
+      "approach_id": "string",
+      "description": "string — what this approach does differently",
+      "trade_offs": "string — what it gains and sacrifices",
+      "recommended": "boolean — architect's preference"
+    }
+  ]
 }
 ```
+
+**Note:** `competing_approaches` is optional. When present, each entry provides structured metadata for speculative competitors. `speculative_fork_recommended` is the boolean trigger; `competing_approaches` provides the per-approach detail.
 
 **Note:** If `pipeline_feasible` is `false`, the Lead runs Phase 3 in sequential mode using the
 same agents and protocol — just no parallelism. See `references/pipeline-model.md`.
@@ -128,6 +140,31 @@ Written by the Phase 2.5 security-design agent to `{run_dir}/security-design-rev
 ## Pipeline Handoff Schemas
 
 These schemas cover every message exchanged during Phase 3 pipeline execution.
+
+### ContextAcknowledgment (Agent → Lead)
+
+Sent by a pipeline agent immediately upon receiving a ComponentAssignment. The Lead waits for
+this acknowledgment before marking the component as "in progress." This confirms the agent
+received its assignment and is ready to begin work.
+
+```json
+{
+  "schema": "ContextAcknowledgment",
+  "component_id": "string — matches the assigned component",
+  "agent_role": "string — implementer | reviewer | test-writer | security-design-reviewer",
+  "received": true,
+  "ready": true,
+  "clarifications_needed": ["string — any ambiguities in the assignment (optional, empty if none)"]
+}
+```
+
+**Lead routing:**
+- `clarifications_needed` is empty → mark component as "in progress," agent begins work immediately.
+- `clarifications_needed` is non-empty → Lead answers all clarifications before the agent starts work.
+  Send answers back to the agent via SendMessage before proceeding.
+- No acknowledgment after agent appears idle (2+ minutes with no messages) → Lead re-sends the
+  assignment once. If second attempt also fails, log to `{run_dir}/errors.log` and spawn a
+  replacement agent with the same assignment.
 
 ### ComponentAssignment (Lead → Implementer)
 
@@ -318,6 +355,7 @@ and sends a summary to the Lead.
 | UI Reviewer | UI | UI-001 |
 | API Reviewer | API | API-001 |
 | DB Reviewer | DB | DB-001 |
+| Structural Analyst (Phase 4.5) | STRUCT | STRUCT-001 |
 
 IDs are sequential within each reviewer's output (SEC-001, SEC-002, etc.). The Lead uses these
 IDs when routing findings to the Fixer and when recording disposition in the audit trail.
@@ -558,7 +596,9 @@ hack/swarm/
         ├── performance.json        # Performance reviewer findings (ReviewFindings)
         ├── ui.json                 # UI reviewer findings (if triggered)
         ├── api.json                # API reviewer findings (if triggered)
-        └── db.json                 # DB reviewer findings (if triggered)
+        ├── db.json                 # DB reviewer findings (if triggered)
+        ├── structural-concurrency.json  # Phase 4.5 Concurrency & State analyst findings
+        └── structural-integration.json  # Phase 4.5 Integration & Contract analyst findings
 ```
 
 The Lead resolves `{run_dir}` once in Phase 0 and passes it to all agents in their context
