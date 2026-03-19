@@ -58,8 +58,9 @@ is blocked.
 **CronCreate watchdog:** After spawning competitors, create a CronCreate job with a 60-second
 interval. The watchdog checks `TaskList` for competitor tasks with no recent updates and sends
 a status alert to the lead if any competitor has been idle for 2+ consecutive checks. The
-watchdog monitors — it does NOT intervene directly. CronDelete the watchdog when Phase 1
-completes (all competitors have submitted ImplementationResults).
+watchdog monitors — it does NOT intervene directly. CronDelete the watchdog before
+transitioning to Phase 2, including when all competitors fail or are timed out. Delete on all
+paths — never leave orphaned cron jobs at phase boundaries.
 
 **Completion:** Each competitor writes its `ImplementationResult` to
 `{run_dir}/implementations/competitor-{id}.json` and signals completion via SendMessage.

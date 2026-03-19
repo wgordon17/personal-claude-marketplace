@@ -168,6 +168,10 @@ If the user picks one approach directly, skip /speculative and continue to Phase
 **Scope:** Only the contested component(s) go through the speculative fork. Uncontested
 components proceed directly to Phase 3 without waiting (if pipeline-feasible).
 
+**Watchdog:** CronDelete the Phase 2.7 watchdog after all competitors complete (or are timed
+out/failed) and before merging the winning approach back into architect-plan.json. Delete on
+all paths including abort — never leave orphaned cron jobs at phase boundaries.
+
 **Escalation:** If the judge recommends hybrid AND the Lead agrees it's genuinely better,
 run Phase 3.5 of the speculative skill (synthesis agent) before continuing to swarm Phase 3.
 Note it in the audit trail.
@@ -249,7 +253,7 @@ and are written to `{run_dir}/reviews/structural-concurrency.json` and
 `{run_dir}/reviews/structural-integration.json`.
 
 **Routing:**
-- Critical/High STRUCT findings follow tuix's escalation routing rules (same as Phase 4)
+- Critical/High STRUCT findings follow the Phase 4 escalation routing rules
 - STRUCT escalations count toward the cumulative `design_escalation_count` cap (max 2 total
   re-implementations before human escalation)
 - STRUCT escalation events are logged to `{run_dir}/escalations.json`
