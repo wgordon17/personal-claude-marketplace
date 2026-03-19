@@ -1812,8 +1812,8 @@ TeamCreate:
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 20 (15 core + 5 optional domain reviewers).
-Minimum agent count: 15 (all domain reviewers skipped).
+Maximum agent count: 22 (17 core + 5 optional domain reviewers).
+Minimum agent count: 17 (all domain reviewers skipped, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.

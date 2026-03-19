@@ -151,7 +151,7 @@ received its assignment and is ready to begin work.
 {
   "schema": "ContextAcknowledgment",
   "component_id": "string — matches the assigned component",
-  "agent_role": "string — implementer | reviewer | test-writer",
+  "agent_role": "string — implementer | reviewer | test-writer | security-design-reviewer",
   "received": true,
   "ready": true,
   "clarifications_needed": ["string — any ambiguities in the assignment (optional, empty if none)"]

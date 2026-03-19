@@ -1,7 +1,7 @@
 ---
 name: map-reduce
 description: Parallelized workload processing with structured chunking, mapper agents, and reducer synthesis. Use for codebase-wide analysis, bulk transformations, and large file audits (20+ files).
-allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet]
 ---
 
 # /map-reduce — Parallelized Workload Processing

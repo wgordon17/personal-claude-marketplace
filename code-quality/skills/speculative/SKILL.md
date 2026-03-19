@@ -70,7 +70,7 @@ the lead sends one status check. If the competitor does not complete within a re
 additional time, the lead marks it as timed-out and proceeds with the results it has. A
 run with 1 of 2 competitors can still proceed — the judge evaluates what it received.
 
-**Failed competitor:** If a competitor sends a `ImplementationResult` with `status: "failed"`,
+**Failed competitor:** If a competitor sends an `ImplementationResult` with `status: "failed"`,
 the lead records the failure, CronDeletes the watchdog, and proceeds with remaining results.
 If ALL competitors fail, escalate to the user via `AskUserQuestion` before continuing.
 
