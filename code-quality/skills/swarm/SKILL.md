@@ -490,7 +490,7 @@ After escalation, wait for user input before proceeding.
 | Code-Simplifier | Fixer made no changes in Phase 5 |
 | Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
 | /unfuck sweep | Fewer than 20 files modified and not an architectural change |
-| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 7 (Verifier) |
+| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
 
 ---
 

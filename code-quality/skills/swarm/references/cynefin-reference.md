@@ -224,9 +224,11 @@ solvable as stated?
 | Phase 1: Clarify & Checkpoint | Yes | Confirm scope is truly bounded. |
 | Phase 2: Architect | Yes | Can be short. Single-pass decomposition. |
 | Phase 2.5: Security Design Review | Optional | Skip unless auth/data/external API is involved. |
+| Phase 2.7: Speculative Fork | Skip | Overhead exceeds value for Clear-domain tasks. |
 | Phase 3: Pipelined Implementation | Yes | Standard pipeline. |
 | Phase 4: Parallel Review | Yes | Standard. |
-| Phase 5: Fix & Simplify | Conditional | Only if Phase 4 finds critical/high issues. |
+| Phase 4.5: Structural Design Review | Yes | Always runs. |
+| Phase 5: Fix & Simplify | Conditional | Only if Phase 4/4.5 finds critical/high issues. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Standard. Quality-gate invoked here. |
 
@@ -238,9 +240,11 @@ solvable as stated?
 | Phase 1: Clarify & Checkpoint | Yes | Confirm scope and identify expert needs. |
 | Phase 2: Architect | Yes | Full decomposition with dependency graph. |
 | Phase 2.5: Security Design Review | Conditional | Mandatory if auth/data/external API involved. |
+| Phase 2.7: Speculative Fork | Conditional | Recommended when architect identifies competing approaches. |
 | Phase 3: Pipelined Implementation | Yes | Standard pipeline. Parallel where possible. |
 | Phase 4: Parallel Review | Yes | Standard. May require domain expert reviewer. |
-| Phase 5: Fix & Simplify | Conditional | Only if Phase 4 finds critical/high issues. |
+| Phase 4.5: Structural Design Review | Yes | Always runs. |
+| Phase 5: Fix & Simplify | Conditional | Only if Phase 4/4.5 finds critical/high issues. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Standard. Quality-gate invoked here. |
 
@@ -252,9 +256,11 @@ solvable as stated?
 | Phase 1: Clarify & Checkpoint | Yes | Flag complexity. Set probe objectives. |
 | Phase 2: Architect | Yes | Probe design output, not full plan. Define signals. |
 | Phase 2.5: Security Design Review | Yes | Always mandatory for Complex tasks. |
+| Phase 2.7: Speculative Fork | Recommended | Complex-domain tasks benefit most from speculative execution. |
 | Phase 3: Pipelined Implementation | Yes | Smaller components. Explicit checkpoints between. |
 | Phase 4: Parallel Review | Yes | Reviewer assesses probe results, not just correctness. |
-| Phase 5: Fix & Simplify | Conditional | Only if Phase 4 finds critical/high issues. |
+| Phase 4.5: Structural Design Review | Yes | Always runs. Probe results may reveal structural issues. |
+| Phase 5: Fix & Simplify | Conditional | Only if Phase 4/4.5 finds critical/high issues. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Quality-gate invoked here. Include re-classification assessment. |
 
@@ -266,8 +272,10 @@ solvable as stated?
 | Phase 1: Clarify & Checkpoint | Yes | Identify stabilization target. |
 | Phase 2: Architect | Yes | Stabilization brief only. No full decomposition. |
 | Phase 2.5: Security Design Review | Deferred | Resume after stabilization. |
+| Phase 2.7: Speculative Fork | Skip | Crisis mode — no time for competing implementations. |
 | Phase 3: Pipelined Implementation | Yes | Single implementer. Stabilization action only. |
 | Phase 4: Parallel Review | Yes | Lightweight. Verify stabilization works. |
+| Phase 4.5: Structural Design Review | Yes | Always runs. Stabilization may introduce structural issues. |
 | Phase 5: Fix & Simplify | Conditional | Standard. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Quality-gate invoked here. Must re-classify domain after stabilization. |
@@ -280,7 +288,8 @@ solvable as stated?
 | Phase 1: Clarify & Checkpoint | Yes | Identify what information is missing. |
 | Phase 2: Architect | Yes | Investigation plan, not implementation plan. |
 | Phase 2.5: Security Design Review | Deferred | Re-evaluate after classification. |
-| Phase 3-7 | Conditional | Only after domain is determined. Follow phase map for determined domain. |
+| Phase 2.7: Speculative Fork | Deferred | Re-evaluate after classification. |
+| Phase 3-7 (incl. 4.5) | Conditional | Only after domain is determined. Follow phase map for determined domain. |
 
 ---
 
