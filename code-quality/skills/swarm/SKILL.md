@@ -287,7 +287,7 @@ Spawn the Docs agent (**sonnet model** — documentation requires judgment about
 and what's changed) with the full list of modified files, a summary of what changed, and the
 architect's `documentation_impact` array from `architect-plan.json`.
 
-The Docs agent performs two passes:
+The Docs agent performs three passes:
 
 **Pass 1: Architect-guided updates** — Work through each entry in `documentation_impact`:
 - For each affected documentation surface, read the current state and update it
@@ -302,6 +302,10 @@ The Docs agent performs two passes:
   vs skills listed in README table — they must match)
 - Grep for stale references to renamed/removed features
 - Verify component counts, descriptions, and cross-references are internally consistent
+
+**Pass 3: Changed-file documentation** — For each file modified in the swarm, check if
+corresponding documentation needs updating (README behavior descriptions, API docs, config docs,
+CONTRIBUTING.md). Update only what is directly affected.
 
 The Docs agent also detects the project's memory directory (`hack/`, `.local/`, `scratch/`,
 `.dev/`) and updates PROJECT.md with architectural decisions, TODO.md with completed and new

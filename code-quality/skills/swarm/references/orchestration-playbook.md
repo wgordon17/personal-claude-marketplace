@@ -807,7 +807,7 @@ reason, always CronDelete before transitioning to the next phase or stopping.
 
 ### Step 3.1: Spawn Persistent Pipeline Team
 
-Spawn ALL 4 pipeline agents in a SINGLE message (4 parallel Task calls). They persist through all
+Spawn ALL 4 pipeline agents in a SINGLE message (4 parallel Agent calls). They persist through all
 components — do NOT shut them down between components. Also spawn the Architect in this same batch
 (it was already running from Phase 2, remaining on standby).
 
@@ -1458,9 +1458,9 @@ Agent(name="docs", subagent_type="general-purpose", model="sonnet",
             "DOCUMENTATION IMPACT (from architect):\n<documentation_impact JSON>")
 ```
 
-### Step 6.2: Docs Agent Two-Pass Protocol
+### Step 6.2: Docs Agent Three-Pass Protocol
 
-The Docs agent performs two passes:
+The Docs agent performs three passes:
 
 **Pass 1 (Architect-guided):** Works through each entry in `documentation_impact` from the
 architect's plan. For each surface, reads the current state and updates it — adding new

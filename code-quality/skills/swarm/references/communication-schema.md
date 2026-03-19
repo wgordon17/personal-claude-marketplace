@@ -91,6 +91,8 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
 }
 ```
 
+**Note:** `documentation_impact` is required. Set to `[]` if no documentation surfaces are affected — do not omit.
+
 **Note:** `competing_approaches` is optional. When present, each entry provides structured metadata for speculative competitors. `speculative_fork_recommended` is the boolean trigger; `competing_approaches` provides the per-approach detail.
 
 **Note:** If `pipeline_feasible` is `false`, the Lead runs Phase 3 in sequential mode using the

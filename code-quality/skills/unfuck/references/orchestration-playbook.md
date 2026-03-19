@@ -154,7 +154,7 @@ Store this context string for use in Phase 1.
 
 ## Phase 1: Discovery (7 Parallel Teammates)
 
-Spawn **ALL 7 agents** as TeamCreate teammates in a **single message** (7 parallel Task calls). Every agent MUST be spawned — do not skip agents based on earlier runs or existing discovery files. If previous results exist from an earlier run, the orchestrator should mention them in the agent prompt as prior context, but the agent must still perform its own fresh analysis.
+Spawn **ALL 7 agents** as TeamCreate teammates in a **single message** (7 parallel Agent calls). Every agent MUST be spawned — do not skip agents based on earlier runs or existing discovery files. If previous results exist from an earlier run, the orchestrator should mention them in the agent prompt as prior context, but the agent must still perform its own fresh analysis.
 
 Each teammate runs in its own independent context window, writes its JSON findings to disk, and sends a brief summary to the team lead via `SendMessage`. This avoids context pressure on the orchestrator — the orchestrator never calls `TaskOutput` or reads full agent transcripts.
 
@@ -178,7 +178,7 @@ Each teammate runs in its own independent context window, writes its JSON findin
 
 ### Launching Pattern
 
-In a single message, issue 7 parallel Task calls with `team_name` to spawn as teammates:
+In a single message, issue 7 parallel Agent calls with `team_name` to spawn as teammates:
 
 ```
 Agent(name="dead-code-hunter", subagent_type="general-purpose", model="sonnet",

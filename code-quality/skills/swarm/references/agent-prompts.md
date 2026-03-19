@@ -184,14 +184,16 @@ Write your plan to `{run_dir}/architect-plan.json` using the Architect Plan Sche
 `domain_justification`, `goal`, `components` (each with `id`, `name`, `description`,
 `files_to_create`, `files_to_modify`, `dependencies`, `implementation_order`,
 `testing_strategy`, `risks`, `estimated_complexity`), `component_dependency_graph`,
-`pipeline_feasible`, `pipeline_notes`, `global_risks`, `data_model_changes`, `api_changes`.
+`pipeline_feasible`, `pipeline_notes`, `global_risks`, `data_model_changes`, `api_changes`,
+`documentation_impact`.
 
 Additionally include these fields for lead routing:
-- `documentation_impact`: array of `{surface, action, reason}` — identify which documentation
-  surfaces (READMEs, manifests, registries, component tables, dependency matrices) need updating
-  as a result of this implementation. The Docs agent in Phase 6 uses this to drive documentation
-  updates. Check for: new features needing README entries, removed features leaving stale docs,
-  changed component counts, manifest descriptions that will need updating.
+- `documentation_impact`: array of `{surface, action, reason}` — **required**. Identify which
+  documentation surfaces (READMEs, manifests, registries, component tables, dependency matrices)
+  need updating as a result of this implementation. The Docs agent in Phase 6 uses this to drive
+  documentation updates. Check for: new features needing README entries, removed features leaving
+  stale docs, changed component counts, manifest descriptions that will need updating. If no
+  documentation surfaces are affected, set to an empty array `[]` — do not omit the field.
 - `questions`: array of strings — any open questions that need user input before implementation
 - `speculative_fork_recommended`: boolean (optional) — set to `true` if you identify multiple
   genuinely viable implementation approaches for one or more components where the trade-offs
