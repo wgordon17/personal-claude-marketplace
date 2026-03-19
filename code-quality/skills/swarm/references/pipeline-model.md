@@ -337,6 +337,7 @@ Single agent, shut down after it sends `VerificationResult`.
 | 0 | Lead only | 1 |
 | 1 | Lead only | 1 |
 | 2 | Architect | 2 |
+| 2.5 | Security Design Reviewer | 2 |
 | 3 | Architect (standby) + Implementer, Reviewer, Test-Writer, Test-Runner | 6 (5 + Lead) |
 | 4 | Security, QA, Code-Reviewer, Performance (+ optionals) | 5-10 + Lead |
 | 5 | Fixer, then Code-Simplifier | 2 + Lead |

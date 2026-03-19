@@ -36,7 +36,47 @@ This skill activates when:
 
 ## Phase 0: Assess
 
-Before starting the full workflow, assess whether planning is needed and at what depth.
+Before starting the full workflow, classify the task domain and assess planning depth.
+
+### Cynefin Classification
+
+Classify the task using this decision tree:
+
+```
+Are there documented best practices that clearly apply, and any competent
+engineer would reach the same answer?
+  YES → Clear: Apply best practice. Straightforward execution.
+
+Is the situation in active failure/crisis mode requiring immediate action?
+  YES → Chaotic: Stabilize first. Defer analysis.
+
+Do you have enough information to define the problem space at all?
+  NO  → Disorder: Gather information first. Probe as Complex.
+
+Can expert analysis determine the correct approach (even if multiple
+valid approaches exist)?
+  YES → Complicated: Full analysis. Expert decomposition.
+
+Are outcomes uncertain even after analysis? Does the solution space feel
+unbounded, or do experts disagree on whether the problem is solvable as stated?
+  YES → Complex: Probe design. Smaller iterations. More checkpoints.
+```
+
+**Domain summaries:**
+- **Clear** — Known cause→effect. Best practice exists. No meaningful uncertainty.
+- **Complicated** — Discoverable through analysis. Multiple valid approaches, one best answer.
+- **Complex** — Cause→effect only visible in retrospect. Emergent behavior. Probe first.
+- **Chaotic** — No discernible pattern. Stabilize immediately. Analyze after.
+- **Disorder** — Unknown which domain applies. Probe as Complex until classified.
+
+**Chat output (required):**
+> "Cynefin domain: [X]. Justification: [one sentence explaining the classification]."
+
+Classification feeds into depth assessment below but does not override it. If Phase 1
+exploration reveals the task belongs to a different domain, update the classification and
+state it explicitly: "Reclassifying to [domain] because [reason]."
+
+### Depth Assessment
 
 **Decision matrix:**
 
@@ -61,6 +101,9 @@ specific questions — not generic ones.
 
 - Launch an **Explore agent** (`Task` with `subagent_type: "Explore"`) for relevant codebase areas
 - Read `hack/PROJECT.md` (or equivalent memory file) for past architectural decisions
+- Read `hack/LESSONS.md` for relevant past lessons (if exists). Silently incorporate applicable
+  lessons — especially Architecture and Planning categories — into your approach without
+  announcing each one. Do not quote lessons verbatim in chat.
 - Search **claude-mem** MCP for relevant past work, decisions, and learnings
 - Use **Serena** MCP `get_symbols_overview` for component-level understanding (if applicable)
 - Use **sequential-thinking** MCP to reason about scope boundaries
@@ -181,8 +224,29 @@ Announce the location: "Plan file: `hack/plans/2026-02-15-session-auth.md`"
 
 #### 1. Write the Header
 
-Write the plan file with a header containing: goal (1 sentence), architecture summary
-(2-3 sentences), tech stack, and key decisions from Phase 2.
+Write the plan file with a header containing:
+
+**Always include (light and full planning):**
+- **Goal** — 1 sentence
+- **Cynefin Domain** — the domain classified in Phase 0
+- **Domain Justification** — 2-4 sentences explaining why this domain applies and what that
+  means for the plan (e.g., whether a probe is needed, whether outcomes are predictable)
+- **Architecture Summary** — 2-3 sentences
+- **Tech Stack**
+- **Key Decisions** — from Phase 2
+
+**The following header sections apply to full planning only (skip for light planning):**
+- **Options Considered** — for architecture-level plans, list the alternatives evaluated and
+  why they were rejected (1-2 sentences per option). Minimum 2 options if a meaningful choice
+  was made. Omit if the approach was never in question.
+- **Trade-offs Accepted** — what the chosen approach gives up and why that's acceptable
+  (e.g., "Chose X over Y because Z; accepts the risk of W"). One bullet per trade-off.
+  Required for Complicated or Complex domain tasks.
+- **Security Flags** — concerns identified during Phase 1/2/3 that implementation must address.
+  Include mitigations if known. Omit if none identified.
+- **Open Questions** — questions that remain unresolved at plan-write time, each with an owner:
+  - `[human]` — requires user input before or during implementation
+  - `[agent]` — can be resolved by the implementer during execution
 
 **Chat output:** "Wrote plan header. Goal: [1 sentence]. Architecture: [1 sentence]."
 

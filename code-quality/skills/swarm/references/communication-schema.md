@@ -39,6 +39,8 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
 
 ```json
 {
+  "cynefin_domain": "Clear | Complicated | Complex | Chaotic | Disorder",
+  "domain_justification": "string — 2-4 sentences explaining the classification and its implications for how the pipeline should run",
   "goal": "string — one-sentence description of what this implementation achieves",
   "components": [
     {
@@ -77,6 +79,49 @@ same agents and protocol — just no parallelism. See `references/pipeline-model
 
 **Note:** If `questions` is non-empty, the Lead MUST present every question to the user via
 `AskUserQuestion` before proceeding to Phase 3. Do NOT start implementation with unresolved questions.
+
+---
+
+## Security Design Review Schema
+
+Written by the Phase 2.5 security-design agent to `{run_dir}/security-design-review.json`.
+
+```json
+{
+  "schema": "SecurityDesignReview",
+  "reviewer": "security-design",
+  "timestamp": "string — ISO 8601 datetime",
+  "iteration": "integer — 1 for first review, 2 for re-review after architect revision",
+  "threat_surface": {
+    "new_attack_vectors": ["string — new attack surfaces introduced by the proposed design"],
+    "modified_trust_boundaries": ["string — trust boundaries changed by the proposed design"],
+    "exposed_data_flows": ["string — sensitive data flows added or modified"]
+  },
+  "stride_findings": [
+    {
+      "category": "Spoofing | Tampering | Repudiation | InformationDisclosure | DenialOfService | ElevationOfPrivilege",
+      "severity": "critical | high | medium | low",
+      "component_id": "string — affected component ID from architect plan",
+      "description": "string — threat description",
+      "mitigation": "string — recommended mitigation"
+    }
+  ],
+  "security_constraints": [
+    {
+      "constraint": "string — security requirement the implementer must respect",
+      "rationale": "string — why this constraint exists",
+      "applies_to": ["string — component IDs this constraint applies to"]
+    }
+  ],
+  "verdict": "proceed | revise | escalate",
+  "verdict_rationale": "string — justification for the verdict"
+}
+```
+
+**Verdict semantics:**
+- `proceed` — No Critical or High findings. Security constraints (if any) are appended to architect-plan.json and the pipeline continues.
+- `revise` — Critical or High findings require architect plan revision before implementation. Lead routes findings back to Architect.
+- `escalate` — Unresolvable Critical findings after 2 Architect↔Security iterations. Lead escalates to human via AskUserQuestion.
 
 ---
 

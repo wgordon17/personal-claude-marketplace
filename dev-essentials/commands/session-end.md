@@ -35,6 +35,7 @@ Read all markdown files in the memory directory to understand what's already doc
 | Future tasks/todos | TODO.md | SESSIONS.md, NEXT.md |
 | What was done (3-5 bullets) | SESSIONS.md | - |
 | Next direction pointer | NEXT.md | - |
+| Principle-level lessons | LESSONS.md | PROJECT.md, SESSIONS.md |
 
 ---
 
@@ -133,6 +134,34 @@ Or choose from:
 
 ---
 
+## Step 3.5: Extract Lessons
+
+After updating memory files, scan the session for lessons worth capturing:
+
+**What to look for:**
+- Human corrections ("that's wrong", "actually...", "no, use X instead")
+- Rejected approaches (tried X, didn't work, switched to Y)
+- Feedback patterns (repeated similar feedback across tasks)
+- Surprises (things that behaved differently than expected)
+- Tool or process improvements discovered during the session
+
+**Extraction process:**
+1. Identify principle-level patterns (not implementation-specific details)
+2. Format as: `- [Category] Pattern → What to do differently → Why it matters (YYYY-MM-DD)`
+3. Check existing `hack/LESSONS.md` for duplicates or contradictions
+4. If contradicting an existing lesson, mark the old one `[SUPERSEDED by YYYY-MM-DD]`
+5. Append new lessons to the `## Active` section of `hack/LESSONS.md`
+6. If `hack/LESSONS.md` doesn't exist, create it with the Active and Archived sections
+
+**Context compaction note:** In long sessions, early human corrections may be compacted
+out of context. If the session was long, ask the user:
+"Were there corrections or feedback I should capture as lessons? My context may not include the full session."
+
+**Skip when:** Session was pure Q&A with no corrections, no rejected approaches, and no
+surprising discoveries.
+
+---
+
 ## Step 4: Determine Next Focus
 
 After updating TODO.md, determine what NEXT.md should contain:
@@ -173,6 +202,7 @@ Files updated:
 - TODO.md: [X tasks completed, Y new tasks added]
 - SESSIONS.md: [today's summary added]
 - NEXT.md: [next focus set]
+- LESSONS.md: [N new lessons captured | no new lessons]
 
 Next session focus:
 [From NEXT.md]

@@ -29,6 +29,9 @@ Check for existing memory directories in this order:
 - `NEXT.md` — Immediate focus for this session
 - `PROJECT.md` — Project knowledge (overview, architecture, decisions, gotchas)
 - `WORK_ETHIC.md` — Agent behavior rules (if exists)
+- `LESSONS.md` — Past lessons and patterns (if exists; silently incorporate relevant ones)
+
+Do NOT recite lessons back to the user. Silently incorporate applicable lessons into your approach.
 
 **DO NOT read at startup:**
 - `TODO.md` — Only consult when user asks "what else to work on"
