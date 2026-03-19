@@ -116,8 +116,26 @@ _COMPLETION_CLAIM_PATTERNS = [
     ),
 ]
 
-# Research tool names
+# Research tool names (native)
 _RESEARCH_TOOLS = frozenset({"WebSearch", "WebFetch"})
+
+# MCP prefixes where ALL tools under the server count as research
+_RESEARCH_MCP_PREFIXES: tuple[str, ...] = ("mcp__context7__",)
+
+# Selective MCP tools that count as research (upstream/external verification only).
+# Uses full tool names (mcp__...) to match transcript entries directly, unlike
+# MCP_READ_ONLY which uses server-qualified keys via mcp_key().
+_RESEARCH_MCP_TOOLS = frozenset(
+    {
+        "mcp__plugin_github-mcp_github__search_code",
+        "mcp__plugin_github-mcp_github__get_file_contents",
+        "mcp__plugin_github-mcp_github__get_latest_release",
+        "mcp__plugin_github-mcp_github__get_release_by_tag",
+        "mcp__plugin_github-mcp_github__get_commit",
+        "mcp__plugin_github-mcp_github__search_repositories",
+        "mcp__plugin_github-mcp_github__github_support_docs_search",
+    }
+)
 
 
 # ── State Management ─────────────────────────────────────────────────────────
@@ -425,8 +443,13 @@ def _detect_completion_claim(message: str | None) -> bool:
 
 
 def _detect_research_tools(tool_calls: list[str]) -> bool:
-    """Return True if any research tool was used."""
-    return any(tc in _RESEARCH_TOOLS for tc in tool_calls)
+    """Return True if any research tool was used (native, MCP prefix, or selective MCP)."""
+    for tc in tool_calls:
+        if tc in _RESEARCH_TOOLS or tc in _RESEARCH_MCP_TOOLS:
+            return True
+        if any(tc.startswith(p) for p in _RESEARCH_MCP_PREFIXES):
+            return True
+    return False
 
 
 def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:

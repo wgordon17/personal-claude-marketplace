@@ -149,8 +149,12 @@ def _build_prompt(ctx: dict) -> str:
     if work_type in ("research", "mixed") or "research" in trigger_reasons:
         criteria.append(
             "VERIFICATION: Were factual claims, API schemas, or technical recommendations "
-            "backed by primary source research (WebSearch/WebFetch), or stated from memory? "
-            "Flag unverified specific claims."
+            "backed by primary source research (WebSearch/WebFetch, Context7 docs, "
+            "GitHub code search/file contents), or stated from memory? "
+            "Look for specificity markers that indicate genuine research use: exact version "
+            "numbers, API signatures, specific behavior descriptions, or quoted passages. "
+            "Generic claims that could come from training data alone — despite research "
+            "tools being available — suggest the tools were called but results ignored."
         )
 
     if work_type in ("question",) or "completion_claim" in trigger_reasons:

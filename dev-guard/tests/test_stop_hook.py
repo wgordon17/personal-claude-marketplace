@@ -322,6 +322,80 @@ class TestExitWithGuidance:
             or "research done" in result.stdout.lower()
         )
 
+    def test_context7_mcp_counts_as_research(self, tmp_path):
+        """Context7 MCP tool (prefix match) triggers research guidance."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Check the latest API for this library."},
+            {"type": "tool_use", "name": "mcp__context7__query-docs", "id": "t1"},
+            {"role": "assistant", "content": "Here are the docs."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="Here are the docs.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        assert (
+            "verify external claims" in result.stdout.lower()
+            or "research done" in result.stdout.lower()
+        )
+
+    def test_github_mcp_search_code_counts_as_research(self, tmp_path):
+        """Selective GitHub MCP tool triggers research guidance."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Find how upstream handles auth."},
+            {"type": "tool_use", "name": "mcp__plugin_github-mcp_github__search_code", "id": "t1"},
+            {"role": "assistant", "content": "Found the pattern."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="Found the pattern.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        assert (
+            "verify external claims" in result.stdout.lower()
+            or "research done" in result.stdout.lower()
+        )
+
+    def test_github_mcp_list_issues_not_research(self, tmp_path):
+        """Non-research GitHub MCP tool (list_issues) does NOT trigger research guidance."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Check my open issues."},
+            {"type": "tool_use", "name": "mcp__plugin_github-mcp_github__list_issues", "id": "t1"},
+            {"role": "assistant", "content": "You have 3 open issues."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="You have 3 open issues.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        # Should NOT get research guidance — this is project management, not research
+        assert "verify external claims" not in result.stdout.lower()
+        assert "research done" not in result.stdout.lower()
+
     def test_read_only_factual_question_guidance_message(self, tmp_path):
         """Read tool + factual question → prints guidance to stdout."""
         transcript = tmp_path / "transcript.jsonl"

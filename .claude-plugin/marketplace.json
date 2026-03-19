@@ -66,7 +66,7 @@
     },
     {
       "name": "dev-guard",
-      "version": "1.40.1",
+      "version": "1.41.0",
       "source": "./dev-guard",
       "description": "Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard, trust management, oc/kubectl introspection",
       "category": "quality",
@@ -77,9 +77,9 @@
     },
     {
       "name": "code-quality",
-      "version": "2.7.0",
+      "version": "2.8.0",
       "source": "./code-quality",
-      "description": "Code quality agents and skills: architecture, security, QA, performance review plus file-audit, bug-investigation, unfuck, and swarm orchestration",
+      "description": "Code quality agents and skills: architecture, security, QA, performance review plus file-audit, bug-investigation, unfuck, swarm orchestration, quality-gate, map-reduce, and speculative",
       "category": "quality",
       "tags": ["agents", "architecture", "security", "qa", "performance", "audit"],
       "author": {
@@ -88,7 +88,7 @@
     },
     {
       "name": "dev-essentials",
-      "version": "1.2.1",
+      "version": "1.3.0",
       "source": "./dev-essentials",
       "description": "Essential development utilities: LSP navigation, uv-python enforcement, test execution, incremental planning, and session management",
       "category": "productivity",
