@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Architecture, security, QA, and performance agents with audit and orchestration skills | 4 agents, 6 skills | [README](code-quality/README.md) |
+| code-quality | Architecture, security, QA, and performance agents with audit and orchestration skills | 4 agents, 9 skills | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -33,6 +33,9 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/bug-investigation` - PROACTIVE interactive bug hunting with background agents
 - `/unfuck` - Comprehensive one-shot repo cleanup
 - `/swarm` - Full agent team implementation via TeamCreate
+- `/quality-gate` - PROACTIVE multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates
+- `/map-reduce` - Parallelized workload processing with chunking, mapper agents, and reducer synthesis
+- `/speculative` - Competing implementations in isolated worktrees with judge selection
 
 ### Development Essentials
 
@@ -239,7 +242,7 @@ Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** =
 
 | Plugin | code-quality | dev-essentials | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | SuperClaude |
 |--------|-------------|---------------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|-------------|
-| **code-quality** | -- | HARD | soft | HARD | -- | -- | -- | soft | -- | -- | HARD |
+| **code-quality** | -- | HARD | soft | HARD | -- | -- | -- | soft | -- | -- | soft |
 | **dev-essentials** | HARD | -- | HARD | -- | soft | soft | soft | soft | soft | -- | soft |
 | **git-tools** | -- | -- | -- | soft | -- | -- | -- | HARD | HARD | HARD | -- |
 | **dev-guard** | -- | -- | -- | -- | -- | -- | -- | HARD | -- | -- | -- |

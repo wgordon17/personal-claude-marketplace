@@ -44,7 +44,7 @@ specialist agent.
 | 4.5 | Structural Analyst (×2) | general-purpose | opus | No | Adversarial structural design review |
 | 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
 | 5 | Code-Simplifier | code-simplifier:code-simplifier | sonnet | Yes | Post-fix simplification pass |
-| 6 | Docs | general-purpose | haiku | Yes | Update repo docs and hack/ memory |
+| 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |
 | 7 | Verifier | dev-essentials:test-runner | haiku | No | Final test suite + lint verification |
 
@@ -102,7 +102,10 @@ run. The Lead reads the classification to inform Phase 2.5 skip decisions.
 
 Output is a structured JSON plan written to `hack/swarm/YYYY-MM-DD/architect-plan.json`
 (see schema in `references/communication-schema.md`). The architect also identifies global risks,
-data model changes, and API surface changes. After receiving the plan, the Lead MUST:
+data model changes, API surface changes, and **documentation impact** — a `documentation_impact`
+array listing which documentation surfaces are affected and why (READMEs, manifests, registries,
+component tables, descriptions, dependency matrices, user-facing docs). This array feeds Phase 6.
+After receiving the plan, the Lead MUST:
 
 1. Read `architect-plan.json` and check the `questions` array
 2. If `questions` is non-empty, present EVERY question to the user via `AskUserQuestion`
@@ -280,11 +283,34 @@ Re-run affected tests after any fixes to confirm nothing regressed.
 
 ### Phase 6: Docs & Memory
 
-Spawn the Docs agent with the full list of modified files and a summary of what changed. The Docs
-agent updates affected README files, API documentation, and inline docs. It also detects the
-project's memory directory (`hack/`, `.local/`, `scratch/`, `.dev/`) and updates PROJECT.md with
-architectural decisions, TODO.md with completed and new items, and SESSIONS.md with a 3-5 bullet
-summary. Only update documentation that is actually affected by the implementation.
+Spawn the Docs agent (**sonnet model** — documentation requires judgment about what's user-facing
+and what's changed) with the full list of modified files, a summary of what changed, and the
+architect's `documentation_impact` array from `architect-plan.json`.
+
+The Docs agent performs two passes:
+
+**Pass 1: Architect-guided updates** — Work through each entry in `documentation_impact`:
+- For each affected documentation surface, read the current state and update it
+- If a new feature/skill/command/agent was added: add entries to README tables, update component
+  counts, add to plugin manifest descriptions, add to marketplace registry descriptions
+- If a feature was removed/renamed: remove or update all references across all doc surfaces
+- If dependencies changed: update dependency matrices and requirements sections
+
+**Pass 2: Discovery-based completeness check** — Independent of the architect's list:
+- Glob for all documentation surfaces (READMEs, manifests, registries, CONTRIBUTING.md)
+- Compare on-disk components against documented components (e.g., count skills in `skills/*/SKILL.md`
+  vs skills listed in README table — they must match)
+- Grep for stale references to renamed/removed features
+- Verify component counts, descriptions, and cross-references are internally consistent
+
+The Docs agent also detects the project's memory directory (`hack/`, `.local/`, `scratch/`,
+`.dev/`) and updates PROJECT.md with architectural decisions, TODO.md with completed and new
+items, and SESSIONS.md with a 3-5 bullet summary.
+
+**Skip conditions for Phase 6 docs (memory updates always run):**
+Only skip documentation updates for purely internal refactors with no public API, documented
+behavior, feature, or component changes. When in doubt, run the docs pass — the cost of a
+no-op docs check is low; the cost of missing documentation is high.
 
 After the Docs agent completes, spawn a separate **Lessons Extractor** agent (sonnet model). This
 agent scans the swarm run's audit trail and extracts principle-level lessons to `hack/LESSONS.md`
@@ -523,8 +549,8 @@ specific skills directly.
 | Model | Cost | Used For |
 |-------|------|---------|
 | opus | Expensive | Architect, Reviewer, Security, QA — judgment-heavy tasks |
-| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier, Lessons Extractor |
-| haiku | Cheap | Test-Runner, Docs, Verifier — execution-only tasks |
+| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier, Lessons Extractor, Docs |
+| haiku | Cheap | Test-Runner, Verifier — execution-only tasks |
 
 Minimize opus usage to the phases where nuanced judgment is genuinely required.
 

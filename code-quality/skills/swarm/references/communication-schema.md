@@ -71,6 +71,13 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
   "data_model_changes": "string | null — description of schema/model changes, or null",
   "api_changes": "string | null — description of public API surface changes, or null",
   "questions": ["string — open questions requiring user decision before implementation begins"],
+  "documentation_impact": [
+    {
+      "surface": "string — documentation surface affected (e.g., 'code-quality/README.md', 'plugin.json', 'marketplace.json', 'root README.md')",
+      "action": "add | update | remove",
+      "reason": "string — why this surface needs updating (e.g., 'new skill added but not listed in skill table')"
+    }
+  ],
   "speculative_fork_recommended": "boolean | null — true if the architect identifies multiple viable approaches with real trade-offs for one or more components. Omit or null if not applicable.",
   "speculative_components": ["string — component IDs the architect recommends for speculative fork (only present when speculative_fork_recommended is true)"],
   "competing_approaches": [

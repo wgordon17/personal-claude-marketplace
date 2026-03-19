@@ -316,7 +316,7 @@ before Phase 6.
 
 ```
 Lead spawns sequentially:
-  docs               (general-purpose, haiku)   -- updates docs and hack/ memory
+  docs               (general-purpose, sonnet)  -- updates docs and hack/ memory
   lessons-extractor  (general-purpose, sonnet)  -- extracts principle-level lessons from swarm run
 ```
 

@@ -19,7 +19,7 @@ point is documented here.
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
 | 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
-| 6 | Docs & Memory | Sequential pair | docs (haiku), then lessons-extractor (sonnet) |
+| 6 | Docs & Memory | Sequential pair | docs (sonnet), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
 ---
@@ -1447,23 +1447,32 @@ SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simpl
 
 ### Step 6.1: Spawn Docs Agent
 
+Read `documentation_impact` from `{run_dir}/architect-plan.json` and serialize it as JSON for
+the agent prompt. Then spawn the Docs agent:
+
 ```
-Agent(name="docs", subagent_type="general-purpose", model="haiku",
+Agent(name="docs", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[docs prompt from agent-prompts.md]\n\n"
-            "FILES MODIFIED THIS SWARM:\n<git diff --name-only from branch start>")
+            "FILES MODIFIED THIS SWARM:\n<git diff --name-only from branch start>\n\n"
+            "DOCUMENTATION IMPACT (from architect):\n<documentation_impact JSON>")
 ```
 
-### Step 6.2: Repo Doc Updates
+### Step 6.2: Docs Agent Two-Pass Protocol
 
-The docs agent updates only documentation files that are directly affected by the implementation.
-It does NOT create new doc files unless the project has none.
+The Docs agent performs two passes:
 
-Typical targets:
-- README.md sections that describe changed functionality
-- API docs or docstrings in modified modules
-- Configuration documentation if config schema changed
-- CONTRIBUTING.md if dev workflow changed
+**Pass 1 (Architect-guided):** Works through each entry in `documentation_impact` from the
+architect's plan. For each surface, reads the current state and updates it — adding new
+entries to README tables, updating component counts, fixing manifest descriptions, removing
+stale references for deleted features.
+
+**Pass 2 (Discovery-based):** Independent of the architect's list, Globs for all documentation
+surfaces and on-disk components, cross-references counts, and verifies consistency. This
+catches documentation gaps the architect missed.
+
+**Pass 3 (Changed-file):** For each modified file in the swarm, checks if corresponding
+documentation needs updating (README behavior descriptions, API docs, config docs).
 
 ### Step 6.3: Project Memory
 
@@ -1818,7 +1827,7 @@ TeamCreate:
 | 4.5 | structural-integration | general-purpose | opus | default | No |
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | code-simplifier | code-simplifier:code-simplifier | sonnet | bypassPermissions | Yes |
-| 6 | docs | general-purpose | haiku | bypassPermissions | Yes |
+| 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
 | 7 | verifier | dev-essentials:test-runner | haiku | default | No |
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.

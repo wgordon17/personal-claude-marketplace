@@ -40,9 +40,10 @@ digraph quality_gate {
   layer2 [label="Layer 2: Fresh-Context Subagents\n2 subagents x 2 passes"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
+  docs [label="Documentation Gate (BLOCKING)"];
   nodataloss [label="No Data Loss Gate (BLOCKING)"];
   final [label="Final Verification"];
-  detect -> layer1 -> layer1_5 -> layer2 -> memory -> artifact -> nodataloss -> final;
+  detect -> layer1 -> layer1_5 -> layer2 -> memory -> artifact -> docs -> nodataloss -> final;
 }
 ```
 
@@ -77,7 +78,7 @@ comprehensive coverage from different angles.
 | Round | Lens | Core Question |
 |-------|------|---------------|
 | 1 | **Correctness** | What inputs produce wrong results? What assumptions are untested? |
-| 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. |
+| 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. Includes documentation completeness (see below). |
 | 3 | **Robustness** | How does this fail? Bad input, missing deps, concurrent access, edge cases? |
 | 4 | **Simplicity** | What's over-engineered? What could be deleted? What's AI slop? |
 | 5 | **Adversarial** | You are a hostile reviewer. The author claims this is done. Prove them wrong. |
@@ -127,7 +128,22 @@ Execute this protocol for EVERY round:
       - Deployment/delivery requirements (will this change actually reach users?)
       - Any other project-specific rules that apply to this type of change
 
-   b) Cross-reference integrity: search the ENTIRE codebase for references
+   b) Documentation completeness: for every user-facing change in this work
+      (new feature, removed feature, renamed feature, new skill/command/agent,
+      changed behavior, new dependency), verify that corresponding documentation
+      was updated. Check ALL documentation surfaces:
+      - README tables (skill lists, agent lists, command lists, component counts)
+      - Plugin manifests (plugin.json descriptions)
+      - Marketplace registries (marketplace.json entries)
+      - Root README (project-level feature lists, dependency matrices)
+      - CONTRIBUTING.md (if workflow or convention changes)
+      - Inline docs / docstrings (if public API changed)
+
+      The test: count components on disk (e.g., `skills/*/SKILL.md`) and compare
+      against what's listed in documentation. They must match. A new skill with
+      no README entry is a completeness failure, same as a missing test.
+
+   c) Cross-reference integrity: search the ENTIRE codebase for references
       to things you changed, renamed, or removed. Files you DIDN'T modify
       can have stale references to things you DID modify. Grep for:
       - Old names/values you replaced
@@ -434,6 +450,26 @@ Do not assume prior pushes landed or that the PR is still open. Verify:
 
 ---
 
+## Documentation Gate (BLOCKING)
+
+Ensures documentation accurately reflects the current state of the codebase after all changes.
+Cannot proceed past this gate without completing all applicable checks.
+
+**This gate catches code→docs gaps** — features that exist on disk but aren't documented.
+Round 2 checks docs→code (do documented claims match reality). This gate checks the inverse.
+
+| Check | Action |
+|-------|--------|
+| **Component inventory** | Count registrable components on disk (skills, agents, commands, hooks) via Glob. Compare counts against README tables, plugin.json descriptions, marketplace.json entries. Mismatches are blocking. |
+| **Description accuracy** | Read plugin.json and marketplace.json description fields. Do they mention all component types that exist? Are counts/lists accurate? |
+| **Feature coverage** | For each user-facing change in this work: is there a corresponding documentation entry? New skill without README row = fail. Removed feature with stale references = fail. |
+| **Cross-surface consistency** | Do README tables, plugin.json descriptions, marketplace.json entries, and root README all agree on component names, counts, and descriptions? |
+
+**Skip conditions:** Pure internal refactor with no user-facing component changes (no new/removed/
+renamed skills, agents, commands, features, or public APIs). When in doubt, run the check.
+
+---
+
 ## No Data Loss Gate (BLOCKING)
 
 Ensures work artifacts are persisted to a **durable, externally-trackable location** — not just
@@ -517,6 +553,11 @@ Memory Gate: [PASS / UPDATED]
 
 Artifact Gate: [PASS / N/A]
   [work-type-specific status]
+
+Documentation Gate: [PASS / SKIP / N/A]
+  Components on disk: [count] | Documented: [count]
+  Surfaces checked: [list]
+  Gaps found: [count]
 
 No Data Loss Gate: [PASS / N/A]
   [artifact persistence status]

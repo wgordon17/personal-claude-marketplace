@@ -11,7 +11,7 @@ Code quality agents and orchestration skills for architecture, security, QA, per
 | `code-quality:qa` | Code quality, test strategy, tech debt | Sonnet |
 | `code-quality:performance` | Performance profiling and optimization | Sonnet |
 
-## Skills (6)
+## Skills (9)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -21,6 +21,9 @@ Code quality agents and orchestration skills for architecture, security, QA, per
 | `/bug-investigation` | Interactive bug hunting with background agents | PROACTIVE |
 | `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
 | `/swarm` | Full agent team implementation via TeamCreate | Manual |
+| `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
+| `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
+| `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
 
 ## Requirements
 

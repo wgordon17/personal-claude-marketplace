@@ -99,7 +99,7 @@ specific questions — not generic ones.
 
 ### Actions
 
-- Launch an **Explore agent** (`Task` with `subagent_type: "Explore"`) for relevant codebase areas
+- Launch an **Explore agent** (`Agent` with `subagent_type: "Explore"`) for relevant codebase areas
 - Read `hack/PROJECT.md` (or equivalent memory file) for past architectural decisions
 - Read `hack/LESSONS.md` for relevant past lessons (if exists). Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without
@@ -107,6 +107,9 @@ specific questions — not generic ones.
 - Search **claude-mem** MCP for relevant past work, decisions, and learnings
 - Use **Serena** MCP `get_symbols_overview` for component-level understanding (if applicable)
 - Use **sequential-thinking** MCP to reason about scope boundaries
+- **Discover documentation surfaces** — Glob for READMEs, manifests, registries, plugin.json,
+  marketplace.json, CONTRIBUTING.md, and any other user-facing documentation. Note which
+  surfaces exist and what they document. This inventory feeds Phase 4 and Phase 5.
 
 ### Chat Output
 
@@ -173,7 +176,7 @@ Skip this phase for light planning.
 
 ### Actions
 
-Launch specialized agents in parallel using the `Task` tool:
+Launch specialized agents in parallel using the `Agent` tool:
 
 - **`code-quality:architect`** — "Given [Phase 1 context] and [Phase 2 requirements],
   what are the key architectural considerations?"
@@ -236,6 +239,11 @@ Write the plan file with a header containing:
 - **Key Decisions** — from Phase 2
 
 **The following header sections apply to full planning only (skip for light planning):**
+- **Documentation Impact** — which documentation surfaces are affected by this work and how.
+  Reference the surfaces discovered in Phase 1. Include: READMEs (skill tables, component counts,
+  feature lists), plugin manifests (descriptions), marketplace registries, CONTRIBUTING.md,
+  dependency matrices, any user-facing docs. Format: `surface → action (add/update/remove) → why`.
+  Omit if the work has no user-facing changes.
 - **Options Considered** — for architecture-level plans, list the alternatives evaluated and
   why they were rejected (1-2 sentences per option). Minimum 2 options if a meaningful choice
   was made. Omit if the approach was never in question.
@@ -256,6 +264,9 @@ Append one task at a time using the Edit tool. Each task should follow bite-size
 - Files to create/modify (exact paths)
 - Steps (each step is one action: write test, run test, implement, verify, commit)
 - Test commands with expected output
+- Documentation updates (what docs to create/update/remove — READMEs, manifests, registries,
+  descriptions, component counts, skill tables, dependency matrices. "None" if no user-facing
+  changes. Reference the documentation surfaces discovered in Phase 1.)
 - Commit message
 
 **Chat output per task:** "Task N written: [1 sentence description]. N steps."
@@ -291,6 +302,15 @@ After all tasks are written:
 2. Use **sequential-thinking** MCP to check for gaps: missing error handling, untested paths,
    dependency ordering issues
 3. Cross-reference against Phase 2 requirements: does the plan cover everything?
+4. **Documentation coverage check:** For every task that adds, removes, or renames user-facing
+   features (skills, commands, agents, APIs, config options, CLI flags), verify the plan includes
+   corresponding documentation updates. Cross-reference the documentation surfaces discovered in
+   Phase 1. Common gaps:
+   - New skill/command/agent added but no README table entry
+   - Feature removed but stale references remain in docs
+   - Component counts in tables don't match reality
+   - Plugin/manifest descriptions don't mention new components
+   - Dependency matrices not updated for new dependencies
 
 **Chat output:**
 > "Plan complete. N tasks, M steps total. Covers: [list of areas].

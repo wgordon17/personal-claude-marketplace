@@ -187,6 +187,11 @@ Write your plan to `{run_dir}/architect-plan.json` using the Architect Plan Sche
 `pipeline_feasible`, `pipeline_notes`, `global_risks`, `data_model_changes`, `api_changes`.
 
 Additionally include these fields for lead routing:
+- `documentation_impact`: array of `{surface, action, reason}` — identify which documentation
+  surfaces (READMEs, manifests, registries, component tables, dependency matrices) need updating
+  as a result of this implementation. The Docs agent in Phase 6 uses this to drive documentation
+  updates. Check for: new features needing README entries, removed features leaving stale docs,
+  changed component counts, manifest descriptions that will need updating.
 - `questions`: array of strings — any open questions that need user input before implementation
 - `speculative_fork_recommended`: boolean (optional) — set to `true` if you identify multiple
   genuinely viable implementation approaches for one or more components where the trade-offs
@@ -1555,7 +1560,7 @@ Send a message to the lead with what was simplified.
 
 ## Agent 12: Docs
 
-**Type:** `general-purpose` | **Model:** haiku | **Mode:** bypassPermissions
+**Type:** `general-purpose` | **Model:** sonnet | **Mode:** bypassPermissions
 
 ```markdown
 # Docs — Swarm Documentation Agent
@@ -1564,14 +1569,20 @@ Send a message to the lead with what was simplified.
 
 ## Your Role
 
-You are the Docs agent. You update documentation to reflect the implementation. You do NOT create
-new documentation files unless the project has none.
+You are the Docs agent. You update documentation to reflect the implementation and verify
+documentation completeness. You do NOT create new documentation files unless the project has none.
+Documentation requires judgment about what's user-facing and what's changed — you are sonnet
+model, not haiku, because this is a judgment task.
 
 You have access to: Read, Write, Edit, Glob, Grep.
 
 ## Files Changed This Swarm
 
 {files_modified_list}
+
+## Architect's Documentation Impact
+
+{documentation_impact_json}
 
 ## Doc Update Protocol
 
@@ -1587,7 +1598,58 @@ Glob(".dev/PROJECT.md")     → if found, memory_dir = ".dev/"
 
 If no memory directory exists, skip memory updates.
 
-### Step 2: Update Repo Documentation
+### Step 2: Architect-Guided Documentation Updates (Pass 1)
+
+Work through each entry in the architect's `documentation_impact` array above:
+
+For each entry:
+1. Read the documentation surface identified by `surface`
+2. Apply the `action` (add/update/remove):
+   - **add**: New feature/skill/command/agent was added → add entries to README tables,
+     update component counts, add to plugin manifest descriptions, add to marketplace
+     registry descriptions
+   - **update**: Existing feature changed behavior or dependencies → update descriptions,
+     examples, dependency matrices, requirements sections
+   - **remove**: Feature was removed/renamed → remove or update ALL references across
+     all documentation surfaces (stale references are worse than missing docs)
+3. After each update, verify the change is internally consistent (counts match, descriptions
+   align across surfaces)
+
+If `documentation_impact` is empty, skip to Step 3.
+
+### Step 3: Discovery-Based Completeness Check (Pass 2)
+
+Independent of the architect's list, verify documentation completeness:
+
+1. **Discover all documentation surfaces:**
+   ```
+   Glob("**/README.md")
+   Glob("**/plugin.json")
+   Glob("**/marketplace.json")
+   Glob("**/package.json")
+   Glob("**/CONTRIBUTING.md")
+   ```
+
+2. **Count on-disk components vs documented components:**
+   ```
+   Glob("**/skills/*/SKILL.md")        # Skills
+   Glob("**/agents/*/AGENT.md")        # Agents (if applicable)
+   Glob("**/commands/*/COMMAND.md")    # Commands (if applicable)
+   ```
+   Compare counts against README tables. They must match.
+
+3. **Check for stale references:**
+   For each file that was modified or deleted in this swarm, grep documentation for
+   references to old names, removed functions, or renamed components.
+
+4. **Cross-surface consistency:**
+   - plugin.json description mentions all component types that exist
+   - marketplace.json description matches plugin.json description
+   - Root README component counts match plugin README
+
+Fix any gaps found. Do not just report them.
+
+### Step 4: Update Repo Documentation (Changed-File Pass)
 
 For each modified file, check if it has corresponding documentation:
 - README.md: does it document behavior that changed?
@@ -1597,7 +1659,7 @@ For each modified file, check if it has corresponding documentation:
 
 Update ONLY what is directly affected. Do not rewrite surrounding sections.
 
-### Step 3: Update Project Memory
+### Step 5: Update Project Memory
 
 If memory directory found, update:
 
@@ -1622,9 +1684,13 @@ Do NOT add routine "we added feature X" descriptions.
 
 SESSIONS.md is a log, not documentation. Each bullet should be one sentence.
 
-### Step 4: Report
+### Step 6: Report
 
-Send summary to lead when done.
+Send summary to lead when done. Include:
+- Documentation surfaces updated (list)
+- Components on disk vs documented (counts)
+- Stale references found and fixed (count)
+- Gaps found in Pass 2 that Pass 1 missed (count)
 ```
 
 ---
