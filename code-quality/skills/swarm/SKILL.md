@@ -2,10 +2,11 @@
 name: swarm
 description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
-  of 13+ specialized agents (Architect, Implementer, Reviewer, Test-Writer,
-  Test-Runner, Security, QA, Code-Reviewer, Performance, Fixer, Code-Simplifier,
-  Docs, Verifier) with structured JSON communication, audit trails, and early
-  user checkpoint. Use when asked to "swarm this", "full team", "agent team",
+  of 15+ specialized agents (Architect, Security Design Reviewer, Implementer,
+  Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer, Performance,
+  Fixer, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
+  communication, Cynefin domain classification, audit trails, and early user
+  checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
   Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion, TeamCreate, TeamDelete,
@@ -393,7 +394,7 @@ After escalation, wait for user input before proceeding.
 
 ## Cost Awareness
 
-This skill spawns 13+ agents, each with their own context and API calls. Use it only when the
+This skill spawns 15+ agents, each with their own context and API calls. Use it only when the
 task genuinely warrants maximum rigor. For smaller tasks, use a targeted subagent or invoke
 specific skills directly.
 
@@ -425,7 +426,7 @@ Minimize opus usage to the phases where nuanced judgment is genuinely required.
 | File | Content |
 |------|---------|
 | `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, TeamCreate config, and git workflow |
-| `references/agent-prompts.md` | Full prompt templates for all 13+ agents — role, boundaries, communication protocol, output format |
+| `references/agent-prompts.md` | Full prompt templates for all 15+ agents — role, boundaries, communication protocol, output format |
 | `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
 | `references/cynefin-reference.md` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |
