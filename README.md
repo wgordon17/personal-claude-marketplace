@@ -61,11 +61,10 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| git-tools | Git history, hooks, commit review, and contributing guide generation | 3 skills, 2 commands | [README](git-tools/README.md) |
+| git-tools | Git history, hooks, commit review, and contributing guide generation | 1 skill, 2 commands | [README](git-tools/README.md) |
 
 **Skills:**
 - `/git-history` - Git history manipulation (git-branchless)
-- `/git-hooks-install` & `/git-hooks-uninstall` - Defense-in-depth git hooks
 
 **Commands:**
 - `/git-tools:review-commits` - AI-assisted commit review for PRs
@@ -144,7 +143,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 ### For Git Tools
 
 - **[git-branchless](https://github.com/arxanas/git-branchless)**: `brew install git-branchless` — Required by `/git-history` skill and `/git-tools:review-commits` command
-- **[pre-commit](https://pre-commit.com/)**: `uv tool install pre-commit` — Required by `/git-hooks-install` and `/git-hooks-uninstall` skills
+- **[pre-commit](https://pre-commit.com/)**: `uv tool install pre-commit` — Required by git-tools defense-in-depth hook scripts
 
 ### Verification
 
@@ -214,7 +213,7 @@ Plugins in this marketplace have cross-dependencies, external tool requirements,
 | [`uv`](https://docs.astral.sh/uv/) | **All non-LSP plugins** | dev-guard hooks (`uv run`), test-runner, uv-python enforcement, hook installation |
 | [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
 | [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
-| [`pre-commit`](https://pre-commit.com/) | git-tools | `/git-hooks-install` and `/git-hooks-uninstall` skills |
+| [`pre-commit`](https://pre-commit.com/) | git-tools | Defense-in-depth git hook scripts |
 | [Node.js/npm](https://nodejs.org/) | vtsls-npx, vscode-html-css-npx | Runs LSP servers via `npx` |
 | [Go](https://go.dev/) | gopls-go | Runs gopls language server |
 | [Rust/rustup](https://rustup.rs/) | rust-analyzer-rustup | Runs rust-analyzer |
@@ -244,7 +243,7 @@ Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** =
 |--------|-------------|---------------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|-------------|
 | **code-quality** | -- | HARD | soft | HARD | -- | -- | -- | soft | -- | -- | soft |
 | **dev-essentials** | HARD | -- | HARD | -- | soft | soft | soft | soft | soft | -- | soft |
-| **git-tools** | -- | -- | -- | soft | -- | -- | -- | HARD | HARD | HARD | -- |
+| **git-tools** | -- | -- | -- | soft | -- | -- | -- | HARD | soft | HARD | -- |
 | **dev-guard** | -- | -- | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 | **cmux-integration** | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |

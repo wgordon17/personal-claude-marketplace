@@ -2,13 +2,11 @@
 
 Git workflow tools: history manipulation, defense-in-depth hooks, commit review, and contributing guide generation.
 
-## Skills (3)
+## Skills (1)
 
 | Skill | Description |
 |-------|-------------|
 | `/git-history` | Non-interactive git history manipulation (git-branchless) |
-| `/git-hooks-install` | Install defense-in-depth git hooks using pre-commit |
-| `/git-hooks-uninstall` | Safely remove defense-in-depth git hooks |
 
 ## Commands (2)
 
@@ -26,7 +24,7 @@ Defense-in-depth hook scripts for use with pre-commit framework:
 ## Requirements
 
 - **git-branchless**: `brew install git-branchless` — Required by `/git-history` skill and `/git-tools:review-commits` command. Without it, history manipulation and commit review are non-functional.
-- **pre-commit**: `uv tool install pre-commit` — Required by `/git-hooks-install` and `/git-hooks-uninstall` skills.
+- **pre-commit**: `uv tool install pre-commit` — Required by the defense-in-depth git hook scripts.
 - **uv**: Required for pre-commit installation and hook management.
 
 ## Installation
