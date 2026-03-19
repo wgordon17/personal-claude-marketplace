@@ -5,7 +5,7 @@ description: >-
   "I'm going to report bugs", "let's hunt bugs", "investigate these issues", or describes
   wanting to report issues one-by-one while agents investigate in parallel. Also activates
   when the user reports a bug/issue and a BUGS.md file exists or was recently created.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Task, Bash, AskUserQuestion]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion]
 ---
 
 # Bug Investigation Workflow
