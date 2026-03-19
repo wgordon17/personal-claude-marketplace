@@ -10,8 +10,8 @@ it informs decisions but never restricts mandatory pipeline phases.
 ## Overview
 
 Cynefin (pronounced "ku-NEV-in") provides five domains that describe the relationship between
-cause and effect in a problem. In /swarm, domain classification happens during Phase 1 (Lead
-analysis) and Phase 2 (Architect decomposition), and can be revised at any point during execution.
+cause and effect in a problem. In /swarm, domain classification happens during Phase 2 (Architect decomposition)
+and can be revised at any point during execution.
 
 | Domain | Cause→Effect Relationship | Core Response |
 |--------|--------------------------|---------------|

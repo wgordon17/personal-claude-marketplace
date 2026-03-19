@@ -322,7 +322,7 @@ Memory that drifts from reality is worse than no memory.
 **Skip conditions:** hack/ doesn't exist → skip hack/ checks. No plans directory → skip plan
 checks. claude-mem MCP unavailable → skip claude-mem checks. Serena MCP unavailable → skip
 Serena memory checks. Pure question with no persistent insights → skip memory saves.
-hack/LESSONS.md doesn't exist → skip LESSONS check (it will be created on first lesson extraction).
+hack/LESSONS.md doesn't exist → skip LESSONS check.
 
 ---
 

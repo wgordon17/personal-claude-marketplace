@@ -216,8 +216,7 @@ Lessons are principle-level only (no file paths, no implementation details). Eac
 format from `dev-essentials/skills/incremental-planning/references/lessons-template.md`:
 `- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
 
-The Lessons Extractor runs in parallel with Docs if Docs is haiku-fast; otherwise, run it after
-Docs completes to avoid audit trail races.
+The Lessons Extractor runs after Docs completes to avoid audit trail races.
 
 ### Phase 7: Verification & Completion
 

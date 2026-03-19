@@ -224,7 +224,7 @@ Ready to start! Use /session-end before finishing to sync.
 
 ## Important Notes
 
-- **Be selective:** Only load NEXT.md and PROJECT.md at startup
+- **Be selective:** Only load the files listed in Step 1 at startup
 - **Be concise:** Summaries should be scannable, not essays
 - **Don't overwhelm:** Focus on immediate focus from NEXT.md
 - **Respect existing structure:** If files have custom formats, preserve them

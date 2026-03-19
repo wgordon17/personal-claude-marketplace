@@ -367,7 +367,7 @@ routing. Initialized as `[]` in Phase 0. The Lessons Extractor reads this file i
 ```json
 [
   {
-    "type": "design-level | security-design | scope-creep",
+    "type": "design | security_design | scope_creep | human",
     "finding_id": "string — ID of the finding that triggered escalation (e.g. CR-001)",
     "target_phase": "string — phase routed to (e.g. 'Phase 2', 'Phase 2.5', 'human')",
     "iteration": "integer — which escalation this is (1 or 2)",

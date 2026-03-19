@@ -218,4 +218,5 @@ Next session focus:
 - **SESSIONS.md is a log:** 3-5 bullets max, no details
 - **TODO items need dates:** Completed items reference session for traceability
 - **NEXT.md is a pointer:** Reference to TODO items, not full descriptions
+- **LESSONS.md is principle-level:** No code, no file paths, no implementation details
 - **Ask when unclear:** Use AskUserQuestion to determine next focus if multiple options
