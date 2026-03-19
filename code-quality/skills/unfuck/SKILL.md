@@ -11,7 +11,7 @@ description: >-
   (file-audit, security-review, sc:cleanup, sc:improve, docs-sync, sc:index-repo,
   code-quality:architect, code-quality:security, code-quality:qa, code-simplifier,
   dev-essentials:test-runner) into a unified cleanup workflow.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
 ---
 
 # /unfuck — Comprehensive Repo Cleanup

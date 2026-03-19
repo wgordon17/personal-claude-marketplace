@@ -9,8 +9,8 @@ description: >-
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
   Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, TeamCreate, TeamDelete,
-  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, Skill]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete,
+  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill]
 ---
 
 # /swarm — Full Agent Swarm Implementation
