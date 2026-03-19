@@ -88,7 +88,7 @@
     },
     {
       "name": "dev-essentials",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "source": "./dev-essentials",
       "description": "Essential development utilities: LSP navigation, uv-python enforcement, test execution, incremental planning, and session management",
       "category": "productivity",
