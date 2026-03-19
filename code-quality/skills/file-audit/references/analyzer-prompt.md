@@ -109,7 +109,7 @@ For each external library used:
 
 1. **Resolve library ID:**
    ```
-   mcp__plugin_context7_context7__resolve-library-id(
+   mcp__context7__resolve-library-id(
      libraryName="<library_name>",
      query="<function_name> usage"
    )
@@ -117,7 +117,7 @@ For each external library used:
 
 2. **Query documentation:**
    ```
-   mcp__plugin_context7_context7__query-docs(
+   mcp__context7__query-docs(
      libraryId="<resolved_id>",
      query="is <function_name> deprecated, correct usage, common mistakes"
    )
