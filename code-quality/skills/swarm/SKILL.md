@@ -414,7 +414,7 @@ specific skills directly.
 | Model | Cost | Used For |
 |-------|------|---------|
 | opus | Expensive | Architect, Reviewer, Security, QA — judgment-heavy tasks |
-| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier |
+| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier, Lessons Extractor |
 | haiku | Cheap | Test-Runner, Docs, Verifier — execution-only tasks |
 
 Minimize opus usage to the phases where nuanced judgment is genuinely required.
