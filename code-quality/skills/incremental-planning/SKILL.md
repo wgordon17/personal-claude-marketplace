@@ -315,9 +315,8 @@ Dispatch a reviewer subagent using the template in
 
 ```
 Agent(
-  subagent_type="general",
   description="Review plan Task N",
-  model="claude-sonnet-4-6",
+  model="sonnet",
   prompt=<constructed from template + plan file path + task number + prior task summaries>
 )
 ```

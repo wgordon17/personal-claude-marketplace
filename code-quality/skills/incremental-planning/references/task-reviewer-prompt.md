@@ -10,9 +10,8 @@ Dispatch via the `Agent` tool:
 
 ```
 Agent(
-  subagent_type="general",
   description="Review plan Task N",
-  model="claude-sonnet-4-6",
+  model="sonnet",
   prompt=<constructed from sections below>
 )
 ```
