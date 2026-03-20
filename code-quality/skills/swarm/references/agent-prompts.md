@@ -1623,34 +1623,17 @@ If `documentation_impact` is empty, skip to Step 3.
 
 Independent of the architect's list, verify documentation completeness:
 
-1. **Discover all documentation surfaces:**
-   ```
-   Glob("**/README.md")
-   Glob("**/plugin.json")
-   Glob("**/marketplace.json")
-   Glob("**/package.json")
-   Glob("**/CONTRIBUTING.md")
-   ```
+Use `code-quality/references/documentation-taxonomy.md` for all definitions:
 
-2. **Count on-disk components vs documented components:**
-   Adapt to the project type — detect from files present (pyproject.toml, Cargo.toml,
-   package.json, .claude-plugin/, go.mod, etc.):
-   - Python: public modules, CLI commands (click/typer/argparse), API endpoints
-   - Rust: public API, binary targets, CLI commands
-   - Node/TS: exports, API routes, CLI commands
-   - Go: exported functions, HTTP handlers
-   - Frontend: components, pages/routes
-   - Claude Code plugins: skills, agents, commands, hooks
-   Compare counts against README tables. They must match.
+1. **Discover all documentation surfaces** using detection patterns from taxonomy § Surfaces.
 
-3. **Check for stale references:**
-   For each file that was modified or deleted in this swarm, grep documentation for
-   references to old names, removed functions, or renamed components.
+2. **Count on-disk components vs documented components** using ecosystem-specific discovery
+   patterns from taxonomy § Component Discovery. Compare counts against README tables. Must match.
 
-4. **Cross-surface consistency:**
-   - plugin.json description mentions all component types that exist
-   - marketplace.json description matches plugin.json description
-   - Root README component counts match plugin README
+3. **Check for stale references:** For each file modified or deleted in this swarm, grep
+   documentation for references to old names, removed functions, or renamed components.
+
+4. **Cross-surface consistency:** Apply rules from taxonomy § Cross-Surface Consistency.
 
 Fix any gaps found. Do not just report them.
 
@@ -1745,23 +1728,17 @@ For each file the Docs agent modified:
 
 ### Step 3: Cross-Surface Consistency
 
-Compare documentation across all surfaces:
-```
-Glob("**/README.md")        → extract component lists, counts, descriptions
-Glob("**/plugin.json")      → extract descriptions
-Glob("**/marketplace.json") → extract descriptions
-Glob("**/package.json")     → extract descriptions
-Glob("**/pyproject.toml")   → extract descriptions
-Glob("**/Cargo.toml")       → extract descriptions
-```
-
-For each registrable component type, verify counts and names match across ALL surfaces.
-Flag any surface that disagrees with the others.
+Use `code-quality/references/documentation-taxonomy.md`:
+- Discover surfaces using detection patterns from taxonomy § Surfaces
+- Apply cross-surface consistency rules from taxonomy § Cross-Surface Consistency
+- For each registrable component type, verify counts and names match across ALL surfaces
+- Flag any surface that disagrees with the others
 
 ### Step 4: Independent Completeness Check
 
-Perform your own component discovery (don't trust the Docs agent's counts):
-- Glob for on-disk components appropriate to the project type
+Perform your own component discovery using ecosystem-specific patterns from
+taxonomy § Component Discovery (don't trust the Docs agent's counts):
+- Detect project type from files present, apply matching discovery patterns
 - Compare YOUR counts against what's documented
 - If you find components the Docs agent missed, report as HIGH finding
 

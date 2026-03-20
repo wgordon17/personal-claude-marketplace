@@ -128,20 +128,13 @@ Execute this protocol for EVERY round:
       - Deployment/delivery requirements (will this change actually reach users?)
       - Any other project-specific rules that apply to this type of change
 
-   b) Documentation completeness: for every user-facing change in this work
-      (new feature, removed feature, renamed feature, new skill/command/agent,
-      changed behavior, new dependency), verify that corresponding documentation
-      was updated. Check ALL documentation surfaces:
-      - README tables (skill lists, agent lists, command lists, component counts)
-      - Plugin manifests (plugin.json descriptions)
-      - Marketplace registries (marketplace.json entries)
-      - Root README (project-level feature lists, dependency matrices)
-      - CONTRIBUTING.md (if workflow or convention changes)
-      - Inline docs / docstrings (if public API changed)
-
-      The test: count components on disk (e.g., `skills/*/SKILL.md`) and compare
-      against what's listed in documentation. They must match. A new skill with
-      no README entry is a completeness failure, same as a missing test.
+   b) Documentation completeness: check every change against the documentation
+      triggers in `code-quality/references/documentation-taxonomy.md`. For each
+      trigger that fires, verify the corresponding documentation surfaces were
+      updated. Use the taxonomy's surface detection patterns to discover all
+      surfaces, and its ecosystem-specific component discovery patterns to count
+      on-disk components. Counts must match what's documented. A new component
+      with no documentation entry is a completeness failure, same as a missing test.
 
    c) Cross-reference integrity: search the ENTIRE codebase for references
       to things you changed, renamed, or removed. Files you DIDN'T modify
@@ -458,15 +451,17 @@ Cannot proceed past this gate without completing all applicable checks.
 **This gate catches code→docs gaps** — features that exist on disk but aren't documented.
 Round 2 checks docs→code (do documented claims match reality). This gate checks the inverse.
 
+Use `code-quality/references/documentation-taxonomy.md` for all definitions.
+
 | Check | Action |
 |-------|--------|
-| **Component inventory** | Count registrable components on disk via Glob/Grep — adapt to project type: public modules, API endpoints, CLI commands, exported components, entry points, skills/agents (for plugin projects). Compare counts against README tables, package manifest descriptions, registry entries. Mismatches are blocking. |
-| **Description accuracy** | Read package manifests (plugin.json, package.json, pyproject.toml, Cargo.toml, etc.) and registry entries. Do descriptions mention all major component types that exist? Are counts/lists accurate? |
-| **Feature coverage** | For each user-facing change in this work: is there a corresponding documentation entry? New skill without README row = fail. Removed feature with stale references = fail. |
-| **Cross-surface consistency** | Do README tables, package manifests, registry entries, and root-level documentation all agree on component names, counts, and descriptions? |
+| **Trigger check** | Do any changes in this work match documentation triggers (taxonomy § Triggers)? If no triggers fire, skip remaining checks. |
+| **Component inventory** | Use ecosystem-specific discovery patterns (taxonomy § Component Discovery) to count on-disk components. Compare against documentation surfaces (taxonomy § Surfaces). Mismatches are blocking. |
+| **Feature coverage** | For each trigger that fired: is there a corresponding documentation update? New component without doc entry = fail. Removed component with stale references = fail. |
+| **Cross-surface consistency** | Apply consistency rules (taxonomy § Cross-Surface Consistency). All surfaces must agree on names, counts, and descriptions. |
 
-**Skip conditions:** Pure internal refactor with no user-facing component changes (no new/removed/
-renamed skills, agents, commands, features, or public APIs). When in doubt, run the check.
+**Skip conditions:** No documentation triggers fire (per taxonomy § "Changes that DO NOT require
+documentation updates"). When in doubt, run the check.
 
 ---
 
