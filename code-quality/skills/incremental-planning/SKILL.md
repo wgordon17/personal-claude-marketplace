@@ -4,8 +4,10 @@ description: >-
   Incremental planning workflow that replaces native plan mode. Use when Claude tries to enter
   plan mode (EnterPlanMode is denied by hook), when asked to "plan", "design an approach",
   "how should we implement", or before any multi-file implementation task. Asks clarifying
-  questions first, writes plan to file incrementally, provides research context and summaries
-  in chat for feedback. Never displays full plan content in chat.
+  questions first, writes plan to file incrementally with file structure mapping, per-task
+  quality review (sonnet subagent), tiered breakpoints for scope vs detail ambiguity, and
+  assumption surfacing in Phase 6. Provides research context and summaries in chat for
+  feedback. Never displays full plan content in chat.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
 ---
 
@@ -143,7 +145,7 @@ truly simple, the questions will be quick to answer.
 
 ### Exit Condition
 
-You can proceed to Phase 4 (or Phase 3 for complex tasks) when you can articulate ALL of:
+You can proceed to Phase 3 (or Phase 4 directly for light planning) when you can articulate ALL of:
 
 1. **Scope** — what the user wants built
 2. **Behavior** — how it should work
@@ -230,14 +232,21 @@ Announce the location: "Plan file: `hack/plans/2026-02-15-session-auth.md`"
 
 Write the plan file with a header containing:
 
-**Always include (light and full planning):**
-- **Goal** — 1 sentence
-- **Cynefin Domain** — the domain classified in Phase 0
-- **Domain Justification** — 2-4 sentences explaining why this domain applies and what that
+**Always include (light and full planning).** Use `**Field:**` bold format for each field
+(e.g., `**Goal:**`, `**Cynefin Domain:**`) — this format is machine-parseable by `/roadmap`:
+
+- **Agentic directive** — A blockquote at the top of the plan file (above the Goal):
+  `> **For agentic workers:** REQUIRED: Use /swarm to implement this plan. Each task within
+  a phase should run in an isolated worktree.`
+  For light plans (1-3 tasks), the directive may reference direct implementation instead of
+  `/swarm` if the scope doesn't warrant a full agent swarm.
+- **Goal:** — 1 sentence
+- **Cynefin Domain:** — the domain classified in Phase 0
+- **Domain Justification:** — 2-4 sentences explaining why this domain applies and what that
   means for the plan (e.g., whether a probe is needed, whether outcomes are predictable)
-- **Architecture Summary** — 2-3 sentences
-- **Tech Stack**
-- **Key Decisions** — from Phase 2
+- **Architecture Summary:** — 2-3 sentences
+- **Tech Stack:**
+- **Key Decisions:** — from Phase 2
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
@@ -258,12 +267,66 @@ Write the plan file with a header containing:
 
 **Chat output:** "Wrote plan header. Goal: [1 sentence]. Architecture: [1 sentence]."
 
-#### 2. Write Each Task
+#### 2. File Structure Mapping
 
-Append one task at a time using the Edit tool. Each task should follow bite-sized structure:
-- Files to create/modify (exact paths)
-- Steps (each step is one action: write test, run test, implement, verify, commit)
-- Test commands with expected output
+Before writing tasks, map all files this plan will touch.
+
+Create a `## File Structure` section in the plan file, placed between the header (after the
+`---` separator) and Task 1. Use this layout:
+
+```markdown
+## File Structure
+
+### Files to Modify
+| File | Responsibility | Change |
+|------|----------------|--------|
+| `path/to/file.ts` | Brief responsibility | What changes |
+
+### Files to Create
+| File | Responsibility |
+|------|----------------|
+| `path/to/new.ts` | Brief responsibility |
+
+### File Design Notes
+- **`path/to/file.ts`** — Why it exists here and not elsewhere (for non-obvious decisions only)
+```
+
+**File design philosophy to apply:**
+- Design units with clear boundaries and well-defined interfaces
+- Prefer smaller, focused files over large ones — a file that does one thing is easier to test
+- Files that change together should live together — split by responsibility, not technical layer
+- In existing codebases, follow established patterns (check adjacent files before choosing placement)
+
+This step writes to the plan file only. **Chat output:** "Wrote file structure. N files mapped."
+
+#### 3. Write Each Task
+
+Append one task at a time using the Edit tool. Use the heading format `## Task N: [Title]`
+for each task. Each task should follow this structure:
+
+```markdown
+## Task N: [Short Title]
+
+**Files:**
+- Modify: `path/to/file.ts`
+- Create: `path/to/new.ts`
+
+**Depends on:** Task N-1 (if applicable, or "None")
+
+- [ ] **Step 1: [action]**
+  [details]
+  Test: `command` → expected output
+- [ ] **Step 2: [action]**
+  [details]
+
+**Documentation updates:** [surfaces to update, or "None"]
+**Commit:** `type(scope): description`
+```
+
+Each task includes:
+- Files to create/modify (exact paths, using `**Files:**` block)
+- Steps (each step is one concrete action — include test commands with expected output
+  inline within the relevant step)
 - Documentation updates (what docs to create/update/remove. "None" if no documentation
   triggers apply per `code-quality/references/documentation-taxonomy.md`. Reference surfaces
   discovered in Phase 1.)
@@ -271,7 +334,67 @@ Append one task at a time using the Edit tool. Each task should follow bite-size
 
 **Chat output per task:** "Task N written: [1 sentence description]. N steps."
 
-#### 3. Checkpoint Every 2-3 Tasks
+**After writing each task (full planning only — skip for light plans):**
+
+Dispatch a reviewer subagent. Read the template at
+`references/task-reviewer-prompt.md`, fill in the placeholders (`{PLAN_FILE_PATH}`,
+`{TASK_NUMBER}`, `{PRIOR_TASK_SUMMARIES}`), and pass the result as the prompt:
+
+```
+Agent(
+  description="Review plan Task N",
+  model="sonnet",
+  prompt=<template with placeholders filled in>
+)
+```
+
+As you write more tasks, the `{PRIOR_TASK_SUMMARIES}` context grows — keep prior summaries
+concise (1-2 sentences each).
+
+**If reviewer returns Approved:** proceed to next task.
+
+**If reviewer returns Issues Found:**
+1. Fix the specific issues listed in the task
+2. Re-dispatch the reviewer (same task, updated content)
+3. Cap at 5 total review dispatches (initial + up to 4 revision cycles)
+4. If still not approved after 5 dispatches, escalate via `AskUserQuestion` with the
+   outstanding issues and ask the user how to resolve them
+
+**If reviewer crashes or returns unparseable output:** retry once. If the second attempt also
+fails, mark the task as `[UNREVIEWED]` in the plan file and continue. `[UNREVIEWED]` tasks
+are surfaced in the Phase 6 flags report.
+
+**Collect assumptions:** When the reviewer detects `[ASSUMPTION: ...]` items, write them into
+the plan file immediately (append to the task body) — do not hold them only in memory.
+Assumptions must persist in the file so they survive context recycling.
+
+If a reviewer flags a **scope-level** assumption, treat it as a reactive breakpoint: stop
+and use `AskUserQuestion` immediately (same as agent-initiated scope ambiguity in step 3.5
+below). Do not defer scope assumptions to Phase 6.
+
+#### 3.5 Reactive Breakpoints
+
+While writing a task, if you encounter ambiguity, apply this decision:
+
+**Scope/Architecture ambiguity** — could change the plan's shape, affect other tasks, or
+alter the file structure:
+- STOP writing the current task immediately
+- Use `AskUserQuestion` with the specific ambiguity and the context that caused it
+- Do NOT continue writing until the user answers
+- Example: "While writing Task 4, I realized the auth flow could go through middleware OR
+  a decorator pattern. This affects Tasks 5-7. Which approach?"
+
+**Implementation detail ambiguity** — resolvable during execution, doesn't change plan shape:
+- Flag inline in the task as `[ASSUMPTION: description]`
+- Continue writing
+- The assumption accumulates for Phase 6 surfacing
+- Example: `[ASSUMPTION: Redis session TTL should be 24h — adjustable during implementation]`
+
+**Classification test:** "If I'm wrong about this, would it change other tasks?"
+- YES → scope ambiguity → hard gate, stop and ask
+- NO → detail ambiguity → flag inline and continue
+
+#### 4. Checkpoint Every 2-3 Tasks
 
 After every 2-3 tasks:
 
@@ -289,7 +412,9 @@ Options:
 If "Let me review" → wait for the user to read the file and come back.
 If "Adjust something" → discuss, rewrite just that task, continue.
 
-#### 4. Incorporate Feedback Immediately
+Mention in the checkpoint: "N assumptions flagged so far — will surface all in Phase 6."
+
+#### 5. Incorporate Feedback Immediately
 
 When the user gives feedback on a specific task, rewrite ONLY that task. Don't regenerate
 the entire plan.
@@ -302,30 +427,46 @@ After all tasks are written:
 2. Use **sequential-thinking** MCP to check for gaps: missing error handling, untested paths,
    dependency ordering issues
 3. Cross-reference against Phase 2 requirements: does the plan cover everything?
-4. **Documentation coverage check:** For every task whose changes match the documentation
+4. **File structure reconciliation:** Compare the `## File Structure` section against the
+   files actually referenced in all tasks. If tasks discovered new files not in the original
+   mapping, update the File Structure section. If planned files were dropped, remove them.
+5. **Documentation coverage check:** For every task whose changes match the documentation
    triggers in `code-quality/references/documentation-taxonomy.md`, verify the plan includes
    corresponding documentation updates. Cross-reference surfaces discovered in Phase 1.
    Check both trigger coverage (every trigger has a doc update) and surface coverage (every
    affected surface is updated).
+6. **Collect flags for Phase 6:**
+   - Collect all `[ASSUMPTION: ...]` flags from the plan file (from Phase 4 breakpoints and
+     reviewer-detected assumptions)
+   - Collect all open questions from the plan header's "Open Questions" section marked `[human]`
+   - Build a consolidated flags report to present in Phase 6
 
 **Chat output:**
-> "Plan complete. N tasks, M steps total. Covers: [list of areas].
->
-> One gap I noticed: [description]. Should I add a task for that?"
+> "Validation complete. N flags collected. Proceeding to completion report."
 
-## Phase 6: Handoff
+## Phase 6: Complete
 
-Offer execution options:
+The plan is the deliverable. Present the completion report.
 
-```
-AskUserQuestion: "How do you want to execute this plan?"
+**Chat output (required):**
 
-Options:
-- "Subagent-driven (this session)" → invoke superpowers:subagent-driven-development
-- "Executing-plans (new session)" → guide to superpowers:executing-plans
-- "I'll handle it manually"
-- "Let me review the full plan first"
-```
+1. **Summary** — "Plan complete. N tasks, M steps total. Covers: [areas]. Plan file: [path]."
+2. **Flags Report** — Surface everything flagged during the entire flow:
+   - Assumptions (from Phase 4 breakpoints and reviewer detection), each labeled
+     `scope` or `detail`. Advisory recommendations from the reviewer are informational
+     only — do not surface them as flags.
+   - Open questions from the plan header marked `[human]`
+3. **AskUserQuestion** — If there are ANY `[human]` open questions or scope-level assumptions
+   remaining, present them via `AskUserQuestion`. Hard requirement — never bury open questions
+   in the plan doc without surfacing them here.
+
+   After receiving answers, update the plan file: resolve open questions in the header and
+   apply any scope-level assumption resolutions to affected tasks. Then re-state the summary
+   with updated counts.
+
+If no flags remain: "No open flags. Plan is ready for implementation via `/swarm`."
+
+**Do NOT offer execution options. Do NOT ask "should I implement this?"**
 
 ## Quick Reference
 
@@ -334,7 +475,7 @@ Options:
 Phase 0: Assess depth → Phase 1: Explore (findings in chat) →
 Phase 2: Clarify (min 3 questions) → Phase 3: Consult (complex only) →
 Phase 4: Write incrementally (summaries in chat, content to file) →
-Phase 5: Validate → Phase 6: Handoff
+Phase 5: Validate → Phase 6: Complete
 ```
 
 ### What Goes Where

@@ -12,7 +12,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:performance` | Performance profiling and optimization | Sonnet |
 | `code-quality:test-runner` | Efficient test execution specialist | Haiku |
 
-## Skills (13)
+## Skills (14)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -25,7 +25,8 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
 | `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
 | `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
-| `/incremental-planning` | Planning workflow (replaces native plan mode) | Manual |
+| `/incremental-planning` | Planning workflow with per-task review and assumption surfacing | Manual |
+| `/roadmap` | Multi-plan phase sequencing and dependency analysis | Manual |
 | `/lsp-navigation` | Semantic code navigation via LSP | PROACTIVE |
 | `/uv-python` | Python tooling enforcement (uv over pip) | PROACTIVE |
 | `/test-runner` | Efficient test execution patterns | Manual |
@@ -44,7 +45,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 - **At least one LSP plugin** — Required for `/lsp-navigation` (pyright-uvx, vtsls-npx, gopls-go, etc.).
 - **Context7 MCP** — Required for `/file-audit` library validation (deprecated APIs, wrong signatures).
 - **Serena MCP** — Optional. Enhances `/incremental-planning` Phase 1 with `get_symbols_overview`.
-- **Sequential-Thinking MCP** — Optional. Used in `/incremental-planning` for scope boundary reasoning.
+- **Sequential-Thinking MCP** — Optional. Used in `/incremental-planning` and `/roadmap` for scope boundary reasoning.
 - **claude-mem MCP** — Optional. Searches past work and decisions in `/incremental-planning` Phase 1.
 - **SuperClaude** — Optional. The `/unfuck` skill references SuperClaude skills. Degrades gracefully without them.
 
