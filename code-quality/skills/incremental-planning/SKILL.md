@@ -232,17 +232,19 @@ Announce the location: "Plan file: `hack/plans/2026-02-15-session-auth.md`"
 
 Write the plan file with a header containing:
 
-**Always include (light and full planning):**
+**Always include (light and full planning).** Use `**Field:**` bold format for each field
+(e.g., `**Goal:**`, `**Cynefin Domain:**`) — this format is machine-parseable by `/roadmap`:
+
 - **Agentic directive** — A blockquote at the top of the plan file (above the Goal):
   `> **For agentic workers:** REQUIRED: Use /swarm to implement this plan. Each task within
   a phase should run in an isolated worktree.`
-- **Goal** — 1 sentence
-- **Cynefin Domain** — the domain classified in Phase 0
-- **Domain Justification** — 2-4 sentences explaining why this domain applies and what that
+- **Goal:** — 1 sentence
+- **Cynefin Domain:** — the domain classified in Phase 0
+- **Domain Justification:** — 2-4 sentences explaining why this domain applies and what that
   means for the plan (e.g., whether a probe is needed, whether outcomes are predictable)
-- **Architecture Summary** — 2-3 sentences
-- **Tech Stack**
-- **Key Decisions** — from Phase 2
+- **Architecture Summary:** — 2-3 sentences
+- **Tech Stack:**
+- **Key Decisions:** — from Phase 2
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
@@ -307,16 +309,22 @@ for each task. Each task should follow this structure:
 - Modify: `path/to/file.ts`
 - Create: `path/to/new.ts`
 
+**Depends on:** Task N-1 (if applicable, or "None")
+
 - [ ] **Step 1: [action]**
   [details]
+  Test: `command` → expected output
 - [ ] **Step 2: [action]**
   [details]
+
+**Documentation updates:** [surfaces to update, or "None"]
+**Commit:** `type(scope): description`
 ```
 
 Each task includes:
 - Files to create/modify (exact paths, using `**Files:**` block)
-- Steps (each step is one action: write test, run test, implement, verify, commit)
-- Test commands with expected output
+- Steps (each step is one concrete action — include test commands with expected output
+  inline within the relevant step)
 - Documentation updates (what docs to create/update/remove. "None" if no documentation
   triggers apply per `code-quality/references/documentation-taxonomy.md`. Reference surfaces
   discovered in Phase 1.)
