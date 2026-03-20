@@ -786,8 +786,10 @@ def main() -> None:
     latest_user_message = recent_user_messages[-1] if recent_user_messages else None
 
     # ── Tool-call dedup via count ────────────────────────────────────────────
-    if evaluated_count > len(all_tool_calls):
-        evaluated_count = 0  # transcript compacted, re-evaluate all
+    # When the 512KB tail window shifts (large transcripts), the count refers to a
+    # different window base — reset to 0 to avoid silently skipping tools.
+    if evaluated_count > len(all_tool_calls) or file_size > _MAX_PARSE_BYTES:
+        evaluated_count = 0
     new_tool_calls = all_tool_calls[evaluated_count:]
 
     # Create name-deduped list for LLM context
