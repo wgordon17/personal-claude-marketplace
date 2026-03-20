@@ -545,7 +545,7 @@ Categories execute sequentially because:
 Run the complete test suite one final time. This catches any cross-category regressions that individual category tests might miss.
 
 ```
-Agent(name="final-verification", subagent_type="dev-essentials:test-runner",
+Agent(name="final-verification", subagent_type="code-quality:test-runner",
      prompt="Run the full test suite. Report all pass/fail results.")
 ```
 

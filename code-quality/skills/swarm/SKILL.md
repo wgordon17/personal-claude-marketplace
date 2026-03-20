@@ -36,7 +36,7 @@ specialist agent.
 | 3 | Implementer | general-purpose | sonnet | Yes | Write code, component by component |
 | 3 | Reviewer | general-purpose | opus | No | Review each component before testing |
 | 3 | Test-Writer | general-purpose | sonnet | Yes | Write tests for reviewed components |
-| 3 | Test-Runner | dev-essentials:test-runner | haiku | No | Execute tests, report results |
+| 3 | Test-Runner | code-quality:test-runner | haiku | No | Execute tests, report results |
 | 4 | Security | code-quality:security | opus | No | OWASP, auth, secrets, injection review |
 | 4 | QA | code-quality:qa | opus | No | Patterns, conventions, code quality |
 | 4 | Code-Reviewer | superpowers:code-reviewer | sonnet | No | Broader review, complements QA |
@@ -47,7 +47,7 @@ specialist agent.
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |
-| 7 | Verifier | dev-essentials:test-runner | haiku | No | Final test suite + lint verification |
+| 7 | Verifier | code-quality:test-runner | haiku | No | Final test suite + lint verification |
 
 ### Optional Domain Reviewers (auto-detected in Phase 1)
 
@@ -348,7 +348,7 @@ agent scans the swarm run's audit trail and extracts principle-level lessons to 
 - Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
 
 Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
-format from `dev-essentials/skills/incremental-planning/references/lessons-template.md`:
+format from `code-quality/skills/incremental-planning/references/lessons-template.md`:
 `- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
 
 The Lessons Extractor runs after Docs completes to avoid audit trail races.
@@ -565,7 +565,7 @@ specific skills directly.
 | Large feature or architectural change | `/swarm` |
 | Codebase-wide cleanup | `/unfuck` |
 | Security audit only | `code-quality:security` directly |
-| Test coverage only | `dev-essentials:test-runner` directly |
+| Test coverage only | `code-quality:test-runner` directly |
 | Codebase-wide analysis or bulk transformation (20+ files) | `/map-reduce` |
 | Multiple viable approaches, need to compare | `/speculative` |
 | Architectural analysis (cross-cutting concerns) | Single agent (NOT /map-reduce) |

@@ -824,7 +824,7 @@ Agent(name="test-writer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[test-writer prompt from agent-prompts.md]")
 
-Agent(name="test-runner", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="test-runner", subagent_type="code-quality:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[test-runner prompt from agent-prompts.md]")
 ```
@@ -1567,7 +1567,7 @@ SendMessage(type="shutdown_request", recipient="lessons-extractor",
 ### Step 7.1: Spawn Verifier
 
 ```
-Agent(name="verifier", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="verifier", subagent_type="code-quality:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[verifier prompt from agent-prompts.md]\n\n"
             "BASELINE: {baseline from Phase 0.1}")
@@ -1833,7 +1833,7 @@ TeamCreate:
 | 3 | implementer | general-purpose | sonnet | bypassPermissions | Yes |
 | 3 | reviewer | general-purpose | opus | default | No |
 | 3 | test-writer | general-purpose | sonnet | bypassPermissions | Yes |
-| 3 | test-runner | dev-essentials:test-runner | haiku | default | No |
+| 3 | test-runner | code-quality:test-runner | haiku | default | No |
 | 4 | security-reviewer | code-quality:security | opus | default | No |
 | 4 | qa-reviewer | code-quality:qa | opus | default | No |
 | 4 | code-reviewer | superpowers:code-reviewer | sonnet | default | No |
@@ -1850,7 +1850,7 @@ TeamCreate:
 | 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
 | 6 | docs-reviewer | general-purpose | sonnet | default | No |
 | 6 | lessons-extractor | general-purpose | sonnet | bypassPermissions | Yes |
-| 7 | verifier | dev-essentials:test-runner | haiku | default | No |
+| 7 | verifier | code-quality:test-runner | haiku | default | No |
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 

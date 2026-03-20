@@ -10,7 +10,7 @@ description: >-
   implement changes autonomously. Combines detailed custom analysis with existing skills
   (file-audit, security-review, sc:cleanup, sc:improve, docs-sync, sc:index-repo,
   code-quality:architect, code-quality:security, code-quality:qa, code-simplifier,
-  dev-essentials:test-runner) into a unified cleanup workflow.
+  code-quality:test-runner) into a unified cleanup workflow.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
 ---
 
@@ -104,7 +104,7 @@ The orchestrator assigns categories in priority order (security â†’ dead code â†
 
 ### Phase 4: Verification & Report
 
-1. Run full test suite via `dev-essentials:test-runner`
+1. Run full test suite via `code-quality:test-runner`
 2. Run code quality checks on all modified files
 3. Apply `superpowers:verification-before-completion` patterns
 4. Invoke `sc:reflect` to verify completeness against the original cleanup plan

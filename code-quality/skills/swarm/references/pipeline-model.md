@@ -238,7 +238,7 @@ Lead spawns (pipeline team):
   implementer  (general-purpose, sonnet)   -- waits for first component assignment
   reviewer     (general-purpose, opus)     -- waits for first ComponentHandoff
   test-writer  (general-purpose, sonnet)   -- waits for first TestRequest
-  test-runner  (dev-essentials:test-runner, haiku) -- waits for first TestExecution
+  test-runner  (code-quality:test-runner, haiku) -- waits for first TestExecution
 
 Active from Phase 2 (remains available):
   architect    (code-quality:architect, opus) -- on standby for clarification questions
@@ -330,7 +330,7 @@ After Docs Reviewer confirms clean, Lessons Extractor reads the audit trail and 
 
 ```
 Lead spawns:
-  verifier  (dev-essentials:test-runner, haiku)  -- full test suite + lint
+  verifier  (code-quality:test-runner, haiku)  -- full test suite + lint
 ```
 
 Single agent, shut down after it sends `VerificationResult`.

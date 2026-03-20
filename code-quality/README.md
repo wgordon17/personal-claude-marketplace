@@ -1,8 +1,8 @@
 # Code Quality Plugin
 
-Code quality agents and orchestration skills for architecture, security, QA, performance review, auditing, and comprehensive cleanup.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance review, auditing, planning, LSP navigation, test execution, and session management.
 
-## Agents (4)
+## Agents (5)
 
 | Agent | Purpose | Model |
 |-------|---------|-------|
@@ -10,8 +10,9 @@ Code quality agents and orchestration skills for architecture, security, QA, per
 | `code-quality:security` | Application security review (OWASP) | Sonnet |
 | `code-quality:qa` | Code quality, test strategy, tech debt | Sonnet |
 | `code-quality:performance` | Performance profiling and optimization | Sonnet |
+| `code-quality:test-runner` | Efficient test execution specialist | Haiku |
 
-## Skills (9)
+## Skills (13)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -24,12 +25,28 @@ Code quality agents and orchestration skills for architecture, security, QA, per
 | `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
 | `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
 | `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
+| `/incremental-planning` | Planning workflow (replaces native plan mode) | Manual |
+| `/lsp-navigation` | Semantic code navigation via LSP | PROACTIVE |
+| `/uv-python` | Python tooling enforcement (uv over pip) | PROACTIVE |
+| `/test-runner` | Efficient test execution patterns | Manual |
+
+## Commands (4)
+
+| Command | Description |
+|---------|-------------|
+| `/code-quality:session-start` | Load project context or initialize new project |
+| `/code-quality:session-end` | Sync project memory before ending |
+| `/code-quality:review-project` | Comprehensive TODO validation |
+| `/code-quality:lsp-status` | Check LSP server status |
 
 ## Requirements
 
-- **dev-essentials plugin** — Required. The `/swarm` and `/unfuck` skills use the `dev-essentials:test-runner` agent for verification phases.
-- **Context7 MCP** — Required for `/file-audit` library validation (deprecated APIs, wrong signatures). Listed in `/file-audit` allowed-tools.
-- **SuperClaude** — The `/unfuck` skill references SuperClaude skills (`sc:index-repo`, `sc:analyze`, etc.) from a separate plugin system. These are informational — the skill degrades gracefully without them.
+- **At least one LSP plugin** — Required for `/lsp-navigation` (pyright-uvx, vtsls-npx, gopls-go, etc.).
+- **Context7 MCP** — Required for `/file-audit` library validation (deprecated APIs, wrong signatures).
+- **Serena MCP** — Optional. Enhances `/incremental-planning` Phase 1 with `get_symbols_overview`.
+- **Sequential-Thinking MCP** — Optional. Used in `/incremental-planning` for scope boundary reasoning.
+- **claude-mem MCP** — Optional. Searches past work and decisions in `/incremental-planning` Phase 1.
+- **SuperClaude** — Optional. The `/unfuck` skill references SuperClaude skills. Degrades gracefully without them.
 
 ## Installation
 

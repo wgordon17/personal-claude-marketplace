@@ -18,13 +18,14 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Architecture, security, QA, and performance agents with audit and orchestration skills | 4 agents, 9 skills | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 5 agents, 13 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
 - `code-quality:security` - Application security specialist (OWASP, auth, vulnerability detection)
 - `code-quality:qa` - Code quality & QA specialist (test strategy, maintainability, tech debt)
 - `code-quality:performance` - Performance engineering specialist (profiling, optimization, bottlenecks)
+- `code-quality:test-runner` - Efficient test execution specialist
 
 **Skills:**
 - `/deep-research` - Multi-hop research (40+ sources, multi-perspective analysis)
@@ -36,26 +37,16 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/quality-gate` - PROACTIVE multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates
 - `/map-reduce` - Parallelized workload processing with chunking, mapper agents, and reducer synthesis
 - `/speculative` - Competing implementations in isolated worktrees with judge selection
-
-### Development Essentials
-
-| Plugin | Description | Components | Docs |
-|--------|-------------|------------|------|
-| dev-essentials | LSP navigation, Python tooling, test execution, planning, and session management | 1 agent, 4 skills, 4 commands | [README](dev-essentials/README.md) |
-
-**Agent:** `dev-essentials:test-runner` - Efficient test execution specialist
-
-**Skills:**
+- `/incremental-planning` - Incremental planning workflow (replaces native plan mode)
 - `/lsp-navigation` - PROACTIVE semantic code navigation
 - `/uv-python` - PROACTIVE Python tooling enforcement (uv over pip)
 - `/test-runner` - Efficient test execution patterns
-- `/incremental-planning` - Incremental planning workflow (replaces native plan mode)
 
 **Commands:**
-- `/dev-essentials:session-start` - Load project context or initialize
-- `/dev-essentials:session-end` - Sync project memory before ending
-- `/dev-essentials:review-project` - Comprehensive TODO validation
-- `/dev-essentials:lsp-status` - Check LSP server status
+- `/code-quality:session-start` - Load project context or initialize
+- `/code-quality:session-end` - Sync project memory before ending
+- `/code-quality:review-project` - Comprehensive TODO validation
+- `/code-quality:lsp-status` - Check LSP server status
 
 ### Git Tools
 
@@ -110,7 +101,6 @@ claude plugin marketplace add wgordon17/personal-claude-marketplace
 # Install non-LSP plugins
 claude plugin install dev-guard@personal-claude-marketplace
 claude plugin install code-quality@personal-claude-marketplace
-claude plugin install dev-essentials@personal-claude-marketplace
 claude plugin install git-tools@personal-claude-marketplace
 claude plugin install github-mcp@personal-claude-marketplace
 claude plugin install cmux-integration@personal-claude-marketplace  # Optional: requires CMUX terminal
@@ -127,7 +117,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ### For All Non-LSP Plugins
 
-- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), dev-essentials (test-runner, uv-python), and git-tools (hook installation)
+- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), code-quality (test-runner, uv-python), and git-tools (hook installation)
 
 ### For GitHub MCP
 
@@ -194,15 +184,11 @@ rm -rf ~/.npm/_npx
 
 ## Ecosystem & Dependencies
 
-Plugins in this marketplace have cross-dependencies, external tool requirements, and optional MCP server integrations. This section documents what each plugin needs for full functionality.
+Plugins in this marketplace have external tool requirements and optional MCP server integrations. This section documents what each plugin needs for full functionality.
 
 ### Plugin Dependencies
 
-**code-quality + dev-essentials** are tightly coupled and should be installed together:
-
-- **code-quality** requires **dev-essentials** — The `/swarm` and `/unfuck` skills reference the `dev-essentials:test-runner` agent for verification phases. Without dev-essentials, final verification cannot spawn the correct agent type.
-- **dev-essentials** requires **code-quality** — The `/incremental-planning` skill references `code-quality:architect`, `code-quality:security`, and `code-quality:qa` agents for expert consultation. Without code-quality, Phase 3 (Consult) cannot spawn these agents.
-- **dev-essentials** requires at least one **LSP plugin** — The `/lsp-navigation` skill depends on an installed LSP plugin (pyright-uvx, vtsls-npx, gopls-go, etc.) to function.
+**code-quality** requires at least one **LSP plugin** — The `/lsp-navigation` skill depends on an installed LSP plugin (pyright-uvx, vtsls-npx, gopls-go, etc.) to function.
 
 **dev-guard** and **git-tools** are self-contained — no cross-plugin dependencies.
 
@@ -227,27 +213,26 @@ These MCP servers enhance functionality but are not required for core operation 
 | **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
-| **[Serena](https://github.com/Agentic-Coding/serena)** | dev-essentials | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1. Alternative tools work. |
-| **[Sequential-Thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)** | dev-essentials | Soft | Reasoning about scope boundaries in `/incremental-planning` Phases 1 and 5. Reasoning works without it. |
-| **[claude-mem](https://github.com/pchaganti/gx-claude-mem)** | dev-essentials | Soft | Search past work, decisions, and learnings in `/incremental-planning` Phase 1. Enhanced context, not required. |
+| **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1. Alternative tools work. |
+| **[Sequential-Thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)** | code-quality | Soft | Reasoning about scope boundaries in `/incremental-planning` Phases 1 and 5. Reasoning works without it. |
+| **[claude-mem](https://github.com/pchaganti/gx-claude-mem)** | code-quality | Soft | Search past work, decisions, and learnings in `/incremental-planning` Phase 1. Enhanced context, not required. |
 
 ### SuperClaude / Superpowers References
 
-Some skills in code-quality (`/unfuck`) and dev-essentials (`/incremental-planning`) reference SuperClaude skills (`sc:index-repo`, `sc:analyze`, `sc:cleanup`, `sc:improve`, `sc:reflect`) and Superpowers patterns (`superpowers:verification-before-completion`, `superpowers:subagent-driven-development`). These are from a separate plugin system not distributed in this marketplace. The skills degrade gracefully without them — the references are informational and the skills use alternative approaches when SuperClaude is unavailable.
+Some skills in code-quality (`/unfuck`, `/incremental-planning`) reference SuperClaude skills (`sc:index-repo`, `sc:analyze`, `sc:cleanup`, `sc:improve`, `sc:reflect`) and Superpowers patterns (`superpowers:verification-before-completion`, `superpowers:subagent-driven-development`). These are from a separate plugin system not distributed in this marketplace. The skills degrade gracefully without them — the references are informational and the skills use alternative approaches when SuperClaude is unavailable.
 
 ### Dependency Matrix
 
 Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** = degraded without it.
 
-| Plugin | code-quality | dev-essentials | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | SuperClaude |
-|--------|-------------|---------------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|-------------|
-| **code-quality** | -- | HARD | soft | HARD | -- | -- | -- | soft | -- | -- | soft |
-| **dev-essentials** | HARD | -- | HARD | -- | soft | soft | soft | soft | soft | -- | soft |
-| **git-tools** | -- | -- | -- | soft | -- | -- | -- | HARD | soft | HARD | -- |
-| **dev-guard** | -- | -- | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
-| **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| **cmux-integration** | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| **LSP plugins** | -- | -- | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
+| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | SuperClaude |
+|--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|-------------|
+| **code-quality** | soft | HARD | soft | soft | soft | soft | -- | -- | soft |
+| **git-tools** | -- | soft | -- | -- | -- | HARD | soft | HARD | -- |
+| **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **cmux-integration** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.
 

@@ -782,7 +782,7 @@ Route all TestHandoff messages through the team lead.
 
 ## Agent 5: Test-Runner
 
-**Type:** `dev-essentials:test-runner` | **Model:** haiku | **Mode:** default | **Persistent**
+**Type:** `code-quality:test-runner` | **Model:** haiku | **Mode:** default | **Persistent**
 
 ```markdown
 # Test-Runner — Swarm Pipeline Agent
@@ -1957,7 +1957,7 @@ SendMessage(type="message", recipient="team-lead",
 
 ## Agent 13: Verifier
 
-**Type:** `dev-essentials:test-runner` | **Model:** haiku | **Mode:** default
+**Type:** `code-quality:test-runner` | **Model:** haiku | **Mode:** default
 
 ```markdown
 # Verifier — Swarm Verification Agent

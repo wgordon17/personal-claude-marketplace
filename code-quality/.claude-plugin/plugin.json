@@ -1,6 +1,6 @@
 {
   "name": "code-quality",
-  "description": "Code quality agents and skills: architecture, security, QA, performance review plus file-audit, bug-investigation, unfuck, swarm orchestration, quality-gate, map-reduce, and speculative",
-  "version": "2.8.0",
+  "description": "Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, LSP navigation, uv-python, incremental planning, session management, file-audit, bug-investigation, unfuck, swarm, quality-gate, map-reduce, and speculative",
+  "version": "3.0.0",
   "author": { "name": "wgordon17" }
 }

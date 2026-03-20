@@ -39,12 +39,11 @@ Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 
 ## Repository Structure
 
-Personal Claude Code plugin marketplace with 11 plugins. Master registry: `.claude-plugin/marketplace.json`.
+Personal Claude Code plugin marketplace with 10 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
 - **dev-guard/** — Tool selection guard, commit validation, pre-push review (only plugin with tests)
-- **code-quality/** — Architecture, security, QA, performance agents + audit and orchestration skills
-- **dev-essentials/** — LSP navigation, uv-python, test execution, planning, session management
+- **code-quality/** — Agents (architect, security, QA, performance, test-runner), skills (13), commands (4), and orchestration
 - **git-tools/** — Git history, hooks, commit review, contributing guide; SessionStart git instructions
 - **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
 - **cmux-integration/** — Bridges Claude Code hook events to CMUX terminal (notifications, sidebar, activity log)
