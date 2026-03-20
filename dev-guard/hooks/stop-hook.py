@@ -378,6 +378,23 @@ def _git_diff_hash(cwd: str) -> str:
     return ""
 
 
+def _git_diff_names(cwd: str) -> list[str]:
+    """Return list of changed file paths from 'git diff --name-only', or [] on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only"],
+            capture_output=True,
+            timeout=_GIT_TIMEOUT,
+            cwd=cwd,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().splitlines()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return []
+
+
 def _git_diff_stat(cwd: str) -> str | None:
     """Return 'git diff --stat' output or None on failure."""
     try:
@@ -395,27 +412,18 @@ def _git_diff_stat(cwd: str) -> str | None:
     return None
 
 
-def _detect_doc_gap(cwd: str) -> bool:
-    """Return True if git diff shows component-like file changes without doc file changes.
+def _detect_doc_gap(file_list: list[str]) -> bool:
+    """Return True if changed files include components but no documentation.
 
-    Heuristic: if source/config files changed but zero documentation files were
-    touched, documentation may be missing. False positives are acceptable — the LLM
-    evaluator handles nuance.
+    Accepts a pre-fetched list of changed file paths (from git diff --name-only)
+    to avoid redundant subprocess calls.
+
+    Heuristic: if source files changed but zero documentation files were touched,
+    documentation may be missing. False positives are acceptable — the LLM evaluator
+    handles nuance.
     """
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only"],
-            capture_output=True,
-            timeout=_GIT_TIMEOUT,
-            cwd=cwd,
-            text=True,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return False
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    if not file_list:
         return False
-
-    files = result.stdout.strip().splitlines()
 
     # Component-like file extensions (source code that may need documentation)
     component_exts = {
@@ -427,23 +435,19 @@ def _detect_doc_gap(cwd: str) -> bool:
         ".jsx",
         ".go",
         ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".rb",
         ".sh",
         ".bash",
         ".nix",
         ".vue",
         ".svelte",
     }
-    # Documentation file patterns
-    doc_patterns = {
-        "readme",
-        "contributing",
-        "changelog",
-        "history",
-        "changes",
-        "news",
-    }
+    # Documentation file extensions — any file with these extensions counts as docs,
+    # regardless of directory. A project modifying .md files is doing documentation work.
     doc_exts = {".md", ".rst", ".adoc", ".txt", ".mdx", ".org"}
-    doc_dirs = {"docs/", "doc/", "documentation/", "wiki/", "guides/", "man/", "pages/", "content/"}
     manifest_files = {
         "plugin.json",
         "package.json",
@@ -456,23 +460,17 @@ def _detect_doc_gap(cwd: str) -> bool:
     has_component_changes = False
     has_doc_changes = False
 
-    for f in files:
+    for f in file_list:
         lower = f.lower()
         _name = lower.rsplit("/", 1)[-1]
-        _stem = _name.rsplit(".", 1)[0] if "." in _name else _name
         _ext = "." + _name.rsplit(".", 1)[1] if "." in _name else ""
 
-        # Check if this is a documentation file
-        if (
-            _stem in doc_patterns
-            or (_ext in doc_exts and any(lower.startswith(d) or f"/{d}" in lower for d in doc_dirs))
-            or _name in manifest_files
-        ):
-            has_doc_changes = True
-
-        # Check if this is a component file
+        # Component check first — if it's a source file, it's a component,
+        # even if its stem matches a doc pattern (e.g., src/news.py)
         if _ext in component_exts:
             has_component_changes = True
+        elif _ext in doc_exts or _name in manifest_files:
+            has_doc_changes = True
 
     return has_component_changes and not has_doc_changes
 
@@ -905,7 +903,8 @@ def main() -> None:
         trigger_reasons.append("mcp_write")
     if user_requested_action and not write_signals:
         trigger_reasons.append("action_requested_no_tools")
-    if diff_changed and _detect_doc_gap(cwd):
+    diff_names = _git_diff_names(cwd) if diff_changed else []
+    if diff_names and _detect_doc_gap(diff_names):
         trigger_reasons.append("doc_gap")
 
     # ── Fast-exit 7: No triggers at all ─────────────────────────────────────

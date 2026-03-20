@@ -1131,117 +1131,60 @@ def _load_stop_hook_module():
 
 
 class TestDetectDocGap:
-    """Unit tests for _detect_doc_gap heuristic."""
+    """Unit tests for _detect_doc_gap heuristic.
 
-    def test_component_files_without_docs_returns_true(self, tmp_path):
-        """Source files changed, no doc files changed -> gap detected."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@test.com"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "test"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        (tmp_path / "main.py").write_text("print('hello')")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
-        (tmp_path / "main.py").write_text("print('world')")
+    _detect_doc_gap now accepts a pre-fetched file list (not a cwd), so tests
+    pass file lists directly — no git repo setup needed.
+    """
 
-        mod = _load_stop_hook_module()
-        assert mod._detect_doc_gap(str(tmp_path)) is True
+    def setup_method(self):
+        self.mod = _load_stop_hook_module()
 
-    def test_component_files_with_docs_returns_false(self, tmp_path):
-        """Source files changed WITH doc files changed -> no gap."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@test.com"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "test"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        (tmp_path / "main.py").write_text("print('hello')")
-        (tmp_path / "README.md").write_text("# Project")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
-        (tmp_path / "main.py").write_text("print('world')")
-        (tmp_path / "README.md").write_text("# Updated Project")
+    def test_component_without_docs_returns_true(self):
+        """Source files changed, no doc files -> gap detected."""
+        assert self.mod._detect_doc_gap(["src/main.py"]) is True
 
-        mod = _load_stop_hook_module()
-        assert mod._detect_doc_gap(str(tmp_path)) is False
+    def test_component_with_readme_returns_false(self):
+        """Source files changed WITH README -> no gap."""
+        assert self.mod._detect_doc_gap(["src/main.py", "README.md"]) is False
 
-    def test_only_doc_files_returns_false(self, tmp_path):
+    def test_only_doc_files_returns_false(self):
         """Only doc files changed -> no gap."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@test.com"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "test"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        (tmp_path / "README.md").write_text("# Project")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
-        (tmp_path / "README.md").write_text("# Updated")
+        assert self.mod._detect_doc_gap(["README.md", "docs/guide.md"]) is False
 
-        mod = _load_stop_hook_module()
-        assert mod._detect_doc_gap(str(tmp_path)) is False
+    def test_empty_list_returns_false(self):
+        """Empty file list -> no gap."""
+        assert self.mod._detect_doc_gap([]) is False
 
-    def test_no_diff_returns_false(self, tmp_path):
-        """Clean working tree -> no gap."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@test.com"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "test"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        (tmp_path / "main.py").write_text("print('hello')")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+    def test_manifest_counts_as_docs(self):
+        """package.json alongside .ts -> no gap."""
+        assert self.mod._detect_doc_gap(["index.ts", "package.json"]) is False
 
-        mod = _load_stop_hook_module()
-        assert mod._detect_doc_gap(str(tmp_path)) is False
+    def test_any_md_file_counts_as_docs(self):
+        """Any .md file counts as docs, even outside docs/ directory."""
+        assert self.mod._detect_doc_gap(["src/lib.py", "ARCHITECTURE.md"]) is False
+        assert self.mod._detect_doc_gap(["src/lib.py", "skills/swarm/SKILL.md"]) is False
+        assert self.mod._detect_doc_gap(["src/lib.py", "references/schema.md"]) is False
 
-    def test_manifest_counts_as_docs(self, tmp_path):
-        """package.json change alongside .ts change -> no gap."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "test@test.com"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "test"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        (tmp_path / "index.ts").write_text("export const x = 1")
-        (tmp_path / "package.json").write_text('{"name": "test"}')
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
-        (tmp_path / "index.ts").write_text("export const x = 2")
-        (tmp_path / "package.json").write_text('{"name": "test", "version": "1.0.1"}')
+    def test_rst_and_adoc_count_as_docs(self):
+        """Non-markdown doc formats are recognized."""
+        assert self.mod._detect_doc_gap(["lib.rs", "docs/guide.rst"]) is False
+        assert self.mod._detect_doc_gap(["Main.java", "README.adoc"]) is False
 
-        mod = _load_stop_hook_module()
-        assert mod._detect_doc_gap(str(tmp_path)) is False
+    def test_c_and_cpp_are_components(self):
+        """C/C++ files are recognized as components."""
+        assert self.mod._detect_doc_gap(["src/main.c"]) is True
+        assert self.mod._detect_doc_gap(["src/parser.cpp"]) is True
+        assert self.mod._detect_doc_gap(["src/main.c", "README.md"]) is False
 
-    def test_non_git_dir_returns_false(self, tmp_path):
-        """Non-git directory -> fails open (no gap)."""
-        mod = _load_stop_hook_module()
-        assert mod._detect_doc_gap(str(tmp_path)) is False
+    def test_src_news_py_is_component_not_doc(self):
+        """A .py file named 'news' is a component, not documentation."""
+        assert self.mod._detect_doc_gap(["src/news.py"]) is True
+
+    def test_pyproject_toml_counts_as_docs(self):
+        """pyproject.toml is a manifest -> counts as docs."""
+        assert self.mod._detect_doc_gap(["src/app.py", "pyproject.toml"]) is False
+
+    def test_cargo_toml_counts_as_docs(self):
+        """Cargo.toml is a manifest -> counts as docs (case-insensitive)."""
+        assert self.mod._detect_doc_gap(["src/main.rs", "Cargo.toml"]) is False
