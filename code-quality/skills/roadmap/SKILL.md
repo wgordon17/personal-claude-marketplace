@@ -549,7 +549,7 @@ Phase 0: Detect & Route (HITL, requires project memory dir) →
   [Update]  Completion Check → Phase 1-5 (re-ingest, completed phases preserved)
   [Status]  Completion Check → Drift Detection → Report → offer Update/Cleanup/Exit
   [Cleanup] Completion Check → Archive plans → Delete branches → Update roadmap doc
-  [No memory dir] → skip Phase 0, go directly to Phase 1
+  [No memory dir] → skip Phase 0, go to Phase 1 (lifecycle requests get AskUserQuestion first)
 ```
 
 ### What Goes Where
