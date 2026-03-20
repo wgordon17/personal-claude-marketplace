@@ -4,8 +4,10 @@ description: >-
   Incremental planning workflow that replaces native plan mode. Use when Claude tries to enter
   plan mode (EnterPlanMode is denied by hook), when asked to "plan", "design an approach",
   "how should we implement", or before any multi-file implementation task. Asks clarifying
-  questions first, writes plan to file incrementally, provides research context and summaries
-  in chat for feedback. Never displays full plan content in chat.
+  questions first, writes plan to file incrementally with file structure mapping, per-task
+  adversarial review (sonnet subagent), tiered breakpoints for scope vs detail ambiguity, and
+  assumption surfacing in Phase 6. Provides research context and summaries in chat for
+  feedback. Never displays full plan content in chat.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
 ---
 
@@ -392,25 +394,34 @@ After all tasks are written:
    corresponding documentation updates. Cross-reference surfaces discovered in Phase 1.
    Check both trigger coverage (every trigger has a doc update) and surface coverage (every
    affected surface is updated).
+5. **Collect flags for Phase 6:**
+   - Collect all `[ASSUMPTION: ...]` flags from the plan file (from Phase 4 breakpoints and
+     reviewer-detected assumptions)
+   - Collect all open questions from the plan header's "Open Questions" section marked `[human]`
+   - Build a consolidated flags report to present in Phase 6
 
 **Chat output:**
-> "Plan complete. N tasks, M steps total. Covers: [list of areas].
->
-> One gap I noticed: [description]. Should I add a task for that?"
+> "Validation complete. N flags collected. Proceeding to completion report."
 
-## Phase 6: Handoff
+## Phase 6: Complete
 
-Offer execution options:
+The plan is the deliverable. Present the completion report.
 
-```
-AskUserQuestion: "How do you want to execute this plan?"
+**Chat output (required):**
 
-Options:
-- "Subagent-driven (this session)" → invoke superpowers:subagent-driven-development
-- "Executing-plans (new session)" → guide to superpowers:executing-plans
-- "I'll handle it manually"
-- "Let me review the full plan first"
-```
+1. **Summary** — "Plan complete. N tasks, M steps total. Covers: [areas]. Plan file: [path]."
+2. **Flags Report** — Surface everything flagged during the entire flow:
+   - Assumptions made (from Phase 4 breakpoints and reviewer detection), each labeled
+     `scope` or `detail`
+   - Open questions from the plan header marked `[human]`
+   - Any reviewer recommendations that warrant user attention
+3. **AskUserQuestion** — If there are ANY `[human]` open questions or scope-level assumptions
+   remaining, present them via `AskUserQuestion`. Hard requirement — never bury open questions
+   in the plan doc without surfacing them here.
+
+If no flags remain: "No open flags. Plan is ready for implementation via `/swarm`."
+
+**Do NOT offer execution options. Do NOT ask "should I implement this?"**
 
 ## Quick Reference
 
@@ -419,7 +430,7 @@ Options:
 Phase 0: Assess depth → Phase 1: Explore (findings in chat) →
 Phase 2: Clarify (min 3 questions) → Phase 3: Consult (complex only) →
 Phase 4: Write incrementally (summaries in chat, content to file) →
-Phase 5: Validate → Phase 6: Handoff
+Phase 5: Validate → Phase 6: Complete
 ```
 
 ### What Goes Where
