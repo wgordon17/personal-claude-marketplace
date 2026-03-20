@@ -332,6 +332,28 @@ tasks. As you write more tasks, the summary context grows — keep prior summari
 **Collect assumptions:** Any `[ASSUMPTION: ...]` items detected by the reviewer accumulate
 across all tasks. These are surfaced in the Phase 6 flags report.
 
+#### 3.5 Reactive Breakpoints
+
+While writing a task, if you encounter ambiguity, apply this decision:
+
+**Scope/Architecture ambiguity** — could change the plan's shape, affect other tasks, or
+alter the file structure:
+- STOP writing the current task immediately
+- Use `AskUserQuestion` with the specific ambiguity and the context that caused it
+- Do NOT continue writing until the user answers
+- Example: "While writing Task 4, I realized the auth flow could go through middleware OR
+  a decorator pattern. This affects Tasks 5-7. Which approach?"
+
+**Implementation detail ambiguity** — resolvable during execution, doesn't change plan shape:
+- Flag inline in the task as `[ASSUMPTION: description]`
+- Continue writing
+- The assumption accumulates for Phase 6 surfacing
+- Example: `[ASSUMPTION: Redis session TTL should be 24h — adjustable during implementation]`
+
+**Classification test:** "If I'm wrong about this, would it change other tasks?"
+- YES → scope ambiguity → hard gate, stop and ask
+- NO → detail ambiguity → flag inline and continue
+
 #### 4. Checkpoint Every 2-3 Tasks
 
 After every 2-3 tasks:
