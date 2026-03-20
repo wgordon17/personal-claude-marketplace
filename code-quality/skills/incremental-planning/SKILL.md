@@ -303,6 +303,35 @@ Append one task at a time using the Edit tool. Each task should follow bite-size
 
 **Chat output per task:** "Task N written: [1 sentence description]. N steps."
 
+**After writing each task (full planning only — skip for light plans):**
+
+Dispatch a reviewer subagent using the template in
+`code-quality/skills/incremental-planning/references/task-reviewer-prompt.md`:
+
+```
+Agent(
+  subagent_type="general",
+  description="Review plan Task N",
+  model="claude-sonnet-4-6",
+  prompt=<constructed from template + plan file path + task number + prior task summaries>
+)
+```
+
+Provide: plan file path, task number to focus on, and 1-2 sentence summaries of all prior
+tasks. As you write more tasks, the summary context grows — keep prior summaries concise.
+
+**If reviewer returns Approved:** proceed to next task.
+
+**If reviewer returns Issues Found:**
+1. Fix the specific issues listed in the task
+2. Re-dispatch the reviewer (same task, updated content)
+3. Cap at 5 total review dispatches (initial + up to 4 revision cycles)
+4. If still not approved after 5 dispatches, escalate via `AskUserQuestion` with the
+   outstanding issues and ask the user how to resolve them
+
+**Collect assumptions:** Any `[ASSUMPTION: ...]` items detected by the reviewer accumulate
+across all tasks. These are surfaced in the Phase 6 flags report.
+
 #### 4. Checkpoint Every 2-3 Tasks
 
 After every 2-3 tasks:
@@ -320,6 +349,8 @@ Options:
 
 If "Let me review" → wait for the user to read the file and come back.
 If "Adjust something" → discuss, rewrite just that task, continue.
+
+Mention in the checkpoint: "N assumptions flagged so far — will surface all in Phase 6."
 
 #### 5. Incorporate Feedback Immediately
 
