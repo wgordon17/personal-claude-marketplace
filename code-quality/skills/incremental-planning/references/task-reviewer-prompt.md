@@ -20,6 +20,9 @@ Agent(
 Construct the prompt by filling in the bracketed placeholders. Provide all three context
 blocks (plan file path, task number, prior task summaries) even if prior summaries are empty.
 
+The reviewer subagent (general-purpose type) has full tool access including Read, so it can
+read the plan file directly.
+
 ---
 
 ## Prompt Template

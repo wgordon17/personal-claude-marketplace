@@ -145,7 +145,7 @@ truly simple, the questions will be quick to answer.
 
 ### Exit Condition
 
-You can proceed to Phase 4 (or Phase 3 for complex tasks) when you can articulate ALL of:
+You can proceed to Phase 3 (or Phase 4 directly for light planning) when you can articulate ALL of:
 
 1. **Scope** — what the user wants built
 2. **Behavior** — how it should work
@@ -417,10 +417,14 @@ The plan is the deliverable. Present the completion report.
    - Assumptions made (from Phase 4 breakpoints and reviewer detection), each labeled
      `scope` or `detail`
    - Open questions from the plan header marked `[human]`
-   - Any reviewer recommendations that warrant user attention
+   - Any reviewer-detected assumptions (not advisory recommendations — those are informational only)
 3. **AskUserQuestion** — If there are ANY `[human]` open questions or scope-level assumptions
    remaining, present them via `AskUserQuestion`. Hard requirement — never bury open questions
    in the plan doc without surfacing them here.
+
+   After receiving answers, update the plan file: resolve open questions in the header and
+   apply any scope-level assumption resolutions to affected tasks. Then re-state the summary
+   with updated counts.
 
 If no flags remain: "No open flags. Plan is ready for implementation via `/swarm`."
 

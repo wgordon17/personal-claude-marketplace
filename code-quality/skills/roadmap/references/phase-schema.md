@@ -60,7 +60,7 @@ must appear as columns — do not add per-track metadata outside the table.
 | Tasks | Yes | Task range from that plan (e.g., "Tasks 1-3", "Tasks 4-7", "All") |
 | Worktree Branch | Yes | Convention: `roadmap/phase-N/plan-name` (derived from plan filename) |
 | Depends On | Yes | Other tracks/phases that must complete first, or "None" |
-| Skill | Yes | Execution skill (default: `/swarm`; use `/incremental-planning` for planning-only tracks) |
+| Skill | Yes | Execution skill (default: `/swarm`; use `/incremental-planning` for planning-only tracks). Valid values are `/swarm` (full agent swarm — default for most implementation work), `/speculative` (competing implementations), or a custom skill path. The orchestrator invokes the specified skill in the track's worktree with the plan file and task range as arguments. |
 | Domain | Yes | Cynefin domain from the plan's header (Clear, Complicated, Complex, Chaotic, Disorder) |
 
 ### Per-Phase Fixed Fields
@@ -204,3 +204,21 @@ each layer depends on the contract defined by the layer below it.
 **Sync point:** All tracks must complete before merging to main. Final phase.
 **Merge order:** Track B first (API hardening is additive), then Track A (frontend may reference finalized API contracts).
 ```
+
+---
+
+## Consumption
+
+An orchestrator processes the roadmap document phase-by-phase:
+
+1. **Parse** — Read the roadmap file. For each phase block, extract the per-track table rows.
+2. **Fork** — For each track in the current phase, create an isolated git worktree on the specified branch.
+3. **Execute** — In each worktree, invoke the track's Skill (default: `/swarm`) with:
+   - Plan file path (from the Plan column)
+   - Task range (from the Tasks column)
+   - Worktree branch (already checked out)
+4. **Sync** — Wait for all tracks in the phase to complete (sync point).
+5. **Merge** — Merge worktree branches back to main in the specified merge order.
+6. **Advance** — Move to the next phase. Repeat from step 2.
+
+If any track fails, the phase is blocked. The orchestrator should surface the failure and await human resolution before retrying or advancing.
