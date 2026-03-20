@@ -258,7 +258,39 @@ Write the plan file with a header containing:
 
 **Chat output:** "Wrote plan header. Goal: [1 sentence]. Architecture: [1 sentence]."
 
-#### 2. Write Each Task
+#### 2. File Structure Mapping
+
+Before writing tasks, map all files this plan will touch.
+
+Create a `## File Structure` section in the plan file, placed between the header (after the
+`---` separator) and Task 1. Use this layout:
+
+```markdown
+## File Structure
+
+### Files to Modify
+| File | Responsibility | Change |
+|------|----------------|--------|
+| `path/to/file.ts` | Brief responsibility | What changes |
+
+### Files to Create
+| File | Responsibility |
+|------|----------------|
+| `path/to/new.ts` | Brief responsibility |
+
+### File Design Notes
+- **`path/to/file.ts`** — Why it exists here and not elsewhere (for non-obvious decisions only)
+```
+
+**File design philosophy to apply:**
+- Design units with clear boundaries and well-defined interfaces
+- Prefer smaller, focused files over large ones — a file that does one thing is easier to test
+- Files that change together should live together — split by responsibility, not technical layer
+- In existing codebases, follow established patterns (check adjacent files before choosing placement)
+
+This step writes to the plan file only. **Chat output:** "Wrote file structure. N files mapped."
+
+#### 3. Write Each Task
 
 Append one task at a time using the Edit tool. Each task should follow bite-sized structure:
 - Files to create/modify (exact paths)
@@ -271,7 +303,7 @@ Append one task at a time using the Edit tool. Each task should follow bite-size
 
 **Chat output per task:** "Task N written: [1 sentence description]. N steps."
 
-#### 3. Checkpoint Every 2-3 Tasks
+#### 4. Checkpoint Every 2-3 Tasks
 
 After every 2-3 tasks:
 
@@ -289,7 +321,7 @@ Options:
 If "Let me review" → wait for the user to read the file and come back.
 If "Adjust something" → discuss, rewrite just that task, continue.
 
-#### 4. Incorporate Feedback Immediately
+#### 5. Incorporate Feedback Immediately
 
 When the user gives feedback on a specific task, rewrite ONLY that task. Don't regenerate
 the entire plan.
