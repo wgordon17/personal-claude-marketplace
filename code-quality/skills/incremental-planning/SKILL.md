@@ -99,7 +99,7 @@ specific questions — not generic ones.
 
 ### Actions
 
-- Launch an **Explore agent** (`Task` with `subagent_type: "Explore"`) for relevant codebase areas
+- Launch an **Explore agent** (`Agent` with `subagent_type: "Explore"`) for relevant codebase areas
 - Read `hack/PROJECT.md` (or equivalent memory file) for past architectural decisions
 - Read `hack/LESSONS.md` for relevant past lessons (if exists). Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without
@@ -107,6 +107,10 @@ specific questions — not generic ones.
 - Search **claude-mem** MCP for relevant past work, decisions, and learnings
 - Use **Serena** MCP `get_symbols_overview` for component-level understanding (if applicable)
 - Use **sequential-thinking** MCP to reason about scope boundaries
+- **Discover documentation surfaces** — Use the detection patterns in
+  `code-quality/references/documentation-taxonomy.md` (Documentation Surfaces section) to
+  find all surfaces in the project. Note which exist and what they document. This inventory
+  feeds Phase 4 and Phase 5.
 
 ### Chat Output
 
@@ -173,7 +177,7 @@ Skip this phase for light planning.
 
 ### Actions
 
-Launch specialized agents in parallel using the `Task` tool:
+Launch specialized agents in parallel using the `Agent` tool:
 
 - **`code-quality:architect`** — "Given [Phase 1 context] and [Phase 2 requirements],
   what are the key architectural considerations?"
@@ -236,6 +240,10 @@ Write the plan file with a header containing:
 - **Key Decisions** — from Phase 2
 
 **The following header sections apply to full planning only (skip for light planning):**
+- **Documentation Impact** — which documentation surfaces are affected by this work and how.
+  Use the trigger definitions from `code-quality/references/documentation-taxonomy.md` to
+  determine if changes require documentation. Reference surfaces discovered in Phase 1.
+  Format: `surface → action (add/update/remove) → why`. Omit if no documentation triggers apply.
 - **Options Considered** — for architecture-level plans, list the alternatives evaluated and
   why they were rejected (1-2 sentences per option). Minimum 2 options if a meaningful choice
   was made. Omit if the approach was never in question.
@@ -256,6 +264,9 @@ Append one task at a time using the Edit tool. Each task should follow bite-size
 - Files to create/modify (exact paths)
 - Steps (each step is one action: write test, run test, implement, verify, commit)
 - Test commands with expected output
+- Documentation updates (what docs to create/update/remove. "None" if no documentation
+  triggers apply per `code-quality/references/documentation-taxonomy.md`. Reference surfaces
+  discovered in Phase 1.)
 - Commit message
 
 **Chat output per task:** "Task N written: [1 sentence description]. N steps."
@@ -291,6 +302,11 @@ After all tasks are written:
 2. Use **sequential-thinking** MCP to check for gaps: missing error handling, untested paths,
    dependency ordering issues
 3. Cross-reference against Phase 2 requirements: does the plan cover everything?
+4. **Documentation coverage check:** For every task whose changes match the documentation
+   triggers in `code-quality/references/documentation-taxonomy.md`, verify the plan includes
+   corresponding documentation updates. Cross-reference surfaces discovered in Phase 1.
+   Check both trigger coverage (every trigger has a doc update) and surface coverage (every
+   affected surface is updated).
 
 **Chat output:**
 > "Plan complete. N tasks, M steps total. Covers: [list of areas].

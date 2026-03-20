@@ -355,7 +355,7 @@ For complex test workflows, consider launching the test-runner agent via Agent t
 ```python
 # Launch agent for test execution and failure reporting
 Agent(
-  subagent_type="dev-essentials:test-runner",
+  subagent_type="code-quality:test-runner",
   prompt="Run pre-commit and pytest, report any failures with specific test paths"
 )
 ```

@@ -36,7 +36,7 @@ specialist agent.
 | 3 | Implementer | general-purpose | sonnet | Yes | Write code, component by component |
 | 3 | Reviewer | general-purpose | opus | No | Review each component before testing |
 | 3 | Test-Writer | general-purpose | sonnet | Yes | Write tests for reviewed components |
-| 3 | Test-Runner | dev-essentials:test-runner | haiku | No | Execute tests, report results |
+| 3 | Test-Runner | code-quality:test-runner | haiku | No | Execute tests, report results |
 | 4 | Security | code-quality:security | opus | No | OWASP, auth, secrets, injection review |
 | 4 | QA | code-quality:qa | opus | No | Patterns, conventions, code quality |
 | 4 | Code-Reviewer | superpowers:code-reviewer | sonnet | No | Broader review, complements QA |
@@ -44,9 +44,10 @@ specialist agent.
 | 4.5 | Structural Analyst (×2) | general-purpose | opus | No | Adversarial structural design review |
 | 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
 | 5 | Code-Simplifier | code-simplifier:code-simplifier | sonnet | Yes | Post-fix simplification pass |
-| 6 | Docs | general-purpose | haiku | Yes | Update repo docs and hack/ memory |
+| 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
+| 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |
-| 7 | Verifier | dev-essentials:test-runner | haiku | No | Final test suite + lint verification |
+| 7 | Verifier | code-quality:test-runner | haiku | No | Final test suite + lint verification |
 
 ### Optional Domain Reviewers (auto-detected in Phase 1)
 
@@ -102,7 +103,10 @@ run. The Lead reads the classification to inform Phase 2.5 skip decisions.
 
 Output is a structured JSON plan written to `hack/swarm/YYYY-MM-DD/architect-plan.json`
 (see schema in `references/communication-schema.md`). The architect also identifies global risks,
-data model changes, and API surface changes. After receiving the plan, the Lead MUST:
+data model changes, API surface changes, and **documentation impact** — a `documentation_impact`
+array listing which documentation surfaces are affected and why (READMEs, manifests, registries,
+component tables, descriptions, dependency matrices, user-facing docs). This array feeds Phase 6.
+After receiving the plan, the Lead MUST:
 
 1. Read `architect-plan.json` and check the `questions` array
 2. If `questions` is non-empty, present EVERY question to the user via `AskUserQuestion`
@@ -280,13 +284,61 @@ Re-run affected tests after any fixes to confirm nothing regressed.
 
 ### Phase 6: Docs & Memory
 
-Spawn the Docs agent with the full list of modified files and a summary of what changed. The Docs
-agent updates affected README files, API documentation, and inline docs. It also detects the
-project's memory directory (`hack/`, `.local/`, `scratch/`, `.dev/`) and updates PROJECT.md with
-architectural decisions, TODO.md with completed and new items, and SESSIONS.md with a 3-5 bullet
-summary. Only update documentation that is actually affected by the implementation.
+Spawn the Docs agent (**sonnet model** — documentation requires judgment about what's user-facing
+and what's changed) with the full list of modified files, a summary of what changed, and the
+architect's `documentation_impact` array from `architect-plan.json`.
 
-After the Docs agent completes, spawn a separate **Lessons Extractor** agent (sonnet model). This
+The Docs agent performs three passes:
+
+**Pass 1: Architect-guided updates** — Work through each entry in `documentation_impact`:
+- For each affected documentation surface, read the current state and update it
+- If a new feature/skill/command/agent was added: add entries to README tables, update component
+  counts, add to plugin manifest descriptions, add to marketplace registry descriptions
+- If a feature was removed/renamed: remove or update all references across all doc surfaces
+- If dependencies changed: update dependency matrices and requirements sections
+
+**Pass 2: Discovery-based completeness check** — Independent of the architect's list:
+- Glob for all documentation surfaces (READMEs, manifests, registries, CONTRIBUTING.md)
+- Compare on-disk components against documented components (e.g., count skills in `skills/*/SKILL.md`
+  vs skills listed in README table — they must match)
+- Grep for stale references to renamed/removed features
+- Verify component counts, descriptions, and cross-references are internally consistent
+
+**Pass 3: Changed-file documentation** — For each file modified in the swarm, check if
+corresponding documentation needs updating (README behavior descriptions, API docs, config docs,
+CONTRIBUTING.md). Update only what is directly affected.
+
+The Docs agent also detects the project's memory directory (`hack/`, `.local/`, `scratch/`,
+`.dev/`) and updates PROJECT.md with architectural decisions, TODO.md with completed and new
+items, and SESSIONS.md with a 3-5 bullet summary.
+
+**Skip conditions for Phase 6 docs (memory updates always run):**
+Only skip documentation updates for purely internal refactors with no public API, documented
+behavior, feature, or component changes. When in doubt, run the docs pass — the cost of a
+no-op docs check is low; the cost of missing documentation is high.
+
+After the Docs agent completes, spawn a **Docs Reviewer** agent (sonnet, read-only) to verify
+the Docs agent's work. The Docs Reviewer receives:
+- The architect's `documentation_impact` array from `architect-plan.json`
+- The Docs agent's completion report (surfaces updated, counts, gaps found)
+- `git diff` of documentation changes made by the Docs agent
+
+The Docs Reviewer checks:
+1. **Impact coverage** — Was every entry in `documentation_impact` addressed? If the architect
+   flagged a surface and the Docs agent didn't touch it, that's a finding.
+2. **Accuracy** — Are the doc changes factually correct? Do component counts match on-disk
+   reality? Do descriptions accurately describe the implemented features?
+3. **Consistency** — Do all documentation surfaces agree with each other after the Docs agent's
+   edits? (README ↔ manifest ↔ registry ↔ root README)
+4. **Completeness** — Did the Docs agent miss any documentation surface the Reviewer can
+   discover independently via Glob?
+
+Findings are written to `{run_dir}/reviews/docs-review.json` using the standard ReviewFindings
+schema with `DOC-R` prefix. Critical/High findings are routed back to the Docs agent for fixes
+(max 1 iteration — the Docs Reviewer re-reviews after fixes). Low/Medium findings are recorded
+in the audit trail.
+
+After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
 agent scans the swarm run's audit trail and extracts principle-level lessons to `hack/LESSONS.md`
 (creating the file if it does not exist). It reads:
 - `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged
@@ -296,7 +348,7 @@ agent scans the swarm run's audit trail and extracts principle-level lessons to 
 - Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
 
 Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
-format from `dev-essentials/skills/incremental-planning/references/lessons-template.md`:
+format from `code-quality/skills/incremental-planning/references/lessons-template.md`:
 `- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
 
 The Lessons Extractor runs after Docs completes to avoid audit trail races.
@@ -513,7 +565,7 @@ specific skills directly.
 | Large feature or architectural change | `/swarm` |
 | Codebase-wide cleanup | `/unfuck` |
 | Security audit only | `code-quality:security` directly |
-| Test coverage only | `dev-essentials:test-runner` directly |
+| Test coverage only | `code-quality:test-runner` directly |
 | Codebase-wide analysis or bulk transformation (20+ files) | `/map-reduce` |
 | Multiple viable approaches, need to compare | `/speculative` |
 | Architectural analysis (cross-cutting concerns) | Single agent (NOT /map-reduce) |
@@ -523,8 +575,8 @@ specific skills directly.
 | Model | Cost | Used For |
 |-------|------|---------|
 | opus | Expensive | Architect, Reviewer, Security, QA — judgment-heavy tasks |
-| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier, Lessons Extractor |
-| haiku | Cheap | Test-Runner, Docs, Verifier — execution-only tasks |
+| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier, Lessons Extractor, Docs |
+| haiku | Cheap | Test-Runner, Verifier — execution-only tasks |
 
 Minimize opus usage to the phases where nuanced judgment is genuinely required.
 

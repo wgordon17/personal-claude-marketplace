@@ -40,9 +40,10 @@ digraph quality_gate {
   layer2 [label="Layer 2: Fresh-Context Subagents\n2 subagents x 2 passes"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
+  docs [label="Documentation Gate (BLOCKING)"];
   nodataloss [label="No Data Loss Gate (BLOCKING)"];
   final [label="Final Verification"];
-  detect -> layer1 -> layer1_5 -> layer2 -> memory -> artifact -> nodataloss -> final;
+  detect -> layer1 -> layer1_5 -> layer2 -> memory -> artifact -> docs -> nodataloss -> final;
 }
 ```
 
@@ -77,7 +78,7 @@ comprehensive coverage from different angles.
 | Round | Lens | Core Question |
 |-------|------|---------------|
 | 1 | **Correctness** | What inputs produce wrong results? What assumptions are untested? |
-| 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. |
+| 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. Includes documentation completeness (see below). |
 | 3 | **Robustness** | How does this fail? Bad input, missing deps, concurrent access, edge cases? |
 | 4 | **Simplicity** | What's over-engineered? What could be deleted? What's AI slop? |
 | 5 | **Adversarial** | You are a hostile reviewer. The author claims this is done. Prove them wrong. |
@@ -127,7 +128,15 @@ Execute this protocol for EVERY round:
       - Deployment/delivery requirements (will this change actually reach users?)
       - Any other project-specific rules that apply to this type of change
 
-   b) Cross-reference integrity: search the ENTIRE codebase for references
+   b) Documentation completeness: check every change against the documentation
+      triggers in `code-quality/references/documentation-taxonomy.md`. For each
+      trigger that fires, verify the corresponding documentation surfaces were
+      updated. Use the taxonomy's surface detection patterns to discover all
+      surfaces, and its ecosystem-specific component discovery patterns to count
+      on-disk components. Counts must match what's documented. A new component
+      with no documentation entry is a completeness failure, same as a missing test.
+
+   c) Cross-reference integrity: search the ENTIRE codebase for references
       to things you changed, renamed, or removed. Files you DIDN'T modify
       can have stale references to things you DID modify. Grep for:
       - Old names/values you replaced
@@ -434,6 +443,28 @@ Do not assume prior pushes landed or that the PR is still open. Verify:
 
 ---
 
+## Documentation Gate (BLOCKING)
+
+Ensures documentation accurately reflects the current state of the codebase after all changes.
+Cannot proceed past this gate without completing all applicable checks.
+
+**This gate catches code→docs gaps** — features that exist on disk but aren't documented.
+Round 2 checks docs→code (do documented claims match reality). This gate checks the inverse.
+
+Use `code-quality/references/documentation-taxonomy.md` for all definitions.
+
+| Check | Action |
+|-------|--------|
+| **Trigger check** | Do any changes in this work match documentation triggers (taxonomy § Triggers)? If no triggers fire, skip remaining checks. |
+| **Component inventory** | Use ecosystem-specific discovery patterns (taxonomy § Component Discovery) to count on-disk components. Compare against documentation surfaces (taxonomy § Surfaces). Mismatches are blocking. |
+| **Feature coverage** | For each trigger that fired: is there a corresponding documentation update? New component without doc entry = fail. Removed component with stale references = fail. |
+| **Cross-surface consistency** | Apply consistency rules (taxonomy § Cross-Surface Consistency). All surfaces must agree on names, counts, and descriptions. |
+
+**Skip conditions:** No documentation triggers fire (per taxonomy § "Changes that DO NOT require
+documentation updates"). When in doubt, run the check.
+
+---
+
 ## No Data Loss Gate (BLOCKING)
 
 Ensures work artifacts are persisted to a **durable, externally-trackable location** — not just
@@ -517,6 +548,11 @@ Memory Gate: [PASS / UPDATED]
 
 Artifact Gate: [PASS / N/A]
   [work-type-specific status]
+
+Documentation Gate: [PASS / SKIP / N/A]
+  Components on disk: [count] | Documented: [count]
+  Surfaces checked: [list]
+  Gaps found: [count]
 
 No Data Loss Gate: [PASS / N/A]
   [artifact persistence status]

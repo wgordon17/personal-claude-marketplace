@@ -238,7 +238,7 @@ Lead spawns (pipeline team):
   implementer  (general-purpose, sonnet)   -- waits for first component assignment
   reviewer     (general-purpose, opus)     -- waits for first ComponentHandoff
   test-writer  (general-purpose, sonnet)   -- waits for first TestRequest
-  test-runner  (dev-essentials:test-runner, haiku) -- waits for first TestExecution
+  test-runner  (code-quality:test-runner, haiku) -- waits for first TestExecution
 
 Active from Phase 2 (remains available):
   architect    (code-quality:architect, opus) -- on standby for clarification questions
@@ -316,18 +316,21 @@ before Phase 6.
 
 ```
 Lead spawns sequentially:
-  docs               (general-purpose, haiku)   -- updates docs and hack/ memory
+  docs               (general-purpose, sonnet)  -- updates docs and hack/ memory
+  docs-reviewer      (general-purpose, sonnet)  -- verifies docs agent's work (read-only)
   lessons-extractor  (general-purpose, sonnet)  -- extracts principle-level lessons from swarm run
 ```
 
-Two agents, run sequentially. Docs agent completes first, then Lessons Extractor reads the
-audit trail and writes to `hack/LESSONS.md`. Shut down each after it reports completion.
+Three agents, run sequentially. Docs agent completes first, then Docs Reviewer verifies the
+documentation changes (critical/high findings route back to Docs for fixes, max 1 iteration).
+After Docs Reviewer confirms clean, Lessons Extractor reads the audit trail and writes to
+`hack/LESSONS.md`. Shut down each after it reports completion.
 
 ### Phase 7: Verifier
 
 ```
 Lead spawns:
-  verifier  (dev-essentials:test-runner, haiku)  -- full test suite + lint
+  verifier  (code-quality:test-runner, haiku)  -- full test suite + lint
 ```
 
 Single agent, shut down after it sends `VerificationResult`.

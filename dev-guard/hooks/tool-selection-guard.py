@@ -1607,7 +1607,7 @@ def _guard_plan_mode(tool_name: str) -> None:
         _exit_with_decision(
             "Native plan mode writes and displays the full plan at once.\n"
             "Use the incremental-planning skill instead:\n"
-            "  Invoke Skill tool with 'dev-essentials:incremental-planning'\n\n"
+            "  Invoke Skill tool with 'code-quality:incremental-planning'\n\n"
             "This skill asks clarifying questions first, writes the plan\n"
             "incrementally to a file, and provides research context in chat\n"
             "for informed feedback.",

@@ -19,7 +19,7 @@ point is documented here.
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
 | 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
-| 6 | Docs & Memory | Sequential pair | docs (haiku), then lessons-extractor (sonnet) |
+| 6 | Docs & Memory | Sequential trio | docs (sonnet), docs-reviewer (sonnet), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
 ---
@@ -807,7 +807,7 @@ reason, always CronDelete before transitioning to the next phase or stopping.
 
 ### Step 3.1: Spawn Persistent Pipeline Team
 
-Spawn ALL 4 pipeline agents in a SINGLE message (4 parallel Task calls). They persist through all
+Spawn ALL 4 pipeline agents in a SINGLE message (4 parallel Agent calls). They persist through all
 components — do NOT shut them down between components. Also spawn the Architect in this same batch
 (it was already running from Phase 2, remaining on standby).
 
@@ -824,7 +824,7 @@ Agent(name="test-writer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[test-writer prompt from agent-prompts.md]")
 
-Agent(name="test-runner", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="test-runner", subagent_type="code-quality:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[test-runner prompt from agent-prompts.md]")
 ```
@@ -1447,23 +1447,32 @@ SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simpl
 
 ### Step 6.1: Spawn Docs Agent
 
+Read `documentation_impact` from `{run_dir}/architect-plan.json` and serialize it as JSON for
+the agent prompt. Then spawn the Docs agent:
+
 ```
-Agent(name="docs", subagent_type="general-purpose", model="haiku",
+Agent(name="docs", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[docs prompt from agent-prompts.md]\n\n"
-            "FILES MODIFIED THIS SWARM:\n<git diff --name-only from branch start>")
+            "FILES MODIFIED THIS SWARM:\n<git diff --name-only from branch start>\n\n"
+            "DOCUMENTATION IMPACT (from architect):\n<documentation_impact JSON>")
 ```
 
-### Step 6.2: Repo Doc Updates
+### Step 6.2: Docs Agent Three-Pass Protocol
 
-The docs agent updates only documentation files that are directly affected by the implementation.
-It does NOT create new doc files unless the project has none.
+The Docs agent performs three passes:
 
-Typical targets:
-- README.md sections that describe changed functionality
-- API docs or docstrings in modified modules
-- Configuration documentation if config schema changed
-- CONTRIBUTING.md if dev workflow changed
+**Pass 1 (Architect-guided):** Works through each entry in `documentation_impact` from the
+architect's plan. For each surface, reads the current state and updates it — adding new
+entries to README tables, updating component counts, fixing manifest descriptions, removing
+stale references for deleted features.
+
+**Pass 2 (Discovery-based):** Independent of the architect's list, Globs for all documentation
+surfaces and on-disk components, cross-references counts, and verifies consistency. This
+catches documentation gaps the architect missed.
+
+**Pass 3 (Changed-file):** For each modified file in the swarm, checks if corresponding
+documentation needs updating (README behavior descriptions, API docs, config docs).
 
 ### Step 6.3: Project Memory
 
@@ -1501,13 +1510,33 @@ git commit -m "docs: update documentation for <feature>"
 
 If no doc changes were made (pure internal refactor with no user-facing changes), skip this commit.
 
-### Step 6.5: Shutdown Docs Agent
+### Step 6.5: Spawn Docs Reviewer
+
+After the Docs agent commits, spawn the Docs Reviewer to verify the work:
+
+```
+Agent(name="docs-reviewer", subagent_type="general-purpose", model="sonnet",
+     team_name="swarm-impl", mode="default",
+     prompt="[context bundle]\n\n[docs-reviewer prompt from agent-prompts.md]\n\n"
+            "DOCUMENTATION IMPACT (from architect):\n<documentation_impact JSON>\n\n"
+            "DOCS AGENT REPORT:\n<docs agent completion summary>")
+```
+
+The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it reports
+Critical/High findings:
+1. Route findings back to the Docs agent (still alive)
+2. Docs agent fixes, re-commits
+3. Docs Reviewer re-reviews (max 1 iteration)
+
+If clean or only Low/Medium findings, proceed.
+
+### Step 6.6: Shutdown Docs Agent
 
 ```
 SendMessage(type="shutdown_request", recipient="docs", content="Documentation phase complete.")
 ```
 
-### Step 6.6: Spawn Lessons Extractor
+### Step 6.7: Spawn Lessons Extractor
 
 After Docs agent is shut down, spawn the Lessons Extractor:
 
@@ -1538,7 +1567,7 @@ SendMessage(type="shutdown_request", recipient="lessons-extractor",
 ### Step 7.1: Spawn Verifier
 
 ```
-Agent(name="verifier", subagent_type="dev-essentials:test-runner", model="haiku",
+Agent(name="verifier", subagent_type="code-quality:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[verifier prompt from agent-prompts.md]\n\n"
             "BASELINE: {baseline from Phase 0.1}")
@@ -1804,7 +1833,7 @@ TeamCreate:
 | 3 | implementer | general-purpose | sonnet | bypassPermissions | Yes |
 | 3 | reviewer | general-purpose | opus | default | No |
 | 3 | test-writer | general-purpose | sonnet | bypassPermissions | Yes |
-| 3 | test-runner | dev-essentials:test-runner | haiku | default | No |
+| 3 | test-runner | code-quality:test-runner | haiku | default | No |
 | 4 | security-reviewer | code-quality:security | opus | default | No |
 | 4 | qa-reviewer | code-quality:qa | opus | default | No |
 | 4 | code-reviewer | superpowers:code-reviewer | sonnet | default | No |
@@ -1818,8 +1847,10 @@ TeamCreate:
 | 4.5 | structural-integration | general-purpose | opus | default | No |
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | code-simplifier | code-simplifier:code-simplifier | sonnet | bypassPermissions | Yes |
-| 6 | docs | general-purpose | haiku | bypassPermissions | Yes |
-| 7 | verifier | dev-essentials:test-runner | haiku | default | No |
+| 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
+| 6 | docs-reviewer | general-purpose | sonnet | default | No |
+| 6 | lessons-extractor | general-purpose | sonnet | bypassPermissions | Yes |
+| 7 | verifier | code-quality:test-runner | haiku | default | No |
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 

@@ -799,6 +799,28 @@ For each README issue:
 4. **Remove sections about deleted features** — check if referenced files/modules still exist. If they were removed (by the Dead Code Remover or otherwise), remove their documentation
 5. **Update installation instructions** — verify they work by reading dependency files
 
+### Step 1b: Fix Component Registry Gaps
+
+For each `undocumented-component` or `registry-mismatch` finding:
+
+1. **Undocumented components** — A component exists on disk but isn't listed in documentation:
+   - Identify the README table or list where it should appear (match format of existing entries)
+   - Add the missing entry (name, description, type)
+   - Update component counts in section headings (e.g., "## Skills (6)" → "## Skills (7)")
+   - Update package manifest descriptions (plugin.json, package.json, pyproject.toml, Cargo.toml)
+     to mention the new component type if they enumerate components
+   - Update any root-level or parent README that aggregates component counts
+
+2. **Registry mismatches** — Documentation surfaces disagree with each other:
+   - Identify the source of truth (usually the actual code/files on disk)
+   - Update all documentation surfaces to match: README tables, manifest descriptions,
+     registry entries, parent READMEs
+   - Verify component counts are consistent across all surfaces
+
+3. **After all registry fixes**, re-count all registrable components on disk and verify every
+   documentation surface matches. This is a final consistency check — individual fixes can
+   introduce new mismatches if counts aren't re-verified.
+
 ### Step 2: Fix Broken Internal Links
 
 For each broken link:

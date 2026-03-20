@@ -116,8 +116,26 @@ _COMPLETION_CLAIM_PATTERNS = [
     ),
 ]
 
-# Research tool names
+# Research tool names (native)
 _RESEARCH_TOOLS = frozenset({"WebSearch", "WebFetch"})
+
+# MCP prefixes where ALL tools under the server count as research
+_RESEARCH_MCP_PREFIXES: tuple[str, ...] = ("mcp__context7__",)
+
+# Selective MCP tools that count as research (upstream/external verification only).
+# Uses full tool names (mcp__...) to match transcript entries directly, unlike
+# MCP_READ_ONLY which uses server-qualified keys via mcp_key().
+_RESEARCH_MCP_TOOLS = frozenset(
+    {
+        "mcp__plugin_github-mcp_github__search_code",
+        "mcp__plugin_github-mcp_github__get_file_contents",
+        "mcp__plugin_github-mcp_github__get_latest_release",
+        "mcp__plugin_github-mcp_github__get_release_by_tag",
+        "mcp__plugin_github-mcp_github__get_commit",
+        "mcp__plugin_github-mcp_github__search_repositories",
+        "mcp__plugin_github-mcp_github__github_support_docs_search",
+    }
+)
 
 
 # ── State Management ─────────────────────────────────────────────────────────
@@ -360,6 +378,23 @@ def _git_diff_hash(cwd: str) -> str:
     return ""
 
 
+def _git_diff_names(cwd: str) -> list[str]:
+    """Return list of changed file paths from 'git diff --name-only', or [] on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only"],
+            capture_output=True,
+            timeout=_GIT_TIMEOUT,
+            cwd=cwd,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().splitlines()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return []
+
+
 def _git_diff_stat(cwd: str) -> str | None:
     """Return 'git diff --stat' output or None on failure."""
     try:
@@ -375,6 +410,69 @@ def _git_diff_stat(cwd: str) -> str | None:
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return None
+
+
+def _detect_doc_gap(file_list: list[str]) -> bool:
+    """Return True if changed files include components but no documentation.
+
+    Accepts a pre-fetched list of changed file paths (from git diff --name-only)
+    to avoid redundant subprocess calls.
+
+    Heuristic: if source files changed but zero documentation files were touched,
+    documentation may be missing. False positives are acceptable — the LLM evaluator
+    handles nuance.
+    """
+    if not file_list:
+        return False
+
+    # Component-like file extensions (source code that may need documentation)
+    component_exts = {
+        ".py",
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".go",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".rb",
+        ".sh",
+        ".bash",
+        ".nix",
+        ".vue",
+        ".svelte",
+    }
+    # Documentation file extensions — any file with these extensions counts as docs,
+    # regardless of directory. A project modifying .md files is doing documentation work.
+    doc_exts = {".md", ".rst", ".adoc", ".txt", ".mdx", ".org"}
+    manifest_files = {
+        "plugin.json",
+        "package.json",
+        "pyproject.toml",
+        "cargo.toml",
+        "go.mod",
+        "marketplace.json",
+    }
+
+    has_component_changes = False
+    has_doc_changes = False
+
+    for f in file_list:
+        lower = f.lower()
+        _name = lower.rsplit("/", 1)[-1]
+        _ext = "." + _name.rsplit(".", 1)[1] if "." in _name else ""
+
+        # Component check first — if it's a source file, it's a component,
+        # even if its stem matches a doc pattern (e.g., src/news.py)
+        if _ext in component_exts:
+            has_component_changes = True
+        elif _ext in doc_exts or _name in manifest_files:
+            has_doc_changes = True
+
+    return has_component_changes and not has_doc_changes
 
 
 # ── Signal Detection ─────────────────────────────────────────────────────────
@@ -425,8 +523,13 @@ def _detect_completion_claim(message: str | None) -> bool:
 
 
 def _detect_research_tools(tool_calls: list[str]) -> bool:
-    """Return True if any research tool was used."""
-    return any(tc in _RESEARCH_TOOLS for tc in tool_calls)
+    """Return True if any research tool was used (native, MCP prefix, or selective MCP)."""
+    for tc in tool_calls:
+        if tc in _RESEARCH_TOOLS or tc in _RESEARCH_MCP_TOOLS:
+            return True
+        if any(tc.startswith(p) for p in _RESEARCH_MCP_PREFIXES):
+            return True
+    return False
 
 
 def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:
@@ -800,6 +903,9 @@ def main() -> None:
         trigger_reasons.append("mcp_write")
     if user_requested_action and not write_signals:
         trigger_reasons.append("action_requested_no_tools")
+    diff_names = _git_diff_names(cwd) if diff_changed else []
+    if diff_names and _detect_doc_gap(diff_names):
+        trigger_reasons.append("doc_gap")
 
     # ── Fast-exit 7: No triggers at all ─────────────────────────────────────
     if not trigger_reasons:

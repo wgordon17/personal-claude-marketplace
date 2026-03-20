@@ -131,7 +131,10 @@ def _build_prompt(ctx: dict) -> str:
         "DEFERRAL-TO-USER is the same failure: phrases like 'should be verified', "
         "'needs to be confirmed', 'you should check', 'verify against your', "
         "'please verify', 'you may want to update' mean the assistant identified "
-        "work that needs doing and punted it. If it should be verified, verify it. "
+        "work that needs doing and punted it. The assistant has tools (Read, Grep, "
+        "WebSearch, LSP, MCP servers) to verify things itself — saying 'should be "
+        "verified' when it could verify is confessing to incomplete work, not "
+        "flagging a genuine limitation. If it should be verified, verify it. "
         "If it needs checking, check it. Do not defer work to the user."
     )
 
@@ -149,8 +152,12 @@ def _build_prompt(ctx: dict) -> str:
     if work_type in ("research", "mixed") or "research" in trigger_reasons:
         criteria.append(
             "VERIFICATION: Were factual claims, API schemas, or technical recommendations "
-            "backed by primary source research (WebSearch/WebFetch), or stated from memory? "
-            "Flag unverified specific claims."
+            "backed by primary source research (WebSearch/WebFetch, Context7 docs, "
+            "GitHub code search/file contents), or stated from memory? "
+            "Look for specificity markers that indicate genuine research use: exact version "
+            "numbers, API signatures, specific behavior descriptions, or quoted passages. "
+            "Generic claims that could come from training data alone — despite research "
+            "tools being available — suggest the tools were called but results ignored."
         )
 
     if work_type in ("question",) or "completion_claim" in trigger_reasons:
@@ -169,6 +176,16 @@ def _build_prompt(ctx: dict) -> str:
         criteria.append(
             "SUBAGENT RESULTS: Were subagent results verified? "
             "Did the orchestrating turn confirm the work was complete?"
+        )
+
+    if work_type in ("code_config", "mixed") or "doc_gap" in trigger_reasons:
+        criteria.append(
+            "DOCUMENTATION: Were documentation surfaces (READMEs, manifests, "
+            "changelogs, API docs) updated for user-facing changes? "
+            "New features, removed features, renamed features, new CLI commands, "
+            "new API endpoints, or new components require corresponding documentation. "
+            "If source files changed but no documentation files were touched, "
+            "this is likely incomplete work — unless the changes are purely internal."
         )
 
     for i, criterion in enumerate(criteria, 1):

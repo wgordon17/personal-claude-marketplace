@@ -5,6 +5,7 @@ and stdout/stderr content. State file isolation via STOP_HOOK_STATE_PATH env var
 LLM subprocess invocation tested via a mock stop-hook-llm.py stub.
 """
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -321,6 +322,80 @@ class TestExitWithGuidance:
             "verify external claims" in result.stdout.lower()
             or "research done" in result.stdout.lower()
         )
+
+    def test_context7_mcp_counts_as_research(self, tmp_path):
+        """Context7 MCP tool (prefix match) triggers research guidance."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Check the latest API for this library."},
+            {"type": "tool_use", "name": "mcp__context7__query-docs", "id": "t1"},
+            {"role": "assistant", "content": "Here are the docs."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="Here are the docs.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        assert (
+            "verify external claims" in result.stdout.lower()
+            or "research done" in result.stdout.lower()
+        )
+
+    def test_github_mcp_search_code_counts_as_research(self, tmp_path):
+        """Selective GitHub MCP tool triggers research guidance."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Find how upstream handles auth."},
+            {"type": "tool_use", "name": "mcp__plugin_github-mcp_github__search_code", "id": "t1"},
+            {"role": "assistant", "content": "Found the pattern."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="Found the pattern.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        assert (
+            "verify external claims" in result.stdout.lower()
+            or "research done" in result.stdout.lower()
+        )
+
+    def test_github_mcp_list_issues_not_research(self, tmp_path):
+        """Non-research GitHub MCP tool (list_issues) does NOT trigger research guidance."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Check my open issues."},
+            {"type": "tool_use", "name": "mcp__plugin_github-mcp_github__list_issues", "id": "t1"},
+            {"role": "assistant", "content": "You have 3 open issues."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="You have 3 open issues.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        # Should NOT get research guidance — this is project management, not research
+        assert "verify external claims" not in result.stdout.lower()
+        assert "research done" not in result.stdout.lower()
 
     def test_read_only_factual_question_guidance_message(self, tmp_path):
         """Read tool + factual question → prints guidance to stdout."""
@@ -1042,3 +1117,74 @@ class TestMultiFireIntegration:
         assert fire3_offset > fire2_offset
         # first_user_message stays cached
         assert state[session_id]["first_user_message"] == "Fix the bug."
+
+
+# ── Unit tests for _detect_doc_gap ───────────────────────────────────────────
+
+
+def _load_stop_hook_module():
+    """Import stop-hook.py as a module for unit testing internal functions."""
+    spec = importlib.util.spec_from_file_location("stop_hook", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestDetectDocGap:
+    """Unit tests for _detect_doc_gap heuristic.
+
+    _detect_doc_gap now accepts a pre-fetched file list (not a cwd), so tests
+    pass file lists directly — no git repo setup needed.
+    """
+
+    def setup_method(self):
+        self.mod = _load_stop_hook_module()
+
+    def test_component_without_docs_returns_true(self):
+        """Source files changed, no doc files -> gap detected."""
+        assert self.mod._detect_doc_gap(["src/main.py"]) is True
+
+    def test_component_with_readme_returns_false(self):
+        """Source files changed WITH README -> no gap."""
+        assert self.mod._detect_doc_gap(["src/main.py", "README.md"]) is False
+
+    def test_only_doc_files_returns_false(self):
+        """Only doc files changed -> no gap."""
+        assert self.mod._detect_doc_gap(["README.md", "docs/guide.md"]) is False
+
+    def test_empty_list_returns_false(self):
+        """Empty file list -> no gap."""
+        assert self.mod._detect_doc_gap([]) is False
+
+    def test_manifest_counts_as_docs(self):
+        """package.json alongside .ts -> no gap."""
+        assert self.mod._detect_doc_gap(["index.ts", "package.json"]) is False
+
+    def test_any_md_file_counts_as_docs(self):
+        """Any .md file counts as docs, even outside docs/ directory."""
+        assert self.mod._detect_doc_gap(["src/lib.py", "ARCHITECTURE.md"]) is False
+        assert self.mod._detect_doc_gap(["src/lib.py", "skills/swarm/SKILL.md"]) is False
+        assert self.mod._detect_doc_gap(["src/lib.py", "references/schema.md"]) is False
+
+    def test_rst_and_adoc_count_as_docs(self):
+        """Non-markdown doc formats are recognized."""
+        assert self.mod._detect_doc_gap(["lib.rs", "docs/guide.rst"]) is False
+        assert self.mod._detect_doc_gap(["Main.java", "README.adoc"]) is False
+
+    def test_c_and_cpp_are_components(self):
+        """C/C++ files are recognized as components."""
+        assert self.mod._detect_doc_gap(["src/main.c"]) is True
+        assert self.mod._detect_doc_gap(["src/parser.cpp"]) is True
+        assert self.mod._detect_doc_gap(["src/main.c", "README.md"]) is False
+
+    def test_src_news_py_is_component_not_doc(self):
+        """A .py file named 'news' is a component, not documentation."""
+        assert self.mod._detect_doc_gap(["src/news.py"]) is True
+
+    def test_pyproject_toml_counts_as_docs(self):
+        """pyproject.toml is a manifest -> counts as docs."""
+        assert self.mod._detect_doc_gap(["src/app.py", "pyproject.toml"]) is False
+
+    def test_cargo_toml_counts_as_docs(self):
+        """Cargo.toml is a manifest -> counts as docs (case-insensitive)."""
+        assert self.mod._detect_doc_gap(["src/main.rs", "Cargo.toml"]) is False
