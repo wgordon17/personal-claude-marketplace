@@ -175,6 +175,16 @@ def _build_prompt(ctx: dict) -> str:
             "Did the orchestrating turn confirm the work was complete?"
         )
 
+    if work_type in ("code_config", "mixed") or "doc_gap" in trigger_reasons:
+        criteria.append(
+            "DOCUMENTATION: Were documentation surfaces (READMEs, manifests, "
+            "changelogs, API docs) updated for user-facing changes? "
+            "New features, removed features, renamed features, new CLI commands, "
+            "new API endpoints, or new components require corresponding documentation. "
+            "If source files changed but no documentation files were touched, "
+            "this is likely incomplete work — unless the changes are purely internal."
+        )
+
     for i, criterion in enumerate(criteria, 1):
         lines.append(f"{i}. {criterion}")
 

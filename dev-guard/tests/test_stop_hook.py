@@ -5,6 +5,7 @@ and stdout/stderr content. State file isolation via STOP_HOOK_STATE_PATH env var
 LLM subprocess invocation tested via a mock stop-hook-llm.py stub.
 """
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -1116,3 +1117,131 @@ class TestMultiFireIntegration:
         assert fire3_offset > fire2_offset
         # first_user_message stays cached
         assert state[session_id]["first_user_message"] == "Fix the bug."
+
+
+# ── Unit tests for _detect_doc_gap ───────────────────────────────────────────
+
+
+def _load_stop_hook_module():
+    """Import stop-hook.py as a module for unit testing internal functions."""
+    spec = importlib.util.spec_from_file_location("stop_hook", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestDetectDocGap:
+    """Unit tests for _detect_doc_gap heuristic."""
+
+    def test_component_files_without_docs_returns_true(self, tmp_path):
+        """Source files changed, no doc files changed -> gap detected."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "test"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        (tmp_path / "main.py").write_text("print('hello')")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+        (tmp_path / "main.py").write_text("print('world')")
+
+        mod = _load_stop_hook_module()
+        assert mod._detect_doc_gap(str(tmp_path)) is True
+
+    def test_component_files_with_docs_returns_false(self, tmp_path):
+        """Source files changed WITH doc files changed -> no gap."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "test"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        (tmp_path / "main.py").write_text("print('hello')")
+        (tmp_path / "README.md").write_text("# Project")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+        (tmp_path / "main.py").write_text("print('world')")
+        (tmp_path / "README.md").write_text("# Updated Project")
+
+        mod = _load_stop_hook_module()
+        assert mod._detect_doc_gap(str(tmp_path)) is False
+
+    def test_only_doc_files_returns_false(self, tmp_path):
+        """Only doc files changed -> no gap."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "test"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        (tmp_path / "README.md").write_text("# Project")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+        (tmp_path / "README.md").write_text("# Updated")
+
+        mod = _load_stop_hook_module()
+        assert mod._detect_doc_gap(str(tmp_path)) is False
+
+    def test_no_diff_returns_false(self, tmp_path):
+        """Clean working tree -> no gap."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "test"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        (tmp_path / "main.py").write_text("print('hello')")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+
+        mod = _load_stop_hook_module()
+        assert mod._detect_doc_gap(str(tmp_path)) is False
+
+    def test_manifest_counts_as_docs(self, tmp_path):
+        """package.json change alongside .ts change -> no gap."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "test"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        (tmp_path / "index.ts").write_text("export const x = 1")
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+        (tmp_path / "index.ts").write_text("export const x = 2")
+        (tmp_path / "package.json").write_text('{"name": "test", "version": "1.0.1"}')
+
+        mod = _load_stop_hook_module()
+        assert mod._detect_doc_gap(str(tmp_path)) is False
+
+    def test_non_git_dir_returns_false(self, tmp_path):
+        """Non-git directory -> fails open (no gap)."""
+        mod = _load_stop_hook_module()
+        assert mod._detect_doc_gap(str(tmp_path)) is False

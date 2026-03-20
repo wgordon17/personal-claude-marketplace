@@ -395,6 +395,88 @@ def _git_diff_stat(cwd: str) -> str | None:
     return None
 
 
+def _detect_doc_gap(cwd: str) -> bool:
+    """Return True if git diff shows component-like file changes without doc file changes.
+
+    Heuristic: if source/config files changed but zero documentation files were
+    touched, documentation may be missing. False positives are acceptable — the LLM
+    evaluator handles nuance.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only"],
+            capture_output=True,
+            timeout=_GIT_TIMEOUT,
+            cwd=cwd,
+            text=True,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+    files = result.stdout.strip().splitlines()
+
+    # Component-like file extensions (source code that may need documentation)
+    component_exts = {
+        ".py",
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".go",
+        ".java",
+        ".sh",
+        ".bash",
+        ".nix",
+        ".vue",
+        ".svelte",
+    }
+    # Documentation file patterns
+    doc_patterns = {
+        "readme",
+        "contributing",
+        "changelog",
+        "history",
+        "changes",
+        "news",
+    }
+    doc_exts = {".md", ".rst", ".adoc", ".txt", ".mdx", ".org"}
+    doc_dirs = {"docs/", "doc/", "documentation/", "wiki/", "guides/", "man/", "pages/", "content/"}
+    manifest_files = {
+        "plugin.json",
+        "package.json",
+        "pyproject.toml",
+        "cargo.toml",
+        "go.mod",
+        "marketplace.json",
+    }
+
+    has_component_changes = False
+    has_doc_changes = False
+
+    for f in files:
+        lower = f.lower()
+        _name = lower.rsplit("/", 1)[-1]
+        _stem = _name.rsplit(".", 1)[0] if "." in _name else _name
+        _ext = "." + _name.rsplit(".", 1)[1] if "." in _name else ""
+
+        # Check if this is a documentation file
+        if (
+            _stem in doc_patterns
+            or (_ext in doc_exts and any(lower.startswith(d) or f"/{d}" in lower for d in doc_dirs))
+            or _name in manifest_files
+        ):
+            has_doc_changes = True
+
+        # Check if this is a component file
+        if _ext in component_exts:
+            has_component_changes = True
+
+    return has_component_changes and not has_doc_changes
+
+
 # ── Signal Detection ─────────────────────────────────────────────────────────
 
 
@@ -823,6 +905,8 @@ def main() -> None:
         trigger_reasons.append("mcp_write")
     if user_requested_action and not write_signals:
         trigger_reasons.append("action_requested_no_tools")
+    if diff_changed and _detect_doc_gap(cwd):
+        trigger_reasons.append("doc_gap")
 
     # ── Fast-exit 7: No triggers at all ─────────────────────────────────────
     if not trigger_reasons:
