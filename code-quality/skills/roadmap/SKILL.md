@@ -39,15 +39,24 @@ Before ingesting any plans, check whether an existing roadmap document already e
 Check for `hack/`, `.local/`, `scratch/`, `.dev/` in the project root (in this order).
 
 - **If found:** Plan directory is `{memory-dir}/plans/`
-- **If none found:** **Skip Phase 0 entirely** — proceed to Phase 1. Stateful roadmap
-  management requires a project-local memory directory. `~/.claude/plans/` is shared across
-  all projects and globbing it would surface cross-project roadmaps, leading to false positives
-  and unintended mutations.
+- **If none found:** **Skip Phase 0** — proceed to Phase 1. Stateful roadmap management
+  requires a project-local memory directory. `~/.claude/plans/` is shared across all projects
+  and globbing it would surface cross-project roadmaps, leading to false positives and
+  unintended mutations.
+
+  **Exception:** If the user's request matches a lifecycle trigger phrase (`roadmap status`,
+  `update roadmap`, `roadmap cleanup`, `roadmap drift`, or similar), do NOT silently fall
+  through to Phase 1. Instead, surface via `AskUserQuestion`:
+  > "Roadmap lifecycle management (update, cleanup, status/drift) requires a project-local
+  > memory directory (hack/, .local/, scratch/, or .dev/). This project doesn't have one.
+  > Options:
+  > 1. Create a new roadmap via Phase 1 (fresh creation only — no lifecycle features)
+  > 2. Abort"
+
+### Step 2: Glob and verify
 
 **Scope the glob strictly to the determined plan directory** — do not glob the project root
 or any other location. This prevents false positives from unrelated files.
-
-### Step 2: Glob and verify
 
 Glob for `*roadmap*.md` within the plan directory only.
 

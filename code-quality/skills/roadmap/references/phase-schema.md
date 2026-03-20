@@ -140,8 +140,11 @@ Cleanup mode archives completed work to prevent plan directory clutter.
 
 ### Archive location
 
-`{plan-dir}/done/` — a subdirectory of the plan directory (`hack/plans/done/`,
-`~/.claude/plans/done/`, etc.). Created if it doesn't exist.
+`{plan-dir}/done/` — a subdirectory of the plan directory (e.g., `hack/plans/done/`).
+Created if it doesn't exist.
+
+Note: Cleanup mode (Phase 0.C) is only available for project-local memory directories.
+Roadmaps in `~/.claude/plans/` do not support lifecycle operations (see SKILL.md Phase 0).
 
 ### What gets archived (and when)
 
