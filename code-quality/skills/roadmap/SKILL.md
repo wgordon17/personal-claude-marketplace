@@ -175,6 +175,8 @@ Executes when user selects "Clean up completed work."
 - If all phases are complete: add `**Status:** Completed` to the document header (not just
   per-phase blocks), then offer to archive the entire roadmap file itself:
   > "All phases are complete. Archive the roadmap file to {plan-dir}/done/ as well?"
+  If the user confirms, update the document header `**Status:**` to `Archived` before
+  moving the file to `{plan-dir}/done/`.
 
 **Branch deletion scoping:** Only delete branches matching `roadmap/phase-N/` for the
 specific completed phase numbers. Do NOT delete branches for in-progress or not-started
@@ -228,8 +230,9 @@ never mutates files or branches.**
 **Follow-up actions:**
 
 After presenting the report, offer via `AskUserQuestion`:
-- "Update roadmap to incorporate changes" → Route to Phase 0.U
-- "Clean up completed work" → Route to Phase 0.C
+- "Update roadmap to incorporate changes" → Route to Phase 0.U (re-run from step 1; reuse
+  the completion tracking results already gathered — do not re-run completion tracking)
+- "Clean up completed work" → Route to Phase 0.C (reuse completion tracking results)
 - "No action needed" → Exit
 
 ---

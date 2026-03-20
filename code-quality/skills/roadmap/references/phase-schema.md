@@ -26,7 +26,7 @@ Every roadmap document begins with a header block:
 | Source plans | Yes | Absolute paths to all plan files ingested |
 | Total phases | Yes | Count of sequential phases |
 | Critical path | Yes | Which plans/tracks gate the overall schedule, and why |
-| Status | No | Overall roadmap lifecycle status: `Active`, `Completed`, or `Archived`. Written by cleanup mode when all phases are complete. Absent in freshly generated roadmaps (absence = Active). |
+| Status | No | Overall roadmap lifecycle status: `Active` (default, absence = Active), `Completed` (written by cleanup mode when all phases are complete), or `Archived` (written by cleanup mode before moving the roadmap file to `done/`). |
 | Last updated | No | ISO timestamp (e.g., `2026-03-20T14:30:00`) written by update mode when regenerating the roadmap. Provides provenance for distinguishing fresh vs. updated roadmaps and prevents drift detection false negatives after updates. |
 
 ---
@@ -154,7 +154,7 @@ references them is complete. The roadmap document is always the last thing archi
 ### Naming
 
 Files keep their original names when moved to `done/`. No renaming on archive.
-Backup files created by update mode use the pattern:
+Backup files created by update mode are written to `{plan-dir}/done/` using the pattern:
 `{original-filename}.YYYY-MM-DDTHH-MM-SS.pre-update` (timestamped, unique per run).
 
 ---
