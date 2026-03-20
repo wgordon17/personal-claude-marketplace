@@ -215,7 +215,7 @@ These MCP servers enhance functionality but are not required for core operation 
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
 | **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1. Alternative tools work. |
-| **[Sequential-Thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)** | code-quality | Soft | Reasoning about scope boundaries in `/incremental-planning` Phases 1 and 5. Reasoning works without it. |
+| **[Sequential-Thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)** | code-quality | Soft | Reasoning about scope boundaries in `/incremental-planning` and `/roadmap`. Reasoning works without it. |
 | **[claude-mem](https://github.com/pchaganti/gx-claude-mem)** | code-quality | Soft | Search past work, decisions, and learnings in `/incremental-planning` Phase 1. Enhanced context, not required. |
 
 ### SuperClaude / Superpowers References

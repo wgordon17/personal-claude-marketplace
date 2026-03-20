@@ -8,7 +8,7 @@ description: >-
   for AI orchestrator consumption. Use when asked to "roadmap", "sequence plans",
   "coordinate multiple plans", "plan execution order", or when 2+ plans need
   ordering.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, ToolSearch]
 ---
 
 # Roadmap

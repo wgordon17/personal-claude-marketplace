@@ -297,8 +297,24 @@ This step writes to the plan file only. **Chat output:** "Wrote file structure. 
 
 #### 3. Write Each Task
 
-Append one task at a time using the Edit tool. Each task should follow bite-sized structure:
-- Files to create/modify (exact paths)
+Append one task at a time using the Edit tool. Use the heading format `## Task N: [Title]`
+for each task. Each task should follow this structure:
+
+```markdown
+## Task N: [Short Title]
+
+**Files:**
+- Modify: `path/to/file.ts`
+- Create: `path/to/new.ts`
+
+- [ ] **Step 1: [action]**
+  [details]
+- [ ] **Step 2: [action]**
+  [details]
+```
+
+Each task includes:
+- Files to create/modify (exact paths, using `**Files:**` block)
 - Steps (each step is one action: write test, run test, implement, verify, commit)
 - Test commands with expected output
 - Documentation updates (what docs to create/update/remove. "None" if no documentation
@@ -413,10 +429,10 @@ The plan is the deliverable. Present the completion report.
 
 1. **Summary** — "Plan complete. N tasks, M steps total. Covers: [areas]. Plan file: [path]."
 2. **Flags Report** — Surface everything flagged during the entire flow:
-   - Assumptions made (from Phase 4 breakpoints and reviewer detection), each labeled
-     `scope` or `detail`
+   - Assumptions (from Phase 4 breakpoints and reviewer detection), each labeled
+     `scope` or `detail`. Advisory recommendations from the reviewer are informational
+     only — do not surface them as flags.
    - Open questions from the plan header marked `[human]`
-   - Any reviewer-detected assumptions (not advisory recommendations — those are informational only)
 3. **AskUserQuestion** — If there are ANY `[human]` open questions or scope-level assumptions
    remaining, present them via `AskUserQuestion`. Hard requirement — never bury open questions
    in the plan doc without surfacing them here.
