@@ -26,6 +26,8 @@ Every roadmap document begins with a header block:
 | Source plans | Yes | Absolute paths to all plan files ingested |
 | Total phases | Yes | Count of sequential phases |
 | Critical path | Yes | Which plans/tracks gate the overall schedule, and why |
+| Status | No | Overall roadmap lifecycle status: `Active`, `Completed`, or `Archived`. Written by cleanup mode when all phases are complete. Absent in freshly generated roadmaps (absence = Active). |
+| Last updated | No | ISO timestamp (e.g., `2026-03-20T14:30:00`) written by update mode when regenerating the roadmap. Provides provenance for distinguishing fresh vs. updated roadmaps and prevents drift detection false negatives after updates. |
 
 ---
 
@@ -84,6 +86,92 @@ must appear as columns — do not add per-track metadata outside the table.
 4. **Task splitting across phases** is allowed when a single plan has tasks that depend on
    another plan's output. In this case, the same plan file appears in multiple phases with
    non-overlapping task ranges (e.g., "Tasks 1-3" in Phase 1, "Tasks 4-7" in Phase 2).
+
+---
+
+## Completion Status Fields
+
+These fields are written and read by the stateful roadmap skill modes (update, cleanup, status).
+They are optional additions — freshly generated roadmaps do not contain them.
+
+### Per-phase status
+
+A `**Status:**` line may appear in a phase block after cleanup mode marks it complete:
+
+```markdown
+## Phase 1: Foundation
+
+**Prerequisites:** None
+**Parallel tracks:** 2 plans execute concurrently in this phase
+**Status:** Completed
+
+| Track | ...
+```
+
+Values: `Not Started` | `In Progress` | `Completed`
+
+- `Not Started` — default; branch does not exist
+- `In Progress` — branch exists but no merged PR found
+- `Completed` — written explicitly by cleanup mode after all tracks merged and validated
+
+Note: `Not Started` and `In Progress` are runtime-derived states (from branch checks) and are
+**not written to the roadmap file**. Only `Completed` is persisted. Absence of a `**Status:**`
+field means the phase has not been explicitly marked complete.
+
+### Per-track validation result format
+
+When subagent validators run (see Completion Tracking in SKILL.md), they return structured
+verdicts — never raw diff content. The format is ephemeral (shown in chat, not persisted to
+the roadmap file unless the user requests it):
+
+```
+Task N: implemented — [one-sentence evidence citing specific file path or code location]
+Task N: partial — [one-sentence description of what was implemented vs. what was skipped]
+Task N: deferred — [one-sentence description of deferred work, e.g., "TODO left in auth.py:42"]
+```
+
+---
+
+## Archival
+
+Cleanup mode archives completed work to prevent plan directory clutter.
+
+### Archive location
+
+`{plan-dir}/done/` — a subdirectory of the plan directory (`hack/plans/done/`,
+`~/.claude/plans/done/`, etc.). Created if it doesn't exist.
+
+### What gets archived (and when)
+
+| Item | Archived when |
+|------|---------------|
+| Source plan file | All phases that reference this plan are `Completed` |
+| Roadmap document itself | ALL phases in the roadmap are `Completed` |
+
+Plans that span multiple phases (task splitting) are NOT archived until every phase that
+references them is complete. The roadmap document is always the last thing archived.
+
+### Naming
+
+Files keep their original names when moved to `done/`. No renaming on archive.
+Backup files created by update mode use the pattern:
+`{original-filename}.YYYY-MM-DDTHH-MM-SS.pre-update` (timestamped, unique per run).
+
+---
+
+## Backward Compatibility
+
+The `**Status:**` and `**Last updated:**` document header fields and the per-phase
+`**Status:**` field are **optional additions**. Existing roadmap documents without them
+are valid and fully functional.
+
+Consumers (e.g., `/swarm`) that parse roadmap documents MUST tolerate unknown fields
+gracefully. The `/swarm` orchestration-playbook.md has been verified: its "phase block"
+references are about its own internal pipeline phases (Phase 0-7 of swarm execution),
+not roadmap document structure. Encountering `**Status:**` or `**Last updated:**` lines
+in a roadmap document will not break `/swarm`'s parsing — it reads the per-track table
+rows and fixed fields (Prerequisites, Parallel tracks, Sync point, Merge order) and
+ignores unrecognized fields.
 
 ---
 
