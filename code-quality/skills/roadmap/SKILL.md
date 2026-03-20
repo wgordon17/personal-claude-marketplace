@@ -13,8 +13,10 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, Too
 
 # Roadmap
 
-Multi-plan phase sequencing and dependency analysis. Takes existing plan files as input,
-produces a structured roadmap document consumable by `/swarm` and other orchestrators.
+Stateful multi-plan phase sequencing with roadmap lifecycle management. Takes existing plan
+files as input, produces a structured roadmap document consumable by `/swarm` and other
+orchestrators. Detects existing roadmaps and routes to update, cleanup, status/drift, or
+fresh creation.
 
 ## Activation
 
@@ -170,12 +172,17 @@ Executes when user selects "Clean up completed work."
 **Partial cleanup guidance:**
 - Plans that appear in tasks spanning multiple phases (task splitting) are NOT archived
   until ALL their phases are complete.
-- If all phases are complete, offer to archive the entire roadmap file itself:
+- If all phases are complete: add `**Status:** Completed` to the document header (not just
+  per-phase blocks), then offer to archive the entire roadmap file itself:
   > "All phases are complete. Archive the roadmap file to {plan-dir}/done/ as well?"
 
 **Branch deletion scoping:** Only delete branches matching `roadmap/phase-N/` for the
 specific completed phase numbers. Do NOT delete branches for in-progress or not-started
 phases — filter by exact phase number, not a broad `roadmap/*` pattern.
+
+**After cleanup completes**, announce: "Cleanup complete. [N] plans archived, [M] branches
+deleted, [P] phase blocks marked Completed." If not all phases were cleaned up, note which
+phases remain active.
 
 ---
 
@@ -189,7 +196,7 @@ never mutates files or branches.**
 1. Run completion tracking (see **Completion Tracking** section) for all phases.
 2. Present per-phase summary in chat:
    ```
-   Phase 1: Complete (2/2 tracks merged, all tasks validated)
+   Phase 1: Completed (2/2 tracks merged, all tasks validated)
    Phase 2: In Progress (Track A merged, Track B in-progress)
    Phase 3: Not Started (blocked by Phase 2)
    ```
@@ -197,10 +204,12 @@ never mutates files or branches.**
 
 **Drift detection (shown alongside status):**
 
-- **Modified plans:** For each source plan, check mtime via
+- **Modified plans:** Determine the roadmap's generation timestamp: if the roadmap contains a
+  `**Last updated:**` field, parse its ISO timestamp as the reference time. Otherwise, use
+  the roadmap file's mtime via
   `Bash(python3 -c "import os; print(os.path.getmtime('[file]'))")` (portable across macOS
-  and Linux). Compare against the roadmap file's mtime. If a source plan is newer, flag:
-  "Plan [path] was modified after this roadmap was generated."
+  and Linux). For each source plan, compare its mtime against the reference time. If a source
+  plan is newer, flag: "Plan [path] was modified after this roadmap was generated."
   On mtime anomaly (plan appears newer but changes unclear), fall back to content comparison:
   read both the plan and the roadmap's corresponding plan reference and diff to confirm
   whether real changes exist.
@@ -454,12 +463,13 @@ simultaneously — they perform independent reads and can run in parallel.
 
 ### Phase status derivation
 
-A phase is `complete` only when:
+A phase is `Completed` only when:
 1. ALL tracks in the phase have `merged` status, AND
 2. ALL subagent validations report `implemented` for every task
 
-If any track is `in-progress` or `not-started` → phase is `in-progress` or `not-started`.
-If any task is `partial` or `deferred` → phase is `incomplete` (distinct from `in-progress`).
+If any track is `in-progress` or `not-started` → phase is `In Progress` or `Not Started`.
+If all tracks are `merged` but any task is `partial` or `deferred` → phase is `In Progress`
+(all branches merged but work is incomplete — distinct from branches still open).
 
 ### Handling validation gaps
 
