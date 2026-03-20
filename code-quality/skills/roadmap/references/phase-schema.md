@@ -59,8 +59,8 @@ must appear as columns — do not add per-track metadata outside the table.
 | Plan | Yes | Absolute path to the plan file |
 | Tasks | Yes | Task range from that plan (e.g., "Tasks 1-3", "Tasks 4-7", "All") |
 | Worktree Branch | Yes | Convention: `roadmap/phase-N/plan-name` (derived from plan filename) |
-| Depends On | Yes | Other tracks/phases that must complete first, or "None" |
-| Skill | Yes | Execution skill (default: `/swarm`; use `/incremental-planning` for planning-only tracks). Valid values are `/swarm` (full agent swarm — default for most implementation work), `/speculative` (competing implementations), or a custom skill path. The orchestrator invokes the specified skill in the track's worktree with the plan file and task range as arguments. |
+| Depends On | Yes | Intra-phase track dependencies only — other tracks *within this phase* that must complete before this track starts. Inter-phase ordering is handled by the Prerequisites field. Use "None" when the track has no dependencies on other tracks in the same phase. |
+| Skill | Yes | Execution skill. Valid values: `/swarm` (full agent swarm — default for most implementation work), `/speculative` (competing implementations), or a custom skill path. The orchestrator invokes the specified skill in the track's worktree with the plan file and task range as arguments. |
 | Domain | Yes | Cynefin domain from the plan's header (Clear, Complicated, Complex, Chaotic, Disorder) |
 
 ### Per-Phase Fixed Fields

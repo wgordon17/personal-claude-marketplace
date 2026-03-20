@@ -336,19 +336,20 @@ Each task includes:
 
 **After writing each task (full planning only — skip for light plans):**
 
-Dispatch a reviewer subagent using the template in
-`code-quality/skills/incremental-planning/references/task-reviewer-prompt.md`:
+Dispatch a reviewer subagent. Read the template at
+`references/task-reviewer-prompt.md`, fill in the placeholders (`{PLAN_FILE_PATH}`,
+`{TASK_NUMBER}`, `{PRIOR_TASK_SUMMARIES}`), and pass the result as the prompt:
 
 ```
 Agent(
   description="Review plan Task N",
   model="sonnet",
-  prompt=<constructed from template + plan file path + task number + prior task summaries>
+  prompt=<template with placeholders filled in>
 )
 ```
 
-Provide: plan file path, task number to focus on, and 1-2 sentence summaries of all prior
-tasks. As you write more tasks, the summary context grows — keep prior summaries concise.
+As you write more tasks, the `{PRIOR_TASK_SUMMARIES}` context grows — keep prior summaries
+concise (1-2 sentences each).
 
 **If reviewer returns Approved:** proceed to next task.
 
@@ -426,12 +427,15 @@ After all tasks are written:
 2. Use **sequential-thinking** MCP to check for gaps: missing error handling, untested paths,
    dependency ordering issues
 3. Cross-reference against Phase 2 requirements: does the plan cover everything?
-4. **Documentation coverage check:** For every task whose changes match the documentation
+4. **File structure reconciliation:** Compare the `## File Structure` section against the
+   files actually referenced in all tasks. If tasks discovered new files not in the original
+   mapping, update the File Structure section. If planned files were dropped, remove them.
+5. **Documentation coverage check:** For every task whose changes match the documentation
    triggers in `code-quality/references/documentation-taxonomy.md`, verify the plan includes
    corresponding documentation updates. Cross-reference surfaces discovered in Phase 1.
    Check both trigger coverage (every trigger has a doc update) and surface coverage (every
    affected surface is updated).
-5. **Collect flags for Phase 6:**
+6. **Collect flags for Phase 6:**
    - Collect all `[ASSUMPTION: ...]` flags from the plan file (from Phase 4 breakpoints and
      reviewer-detected assumptions)
    - Collect all open questions from the plan header's "Open Questions" section marked `[human]`
