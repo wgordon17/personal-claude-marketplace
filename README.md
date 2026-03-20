@@ -38,7 +38,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/map-reduce` - Parallelized workload processing with chunking, mapper agents, and reducer synthesis
 - `/speculative` - Competing implementations in isolated worktrees with judge selection
 - `/incremental-planning` - Incremental planning workflow with per-task review and assumption surfacing
-- `/roadmap` - Multi-plan phase sequencing and dependency analysis
+- `/roadmap` - Stateful multi-plan phase sequencing with roadmap lifecycle management (update, cleanup, status/drift, fresh creation)
 - `/lsp-navigation` - PROACTIVE semantic code navigation
 - `/uv-python` - PROACTIVE Python tooling enforcement (uv over pip)
 - `/test-runner` - Efficient test execution patterns

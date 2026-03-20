@@ -26,7 +26,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
 | `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
 | `/incremental-planning` | Planning workflow with per-task review and assumption surfacing | Manual |
-| `/roadmap` | Multi-plan phase sequencing and dependency analysis | Manual |
+| `/roadmap` | Stateful multi-plan phase sequencing with roadmap lifecycle management: detect existing roadmaps, update, cleanup completed work, status/drift report, or fresh creation | Manual |
 | `/lsp-navigation` | Semantic code navigation via LSP | PROACTIVE |
 | `/uv-python` | Python tooling enforcement (uv over pip) | PROACTIVE |
 | `/test-runner` | Efficient test execution patterns | Manual |

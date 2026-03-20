@@ -338,6 +338,14 @@ Pass 2 resumes the Pass 1 agent via `SendMessage` using the **agent ID** (not th
 This preserves the agent's full conversation history from Pass 1. You MUST use the agent
 ID returned in the Pass 1 result — using the agent name routes to a team inbox instead.
 
+**CRITICAL — Pass 2 synchronization:** `SendMessage` is asynchronous — it returns immediately
+but the agent's response arrives later as a teammate notification. You MUST wait for each
+Pass 2 response before proceeding. Do NOT move to Memory Gate or any subsequent gate until
+BOTH Pass 2 responses are received and all findings are fixed. "Message sent" is not
+"response received." If the agent does not respond within 2 minutes, re-do the Pass 2 check
+yourself: re-read the files you fixed and verify the fixes are semantically correct (not just
+syntactically applied). A self-performed Pass 2 is better than a skipped one.
+
 **Subagent A: Completeness Reviewer (opus)**
 
 ```
@@ -352,12 +360,13 @@ PASS 1:
 
 PASS 2 (MANDATORY — do not skip):
   SendMessage(
-    to=<agentId from Pass 1>,
+    to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
     message="Here are the fixes I made: {summary_of_fixes}.
              Review them. Also: what did YOU miss on your first pass?
              You had fresh eyes but still have blind spots. Look again.",
     summary="Pass 2 completeness re-review"
   )
+  → WAIT for response (do not proceed to gates)
   → Fix ALL findings from Pass 2
 ```
 
@@ -375,11 +384,12 @@ PASS 1:
 
 PASS 2 (MANDATORY — do not skip):
   SendMessage(
-    to=<agentId from Pass 1>,
+    to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
     message="Here are the fixes: {summary_of_fixes}.
              Verify they're correct. What else breaks in production?",
     summary="Pass 2 adversarial re-review"
   )
+  → WAIT for response (do not proceed to gates)
   → Fix ALL findings from Pass 2
 ```
 
