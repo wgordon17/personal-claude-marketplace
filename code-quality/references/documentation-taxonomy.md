@@ -56,11 +56,46 @@ Where documentation lives. Organized by type, with detection patterns for automa
 
 | Surface | Detection | What it contains |
 |---------|-----------|-----------------|
-| **README.md** | `Glob("**/README.md")` | Project overview, installation, usage, component lists, feature descriptions |
-| **CONTRIBUTING.md** | `Glob("**/CONTRIBUTING.md")` | Development workflow, coding standards, PR process |
-| **Changelog** | `Glob("**/CHANGELOG.md")` OR `Glob("**/HISTORY.md")` OR `Glob("**/CHANGES.md")` | Version history, breaking changes, migration notes |
-| **Documentation directory** | `Glob("**/docs/**/*.md")` | Guides, tutorials, architecture docs, API references |
-| **Examples** | `Glob("**/examples/**/*")` | Usage examples, sample code, demo projects |
+| **README** | `Glob("**/README.md")` OR `Glob("**/README.rst")` OR `Glob("**/README.adoc")` OR `Glob("**/README.txt")` OR `Glob("**/README")` | Project overview, installation, usage, component lists, feature descriptions |
+| **CONTRIBUTING** | `Glob("**/CONTRIBUTING.md")` OR `Glob("**/CONTRIBUTING.rst")` | Development workflow, coding standards, PR process |
+| **Changelog** | `Glob("**/CHANGELOG.md")` OR `Glob("**/HISTORY.md")` OR `Glob("**/CHANGES.md")` OR `Glob("**/CHANGELOG.rst")` OR `Glob("**/NEWS")` | Version history, breaking changes, migration notes |
+| **Documentation directories** | See discovery patterns below — not limited to `docs/` or `.md` | Guides, tutorials, architecture docs, API references |
+| **Examples** | `Glob("**/examples/**/*")` OR `Glob("**/example/**/*")` | Usage examples, sample code, demo projects |
+
+**Documentation directory discovery:** Projects use many conventions. Detect all of these:
+```
+Glob("**/docs/**/*.{md,rst,adoc,txt,html}")
+Glob("**/doc/**/*.{md,rst,adoc,txt,html}")
+Glob("**/documentation/**/*")
+Glob("**/wiki/**/*")
+Glob("**/guides/**/*.{md,rst,adoc}")
+Glob("**/man/**/*")                            # Man pages
+Glob("**/pages/**/*.{md,mdx}")                 # Static site generators
+Glob("**/content/**/*.{md,mdx}")               # Hugo, Gatsby
+Glob("**/site/**/*.md")                        # MkDocs output
+```
+
+**Documentation generator configs** (presence indicates generated docs):
+```
+Glob("**/mkdocs.yml")                          # MkDocs
+Glob("**/conf.py") with Grep("sphinx")         # Sphinx
+Glob("**/Doxyfile")                            # Doxygen
+Glob("**/.storybook/**/*")                     # Storybook
+Glob("**/typedoc.json")                        # TypeDoc
+Glob("**/openapi.{yaml,yml,json}")             # OpenAPI/Swagger
+Glob("**/swagger.{yaml,yml,json}")             # Swagger
+```
+
+**Non-markdown documentation formats:**
+| Format | Extension | Common in |
+|--------|-----------|-----------|
+| reStructuredText | `.rst` | Python/Sphinx |
+| AsciiDoc | `.adoc`, `.asciidoc` | Java, Ruby, infrastructure |
+| MDX | `.mdx` | React/Next.js docs |
+| Plain text | `.txt` | Legacy, man pages |
+| Org-mode | `.org` | Emacs ecosystem |
+| Man pages | `.1`, `.3`, `.5`, `.8` | CLI tools, system utilities |
+| POD | `.pod` | Perl |
 
 ### Package manifests (machine-readable metadata)
 
