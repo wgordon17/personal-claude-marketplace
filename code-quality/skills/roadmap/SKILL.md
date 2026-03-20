@@ -36,11 +36,13 @@ Before ingesting any plans, check whether an existing roadmap document already e
 
 ### Step 1: Locate plan directory
 
-Use the same location logic as Phase 4:
+Check for `hack/`, `.local/`, `scratch/`, `.dev/` in the project root (in this order).
 
-1. Check for `hack/`, `.local/`, `scratch/`, `.dev/` in the project root (in this order)
-2. **If found:** Plan directory is `{memory-dir}/plans/`
-3. **If none found:** Plan directory is `~/.claude/plans/`
+- **If found:** Plan directory is `{memory-dir}/plans/`
+- **If none found:** **Skip Phase 0 entirely** — proceed to Phase 1. Stateful roadmap
+  management requires a project-local memory directory. `~/.claude/plans/` is shared across
+  all projects and globbing it would surface cross-project roadmaps, leading to false positives
+  and unintended mutations.
 
 **Scope the glob strictly to the determined plan directory** — do not glob the project root
 or any other location. This prevents false positives from unrelated files.
@@ -209,8 +211,8 @@ never mutates files or branches.**
 - **Modified plans:** Determine the roadmap's generation timestamp: if the roadmap contains a
   `**Last updated:**` field, parse its ISO timestamp as the reference time. Otherwise, use
   the roadmap file's mtime via
-  `Bash(python3 -c "import os; print(os.path.getmtime('[file]'))")` (portable across macOS
-  and Linux). For each source plan, compare its mtime against the reference time. If a source
+  `Bash(uv run python3 -c "import os; print(os.path.getmtime('[file]'))")` (portable across
+  macOS and Linux). For each source plan, compare its mtime against the reference time. If a source
   plan is newer, flag: "Plan [path] was modified after this roadmap was generated."
   On mtime anomaly (plan appears newer but changes unclear), fall back to content comparison:
   read both the plan and the roadmap's corresponding plan reference and diff to confirm
@@ -219,7 +221,7 @@ never mutates files or branches.**
   roadmap's source plans list AND are not the roadmap file itself. Flag only files that:
   (a) appear to be incremental-planning output (contain `**Goal:**` and `## Task N:` markers)
   AND (b) were created after the roadmap was generated (mtime comparison). This filtering
-  prevents false positives from unrelated files in `~/.claude/plans/` or old completed plans.
+  prevents false positives from old completed plans or non-plan files.
   Flag: "New plan [path] not included in this roadmap."
 - **Deleted plans:** For each source plan path, verify it still exists. Flag any missing:
   "Plan [path] no longer exists."
@@ -533,11 +535,12 @@ If a plan is missing `**Goal:**`, no `## Task N:` headings, or no `**Files:**` b
 ### Flow
 
 ```
-Phase 0: Detect & Route (HITL) →
+Phase 0: Detect & Route (HITL, requires project memory dir) →
   [New]     Phase 1 → Phase 2 → Phase 3 (checkpoint) → Phase 4 (incremental) → Phase 5
   [Update]  Completion Check → Phase 1-5 (re-ingest, completed phases preserved)
   [Status]  Completion Check → Drift Detection → Report → offer Update/Cleanup/Exit
   [Cleanup] Completion Check → Archive plans → Delete branches → Update roadmap doc
+  [No memory dir] → skip Phase 0, go directly to Phase 1
 ```
 
 ### What Goes Where
@@ -549,12 +552,15 @@ FILE: Full roadmap document (header + phase blocks, optional Status/Last updated
 NEVER IN CHAT: Full roadmap content, raw table data, raw diff content from subagent validators
 ```
 
-### Roadmap File Location
+### Roadmap File Location (Phase 4 — document generation)
 
 ```
 1. hack/plans/ (or .local/plans/, scratch/plans/, .dev/plans/) → if memory dir exists
 2. ~/.claude/plans/ → fallback for all other cases
 ```
+
+**Phase 0 detection** only runs when a project memory dir exists (option 1 above).
+Projects using `~/.claude/plans/` skip Phase 0 and go straight to Phase 1.
 
 ### Schema Reference
 
