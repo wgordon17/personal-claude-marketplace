@@ -70,26 +70,21 @@ def write_transcript(path: Path, entries: list[dict]) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
-def transcript_offset(entries: list[dict], seen: int) -> int:
-    """Byte offset after `seen` JSONL entries (matches write_transcript format)."""
-    return sum(len(json.dumps(e)) + 1 for e in entries[:seen])
-
-
 def seed_state(
     state_path: Path,
     session_id: str,
     *,
-    byte_offset: int = 0,
+    evaluated_tool_count: int = 0,
+    last_file_size: int = 0,
     diff_hash: str = "",
-    first_user_message: str | None = None,
 ) -> None:
     """Write initial state so the hook treats this as a second fire."""
     state = {
         session_id: {
             "last_diff_hash": diff_hash,
             "last_fire_timestamp": time.time(),
-            "last_transcript_byte_offset": byte_offset,
-            "first_user_message": first_user_message,
+            "evaluated_tool_count": evaluated_tool_count,
+            "last_file_size": last_file_size,
         }
     }
     state_path.write_text(json.dumps(state))
@@ -161,7 +156,8 @@ class TestFirstFire:
         entry = state[session_id]
         assert "last_diff_hash" in entry
         assert "last_fire_timestamp" in entry
-        assert "last_transcript_byte_offset" in entry
+        assert "evaluated_tool_count" in entry
+        assert "last_file_size" in entry
 
     def test_first_fire_with_corrupt_state_exits_0(self, tmp_path):
         state_path = tmp_path / "state.json"
@@ -183,11 +179,11 @@ class TestZeroNewContent:
             {"role": "assistant", "content": "hi"},
         ]
         write_transcript(transcript, entries)
-        # Seed state at end of file — no new content since last fire
+        # Seed state with the actual file size — triggers file-size-unchanged fast-exit
         seed_state(
             tmp_path / "state.json",
             session_id,
-            byte_offset=transcript_offset(entries, len(entries)),
+            last_file_size=transcript.stat().st_size,
         )
 
         payload = make_payload(session_id=session_id, transcript_path=str(transcript))
@@ -207,7 +203,7 @@ class TestShortResponseFastExit:
             {"role": "assistant", "content": "It is 3pm."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -227,7 +223,7 @@ class TestShortResponseFastExit:
             {"role": "assistant", "content": long_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         # No plugin root → LLM fails open → still exits 0, but didn't short-circuit
         payload = make_payload(
@@ -257,7 +253,7 @@ class TestQuestionClassification:
             {"role": "assistant", "content": assistant_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
         payload = make_payload(
             session_id=session_id,
             transcript_path=str(transcript),
@@ -306,7 +302,7 @@ class TestExitWithGuidance:
             {"role": "assistant", "content": "Here is a summary."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         # Pass cwd=tmp_path (non-git dir) so git diff returns empty string,
         # matching the seeded empty diff_hash — otherwise diff_changed=True blocks this path.
@@ -333,7 +329,7 @@ class TestExitWithGuidance:
             {"role": "assistant", "content": "Here are the docs."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -358,7 +354,7 @@ class TestExitWithGuidance:
             {"role": "assistant", "content": "Found the pattern."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -383,7 +379,7 @@ class TestExitWithGuidance:
             {"role": "assistant", "content": "You have 3 open issues."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -406,7 +402,7 @@ class TestExitWithGuidance:
             {"role": "assistant", "content": "It reads files."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -432,7 +428,7 @@ class TestWriteToolSignals:
             {"role": "assistant", "content": "I've completed the fix. The changes are ready."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
         return session_id, transcript, "I've completed the fix. The changes are ready."
 
     def test_edit_tool_triggers_llm_path(self, tmp_path):
@@ -517,7 +513,7 @@ class TestMCPWriteToolSignals:
             {"role": "assistant", "content": assistant_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
         return session_id, transcript
 
     def test_mcp_read_only_tool_does_not_trigger(self, tmp_path):
@@ -586,7 +582,7 @@ class TestCompletionClaims:
             {"role": "assistant", "content": assistant_msg},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
         payload = make_payload(
             session_id=session_id,
             transcript_path=str(transcript),
@@ -640,7 +636,7 @@ class TestLLMSubprocess:
         ]
         write_transcript(transcript, entries)
         state_path = tmp_path / "state.json"
-        seed_state(state_path, session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(state_path, session_id)
         payload = make_payload(
             session_id=session_id,
             transcript_path=str(transcript),
@@ -693,7 +689,7 @@ class TestLLMSubprocess:
 
 class TestStateManagement:
     def test_state_updated_after_pass(self, tmp_path):
-        """State file reflects new byte offset after a passing run."""
+        """State file reflects updated evaluated_tool_count and last_file_size after pass."""
         transcript = tmp_path / "transcript.jsonl"
         session_id = "sess-state-update"
         entries = [
@@ -704,7 +700,7 @@ class TestStateManagement:
         ]
         write_transcript(transcript, entries)
         state_path = tmp_path / "state.json"
-        seed_state(state_path, session_id, byte_offset=transcript_offset(entries, 2))
+        seed_state(state_path, session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -716,9 +712,9 @@ class TestStateManagement:
 
         state = json.loads(state_path.read_text())
         assert session_id in state
-        assert state[session_id]["last_transcript_byte_offset"] == transcript_offset(
-            entries, len(entries)
-        )
+        assert "evaluated_tool_count" in state[session_id]
+        assert "last_file_size" in state[session_id]
+        assert state[session_id]["last_file_size"] == transcript.stat().st_size
 
     def test_stale_sessions_pruned(self, tmp_path):
         """Sessions older than 24h are removed from state on next run."""
@@ -731,7 +727,8 @@ class TestStateManagement:
             old_session: {
                 "last_diff_hash": "",
                 "last_fire_timestamp": old_time,
-                "last_transcript_byte_offset": 0,
+                "evaluated_tool_count": 0,
+                "last_file_size": 0,
             },
         }
         state_path.write_text(json.dumps(state))
@@ -786,7 +783,7 @@ class TestNonGitDirectory:
             {"role": "assistant", "content": "Hi there."},
         ]
         write_transcript(transcript, entries)
-        seed_state(tmp_path / "state.json", session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(tmp_path / "state.json", session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -800,7 +797,7 @@ class TestNonGitDirectory:
     def test_missing_transcript_exits_0(self, tmp_path):
         """Missing transcript file → graceful fast exit."""
         session_id = str(uuid.uuid4())
-        seed_state(tmp_path / "state.json", session_id, byte_offset=0)
+        seed_state(tmp_path / "state.json", session_id)
         payload = make_payload(
             session_id=session_id,
             transcript_path="/nonexistent/path/transcript.jsonl",
@@ -825,7 +822,7 @@ class TestAgentToolSignals:
         ]
         write_transcript(transcript, entries)
         state_path = tmp_path / "state.json"
-        seed_state(state_path, session_id, byte_offset=transcript_offset(entries, 1))
+        seed_state(state_path, session_id)
 
         payload = make_payload(
             session_id=session_id,
@@ -896,7 +893,6 @@ class TestHackDirModified:
         seed_state(
             tmp_path / "state.json",
             session_id,
-            byte_offset=transcript_offset(entries, 1),
         )
 
         payload = make_payload(
@@ -941,7 +937,6 @@ class TestHackDirModified:
         seed_state(
             tmp_path / "state.json",
             session_id,
-            byte_offset=transcript_offset(entries, 1),
         )
 
         payload = make_payload(
@@ -978,7 +973,6 @@ class TestHackDirModified:
         seed_state(
             tmp_path / "state.json",
             session_id,
-            byte_offset=transcript_offset(entries, 1),
         )
 
         payload = make_payload(
@@ -1003,7 +997,6 @@ class TestHackDirModified:
         seed_state(
             tmp_path / "state.json",
             session_id,
-            byte_offset=transcript_offset(entries, 1),
         )
 
         payload = make_payload(
@@ -1020,16 +1013,17 @@ class TestHackDirModified:
 
 
 class TestStateMigration:
-    def test_old_line_count_state_degrades_gracefully(self, tmp_path):
-        """Old state with last_transcript_line_count is handled via .get() defaults."""
+    def test_old_byte_offset_state_degrades_gracefully(self, tmp_path):
+        """Old state with last_transcript_byte_offset is handled via .get() defaults."""
         state_path = tmp_path / "state.json"
         session_id = "sess-migration"
-        # Write old-format state (pre-byte-offset migration)
+        # Write old-format state (pre-count migration)
         old_state = {
             session_id: {
                 "last_diff_hash": "",
                 "last_fire_timestamp": time.time(),
-                "last_transcript_line_count": 5,  # old key name
+                "last_transcript_byte_offset": 42,  # old key name
+                "first_user_message": "Hello.",  # old key name
             }
         }
         state_path.write_text(json.dumps(old_state))
@@ -1047,13 +1041,15 @@ class TestStateMigration:
             last_assistant_message="Hi.",
         )
         result = run_hook(payload, state_path=state_path)
-        # Old key is ignored, byte_offset defaults to 0 → full re-scan → exit 0
+        # Old keys ignored, evaluated_tool_count defaults to 0 → full parse → exit 0
         assert result.returncode == 0
 
         # Verify state was rewritten with new schema
         new_state = json.loads(state_path.read_text())
-        assert "last_transcript_byte_offset" in new_state[session_id]
-        assert "last_transcript_line_count" not in new_state[session_id]
+        assert "evaluated_tool_count" in new_state[session_id]
+        assert "last_file_size" in new_state[session_id]
+        assert "last_transcript_byte_offset" not in new_state[session_id]
+        assert "first_user_message" not in new_state[session_id]
 
 
 # ── Multi-fire integration ────────────────────────────────────────────────────
@@ -1061,7 +1057,7 @@ class TestStateMigration:
 
 class TestMultiFireIntegration:
     def test_three_sequential_fires_with_transcript_growth(self, tmp_path):
-        """Fire hook 3 times as transcript grows — verifies byte offset tracking."""
+        """Fire hook 3 times as transcript grows — verifies file size and count tracking."""
         transcript = tmp_path / "transcript.jsonl"
         state_path = tmp_path / "state.json"
         session_id = "sess-multi-fire"
@@ -1079,7 +1075,9 @@ class TestMultiFireIntegration:
         result = run_hook(payload, state_path=state_path)
         assert result.returncode == 0
         state = json.loads(state_path.read_text())
-        assert state[session_id]["last_transcript_byte_offset"] == 0  # first fire sets 0
+        # First fire initializes evaluated_tool_count=0 and last_file_size=0
+        assert state[session_id]["evaluated_tool_count"] == 0
+        assert state[session_id]["last_file_size"] == 0
 
         # Fire 2: transcript has grown, hook parses new content
         entries_v2 = entries_v1 + [
@@ -1094,12 +1092,11 @@ class TestMultiFireIntegration:
         result = run_hook(payload, state_path=state_path)
         assert result.returncode == 0
         state = json.loads(state_path.read_text())
-        fire2_offset = state[session_id]["last_transcript_byte_offset"]
-        assert fire2_offset > 0
-        # first_user_message should now be cached
-        assert state[session_id]["first_user_message"] == "Fix the bug."
+        fire2_size = state[session_id]["last_file_size"]
+        assert fire2_size > 0
+        assert fire2_size == transcript.stat().st_size
 
-        # Fire 3: transcript grows again, only new bytes parsed
+        # Fire 3: transcript grows again
         entries_v3 = entries_v2 + [
             {"role": "user", "content": "Is it done yet?"},
             {"role": "assistant", "content": "Almost."},
@@ -1113,10 +1110,9 @@ class TestMultiFireIntegration:
         result = run_hook(payload, state_path=state_path)
         assert result.returncode == 0
         state = json.loads(state_path.read_text())
-        fire3_offset = state[session_id]["last_transcript_byte_offset"]
-        assert fire3_offset > fire2_offset
-        # first_user_message stays cached
-        assert state[session_id]["first_user_message"] == "Fix the bug."
+        fire3_size = state[session_id]["last_file_size"]
+        assert fire3_size > fire2_size
+        assert fire3_size == transcript.stat().st_size
 
 
 # ── Unit tests for _detect_doc_gap ───────────────────────────────────────────
@@ -1188,3 +1184,322 @@ class TestDetectDocGap:
     def test_cargo_toml_counts_as_docs(self):
         """Cargo.toml is a manifest -> counts as docs (case-insensitive)."""
         assert self.mod._detect_doc_gap(["src/main.rs", "Cargo.toml"]) is False
+
+
+# ── Unit tests for _parse_transcript ─────────────────────────────────────────
+
+
+class TestParseTranscript:
+    """Unit tests for _parse_transcript (tail-read, user filtering, slicing)."""
+
+    def setup_method(self):
+        self.mod = _load_stop_hook_module()
+
+    def test_recent_user_messages_window(self, tmp_path):
+        """8 user messages → only last 5 returned (recent_user_limit=5)."""
+        transcript = tmp_path / "t.jsonl"
+        entries = [
+            {"role": "user", "content": f"message {i}"}
+            for i in range(1, 9)  # 8 user messages
+        ]
+        write_transcript(transcript, entries)
+        all_tools, user_msgs, _ = self.mod._parse_transcript(str(transcript))
+        assert len(user_msgs) == 5
+        assert user_msgs[0] == "message 4"
+        assert user_msgs[-1] == "message 8"
+
+    def test_tool_result_user_entries_filtered(self, tmp_path):
+        """User entries whose content is a list of only tool_result blocks are skipped."""
+        transcript = tmp_path / "t.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            # Pure tool_result — no text blocks, should be filtered
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}],
+            },
+            {"role": "assistant", "content": "Done."},
+        ]
+        write_transcript(transcript, entries)
+        _, user_msgs, _ = self.mod._parse_transcript(str(transcript))
+        assert user_msgs == ["Fix the bug."]
+
+    def test_user_entry_with_text_and_tool_result_blocks_kept(self, tmp_path):
+        """User entry with mixed text+tool_result blocks: text blocks are extracted."""
+        transcript = tmp_path / "t.jsonl"
+        entries = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "ok"},
+                    {"type": "text", "text": "Here is my follow-up."},
+                ],
+            },
+        ]
+        write_transcript(transcript, entries)
+        _, user_msgs, _ = self.mod._parse_transcript(str(transcript))
+        assert user_msgs == ["Here is my follow-up."]
+
+    def test_all_tool_calls_collected_undeduped(self, tmp_path):
+        """all_tool_calls returns every occurrence including duplicates."""
+        transcript = tmp_path / "t.jsonl"
+        entries = [
+            {"type": "tool_use", "name": "Read", "id": "t1"},
+            {"type": "tool_use", "name": "Read", "id": "t2"},
+            {"type": "tool_use", "name": "Edit", "id": "t3"},
+        ]
+        write_transcript(transcript, entries)
+        all_tools, _, _ = self.mod._parse_transcript(str(transcript))
+        assert all_tools == ["Read", "Read", "Edit"]
+
+    def test_missing_transcript_returns_empty_tuples(self, tmp_path):
+        """Non-existent transcript path → ([], [], [])."""
+        all_tools, user_msgs, asst_msgs = self.mod._parse_transcript(
+            str(tmp_path / "nonexistent.jsonl")
+        )
+        assert all_tools == []
+        assert user_msgs == []
+        assert asst_msgs == []
+
+    def test_recent_assistant_messages_limit(self, tmp_path):
+        """More than 10 assistant messages → only last 10 returned."""
+        transcript = tmp_path / "t.jsonl"
+        entries = [
+            {"role": "assistant", "content": f"reply {i}"}
+            for i in range(1, 13)  # 12 assistant messages
+        ]
+        write_transcript(transcript, entries)
+        _, _, asst_msgs = self.mod._parse_transcript(str(transcript))
+        assert len(asst_msgs) == 10
+        assert asst_msgs[0] == "reply 3"
+        assert asst_msgs[-1] == "reply 12"
+
+
+# ── Tool-count dedup and compacted transcript ─────────────────────────────────
+
+
+class TestToolCountDedup:
+    def test_evaluated_count_skips_already_seen_tool_calls(self, tmp_path):
+        """evaluated_tool_count from state skips those tools on next fire."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        # Transcript has Edit tool call — we seed as if we already evaluated it
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"role": "assistant", "content": "Done."},
+        ]
+        write_transcript(transcript, entries)
+        # evaluated_tool_count=1 means we already counted the Edit call
+        seed_state(tmp_path / "state.json", session_id, evaluated_tool_count=1)
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="Done.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        # No new tool calls after offset → short response fast exit → exit 0
+        assert result.returncode == 0
+
+    def test_compacted_transcript_resets_count(self, tmp_path):
+        """If evaluated_count > len(all_tool_calls), count resets to 0 (re-evaluate all)."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"role": "assistant", "content": "I've completed the fix."},
+        ]
+        write_transcript(transcript, entries)
+        # Seed with a stale count higher than actual tool calls (simulates compaction)
+        seed_state(tmp_path / "state.json", session_id, evaluated_tool_count=99)
+
+        write_mock_llm(tmp_path / "plugin", decision="pass")
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="I've completed the fix.",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # Count reset to 0 → Edit seen → completion claim → LLM invoked → pass
+        assert result.returncode == 0
+        state = json.loads((tmp_path / "state.json").read_text())
+        assert state[session_id]["evaluated_tool_count"] == 1
+
+
+# ── File-size fast-exit ───────────────────────────────────────────────────────
+
+
+class TestFileSizeFastExit:
+    def test_same_file_size_exits_0_without_parsing(self, tmp_path):
+        """Seeding last_file_size == actual file size → fast exit 0."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix it."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"role": "assistant", "content": "I've completed the fix."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(
+            tmp_path / "state.json",
+            session_id,
+            last_file_size=transcript.stat().st_size,
+        )
+        # Even with a write tool in transcript, file-size fast-exit fires first
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="I've completed the fix.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+
+    def test_grown_file_size_proceeds_to_parse(self, tmp_path):
+        """File size larger than seeded → proceeds past fast-exit to parse."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"role": "assistant", "content": "I've completed the fix."},
+        ]
+        write_transcript(transcript, entries)
+        # Seed with a smaller size than actual → file has grown → parse proceeds
+        seed_state(tmp_path / "state.json", session_id, last_file_size=10)
+
+        write_mock_llm(tmp_path / "plugin", decision="pass")
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="I've completed the fix.",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # Parse proceeded, Edit seen, completion claim → LLM invoked → pass
+        assert result.returncode == 0
+
+
+# ── LLM context fields: last_assistant_message and recent_user_messages ───────
+
+
+class TestLLMContextFields:
+    def test_llm_receives_last_assistant_message(self, tmp_path):
+        """Mock LLM stub receives last_assistant_message in context JSON."""
+        # Write a stub that validates the context field and fails if missing
+        hooks_dir = tmp_path / "plugin" / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        stub = textwrap.dedent("""\
+            #!/usr/bin/env -S uv run
+            # /// script
+            # requires-python = ">=3.10"
+            # ///
+            import json, sys
+            ctx = json.loads(sys.stdin.read())
+            if "last_assistant_message" not in ctx:
+                print(json.dumps({"decision": "fail", "reasoning": "missing field",
+                    "findings": ["last_assistant_message not in context"]}))
+                sys.exit(2)
+            print(json.dumps({"decision": "pass", "reasoning": "ok", "findings": None}))
+            sys.exit(0)
+        """)
+        (hooks_dir / "stop-hook-llm.py").write_text(stub)
+        (hooks_dir / "stop-hook-llm.py").chmod(0o755)
+
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"role": "assistant", "content": "I've completed the fix."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="I've completed the fix.",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+
+    def test_llm_receives_recent_user_messages(self, tmp_path):
+        """Mock LLM stub receives recent_user_messages list in context JSON."""
+        hooks_dir = tmp_path / "plugin" / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        stub = textwrap.dedent("""\
+            #!/usr/bin/env -S uv run
+            # /// script
+            # requires-python = ">=3.10"
+            # ///
+            import json, sys
+            ctx = json.loads(sys.stdin.read())
+            if not isinstance(ctx.get("recent_user_messages"), list):
+                print(json.dumps({"decision": "fail", "reasoning": "missing field",
+                    "findings": ["recent_user_messages not a list"]}))
+                sys.exit(2)
+            print(json.dumps({"decision": "pass", "reasoning": "ok", "findings": None}))
+            sys.exit(0)
+        """)
+        (hooks_dir / "stop-hook-llm.py").write_text(stub)
+        (hooks_dir / "stop-hook-llm.py").chmod(0o755)
+
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"role": "assistant", "content": "I've completed the fix."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="I've completed the fix.",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+
+
+# ── latest_user_message semantic: comes from recent messages, not first ───────
+
+
+class TestLatestUserMessageSemantic:
+    def test_latest_user_message_is_last_not_first(self, tmp_path):
+        """latest_user_message is derived from recent_user_messages[-1], not first."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        # First message is an action word; last is a meta word (should fast-exit)
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"role": "assistant", "content": "Working on it."},
+            {"role": "user", "content": "Looks good, proceed."},  # meta — last message
+            {"role": "assistant", "content": "Sure."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="Sure.",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        # last user message is meta ("proceed") → fast-exit 4
+        assert result.returncode == 0

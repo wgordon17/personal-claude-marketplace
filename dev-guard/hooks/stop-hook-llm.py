@@ -11,9 +11,10 @@ a pass/fail decision JSON on stdout.
 
 Stdin schema (from stop-hook.py):
   {
-    "first_user_message": str | null,
-    "new_tool_calls": list[str],
+    "recent_user_messages": list[str],
+    "last_assistant_message": str,
     "recent_assistant_messages": list[str],
+    "new_tool_calls": list[str],
     "git_diff_stat": str | null,
     "trigger_reasons": list[str],
     "work_type": "code_config | planning | research | question | conversation | mixed"
@@ -44,7 +45,7 @@ import re
 import sys
 from typing import NoReturn
 
-_MAX_INPUT = 1 * 1024 * 1024  # 1 MB — context is small
+_MAX_INPUT = 2 * 1024 * 1024  # 2 MB — includes recent message history
 # Strip Claude Code context-window suffixes like [1m] — Vertex AI doesn't accept them
 _RAW_MODEL = os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-6")
 _MODEL = re.sub(r"\[.*\]$", "", _RAW_MODEL)
@@ -82,60 +83,92 @@ def _parse_stdin() -> dict:
 
 def _build_prompt(ctx: dict) -> str:
     """Build an adaptive evaluation prompt based on trigger reasons and work type."""
-    first_user_msg = ctx.get("first_user_message") or "(not available)"
+    recent_user_msgs = ctx.get("recent_user_messages") or []
+    last_assistant_msg = (ctx.get("last_assistant_message") or "").strip()
+    recent_assistant_msgs = ctx.get("recent_assistant_messages") or []
     tool_calls = ctx.get("new_tool_calls") or []
-    recent_msgs = ctx.get("recent_assistant_messages") or []
     diff_stat = ctx.get("git_diff_stat")
     trigger_reasons = ctx.get("trigger_reasons") or []
     work_type = ctx.get("work_type", "conversation")
-    # Build context section
+
     lines = [
         "You are a quality gate for a Claude Code session. "
-        "Evaluate whether the work is complete and correct.",
+        "Evaluate whether the work is complete and correct based on the evidence below.",
         "",
-        "## Session Context",
-        f"**Original user request:** {first_user_msg}",
+    ]
+
+    # ── Section 1: Conversation Arc ───────────────────────────────────────────
+    lines += ["## 1. Conversation Arc (recent user messages)"]
+    if recent_user_msgs:
+        for i, msg in enumerate(recent_user_msgs, 1):
+            label = (
+                f"**User message {i} (Most recent — current task):**"
+                if i == len(recent_user_msgs)
+                else f"**User message {i}:**"
+            )
+            lines += [label, msg, ""]
+    else:
+        lines += ["(no user messages available)", ""]
+
+    # ── Section 2: Work Evidence ──────────────────────────────────────────────
+    lines += ["## 2. Work Evidence"]
+    lines += [
         f"**Work type:** {work_type}",
         f"**Trigger reasons:** {', '.join(trigger_reasons) if trigger_reasons else 'none'}",
         f"**Tools used this turn:** {', '.join(tool_calls) if tool_calls else 'none'}",
     ]
-
     if diff_stat:
         lines += [
             "",
-            "## Git Changes",
+            "**Git diff stat:**",
             "```",
             diff_stat,
             "```",
         ]
+    lines.append("")
 
-    if recent_msgs:
-        lines += ["", "## Recent Assistant Messages"]
-        for i, msg in enumerate(recent_msgs, 1):
+    # ── Section 3: Final Message ──────────────────────────────────────────────
+    lines += [
+        "## 3. Final Assistant Message (the response being evaluated)",
+        "This is what the user will see. Evaluate this.",
+    ]
+    lines += [last_assistant_msg if last_assistant_msg else "(empty)", ""]
+
+    # ── Section 4: Supporting Context ────────────────────────────────────────
+    if recent_assistant_msgs:
+        lines += ["## 4. Supporting Context (earlier assistant messages)"]
+        for i, msg in enumerate(recent_assistant_msgs, 1):
             lines += [f"**Message {i}:**", msg, ""]
 
-    # Add work-type-specific evaluation criteria
-    lines += ["", "## Evaluation Criteria"]
+    # ── Section 5: Evaluation Criteria ───────────────────────────────────────
+    lines += ["## 5. Evaluation Criteria"]
+    lines += [
+        "Evaluate the final message in the context of the conversation arc. "
+        "Use the work evidence and supporting context to inform your judgment.",
+        "",
+    ]
 
     criteria: list[str] = []
 
     # Universal criteria
     criteria.append(
-        "COMPLETENESS: Was every part of the original user request addressed? "
-        "Not partially, not deferred without explicit user agreement."
+        "CLAIM ACCURACY: Do the claims in the final message match the work evidence? "
+        "Check that tools listed as used appear in the tools list, that git changes "
+        "described match the diff stat, and that completion claims are supported by evidence."
     )
     criteria.append(
-        "IDENTIFIED-BUT-UNFIXED: Did the assistant mention issues ('could be improved', "
-        "'consider', 'potential issue', 'follow-up', 'out of scope') without fixing them? "
-        "If yes, that is incomplete work. "
-        "DEFERRAL-TO-USER is the same failure: phrases like 'should be verified', "
-        "'needs to be confirmed', 'you should check', 'verify against your', "
-        "'please verify', 'you may want to update' mean the assistant identified "
-        "work that needs doing and punted it. The assistant has tools (Read, Grep, "
-        "WebSearch, LSP, MCP servers) to verify things itself — saying 'should be "
-        "verified' when it could verify is confessing to incomplete work, not "
-        "flagging a genuine limitation. If it should be verified, verify it. "
-        "If it needs checking, check it. Do not defer work to the user."
+        "COMPLETENESS: Does the final message address the MOST RECENT user request "
+        "(the last message in the conversation arc)? Not an earlier one, not partially, "
+        "not deferred without explicit user agreement."
+    )
+    criteria.append(
+        "DEFERRED WORK: Does the final message punt work to the user that Claude should "
+        "have done itself? Phrases like 'should be verified', 'needs to be confirmed', "
+        "'you should check', 'verify against your', 'please verify', "
+        "'you may want to update' — when the assistant has tools (Read, Grep, "
+        "WebSearch, LSP, MCP servers) to do that verification — mean the assistant "
+        "identified work that needs doing and punted it. That is incomplete work. "
+        "If it should be verified, verify it. If it needs checking, check it."
     )
 
     if work_type in ("code_config", "mixed"):
@@ -191,9 +224,10 @@ def _build_prompt(ctx: dict) -> str:
     for i, criterion in enumerate(criteria, 1):
         lines.append(f"{i}. {criterion}")
 
+    # ── Section 6: Decision ───────────────────────────────────────────────────
     lines += [
         "",
-        "## Decision",
+        "## 6. Decision",
         "Respond with ONLY a JSON object — no prose, no markdown fences:",
         (
             '{"decision": "pass" | "fail", "reasoning": "brief explanation", '
