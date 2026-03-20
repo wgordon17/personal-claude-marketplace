@@ -255,5 +255,5 @@ NEVER IN CHAT: Full roadmap content, raw table data
 
 ### Schema Reference
 
-`code-quality/skills/roadmap/references/phase-schema.md` — canonical schema for all
-roadmap document fields, including per-track table columns and worktree branch naming.
+`references/phase-schema.md` — canonical schema for all roadmap document fields,
+including per-track table columns and worktree branch naming.

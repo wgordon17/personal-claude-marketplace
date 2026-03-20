@@ -5,7 +5,7 @@ description: >-
   plan mode (EnterPlanMode is denied by hook), when asked to "plan", "design an approach",
   "how should we implement", or before any multi-file implementation task. Asks clarifying
   questions first, writes plan to file incrementally with file structure mapping, per-task
-  adversarial review (sonnet subagent), tiered breakpoints for scope vs detail ambiguity, and
+  quality review (sonnet subagent), tiered breakpoints for scope vs detail ambiguity, and
   assumption surfacing in Phase 6. Provides research context and summaries in chat for
   feedback. Never displays full plan content in chat.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
@@ -238,6 +238,8 @@ Write the plan file with a header containing:
 - **Agentic directive** — A blockquote at the top of the plan file (above the Goal):
   `> **For agentic workers:** REQUIRED: Use /swarm to implement this plan. Each task within
   a phase should run in an isolated worktree.`
+  For light plans (1-3 tasks), the directive may reference direct implementation instead of
+  `/swarm` if the scope doesn't warrant a full agent swarm.
 - **Goal:** — 1 sentence
 - **Cynefin Domain:** — the domain classified in Phase 0
 - **Domain Justification:** — 2-4 sentences explaining why this domain applies and what that
@@ -357,8 +359,17 @@ tasks. As you write more tasks, the summary context grows — keep prior summari
 4. If still not approved after 5 dispatches, escalate via `AskUserQuestion` with the
    outstanding issues and ask the user how to resolve them
 
-**Collect assumptions:** Any `[ASSUMPTION: ...]` items detected by the reviewer accumulate
-across all tasks. These are surfaced in the Phase 6 flags report.
+**If reviewer crashes or returns unparseable output:** retry once. If the second attempt also
+fails, mark the task as `[UNREVIEWED]` in the plan file and continue. `[UNREVIEWED]` tasks
+are surfaced in the Phase 6 flags report.
+
+**Collect assumptions:** When the reviewer detects `[ASSUMPTION: ...]` items, write them into
+the plan file immediately (append to the task body) — do not hold them only in memory.
+Assumptions must persist in the file so they survive context recycling.
+
+If a reviewer flags a **scope-level** assumption, treat it as a reactive breakpoint: stop
+and use `AskUserQuestion` immediately (same as agent-initiated scope ambiguity in step 3.5
+below). Do not defer scope assumptions to Phase 6.
 
 #### 3.5 Reactive Breakpoints
 
