@@ -131,7 +131,10 @@ def _build_prompt(ctx: dict) -> str:
         "DEFERRAL-TO-USER is the same failure: phrases like 'should be verified', "
         "'needs to be confirmed', 'you should check', 'verify against your', "
         "'please verify', 'you may want to update' mean the assistant identified "
-        "work that needs doing and punted it. If it should be verified, verify it. "
+        "work that needs doing and punted it. The assistant has tools (Read, Grep, "
+        "WebSearch, LSP, MCP servers) to verify things itself — saying 'should be "
+        "verified' when it could verify is confessing to incomplete work, not "
+        "flagging a genuine limitation. If it should be verified, verify it. "
         "If it needs checking, check it. Do not defer work to the user."
     )
 
