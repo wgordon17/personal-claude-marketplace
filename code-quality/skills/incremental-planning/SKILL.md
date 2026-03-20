@@ -233,6 +233,9 @@ Announce the location: "Plan file: `hack/plans/2026-02-15-session-auth.md`"
 Write the plan file with a header containing:
 
 **Always include (light and full planning):**
+- **Agentic directive** — A blockquote at the top of the plan file (above the Goal):
+  `> **For agentic workers:** REQUIRED: Use /swarm to implement this plan. Each task within
+  a phase should run in an isolated worktree.`
 - **Goal** — 1 sentence
 - **Cynefin Domain** — the domain classified in Phase 0
 - **Domain Justification** — 2-4 sentences explaining why this domain applies and what that
