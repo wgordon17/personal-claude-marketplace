@@ -108,15 +108,17 @@ A `**Status:**` line may appear in a phase block after cleanup mode marks it com
 | Track | ...
 ```
 
-Values: `Not Started` | `In Progress` | `Completed`
+Values: `Not Started` | `In Progress` | `Incomplete` | `Completed`
 
 - `Not Started` — default; branch does not exist
 - `In Progress` — branch exists but no merged PR found
+- `Incomplete` — all tracks merged but subagent validation found `partial` or `deferred` tasks
 - `Completed` — written explicitly by cleanup mode after all tracks merged and validated
 
-Note: `Not Started` and `In Progress` are runtime-derived states (from branch checks) and are
-**not written to the roadmap file**. Only `Completed` is persisted. Absence of a `**Status:**`
-field means the phase has not been explicitly marked complete.
+Note: `Not Started`, `In Progress`, and `Incomplete` are runtime-derived states (from branch
+checks and subagent validation) and are **not written to the roadmap file**. Only `Completed`
+is persisted. Absence of a `**Status:**` field means the phase has not been explicitly marked
+complete.
 
 ### Per-track validation result format
 

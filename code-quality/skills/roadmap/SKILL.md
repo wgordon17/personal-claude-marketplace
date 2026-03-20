@@ -471,8 +471,9 @@ A phase is `Completed` only when:
 2. ALL subagent validations report `implemented` for every task
 
 If any track is `in-progress` or `not-started` → phase is `In Progress` or `Not Started`.
-If all tracks are `merged` but any task is `partial` or `deferred` → phase is `In Progress`
-(all branches merged but work is incomplete — distinct from branches still open).
+If all tracks are `merged` but any task is `partial` or `deferred` → phase is `Incomplete`
+(all branches merged but not all tasks fully implemented — distinct from `In Progress` where
+branches are still open).
 
 ### Handling validation gaps
 
