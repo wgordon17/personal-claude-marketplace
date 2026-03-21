@@ -465,8 +465,18 @@ class TestSimplerPatterns:
             ('echo "hello" | grep hello', 0, None),
             ('printf "hello world"', 2, "directly"),
             ('printf "%s" x | wc -c', 0, None),
+            # $'...' ANSI-C quoting form
+            ("echo $'hello'", 2, "directly"),
+            ("printf $'result\\n'", 2, "directly"),
         ],
-        ids=["echo-noop", "echo-pipe-allow", "printf-noop", "printf-pipe-allow"],
+        ids=[
+            "echo-noop",
+            "echo-pipe-allow",
+            "printf-noop",
+            "printf-pipe-allow",
+            "echo-ansi-c-noop",
+            "printf-ansi-c-noop",
+        ],
     )
     def test_simpler_patterns(self, command, expected_exit, expected_msg):
         result = run_bash(command)
@@ -840,9 +850,14 @@ class TestPipeSegments:
         assert_guard(result, expected_exit, expected_msg)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Terminal pipe segment noop blocking
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
 class TestTerminalPipeNoop:
     """echo/printf as the terminal (last) pipe segment is a noop — the output goes
-    to the user, not downstream.  Should be blocked, unlike mid-pipe echo/printf
+    to the user, not downstream. Should be blocked, unlike mid-pipe echo/printf
     which feeds the next command."""
 
     @pytest.mark.parametrize(
@@ -858,6 +873,9 @@ class TestTerminalPipeNoop:
             ('printf "%s" x | wc -c', 0, None),
             ('echo "val" | sort | wc', 0, None),
             ('printf "%s" x | sort | wc', 0, None),
+            # Mid-pipe middle segment (position 1 of 3) → allowed (feeds downstream)
+            ('cmd1 | echo "data" | wc -c', 0, None),
+            ('cmd1 | printf "%s" x | wc', 0, None),
         ],
         ids=[
             "echo-terminal-block",
@@ -868,6 +886,8 @@ class TestTerminalPipeNoop:
             "printf-midpipe-allow",
             "echo-midpipe-3stage-allow",
             "printf-midpipe-3stage-allow",
+            "echo-middle-segment-allow",
+            "printf-middle-segment-allow",
         ],
     )
     def test_terminal_pipe_noop(self, command, expected_exit, expected_msg):

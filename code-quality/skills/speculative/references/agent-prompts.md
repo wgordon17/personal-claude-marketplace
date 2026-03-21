@@ -37,7 +37,7 @@ After the context bundle, add the agent-specific prompt below.
 
 ## Competitor Agent Prompt
 
-**Type:** general-purpose | **Model:** sonnet | **Isolation:** worktree
+**Type:** general-purpose | **Model:** sonnet | **Mode:** bypassPermissions | **Isolation:** worktree
 
 ```markdown
 # Competitor — Speculative Execution Agent
