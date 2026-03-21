@@ -117,9 +117,14 @@ use: `"No implementation plan found."` The Correctness Reviewer uses this to det
 
 ### Fetch PR Diff
 
+After worktree alignment, compute the diff locally against the merge base:
 ```
-gh pr diff <number>
+git diff $(git merge-base origin/{base_branch} HEAD)..HEAD
 ```
+
+This is faster than `gh pr diff` and gives agents natural access to individual files via
+`Read`, `Grep`, and per-file `git diff -- <file>` without needing to parse a monolithic
+diff string.
 
 Store as `{diff}`.
 
