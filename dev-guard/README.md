@@ -377,7 +377,8 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 - `config-global-write` — Global git config modifications
 - `stash-drop` — Destructive stash operations
 - `checkout-dash-dash` — Destructive checkout with -- (deprecated, use git restore)
-- `filter-branch` — Dangerous git filter-branch (use git-filter-repo)
+- `filter-branch` — Dangerous git filter-branch (deprecated)
+- `filter-repo` — History-rewriting git filter-repo
 - `reflog-delete-expire` — Reflog delete/expire operations
 - `remote-remove` — Removing a git remote
 - `branch-from-local-main` — Branching from local main (may be stale)

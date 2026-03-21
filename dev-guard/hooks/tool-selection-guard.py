@@ -1405,7 +1405,12 @@ GIT_ASK_RULES: list[GitRule] = [
     GitRule(
         "filter-branch",
         lambda cmd: bool(re.search(r"git\s+filter-branch", cmd)),
-        "git filter-branch is dangerous and deprecated. Use git-filter-repo if truly needed.",
+        "git filter-branch is dangerous and deprecated. Confirm this is intentional.",
+    ),
+    GitRule(
+        "filter-repo",
+        lambda cmd: bool(re.search(r"git\s+filter-repo", cmd)),
+        "git filter-repo rewrites repository history permanently. Confirm this is intentional.",
     ),
     GitRule(
         "reflog-delete-expire",

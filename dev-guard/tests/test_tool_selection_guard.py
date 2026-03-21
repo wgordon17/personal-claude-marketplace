@@ -1205,7 +1205,8 @@ class TestGitSafetyAsk:
         [
             ("git stash drop", True, "permanently deletes"),
             ("git checkout -- file.py", True, "destructive"),
-            ("git filter-branch --tree-filter 'rm -f x'", True, "deprecated"),
+            ("git filter-branch --tree-filter 'rm -f x'", True, "Confirm this is intentional"),
+            ("git filter-repo --invert-paths --path secret.txt", True, "permanently"),
             ("git reflog delete HEAD@{2}", True, "recovery points"),
             ("git reflog expire --expire=now", True, "recovery points"),
             ("git remote remove upstream", True, "break workflows"),
@@ -1218,6 +1219,7 @@ class TestGitSafetyAsk:
             "stash-drop",
             "checkout-dash-dash",
             "filter-branch",
+            "filter-repo",
             "reflog-delete",
             "reflog-expire",
             "remote-remove",
