@@ -1,6 +1,6 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance review, auditing, planning, LSP navigation, test execution, and session management.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, file-audit, bug-investigation, unfuck, swarm, quality-gate, review, map-reduce, and speculative.
 
 ## Agents (5)
 

@@ -1,8 +1,9 @@
 # Reviewer Prompt Templates
 
 Use these templates when spawning domain reviewer agents for PR review. Replace `{placeholders}`
-with actual values. Domain reviewers (Security, QA, Performance, Code Quality) receive diff,
-PR description, project rules, and changed files. The Git History Reviewer receives
+with actual values. Domain reviewers (Security, QA, Performance, Code Quality, Correctness)
+receive diff, PR description, project rules, and changed files. The Correctness Reviewer also
+receives `{plan_content}` for plan drift detection. The Git History Reviewer receives
 `{git_history_context}` instead of `{diff}` — pre-collected blame/log output from the
 orchestrator. The Confidence Scorer receives findings JSON and CLAUDE.md only.
 
