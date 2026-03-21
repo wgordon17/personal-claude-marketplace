@@ -12,7 +12,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:performance` | Performance profiling and optimization | Sonnet |
 | `code-quality:test-runner` | Efficient test execution specialist | Haiku |
 
-## Skills (14)
+## Skills (15)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -23,6 +23,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
 | `/swarm` | Full agent team implementation via TeamCreate | Manual |
 | `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
+| `/review` | Multi-agent PR review with confidence scoring | Manual |
 | `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
 | `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
 | `/incremental-planning` | Planning workflow with per-task review and assumption surfacing | Manual |
