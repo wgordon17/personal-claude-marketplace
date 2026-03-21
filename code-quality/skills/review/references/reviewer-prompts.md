@@ -178,7 +178,7 @@ CHECKLIST:
 For each finding, report:
 - Description: the quality concern
 - Location: file:line
-- Severity: HIGH (actively misleading, unmaintainable, or rule violation) / MEDIUM (degrades over time) / LOW (minor polish)
+- Severity: CRITICAL (violates explicit CLAUDE.md rule with blocking impact) / HIGH (actively misleading, unmaintainable, or rule violation) / MEDIUM (degrades over time) / LOW (minor polish)
 - Evidence: the specific code or doc text that demonstrates the issue
 - Suggested improvement (brief)
 
@@ -209,8 +209,8 @@ GIT HISTORY CONTEXT:
 {git_history_context}
 
 FOCUS: Historical patterns, established decisions, and prior review feedback that the PR
-should respect. Do not duplicate findings that belong to security, QA, performance, or
-code quality reviews.
+should respect. Do not duplicate findings that belong to security, QA, performance, correctness,
+or code quality reviews.
 
 ANALYSIS AREAS:
 1. Established patterns: does the PR contradict coding patterns consistently used in the
@@ -229,7 +229,7 @@ ANALYSIS AREAS:
 For each finding, report:
 - Description: the historical pattern or decision being contradicted
 - Location: file path (line reference if determinable from history context)
-- Severity: HIGH (contradicts explicit prior decision or repeats a reverted pattern) / MEDIUM (diverges from established pattern without explanation) / LOW (worth noting for reviewers)
+- Severity: CRITICAL (repeats exact pattern that was previously reverted and caused an incident) / HIGH (contradicts explicit prior decision or repeats a reverted pattern) / MEDIUM (diverges from established pattern without explanation) / LOW (worth noting for reviewers)
 - Evidence: the specific git log entry, commit message, or blame output that supports the finding
 - Suggested action (brief)
 

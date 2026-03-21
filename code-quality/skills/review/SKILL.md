@@ -91,8 +91,11 @@ Record the original branch/worktree before any checkout.
 5. If neither: run `gh pr checkout <number>`. If it fails due to a dirty working tree,
    run `git stash --include-untracked`, retry the checkout, and remember to `git stash pop`
    after review. If stash also fails, stop with: "Cannot checkout PR branch and stash failed."
-6. After the review completes (Phase 4), return to the original branch or worktree.
-   If changes were stashed in step 5, run `git stash pop` to restore them.
+6. After the review completes (Phase 4) — or if any phase fails — return to the original
+   branch or worktree. If changes were stashed in step 5, run `git stash pop` to restore
+   them. If `git stash pop` fails due to conflicts, do NOT run `git stash drop` — inform
+   the user: "Your changes are in git stash. Run `git stash pop` manually and resolve
+   conflicts." Always attempt stash restoration on error paths, not just success paths.
 
 ### Read Project Rules
 
@@ -136,9 +139,12 @@ Skip files that are newly created in the PR (diff header shows `--- /dev/null`) 
 
 2. **Blame for changed hunks only** (not full-file blame — that produces unbounded output):
    Parse `@@ -a,b +c,d @@` headers from `{diff}` for this file.
-   For each hunk: `start = c`, `end = c + d - 1` (using the `+c,d` side).
-   If `d = 0` (deletion-only hunk with no added lines), skip blame for that hunk.
-   Run: `git blame -L <start>,<end> -- <file>`
+   For each hunk: `start = a`, `end = a + b - 1` (using the `-a,b` side — the old-file lines).
+   If `b = 0` (addition-only hunk with no prior lines), skip blame for that hunk.
+   Run: `git blame {base_branch} -L <start>,<end> -- <file>`
+   Using the old-file side shows who last touched the lines being modified — the actual
+   historical context the Git History Reviewer needs. Blaming the new-file side (`+c,d`)
+   would only show the PR author's own commits.
 
 If more than 15 files changed, append a note listing the skipped files.
 
@@ -283,6 +289,10 @@ Agent(
 The scorer receives: `{findings_json}` (the array above) and `{claude_md_rules}`.
 
 It returns: `[{finding_id, score, justification}, ...]`
+
+Parse the scorer's response as JSON. If parsing fails, extract JSON from between the first `[`
+and last `]` markers. If that also fails, skip scoring and include all findings with a default
+confidence of 50 and a note: "Confidence scoring failed — showing all findings unfiltered."
 
 ### Filter
 
