@@ -1346,6 +1346,11 @@ GIT_DENY_RULES: list[GitRule] = [
         "--no-verify flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
     ),
     GitRule(
+        "filter-branch",
+        lambda cmd: bool(re.search(r"git\s+filter-branch", cmd)),
+        "git filter-branch is FORBIDDEN. It is deprecated — use git-filter-repo instead.",
+    ),
+    GitRule(
         "add-force",
         lambda cmd: bool(re.search(r"git\s+add", cmd)) and _has_force_flag(cmd),
         "git add --force is FORBIDDEN. Files are gitignored for a reason.",
@@ -1401,11 +1406,6 @@ GIT_ASK_RULES: list[GitRule] = [
         "checkout-dash-dash",
         lambda cmd: bool(re.search(r"git\s+checkout\s+--", cmd)),
         "git checkout -- is destructive and deprecated. Consider using 'git restore' instead.",
-    ),
-    GitRule(
-        "filter-branch",
-        lambda cmd: bool(re.search(r"git\s+filter-branch", cmd)),
-        "git filter-branch is dangerous and deprecated. Confirm this is intentional.",
     ),
     GitRule(
         "filter-repo",

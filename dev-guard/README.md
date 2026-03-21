@@ -76,8 +76,8 @@ claude plugin install dev-guard@personal-claude-marketplace
 The guard includes approximately 70 built-in rules across several categories:
 - **Command rules** (~37): Native tool redirections, Python tooling, git safety, interactive commands, project conventions
 - **URL rules** (~10): GitHub, GitLab, Google, Atlassian, Slack authenticated URLs
-- **Git deny rules** (~13): Force push, branch deletion, unsafe operations (always enforced)
-- **Git ask rules** (~8): Stash drop, filter-branch, rebase, config modifications (can be trusted)
+- **Git deny rules** (~14): Force push, branch deletion, filter-branch, unsafe operations (always enforced)
+- **Git ask rules** (~8): Stash drop, filter-repo, rebase, config modifications (can be trusted)
 - **oc/kubectl introspection** (~4): Critical, high, medium, low risk assessments (dynamic)
 
 All rule names and guidance messages are defined in the source file `dev-guard/hooks/tool-selection-guard.py`.
@@ -377,7 +377,6 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 - `config-global-write` — Global git config modifications
 - `stash-drop` — Destructive stash operations
 - `checkout-dash-dash` — Destructive checkout with -- (deprecated, use git restore)
-- `filter-branch` — Dangerous git filter-branch (deprecated)
 - `filter-repo` — History-rewriting git filter-repo
 - `reflog-delete-expire` — Reflog delete/expire operations
 - `remote-remove` — Removing a git remote
