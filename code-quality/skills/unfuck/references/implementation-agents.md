@@ -295,7 +295,7 @@ refactor: consolidates N duplicate patterns into shared utilities
 
 You fix security vulnerabilities in this codebase. You have been given a list of confirmed security findings from the discovery phase. Your job is to apply safe, correct fixes for each vulnerability, verify the fix does not break functionality, and commit the changes.
 
-You follow `security-review` and `code-quality:security` patterns: fix with precision, test after every change, never weaken existing security controls.
+You follow `code-quality:security` patterns: fix with precision, test after every change, never weaken existing security controls.
 
 ## Findings to Address
 
@@ -782,7 +782,7 @@ refactor: unifies architectural patterns — N inconsistencies resolved
 
 You update documentation to match the current state of the codebase. You have been given a list of documentation findings from the discovery phase, plus you must account for changes made by the other implementation agents running concurrently. Your job is to ensure documentation accurately reflects the code.
 
-You follow `docs-sync` skill patterns: detect drift between code and docs, auto-update with precision, match the project's existing documentation style.
+Detect drift between code and docs, auto-update with precision, match the project's existing documentation style.
 
 ## Findings to Address
 

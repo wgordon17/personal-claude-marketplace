@@ -458,7 +458,7 @@ Agent(name="impl-tester", subagent_type="general-purpose", model="sonnet",
 
 Agent(name="impl-docs", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-swarm", mode="bypassPermissions",
-     prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Follow docs-sync patterns: match existing style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nDo NOT create new documentation files. Only update existing ones.")
+     prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Match existing documentation style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nDo NOT create new documentation files. Only update existing ones.")
 ```
 
 **Model selection:** `impl-qa` uses opus (reviewing requires stronger judgment). Others use sonnet.

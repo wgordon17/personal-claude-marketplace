@@ -8,7 +8,7 @@ description: >-
   "unify the architecture", "security review and fix", or wants a thorough, automated cleanup
   of their entire repository. Launches a full agent swarm to discover issues, plan fixes, and
   implement changes autonomously. Combines detailed custom analysis with existing skills
-  (file-audit, code-quality:index-repo, code-quality:code-simplifier, docs-sync,
+  (file-audit, code-quality:index-repo, code-quality:code-simplifier,
   code-quality:architect, code-quality:security, code-quality:qa, code-quality:code-reviewer,
   code-quality:test-runner) into a unified cleanup workflow.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
@@ -59,11 +59,11 @@ All agents run simultaneously in background. Each writes structured JSON finding
 |-------|------|---------------|----------------|--------|
 | dead-code-hunter | Unused code, exports, imports, files, deps | `file-audit` | Knip, Vulture, deadcode | `dead-code.json` |
 | duplicate-detector | Copy-paste code, near-duplicates, redundant wrappers | `file-audit` | jscpd | `duplicates.json` |
-| security-auditor | OWASP Top 10, secrets, CVEs, auth gaps | `security-review`, `code-quality:security` | Semgrep, gitleaks, Bandit | `security.json` |
+| security-auditor | OWASP Top 10, secrets, CVEs, auth gaps | `code-quality:security` | Semgrep, gitleaks, Bandit | `security.json` |
 | architecture-reviewer | Circular deps, divergent patterns, god objects | `code-quality:architect` | dependency-cruiser, Madge | `architecture.json` |
 | ai-slop-detector | Over-abstraction, unnecessary wrappers, catch-rethrow, comment noise | (novel — see `references/ai-slop-checklist.md`) | — | `ai-slop.json` |
 | complexity-auditor | Long functions, deep nesting, magic values, parameter bloat | `code-quality:qa` | radon | `complexity.json` |
-| documentation-auditor | README drift, broken links, stale TODOs, missing docs | `docs-sync`, `file-audit` | — | `documentation.json` |
+| documentation-auditor | README drift, broken links, stale TODOs, missing docs | `file-audit` | — | `documentation.json` |
 
 **Model note:** ai-slop-detector uses `opus` (detecting AI patterns requires stronger judgment).
 All others use `sonnet`.
