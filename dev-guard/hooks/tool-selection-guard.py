@@ -943,6 +943,7 @@ _PIPE_SEGMENT_SKIP = frozenset(
         "echo-redir",
         "cat-heredoc",
         # Category D: echo/printf after a pipe feed downstream, not the user
+        # (only skipped for non-terminal segments — see _PIPE_SEGMENT_SKIP_TERMINAL)
         "echo-noop",
         "printf-noop",
     }
@@ -1661,11 +1662,19 @@ def _check_pipes(
     NOTE: _check_oc_introspection is NOT called on individual pipe segments.
     oc introspection runs on full subcommands in _check_subcmd. Pipe segments
     like "cat file | oc apply -f -" are checked by _check_rules only.
+
+    The terminal (last) pipe segment uses a tighter skip set: echo/printf
+    noop rules are enforced because the output goes to the user, not to
+    another command downstream.
     """
     pipe_segments = split_pipes(cmd)
     if len(pipe_segments) > 1:
-        for segment in pipe_segments[1:]:
-            _check_rules(segment, fetch_seen, skip_rules=skip_rules)
+        last_idx = len(pipe_segments) - 1
+        for i, segment in enumerate(pipe_segments[1:], start=1):
+            effective_skip = skip_rules
+            if i == last_idx and skip_rules:
+                effective_skip = skip_rules - {"echo-noop", "printf-noop"}
+            _check_rules(segment, fetch_seen, skip_rules=effective_skip)
 
 
 def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
