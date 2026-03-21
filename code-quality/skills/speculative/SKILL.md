@@ -42,7 +42,8 @@ Gather the problem and success criteria before spawning anything.
 
 ### Phase 1: Fork (parallel, isolated)
 
-Spawn N competitor agents (sonnet, general-purpose) in parallel, each with `isolation: "worktree"`.
+Spawn N competitor agents (sonnet, general-purpose) in parallel, each with
+`isolation: "worktree"` and `mode: "bypassPermissions"` (they write code).
 
 Each competitor receives a `SpeculativeSpec` (see `references/communication-schema.md`) containing:
 - The problem description and success criteria
@@ -131,7 +132,7 @@ Only triggered if the judge recommends hybrid AND the user approves. This is NOT
 1. The judge's `hybrid_elements` field lists specific elements to combine
    (e.g., "competitor-1's error handling approach with competitor-2's data structure choice").
 
-2. Spawn a synthesis agent (sonnet, general-purpose) with:
+2. Spawn a synthesis agent (sonnet, general-purpose, `mode: "bypassPermissions"`) with:
    - The hybrid_elements list from JudgmentResult
    - Read access to both competitor worktrees
    - Write access to the main branch working tree

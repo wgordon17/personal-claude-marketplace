@@ -277,13 +277,13 @@ RULES: list[CommandRule] = [
     # ── Category D: Encourage simpler patterns ──
     CommandRule(
         "echo-noop",
-        re.compile(r"""^\s*echo\s+(['"].*['"]|[^|>&;$`]+)\s*$"""),
+        re.compile(r"""^\s*echo\s+(\$?['"].*['"]|[^|>&;$`]+)\s*$"""),
         None,
         "Output text directly in your response instead of using echo.",
     ),
     CommandRule(
         "printf-noop",
-        re.compile(r"""^\s*printf\s+(['"].*['"]|[^|>&;$`]+)\s*$"""),
+        re.compile(r"""^\s*printf\s+(\$?['"].*['"]|[^|>&;$`]+)\s*$"""),
         None,
         "Output text directly in your response instead of using printf.",
     ),
@@ -943,7 +943,7 @@ _PIPE_SEGMENT_SKIP = frozenset(
         "echo-redir",
         "cat-heredoc",
         # Category D: echo/printf after a pipe feed downstream, not the user
-        # (only skipped for non-terminal segments — see _PIPE_SEGMENT_SKIP_TERMINAL)
+        # (only skipped for non-terminal segments — see _check_pipes)
         "echo-noop",
         "printf-noop",
     }
