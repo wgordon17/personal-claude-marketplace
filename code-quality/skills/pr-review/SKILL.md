@@ -60,8 +60,8 @@ gh pr view <PR-URL> --json headRefName,baseRefName,number,title,additions,deleti
 ```
 
 Store: head branch, base branch, PR number, title, body, additions, deletions, changed file count,
-state (OPEN/CLOSED/MERGED), isDraft flag. The `files` field returns an array of `{path, additions,
-deletions}` objects — extract the file paths to build `{changed_files}`.
+state (OPEN/CLOSED/MERGED), isDraft flag. The `files` field returns an array of `{path, additions, deletions,
+changeType}` objects — extract the file paths to build `{changed_files}`.
 
 ### Triage Checks (deterministic — no agent)
 
@@ -75,7 +75,7 @@ Run before any expensive operations:
 
 - **Trivially simple (lock files only):** Extract the list of changed file paths from the `files`
   array in PR metadata. If ALL changed files match these patterns — `*.lock`, `*.sum`, `package-lock.json`,
-  `yarn.lock`, `*.generated.*` — stop with:
+  `yarn.lock`, `pnpm-lock.yaml`, `*.generated.*` — stop with:
   "PR #N changes only lock/generated files. No review needed."
   If ANY file outside these patterns is changed, proceed.
 
