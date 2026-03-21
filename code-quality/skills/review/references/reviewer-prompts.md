@@ -309,7 +309,9 @@ FINDINGS TO SCORE:
 {findings_json}
 
 The findings are a JSON array. Each finding has an "id" field and includes the finding
-description, location, severity, and evidence from the diff.
+description, location, severity, evidence, and a `diff_context` field with ±10 lines of
+surrounding diff. Use `diff_context` to verify whether the finding is real — it shows what
+the code actually does around the reported location.
 
 For EACH finding, return a JSON object with:
 - finding_id: the id from the input

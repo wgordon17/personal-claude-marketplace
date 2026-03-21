@@ -2,7 +2,7 @@
 name: review
 description: |
   Multi-agent PR review with confidence scoring. Use when asked to "review PR",
-  "review this PR", or given a PR URL to review. Spawns 6 parallel specialized
+  "review this PR", "code review", or given a PR URL to review. Spawns 6 parallel specialized
   reviewers (security, QA, performance, code quality, correctness, git history),
   scores findings for confidence via batched scoring, filters false positives, and prints a
   structured report to the terminal. Never comments on GitHub PRs.
@@ -117,8 +117,9 @@ use: `"No implementation plan found."` The Correctness Reviewer uses this to det
 
 ### Fetch PR Diff
 
-After worktree alignment, compute the diff locally against the merge base:
+After worktree alignment, ensure the base branch ref is available and compute the diff locally:
 ```
+git fetch origin {base_branch}
 git diff $(git merge-base origin/{base_branch} HEAD)..HEAD
 ```
 
