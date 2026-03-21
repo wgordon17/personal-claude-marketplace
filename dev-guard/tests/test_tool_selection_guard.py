@@ -1156,6 +1156,8 @@ class TestGitSafetyDeny:
             # chain awareness
             ("git status && git reset --hard", 2, "FORBIDDEN"),
             ("git add . && git push -f origin main", 2, "FORBIDDEN"),
+            # filter-branch
+            ("git filter-branch --tree-filter 'rm -f x'", 2, "FORBIDDEN"),
         ],
         ids=[
             "reset-hard",
@@ -1187,6 +1189,7 @@ class TestGitSafetyDeny:
             "clean-df-allow",
             "reset-hard-in-chain",
             "force-push-in-chain",
+            "filter-branch",
         ],
     )
     def test_git_deny(self, command, expected_exit, expected_msg):
@@ -1205,7 +1208,7 @@ class TestGitSafetyAsk:
         [
             ("git stash drop", True, "permanently deletes"),
             ("git checkout -- file.py", True, "destructive"),
-            ("git filter-branch --tree-filter 'rm -f x'", True, "deprecated"),
+            ("git filter-repo --invert-paths --path secret.txt", True, "permanently"),
             ("git reflog delete HEAD@{2}", True, "recovery points"),
             ("git reflog expire --expire=now", True, "recovery points"),
             ("git remote remove upstream", True, "break workflows"),
@@ -1217,7 +1220,7 @@ class TestGitSafetyAsk:
         ids=[
             "stash-drop",
             "checkout-dash-dash",
-            "filter-branch",
+            "filter-repo",
             "reflog-delete",
             "reflog-expire",
             "remote-remove",
