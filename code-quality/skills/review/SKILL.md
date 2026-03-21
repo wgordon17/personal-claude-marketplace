@@ -56,11 +56,12 @@ Extract from `$ARGUMENTS`:
 ### Fetch PR Metadata
 
 ```
-gh pr view <PR-URL> --json headRefName,baseRefName,number,title,additions,deletions,changedFiles,body,state,isDraft
+gh pr view <PR-URL> --json headRefName,baseRefName,number,title,additions,deletions,changedFiles,files,body,state,isDraft
 ```
 
 Store: head branch, base branch, PR number, title, body, additions, deletions, changed file count,
-state (OPEN/CLOSED/MERGED), isDraft flag.
+state (OPEN/CLOSED/MERGED), isDraft flag. The `files` field returns an array of `{path, additions,
+deletions}` objects — extract the file paths to build `{changed_files}`.
 
 ### Triage Checks (deterministic — no agent)
 
@@ -72,8 +73,8 @@ Run before any expensive operations:
 - **Draft:** If isDraft is true, print warning and continue:
   "Note: PR #N is a draft. Proceeding anyway."
 
-- **Trivially simple (lock files only):** Extract the list of changed file paths from the PR
-  metadata. If ALL changed files match these patterns — `*.lock`, `*.sum`, `package-lock.json`,
+- **Trivially simple (lock files only):** Extract the list of changed file paths from the `files`
+  array in PR metadata. If ALL changed files match these patterns — `*.lock`, `*.sum`, `package-lock.json`,
   `yarn.lock`, `*.generated.*` — stop with:
   "PR #N changes only lock/generated files. No review needed."
   If ANY file outside these patterns is changed, proceed.
@@ -86,7 +87,7 @@ Record the original branch/worktree before any checkout.
 2. Check if any worktree has a branch matching the PR's head branch.
 3. If a matching worktree is found: use that worktree's path as the working directory for all
    subsequent git and file operations.
-4. If no matching worktree: check if the current branch matches the PR's head branch.
+4. If no matching worktree: check if the current branch matches the PR's head branch. If yes, use the current working directory — no checkout needed.
 5. If neither: run `gh pr checkout <number>`. If it fails (dirty working tree, locked index),
    stop with: "Cannot checkout PR branch. Commit or stash local changes first."
 6. After the review completes (Phase 4), return to the original branch or worktree.
@@ -114,6 +115,8 @@ The Git History Reviewer cannot run Bash commands — collect this data in the o
 
 For each changed file (cap at 15 files; if more, select the 15 with the most changed lines):
 
+Skip files that are newly created in the PR (diff header shows `--- /dev/null`) — new files have no blame history.
+
 1. **Commit history:**
    ```
    git log --oneline -20 -- <file>
@@ -122,6 +125,7 @@ For each changed file (cap at 15 files; if more, select the 15 with the most cha
 2. **Blame for changed hunks only** (not full-file blame — that produces unbounded output):
    Parse `@@ -a,b +c,d @@` headers from `{diff}` for this file.
    For each hunk: `start = c`, `end = c + d - 1` (using the `+c,d` side).
+   If `d = 0` (deletion-only hunk with no added lines), skip blame for that hunk.
    Run: `git blame -L <start>,<end> -- <file>`
 
 If more than 15 files changed, append a note listing the skipped files.
@@ -207,7 +211,7 @@ Agent(
 ```
 
 The Git History Reviewer receives `{git_history_context}` (from Phase 0) instead of `{diff}`.
-It also receives `{pr_description}` and `{changed_files}`. Do NOT re-collect git history here —
+It also receives `{pr_description}`, `{changed_files}`, `{claude_md_rules}`, and `{contributing_md_rules}`. Do NOT re-collect git history here —
 use the output already stored from Phase 0.
 
 ### Collect Findings
@@ -224,6 +228,8 @@ Spawn a **single** Haiku agent with ALL findings in one call. Do NOT spawn one a
 that pattern is catastrophically slow in Claude Code where each Agent() has significant startup
 overhead. A single batched call takes ~10 seconds; per-finding agents with 15-20 findings would
 take 2-5 minutes.
+
+If no findings were reported by any reviewer, skip the scorer entirely and proceed directly to Phase 4 with the 'no findings' output path.
 
 Build the findings JSON array:
 ```json
@@ -335,7 +341,7 @@ After output, return to the original branch or worktree recorded in Phase 0.
 |-----------|--------|
 | No `gh` CLI | Error: "gh CLI not found. Install it from https://cli.github.com and authenticate with `gh auth login`." |
 | PR URL missing | Error: "Usage: /review <PR-URL> [--threshold N]" |
-| PR in wrong repo | Error: "PR is from {url_repo} but CWD is in {local_repo}. cd to the correct repo first." |
+| PR in wrong repo | Error: "PR is from {url_owner}/{url_repo} but CWD is in {local_repo}. cd to the correct repo first." |
 | PR is closed/merged | Stop: "PR #N is already {state}. Nothing to review." |
 | PR is draft | Warn and continue: "Note: PR #N is a draft. Proceeding anyway." |
 | Lock/generated files only | Stop: "PR #N changes only lock/generated files. No review needed." |
@@ -360,7 +366,7 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{pr_description}` | "PR #N: {title}\n\n{body}" | All domain reviewers + Git History |
 | `{diff}` | Full `gh pr diff` output | Security, QA, Performance, Code Quality |
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Scorer |
-| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All domain reviewers |
-| `{changed_files}` | Newline-separated file paths | All reviewers |
+| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers |
+| `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All domain reviewers + Git History |
 | `{git_history_context}` | Pre-collected blame/log output | Git History Reviewer only |
 | `{findings_json}` | JSON array of all findings | Confidence Scorer only |
