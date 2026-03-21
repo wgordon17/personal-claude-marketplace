@@ -322,16 +322,24 @@ the Docs agent's work. The Docs Reviewer receives:
 - The architect's `documentation_impact` array from `architect-plan.json`
 - The Docs agent's completion report (surfaces updated, counts, gaps found)
 - `git diff` of documentation changes made by the Docs agent
+- `git diff` of **implementation changes** (code, config, skills — everything NOT docs) so the
+  reviewer can verify docs against what was actually written, not just what the architect planned
 
 The Docs Reviewer checks:
 1. **Impact coverage** — Was every entry in `documentation_impact` addressed? If the architect
    flagged a surface and the Docs agent didn't touch it, that's a finding.
-2. **Accuracy** — Are the doc changes factually correct? Do component counts match on-disk
-   reality? Do descriptions accurately describe the implemented features?
+2. **Accuracy vs implementation** — Assume the docs are wrong until proven otherwise. Read the
+   implementation diff and verify every documented claim against the actual code. Do component
+   counts match on-disk reality? Do descriptions accurately describe the implemented behavior
+   (not just the planned behavior)? If a feature was implemented differently than the architect
+   planned, do the docs reflect what was actually built?
 3. **Consistency** — Do all documentation surfaces agree with each other after the Docs agent's
    edits? (README ↔ manifest ↔ registry ↔ root README)
 4. **Completeness** — Did the Docs agent miss any documentation surface the Reviewer can
    discover independently via Glob?
+5. **Plan drift** — Does the implementation diff reveal behavior that diverged from the
+   architect's plan? If so, do the docs follow the plan (wrong) or the code (right)?
+   Docs must always describe what the code does, never what the plan said it would do.
 
 Findings are written to `{run_dir}/reviews/docs-review.json` using the standard ReviewFindings
 schema with `DOC-R` prefix. Critical/High findings are routed back to the Docs agent for fixes

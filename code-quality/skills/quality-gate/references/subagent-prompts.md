@@ -238,6 +238,11 @@ FOCUS AREAS FOR NON-CODE:
 FOCUS AREA FOR ALL WORK TYPES:
 - PROJECT RULES: Were version bumps done? Manifests updated? Will this change
   actually reach users after merge? Any required companion updates missing?
+- DOCUMENTATION ACCURACY: Assume every doc change is wrong. Read the actual code
+  and verify each documented claim, count, description, and behavior against on-disk
+  reality. If docs say "5 agents" — count them. If docs say "supports X" — find the
+  code that does it. If docs describe behavior — read the implementation and confirm.
+  Documentation that matches the plan but not the code is a CRITICAL finding.
 
 For each issue found, report:
 - The specific problem

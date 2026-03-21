@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Code quality agents, development utilities, and orchestration skills | 5 agents, 14 skills, 4 commands | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 5 agents, 15 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -35,6 +35,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/unfuck` - Comprehensive one-shot repo cleanup
 - `/swarm` - Full agent team implementation via TeamCreate
 - `/quality-gate` - PROACTIVE multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates
+- `/pr-review` - Multi-agent PR review with confidence scoring
 - `/map-reduce` - Parallelized workload processing with chunking, mapper agents, and reducer synthesis
 - `/speculative` - Competing implementations in isolated worktrees with judge selection
 - `/incremental-planning` - Incremental planning workflow with per-task review and assumption surfacing

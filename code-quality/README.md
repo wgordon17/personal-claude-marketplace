@@ -1,6 +1,6 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance review, auditing, planning, LSP navigation, test execution, and session management.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research, business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, map-reduce, and speculative.
 
 ## Agents (5)
 
@@ -12,7 +12,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:performance` | Performance profiling and optimization | Sonnet |
 | `code-quality:test-runner` | Efficient test execution specialist | Haiku |
 
-## Skills (14)
+## Skills (15)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -23,6 +23,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
 | `/swarm` | Full agent team implementation via TeamCreate | Manual |
 | `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
+| `/pr-review` | Multi-agent PR review with confidence scoring | Manual |
 | `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
 | `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
 | `/incremental-planning` | Planning workflow with per-task review and assumption surfacing | Manual |
