@@ -147,7 +147,7 @@ Skip files that are newly created in the PR (diff header shows `--- /dev/null`) 
    Parse `@@ -a,b +c,d @@` headers from `{diff}` for this file.
    For each hunk: `start = a`, `end = a + b - 1` (using the `-a,b` side — the old-file lines).
    If `b = 0` (addition-only hunk with no prior lines), skip blame for that hunk.
-   Run: `git blame {base_branch} -L <start>,<end> -- <file>`
+   Run: `git blame origin/{base_branch} -L <start>,<end> -- <file>`
    Using the old-file side shows who last touched the lines being modified — the actual
    historical context the Git History Reviewer needs. Blaming the new-file side (`+c,d`)
    would only show the PR author's own commits.
