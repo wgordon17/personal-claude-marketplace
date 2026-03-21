@@ -305,6 +305,9 @@ are noise.
 PROJECT RULES (CLAUDE.md):
 {claude_md_rules}
 
+PROJECT RULES (CONTRIBUTING.md):
+{contributing_md_rules}
+
 FINDINGS TO SCORE:
 {findings_json}
 

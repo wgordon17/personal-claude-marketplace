@@ -1,5 +1,5 @@
 ---
-name: review
+name: pr-review
 description: |
   Multi-agent PR review with confidence scoring. Use when asked to "review PR",
   "review this PR", "code review", or given a PR URL to review. Spawns 6 parallel specialized
@@ -20,8 +20,8 @@ filters by confidence threshold, and prints a structured terminal report.
 ## Usage
 
 ```
-/review <PR-URL>
-/review <PR-URL> --threshold 60
+/pr-review <PR-URL>
+/pr-review <PR-URL> --threshold 60
 ```
 
 - `<PR-URL>` — required. Full GitHub PR URL (e.g. `https://github.com/owner/repo/pull/123`).
@@ -292,7 +292,7 @@ Agent(
 )
 ```
 
-The scorer receives: `{findings_json}` (the array above) and `{claude_md_rules}`.
+The scorer receives: `{findings_json}` (the array above), `{claude_md_rules}`, and `{contributing_md_rules}`.
 
 It returns: `[{finding_id, score, justification}, ...]`
 
@@ -380,7 +380,7 @@ After output, return to the original branch or worktree recorded in Phase 0.
 | Condition | Action |
 |-----------|--------|
 | No `gh` CLI | Error: "gh CLI not found. Install it from https://cli.github.com and authenticate with `gh auth login`." |
-| PR URL missing | Error: "Usage: /review <PR-URL> [--threshold N]" |
+| PR URL missing | Error: "Usage: /pr-review <PR-URL> [--threshold N]" |
 | PR in wrong repo | Error: "PR is from {url_owner}/{url_repo} but CWD is in {local_repo}. cd to the correct repo first." |
 | PR is closed/merged | Stop: "PR #N is already {state}. Nothing to review." |
 | PR is draft | Warn and continue: "Note: PR #N is a draft. Proceeding anyway." |
@@ -405,7 +405,7 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{pr_description}` | "PR #N: {title}\n\n{body}" | All reviewers (not Scorer) |
 | `{diff}` | Local `git diff` against merge base | Security, QA, Performance, Code Quality, Correctness |
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Scorer |
-| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers (not Scorer) |
+| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers + Scorer |
 | `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers (not Scorer) |
 | `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer only |
 | `{git_history_context}` | Pre-collected blame/log output | Git History Reviewer only |
