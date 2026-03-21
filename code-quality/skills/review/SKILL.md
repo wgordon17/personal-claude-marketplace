@@ -2,8 +2,8 @@
 name: review
 description: |
   Multi-agent PR review with confidence scoring. Use when asked to "review PR",
-  "review this PR", or given a PR URL to review. Spawns 5 parallel specialized
-  reviewers (security, QA, performance, code quality, git history),
+  "review this PR", or given a PR URL to review. Spawns 6 parallel specialized
+  reviewers (security, QA, performance, code quality, correctness, git history),
   scores findings for confidence via batched scoring, filters false positives, and prints a
   structured report to the terminal. Never comments on GitHub PRs.
 allowed-tools: [Read, Glob, Grep, Bash, Agent]
@@ -11,9 +11,9 @@ allowed-tools: [Read, Glob, Grep, Bash, Agent]
 
 # PR Review Skill
 
-Multi-agent pull request review. Spawns 5 parallel Sonnet reviewers (security, QA, performance,
-code quality, git history), scores all findings in a single batched Haiku call, filters by
-confidence threshold, and prints a structured terminal report.
+Multi-agent pull request review. Spawns 6 parallel Sonnet reviewers (security, QA, performance,
+code quality, correctness, git history), scores all findings in a single batched Haiku call,
+filters by confidence threshold, and prints a structured terminal report.
 
 **Never comments on GitHub PRs.** Output is terminal-only.
 
@@ -26,7 +26,7 @@ confidence threshold, and prints a structured terminal report.
 
 - `<PR-URL>` — required. Full GitHub PR URL (e.g. `https://github.com/owner/repo/pull/123`).
 - `--threshold` — optional integer 0-100. Minimum confidence score for a finding to appear in
-  the report. Default: 80. Lower values include more findings (less filtering); higher values
+  the report. Default: 50. Lower values include more findings (less filtering); higher values
   include only high-certainty findings.
 
 ---
@@ -37,7 +37,7 @@ confidence threshold, and prints a structured terminal report.
 
 Extract from `$ARGUMENTS`:
 - PR URL (first token — required; error if absent)
-- `--threshold N` (optional integer; default 80; error if not 0-100)
+- `--threshold N` (optional integer; default 50; error if not 0-100)
 
 ### Preflight Checks
 
@@ -88,9 +88,11 @@ Record the original branch/worktree before any checkout.
 3. If a matching worktree is found: use that worktree's path as the working directory for all
    subsequent git and file operations.
 4. If no matching worktree: check if the current branch matches the PR's head branch. If yes, use the current working directory — no checkout needed.
-5. If neither: run `gh pr checkout <number>`. If it fails (dirty working tree, locked index),
-   stop with: "Cannot checkout PR branch. Commit or stash local changes first."
+5. If neither: run `gh pr checkout <number>`. If it fails due to a dirty working tree,
+   run `git stash --include-untracked`, retry the checkout, and remember to `git stash pop`
+   after review. If stash also fails, stop with: "Cannot checkout PR branch and stash failed."
 6. After the review completes (Phase 4), return to the original branch or worktree.
+   If changes were stashed in step 5, run `git stash pop` to restore them.
 
 ### Read Project Rules
 
@@ -100,14 +102,23 @@ From the repo root in the correct worktree:
 
 Store as `{claude_md_rules}` and `{contributing_md_rules}`.
 
+### Discover Implementation Plan
+
+Search for a plan file that matches the PR's topic. Check both the repo root and any active
+worktree:
+- `hack/plans/` — glob for files whose name relates to the PR title or branch name
+- If the current repo is in a worktree, also check the main worktree's `hack/plans/`
+
+If a matching plan file is found, read it and store as `{plan_content}`. If no plan exists,
+use: `"No implementation plan found."` The Correctness Reviewer uses this to detect plan drift.
+
 ### Fetch PR Diff
 
 ```
 gh pr diff <number>
 ```
 
-Store as `{diff}`. Count total diff lines (additions + deletions). If >5000, print:
-"Large PR (N lines). Review will use more tokens than usual." and continue.
+Store as `{diff}`.
 
 ### Pre-Collect Git History Context
 
@@ -141,14 +152,15 @@ Assemble these values — they are passed to reviewers in Phase 2:
 - `{contributing_md_rules}` = CONTRIBUTING.md content or placeholder
 - `{changed_files}` = newline-separated list of changed file paths
 - `{git_history_context}` = combined blame/log output from above
+- `{plan_content}` = implementation plan content or placeholder
 
 ---
 
 ## Phase 1 — Reviewer Applicability
 
-Determine which of the 5 reviewers apply based on changed file types.
+Determine which of the 6 reviewers apply based on changed file types.
 
-Default: all 5 reviewers run. Skip a reviewer only if its domain has zero applicability:
+Default: all 6 reviewers run. Skip a reviewer only if its domain has zero applicability:
 
 | Reviewer | Skip condition |
 |----------|----------------|
@@ -156,6 +168,7 @@ Default: all 5 reviewers run. Skip a reviewer only if its domain has zero applic
 | Security | (never skip — security concerns appear in config and docs too) |
 | QA | (never skip) |
 | Code Quality | (never skip) |
+| Correctness | (never skip) |
 | Git History | Skip only if git history collection returned empty (e.g., brand-new repo with no history) |
 
 Record which reviewers will run.
@@ -169,7 +182,7 @@ prompt template, substitute all placeholders with actual values, and spawn a Son
 
 Spawn all applicable reviewers simultaneously (parallel Agent calls).
 
-### Domain Reviewers (4 parallel)
+### Domain Reviewers (5 parallel)
 
 ```
 Agent(
@@ -195,12 +208,19 @@ Agent(
   model="sonnet",
   prompt=<Code Quality Reviewer template from references/reviewer-prompts.md, placeholders substituted>
 )
+
+Agent(
+  description="Correctness review of PR #{number}",
+  model="sonnet",
+  prompt=<Correctness Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+)
 ```
 
 Each domain reviewer receives: `{pr_description}`, `{diff}`, `{claude_md_rules}`,
-`{contributing_md_rules}`, `{changed_files}`.
+`{contributing_md_rules}`, `{changed_files}`. The Correctness Reviewer also receives
+`{plan_content}` — see below.
 
-### Git History Reviewer (5th, parallel with above)
+### Git History Reviewer (6th, parallel with above)
 
 ```
 Agent(
@@ -217,7 +237,7 @@ use the output already stored from Phase 0.
 ### Collect Findings
 
 After all agents complete, collect all findings into a consolidated list. Assign each finding a
-unique ID (e.g., `sec-1`, `qa-1`, `perf-1`, `cq-1`, `gh-1`). Preserve: description, file:line,
+unique ID (e.g., `sec-1`, `qa-1`, `perf-1`, `cq-1`, `cor-1`, `gh-1`). Preserve: description, file:line,
 severity, evidence, source reviewer.
 
 ---
@@ -262,7 +282,7 @@ It returns: `[{finding_id, score, justification}, ...]`
 
 ### Filter
 
-Apply the threshold (default 80). Keep findings where `score >= threshold`.
+Apply the threshold (default 50). Keep findings where `score >= threshold`.
 
 If ALL findings are filtered out, proceed to Phase 4 with the "no findings" output path.
 
@@ -306,7 +326,7 @@ Confidence threshold: {threshold} | Total raw findings: {total_raw} | Filtered: 
 
 Group findings by severity (CRITICAL → HIGH → MEDIUM → LOW). Within each severity group, sort by
 confidence score descending. For the `[Reviewer:score]` tag, use the short reviewer name:
-Security, QA, Performance, Code Quality, Git History.
+Security, QA, Performance, Code Quality, Correctness, Git History.
 
 Omit severity sections with zero findings.
 
@@ -322,7 +342,7 @@ Branch: {head_branch} → {base_branch}
 Files changed: {changedFiles} | Additions: +{additions} | Deletions: -{deletions}
 
 No issues found above confidence threshold (≥{threshold}).
-Checked for: security, test coverage, performance, code quality, historical consistency.
+Checked for: security, test coverage, performance, code quality, correctness, historical consistency.
 
 Reviewed by: {reviewer_list}
 Confidence threshold: {threshold} | Total raw findings: {total_raw} | All filtered
@@ -345,8 +365,7 @@ After output, return to the original branch or worktree recorded in Phase 0.
 | PR is closed/merged | Stop: "PR #N is already {state}. Nothing to review." |
 | PR is draft | Warn and continue: "Note: PR #N is a draft. Proceeding anyway." |
 | Lock/generated files only | Stop: "PR #N changes only lock/generated files. No review needed." |
-| Cannot checkout branch | Stop: "Cannot checkout PR branch. Commit or stash local changes first." |
-| Large PR (>5000 lines) | Warn and continue: "Large PR (N lines). Review will use more tokens than usual." |
+| Cannot checkout branch | Auto-stash and retry. If stash fails, stop: "Cannot checkout PR branch and stash failed." |
 | --threshold out of range | Error: "--threshold must be between 0 and 100." |
 | All findings filtered | Output "no findings" report format (not an error) |
 
@@ -368,5 +387,6 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Scorer |
 | `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers |
 | `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All domain reviewers + Git History |
+| `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer only |
 | `{git_history_context}` | Pre-collected blame/log output | Git History Reviewer only |
 | `{findings_json}` | JSON array of all findings | Confidence Scorer only |
