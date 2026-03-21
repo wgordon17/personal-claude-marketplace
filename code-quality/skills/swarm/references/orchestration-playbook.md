@@ -1100,7 +1100,7 @@ Agent(name="qa-reviewer", subagent_type="code-quality:qa", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[qa-reviewer prompt from agent-prompts.md]")
 
-Agent(name="code-reviewer", subagent_type="superpowers:code-reviewer", model="sonnet",
+Agent(name="code-reviewer", subagent_type="code-quality:code-reviewer", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[code-reviewer prompt from agent-prompts.md]")
 
@@ -1397,7 +1397,7 @@ If no deferred items exist, skip this step.
 After fixer completes (and deferrals are handled), spawn code-simplifier:
 
 ```
-Agent(name="code-simplifier", subagent_type="code-simplifier:code-simplifier", model="sonnet",
+Agent(name="code-simplifier", subagent_type="code-quality:code-simplifier", model="sonnet",
      team_name="swarm-impl", mode="bypassPermissions",
      prompt="[context bundle]\n\n[code-simplifier prompt from agent-prompts.md]")
 ```
@@ -1836,7 +1836,7 @@ TeamCreate:
 | 3 | test-runner | code-quality:test-runner | haiku | default | No |
 | 4 | security-reviewer | code-quality:security | opus | default | No |
 | 4 | qa-reviewer | code-quality:qa | opus | default | No |
-| 4 | code-reviewer | superpowers:code-reviewer | sonnet | default | No |
+| 4 | code-reviewer | code-quality:code-reviewer | sonnet | default | No |
 | 4 | performance-reviewer | code-quality:performance | sonnet | default | No |
 | 4 | ui-reviewer (optional) | general-purpose | sonnet | default | No |
 | 4 | api-reviewer (optional) | general-purpose | sonnet | default | No |
@@ -1846,7 +1846,7 @@ TeamCreate:
 | 4.5 | structural-concurrency | general-purpose | opus | default | No |
 | 4.5 | structural-integration | general-purpose | opus | default | No |
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
-| 5 | code-simplifier | code-simplifier:code-simplifier | sonnet | bypassPermissions | Yes |
+| 5 | code-simplifier | code-quality:code-simplifier | sonnet | bypassPermissions | Yes |
 | 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
 | 6 | docs-reviewer | general-purpose | sonnet | default | No |
 | 6 | lessons-extractor | general-purpose | sonnet | bypassPermissions | Yes |

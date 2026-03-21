@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Code quality agents, development utilities, and orchestration skills | 5 agents, 15 skills, 4 commands | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 7 agents, 17 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -26,6 +26,8 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `code-quality:qa` - Code quality & QA specialist (test strategy, maintainability, tech debt)
 - `code-quality:performance` - Performance engineering specialist (profiling, optimization, bottlenecks)
 - `code-quality:test-runner` - Efficient test execution specialist
+- `code-quality:code-reviewer` - Plan alignment, code quality, convention compliance, doc accuracy
+- `code-quality:code-simplifier` - Dead code removal, unnecessary abstraction cleanup, clarity improvement
 
 **Skills:**
 - `/deep-research` - Multi-hop research (40+ sources, multi-perspective analysis)
@@ -43,6 +45,8 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/lsp-navigation` - PROACTIVE semantic code navigation
 - `/uv-python` - PROACTIVE Python tooling enforcement (uv over pip)
 - `/test-runner` - Efficient test execution patterns
+- `/reflect` - Mid-task self-reflection checkpoint via Serena metacognitive tools
+- `/index-repo` - Repository indexing for token-efficient codebase orientation
 
 **Commands:**
 - `/code-quality:session-start` - Load project context or initialize
@@ -219,22 +223,31 @@ These MCP servers enhance functionality but are not required for core operation 
 | **[Sequential-Thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)** | code-quality | Soft | Reasoning about scope boundaries in `/incremental-planning` and `/roadmap`. Reasoning works without it. |
 | **[claude-mem](https://github.com/pchaganti/gx-claude-mem)** | code-quality | Soft | Search past work, decisions, and learnings in `/incremental-planning` Phase 1. Enhanced context, not required. |
 
-### SuperClaude / Superpowers References
+### External Plugin Dependencies
 
-Some skills in code-quality (`/unfuck`, `/incremental-planning`) reference SuperClaude skills (`sc:index-repo`, `sc:analyze`, `sc:cleanup`, `sc:improve`, `sc:reflect`) and Superpowers patterns (`superpowers:verification-before-completion`, `superpowers:subagent-driven-development`). These are from a separate plugin system not distributed in this marketplace. The skills degrade gracefully without them — the references are informational and the skills use alternative approaches when SuperClaude is unavailable.
+No hard dependencies on external plugins remain. All previously referenced external capabilities have been internalized:
+
+| Was | Now |
+|-----|-----|
+| `superpowers:code-reviewer` | `code-quality:code-reviewer` agent |
+| `superpowers:verification-before-completion` | `code-quality:quality-gate` skill |
+| `code-simplifier:code-simplifier` | `code-quality:code-simplifier` agent |
+| `sc:reflect` | `code-quality:reflect` skill (Serena metacognitive tools) |
+| `sc:analyze` | `code-quality:security` / `qa` / `performance` agents |
+| `sc:improve` / `sc:cleanup` | `code-quality:code-simplifier` agent |
+| `sc:index-repo` | `code-quality:index-repo` skill |
 
 ### Dependency Matrix
 
 Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** = degraded without it.
 
-| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | SuperClaude |
-|--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|-------------|
-| **code-quality** | soft | HARD | soft | soft | soft | soft | -- | -- | soft |
-| **git-tools** | -- | soft | -- | -- | -- | HARD | soft | HARD | -- |
-| **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
-| **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| **cmux-integration** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
+| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless |
+|--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|
+| **code-quality** | soft | HARD | soft | soft | soft | soft | -- | -- |
+| **git-tools** | -- | soft | -- | -- | -- | HARD | soft | HARD |
+| **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- |
+| **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- |
+| **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.
 

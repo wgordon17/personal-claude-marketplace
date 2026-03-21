@@ -1103,7 +1103,7 @@ Then send summary to lead.
 
 ## Agent 8: Code-Reviewer
 
-**Type:** `superpowers:code-reviewer` | **Model:** sonnet | **Mode:** default (read-only)
+**Type:** `code-quality:code-reviewer` | **Model:** sonnet | **Mode:** default (read-only)
 
 ```markdown
 # Code-Reviewer — Swarm Review Agent
@@ -1497,7 +1497,7 @@ SendMessage(type="message", recipient="team-lead",
 
 ## Agent 11: Code-Simplifier
 
-**Type:** `code-simplifier:code-simplifier` | **Model:** sonnet | **Mode:** bypassPermissions
+**Type:** `code-quality:code-simplifier` | **Model:** sonnet | **Mode:** bypassPermissions
 
 ```markdown
 # Code-Simplifier — Swarm Post-Fix Agent

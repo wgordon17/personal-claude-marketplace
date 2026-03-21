@@ -39,11 +39,11 @@ specialist agent.
 | 3 | Test-Runner | code-quality:test-runner | haiku | No | Execute tests, report results |
 | 4 | Security | code-quality:security | opus | No | OWASP, auth, secrets, injection review |
 | 4 | QA | code-quality:qa | opus | No | Patterns, conventions, code quality |
-| 4 | Code-Reviewer | superpowers:code-reviewer | sonnet | No | Broader review, complements QA |
+| 4 | Code-Reviewer | code-quality:code-reviewer | sonnet | No | Broader review, complements QA |
 | 4 | Performance | code-quality:performance | sonnet | No | Bottlenecks, N+1, memory issues |
 | 4.5 | Structural Analyst (×2) | general-purpose | opus | No | Adversarial structural design review |
 | 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
-| 5 | Code-Simplifier | code-simplifier:code-simplifier | sonnet | Yes | Post-fix simplification pass |
+| 5 | Code-Simplifier | code-quality:code-simplifier | sonnet | Yes | Post-fix simplification pass |
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |

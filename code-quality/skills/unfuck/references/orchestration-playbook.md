@@ -36,7 +36,7 @@ Phase 0 has several independent tasks that SHOULD run in parallel using TeamCrea
 
 1. **Create team immediately:** `TeamCreate(team_name="cleanup-swarm")` — needed before spawning any teammates
 2. **Launch parallel setup teammates** — spawn these as background teammates in a single message:
-   - `setup-indexer`: Runs `sc:index-repo` to create PROJECT_INDEX.md
+   - `setup-indexer`: Runs `code-quality:index-repo` to create PROJECT_INDEX.md
    - `setup-tools`: Detects available external tools (version checks)
    - `setup-languages`: Detects project languages from config files
 3. **While teammates work**, the orchestrator creates the run directory, feature branch, and output directories (Steps 0.4-0.5)
@@ -44,11 +44,11 @@ Phase 0 has several independent tasks that SHOULD run in parallel using TeamCrea
 5. **Build context bundle** (Step 0.7) using collected results
 6. **Shut down setup teammates** before spawning Phase 1 agents
 
-This parallelism saves time since `sc:index-repo` and tool detection are the slowest setup steps.
+This parallelism saves time since `code-quality:index-repo` and tool detection are the slowest setup steps.
 
 ### Step 0.1: Generate repo index
 
-Spawn a `setup-indexer` teammate to invoke the `sc:index-repo` skill. This creates `PROJECT_INDEX.md` at the project root, giving every agent a ~3K-token project reference instead of reading the full codebase.
+Spawn a `setup-indexer` teammate to invoke the `code-quality:index-repo` skill. This creates `PROJECT_INDEX.md` at the project root, giving every agent a ~3K-token project reference instead of reading the full codebase.
 
 ### Step 0.2: Detect project languages
 
@@ -574,7 +574,7 @@ Agent(name="quality-review", subagent_type="general-purpose",
 
 ### Step 4.3: Verification patterns
 
-Apply `superpowers:verification-before-completion` patterns:
+Apply `code-quality:quality-gate` verification patterns:
 - Every commit compiles/parses cleanly
 - Test suite passes on HEAD
 - No uncommitted changes remain (except `hack/` artifacts)
@@ -686,10 +686,10 @@ Keep these files for user reference:
 
 ### Step 4.6: Reflect on completeness
 
-Invoke `sc:reflect` to verify the cleanup is comprehensive and nothing was missed:
+Invoke `code-quality:reflect` to verify the cleanup is comprehensive and nothing was missed:
 
 ```
-Skill(skill="sc:reflect")
+Skill(skill="code-quality:reflect")
 ```
 
 This performs a final cross-check against the original cleanup plan, verifying:
@@ -812,7 +812,7 @@ TeamCreate:
 
 | Name | Type | Model | Purpose |
 |------|------|-------|---------|
-| setup-indexer | general-purpose | sonnet | Runs sc:index-repo to create PROJECT_INDEX.md |
+| setup-indexer | general-purpose | sonnet | Runs code-quality:index-repo to create PROJECT_INDEX.md |
 | setup-tools | general-purpose | sonnet | Detects available external tools via version checks |
 | setup-languages | general-purpose | sonnet | Detects project languages from config files |
 
@@ -897,4 +897,4 @@ If Phase 1 produces fewer than 3 total findings across all agents:
 1. Report this to the user -- the codebase may already be clean
 2. Still generate the cleanup plan and report (even if nearly empty)
 3. Skip Phase 3 implementation if there's truly nothing actionable
-4. Suggest running individual focused skills instead (e.g., `sc:cleanup`, `security-review`)
+4. Suggest running individual focused skills instead (e.g., `code-quality:code-simplifier`, `code-quality:security`)

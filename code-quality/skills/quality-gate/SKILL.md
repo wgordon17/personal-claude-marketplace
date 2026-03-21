@@ -90,10 +90,10 @@ work-type-specific lens prompts.
 
 ### Skill Integration Per Round
 
-- **Round 1:** Invoke `sc:analyze` for code files. Use `sequential-thinking` MCP for decomposed reasoning.
+- **Round 1:** Spawn domain reviewers (`code-quality:security`, `code-quality:qa`, `code-quality:performance`) for code files. Use `sequential-thinking` MCP for decomposed reasoning.
 - **Round 2:** Use `sequential-thinking` MCP. Apply first-principles: break original request into
   atomic requirements, check each independently.
-- **Round 4:** Invoke `sc:improve` for dead code, unused imports, over-abstraction.
+- **Round 4:** Spawn `code-quality:code-simplifier` for dead code, unused imports, over-abstraction.
 - **Round 5:** First-principles: "State the fundamental purpose in one sentence. Review against
   that purpose, not the structure you created."
 
@@ -264,7 +264,7 @@ Reviewer 3 — Performance (code-quality:performance):
     prompt=<see references/subagent-prompts.md, Domain Reviewer: Performance>
   )
 
-Reviewer 4 — Code Review (superpowers:code-reviewer):
+Reviewer 4 — Code Review (code-quality:code-reviewer):
   Agent(
     description="Code style and maintainability review",
     model="sonnet",
@@ -300,7 +300,7 @@ reviewing with no knowledge of your implementation decisions.
 
 **Layer 2 is NEVER optional and NEVER substitutable.** Do not skip it because the change "seems
 trivial" or subagents feel "disproportionate." Do not substitute it with prior review work —
-swarm Phase 4 reviewers, sc:analyze output, or any other earlier review does NOT replace Layer 2.
+swarm Phase 4 reviewers, domain reviewer output, or any other earlier review does NOT replace Layer 2.
 
 **Why Layer 2 is distinct from all prior reviews:**
 - **Timing:** Layer 2 reviews the FINAL state — after Layer 1 fixes, after any swarm Phase 5
@@ -580,13 +580,12 @@ Overall: [PASS / NEEDS WORK]
 
 | Skill | Relationship |
 |-------|-------------|
-| `sc:analyze` | Invoked in Round 1 (Correctness lens) for code files. |
-| `sc:improve` | Invoked in Round 4 (Simplicity lens) for dead code removal. |
-| `sc:reflect` | Replaced by Serena metacognitive tools (more targeted). |
+| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens) for dead code removal. |
+| `code-quality:reflect` | Invoked for metacognitive checkpoints via Serena reflection tools. |
 | `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `code-quality:qa` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `code-quality:performance` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
-| `superpowers:code-reviewer` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `code-quality:code-reviewer` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `verification-before-completion` | Embedded in Final Verification step. |
 | `session-end` | Complementary — quality-gate reviews accuracy; session-end does final save. |
 | `swarm` Phase 7 | Invokes quality-gate as the final validation step. |
