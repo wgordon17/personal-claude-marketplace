@@ -275,10 +275,11 @@ CHECKLIST:
 6. Data flow: does data flow correctly through the system? Missing transformations,
    wrong variable used, stale state?
 7. Documentation accuracy: for any doc changes in the diff, assume the docs are wrong.
-   Verify every documented claim (counts, descriptions, behavior) against the actual code
-   in the diff. If the PR adds a feature and updates docs, confirm the docs describe what
-   was actually implemented, not an idealized version. If docs say "5 agents" — count them
-   in the diff. If docs say "supports X" — find the code that does it.
+   Verify every documented claim against the actual codebase — use Read and Glob to check
+   on-disk reality, not just what appears in the diff. If docs say "15 skills" — run
+   `Glob("skills/*/SKILL.md")` and count. If docs say "supports X" — search the codebase
+   for X. If the PR adds a feature and updates docs, confirm the docs describe what was
+   actually implemented, not an idealized version.
    Documentation that matches the plan but not the implementation is a HIGH severity finding.
 
 For each finding, report:

@@ -122,7 +122,8 @@ Store as `{diff}`.
 
 ### Pre-Collect Git History Context
 
-The Git History Reviewer cannot run Bash commands — collect this data in the orchestrator.
+Pre-collect git history context in the orchestrator to avoid redundant git commands across
+multiple reviewer agents.
 
 For each changed file (cap at 15 files; if more, select the 15 with the most changed lines):
 
@@ -260,13 +261,16 @@ Build the findings JSON array:
     "description": "...",
     "location": "file/path.py:42",
     "severity": "HIGH",
-    "evidence": "..."
+    "evidence": "...",
+    "diff_context": "±10 lines of diff surrounding the finding location"
   },
   ...
 ]
 ```
 
-Include ±10 lines of diff context around each finding's location.
+For each finding, extract ±10 lines from the diff around the finding's file:line location and
+include it as the `diff_context` field. This gives the scorer surrounding context to distinguish
+real issues from false positives.
 
 ```
 Agent(
@@ -382,11 +386,11 @@ runtime; this skill owns its own copies adapted for PR review context.
 
 | Placeholder | Value | Used by |
 |-------------|-------|---------|
-| `{pr_description}` | "PR #N: {title}\n\n{body}" | All domain reviewers + Git History |
-| `{diff}` | Full `gh pr diff` output | Security, QA, Performance, Code Quality |
+| `{pr_description}` | "PR #N: {title}\n\n{body}" | All reviewers (not Scorer) |
+| `{diff}` | Full `gh pr diff` output | Security, QA, Performance, Code Quality, Correctness |
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Scorer |
-| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers |
-| `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All domain reviewers + Git History |
+| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers (not Scorer) |
+| `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers (not Scorer) |
 | `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer only |
 | `{git_history_context}` | Pre-collected blame/log output | Git History Reviewer only |
 | `{findings_json}` | JSON array of all findings | Confidence Scorer only |
