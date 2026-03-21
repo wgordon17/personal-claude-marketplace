@@ -5,7 +5,7 @@ with actual values. Domain reviewers (Security, QA, Performance, Code Quality, C
 receive diff, PR description, project rules, and changed files. The Correctness Reviewer also
 receives `{plan_content}` for plan drift detection. The Git History Reviewer receives
 `{git_history_context}` instead of `{diff}` — pre-collected blame/log output from the
-orchestrator. The Confidence Scorer receives findings JSON and CLAUDE.md only.
+orchestrator. The Confidence Scorer receives findings JSON, CLAUDE.md, and CONTRIBUTING.md.
 
 ---
 
