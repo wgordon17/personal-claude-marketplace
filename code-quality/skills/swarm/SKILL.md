@@ -2,9 +2,9 @@
 name: swarm
 description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
-  of 15+ specialized agents (Architect, Security Design Reviewer, Implementer,
+  of 18+ specialized agents (Architect, Security Design Reviewer, Implementer,
   Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer, Performance,
-  Fixer, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
+  Fixer, Test Coverage Agent, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
   communication, Cynefin domain classification, audit trails, and early user
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
@@ -42,7 +42,8 @@ specialist agent.
 | 4 | Code-Reviewer | code-quality:code-reviewer | sonnet | No | Broader review, complements QA |
 | 4 | Performance | code-quality:performance | sonnet | No | Bottlenecks, N+1, memory issues |
 | 4.5 | Structural Analyst (×2) | general-purpose | opus | No | Adversarial structural design review |
-| 5 | Fixer | general-purpose | sonnet | Yes | Address critical/high review findings |
+| 5 | Fixer | general-purpose | sonnet | Yes | Address ALL review findings |
+| 5 | Test Coverage Agent | general-purpose | sonnet | Yes | Write tests for coverage gaps from Phase 4 |
 | 5 | Code-Simplifier | code-quality:code-simplifier | sonnet | Yes | Post-fix simplification pass |
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
@@ -206,25 +207,50 @@ Test stages. The watchdog is torn down (CronDelete) when Phase 3 completes or on
 See `references/pipeline-model.md` for full parallelism rules, backpressure handling, and
 fallback to sequential mode.
 
+#### Parallel Mini-Pipelines (when applicable)
+
+If the architect's dependency graph contains 2+ independent component groups (no shared files,
+no dependency edges between groups), the Lead SHOULD spawn parallel mini-pipelines rather than
+serializing all components through one Implementer:
+
+- Each mini-pipeline: Implementer (sonnet, worktree) → Reviewer (opus) → Test-Writer (sonnet)
+  → Test-Runner (haiku)
+- The Lead coordinates merge order based on the architect's merge priority
+- Components with dependencies between them still flow through a single pipeline sequentially
+- Each mini-pipeline's Implementer stays within context limits — no lossy handoffs needed
+
+**Decision heuristic:**
+```
+IF architect.components.count > 3 AND architect.independent_groups.count > 1:
+    Fan out independent groups to parallel mini-pipelines
+ELSE:
+    Use single pipeline (current behavior)
+```
+
+This reduces context pressure on individual Implementers and improves output quality for large
+tasks. The Lead decides based on the dependency graph — never based on cost or token concerns.
+
 ### Phase 4: Parallel Review
 
 Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, and any
 auto-detected optional reviewers (UI, API, DB). All reviewers operate in read-only mode on the
 completed implementation. Each writes structured JSON findings to `hack/swarm/YYYY-MM-DD/reviews/`
-(see schema in `references/communication-schema.md`). The Lead collects all findings, filters by
-severity, and synthesizes into a consolidated view. Critical and high-severity findings go to the
-Fixer in Phase 5. Low/informational findings are recorded in the audit trail but not acted on.
+(see schema in `references/communication-schema.md`). The Lead collects ALL findings and
+synthesizes into a consolidated view. Every finding — regardless of severity — is routed to
+Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
 
 **Escalation Routing (before proceeding to Phase 5):**
 
-After synthesizing findings, classify each critical/high finding by type and route accordingly:
+After synthesizing findings, classify each finding by type and route accordingly:
 
 | Finding Type | Examples | Routing |
 |---|---|---|
 | Design-level | Architecture mismatch, wrong abstraction, missing component entirely | Route back to Architect — respawn Phase 2, then re-run Phase 2.5, then re-implement Phase 3 |
 | Security design | Trust boundary violation in architecture, missing auth layer, new attack surface from design decision | Route to Phase 2.5 Security Design Review for design-level fix |
 | Scope creep | Feature implemented that was not in the plan, undiscussed behavior introduced | Escalate to human via AskUserQuestion — do not fix silently |
-| Implementation | Bugs, quality issues, code-level security vulnerabilities, performance bottlenecks | Route to Phase 5 Fixer (existing flow) |
+| Implementation | Bugs, quality issues, code-level security vulnerabilities, performance bottlenecks | Route to Phase 5 Fixer |
+| Test coverage | Missing tests, untested paths, coverage gaps for the deliverable | Route to Phase 5 Test Coverage Agent |
+| Documentation | Missing or incorrect documentation for implemented features | Route to Phase 6 Docs agent |
 
 **Escalation counter:** Track a `design_escalation_count` across the swarm run. Each time findings
 trigger a return to Phase 2 (design-level) or Phase 2.5 (security design), increment the counter.
@@ -266,21 +292,39 @@ If Phase 4 escalation routing triggers a return to Phase 2, Phase 4.5 runs on th
 
 Phase 5 receives findings from both Phase 4 AND Phase 4.5 in its consolidated findings list.
 
-### Phase 5: Fix & Simplify (conditional)
+### Phase 5: Fix, Test Coverage & Simplify
 
-Skip this phase if ALL reviews (Phases 4 and 4.5) report clean (zero critical or high findings). Otherwise, spawn
-the Fixer with the consolidated critical/high findings and full context of the implementation.
-The Fixer addresses each finding with targeted, minimal changes. After the Fixer completes,
-check its output for `deferred` items — findings it couldn't resolve. For each deferred item:
+Skip this phase only if ALL reviews (Phases 4 and 4.5) report zero findings of any severity.
+Otherwise, spawn agents in this order:
+
+**Step 5.1 — Fixer:** Spawn the Fixer with ALL consolidated findings (every severity level)
+and full context of the implementation. The Fixer addresses each finding with targeted, minimal
+changes — critical/high first, then medium, then low. After the Fixer completes, check its
+output for `deferred` items — findings it couldn't resolve. For each deferred item:
 1. Create a `TaskCreate` entry marked as blocked with the reason (visible in task list throughout)
 2. Add to the "Scope Accountability" section of `swarm-report.md` (permanent record)
 3. If any deferred item is critical or high severity, use `AskUserQuestion` to notify the user
    before proceeding — do NOT silently continue past critical unresolved findings
 
-Then spawn the Code-Simplifier
-for a post-fix pass — it looks for over-engineering, unnecessary abstractions, and complexity
-introduced during implementation or fixing. Skip Code-Simplifier if the Fixer made no changes.
-Re-run affected tests after any fixes to confirm nothing regressed.
+**Step 5.2 — Test Coverage Agent:** If ANY Phase 4 or 4.5 reviewer identified test coverage
+gaps, missing tests, or untested code paths, spawn the Test Coverage Agent (sonnet,
+bypassPermissions). This agent writes tests that Phase 3's Test-Writer could not have written —
+coverage gaps identified only after the full implementation was reviewed. The Test Coverage Agent
+receives:
+- All test-related findings from Phase 4/4.5 (coverage gaps, missing edge case tests, untested
+  components, untested error paths)
+- The full list of files modified by the swarm
+- The existing test suite location and testing conventions
+- The Phase 3 Test-Writer's TestHandoff summaries (what was already tested)
+
+The Test Coverage Agent writes the missing tests and reports a TestCoverageResult listing
+test files created, test count, and which findings were addressed. Run the test suite after
+to confirm all new tests pass.
+
+**Step 5.3 — Code-Simplifier:** Spawn the Code-Simplifier for a post-fix pass — it looks for
+over-engineering, unnecessary abstractions, and complexity introduced during implementation or
+fixing. Skip Code-Simplifier only if neither the Fixer nor the Test Coverage Agent made any
+changes. Re-run affected tests after any fixes to confirm nothing regressed.
 
 ### Phase 6: Docs & Memory
 
@@ -440,13 +484,15 @@ Phase 4.5: Structural Design Review (always runs)
   +-- Analyst 2: Integration & Contract (opus) -------+--> Lead merges STRUCT findings
      |
      v
-Phase 5: Fix & Simplify (if Phase 4 or 4.5 findings exist)
-  +-- Fixer: critical/high findings
+Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
+  +-- Fixer: ALL findings (critical → high → medium → low)
+  +-- Test Coverage Agent: coverage gaps from Phase 4/4.5
   +-- Code-Simplifier: post-fix pass
      |
      v
 Phase 6: Docs & Memory
   +-- Docs agent: repo docs + hack/ updates
+  +-- Docs Reviewer: verify Docs agent's work
   +-- Lessons Extractor: audit trail → hack/LESSONS.md
      |
      v
@@ -550,21 +596,18 @@ After escalation, wait for user input before proceeding.
 | Phase 2.7: Speculative Fork | Architect did NOT flag `speculative_fork_recommended: true` AND Lead does not identify 2+ incompatible approach choices. Skip for single-component tasks and tasks where the user specified an approach. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
 | Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
-| Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero critical or high findings |
-| Code-Simplifier | Fixer made no changes in Phase 5 |
+| Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings of any severity |
+| Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
+| Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |
 | Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
 | /unfuck sweep | Fewer than 20 files modified and not an architectural change |
 | NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
 
 ---
 
-## Cost Awareness
+## Scope Matching
 
-This skill spawns 15+ agents, each with their own context and API calls. Use it only when the
-task genuinely warrants maximum rigor. For smaller tasks, use a targeted subagent or invoke
-specific skills directly.
-
-### When to Use /swarm vs. Alternatives
+Match the tool to the task scope:
 
 | Scenario | Recommended Approach |
 |----------|----------------------|
@@ -578,15 +621,28 @@ specific skills directly.
 | Multiple viable approaches, need to compare | `/speculative` |
 | Architectural analysis (cross-cutting concerns) | Single agent (NOT /map-reduce) |
 
-### Model Cost Hierarchy
+### Model Assignment
 
-| Model | Cost | Used For |
-|-------|------|---------|
-| opus | Expensive | Architect, Reviewer, Security, QA — judgment-heavy tasks |
-| sonnet | Moderate | Implementer, Test-Writer, Code-Reviewer, Performance, Fixer, Code-Simplifier, Lessons Extractor, Docs |
-| haiku | Cheap | Test-Runner, Verifier — execution-only tasks |
+Use opus for any task requiring judgment, evaluation, or nuanced reasoning. Use sonnet for
+implementation and mechanical tasks. Use haiku for execution-only tasks. When in doubt,
+prefer opus — one strong pass beats multiple weaker passes.
 
-Minimize opus usage to the phases where nuanced judgment is genuinely required.
+| Model | Used For |
+|-------|---------|
+| opus | Architect, Reviewer, Security, QA, Structural Analysts — judgment-heavy tasks |
+| sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Docs, Lessons Extractor |
+| haiku | Test-Runner, Verifier — execution-only tasks |
+
+### Work Completion Principle
+
+Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
+If the task requires an agent, spawn the agent. If a finding needs fixing, fix it.
+If tests need writing, write them. The only valid reasons to skip work are:
+(1) the user explicitly opted out, (2) the skip condition in the phase table applies,
+or (3) the work is genuinely out of scope for the current task.
+
+"It would be expensive" is NEVER a valid reason to skip work. Prefer spawning one opus
+agent that does the job right over multiple sonnet agents that require rework.
 
 ---
 

@@ -18,7 +18,7 @@ point is documented here.
 | 3 | Pipelined Implementation | Persistent team | implementer, reviewer, test-writer, test-runner |
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
-| 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
+| 5 | Fix, Test Coverage & Simplify | Sequential trio | fixer, test-coverage-agent, code-simplifier |
 | 6 | Docs & Memory | Sequential trio | docs (sonnet), docs-reviewer (sonnet), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
@@ -241,7 +241,7 @@ t3 = TaskCreate("Phase 3: Pipelined implementation", "All components through pip
                 activeForm="Implementing components") → addBlockedBy: [t2_7]
 t4 = TaskCreate("Phase 4: Parallel review", "Security, QA, code-review, performance",
                 activeForm="Running parallel review") → addBlockedBy: [t3]
-t5 = TaskCreate("Phase 5: Fix & simplify", "Fixer + code-simplifier",
+t5 = TaskCreate("Phase 5: Fix, test coverage & simplify", "Fixer + test-coverage-agent + code-simplifier",
                 activeForm="Fixing review findings") → addBlockedBy: [t4]
 t6 = TaskCreate("Phase 6: Docs & memory", "Update documentation and project memory",
                 activeForm="Updating documentation") → addBlockedBy: [t5]
@@ -558,7 +558,7 @@ Evaluate whether this phase applies before spawning any agents:
 | Task has a single component with no stated approach uncertainty | Skip — proceed to Phase 3 |
 | Architect classified domain as Chaotic (stabilization brief only) | Skip — proceed to Phase 3 |
 | Architect classified domain as Clear (best practice, no real alternatives) | Skip — proceed to Phase 3 |
-| When in doubt | Skip — speculative adds cost, require a positive signal |
+| When in doubt | Skip — require an explicit positive signal from architect or lead |
 
 If skipping: note the reason in the audit trail (`.swarm-run` entry) and proceed to Phase 3.
 
@@ -639,7 +639,7 @@ Create the directory structure:
 ### Step 2.7.4: Spawn Competitors
 
 Default to 2 competitors unless the architect described 3+ meaningfully distinct approaches.
-Maximum 3 competitors in the swarm context (cost constraint).
+Maximum 3 competitors in the swarm context.
 
 For each contested component, spawn competitor agents simultaneously:
 
@@ -1165,18 +1165,20 @@ Read all review JSON files. Categorize findings:
 
 | Category | Criteria | Action |
 |----------|----------|--------|
-| critical/high | Critical/high security findings; critical/high QA findings | Send to Fixer |
+| critical/high | Critical/high security findings; critical/high QA findings | Send to Fixer (priority) |
 | medium | Medium security; medium QA; high performance | Send to Fixer |
-| low/informational | Low/informational security; low QA; informational | Note in report only |
+| low/informational | Low/informational security; low QA; informational | Send to Fixer |
+| test coverage | Missing tests, untested paths, coverage gaps | Send to Test Coverage Agent |
 
-Build a consolidated findings list for the fixer. Group by file when possible.
+Build a consolidated findings list for the Fixer (all severities) and a test coverage
+findings list for the Test Coverage Agent. Group by file when possible.
 
-If ALL reviews report zero critical and zero high findings, set a flag: `skip_fixer = true`.
+If ALL reviews report zero findings of any severity, set a flag: `skip_phase5 = true`.
 
 ### Step 4.5: Escalation Routing
 
-Before shutting down reviewers or proceeding to Phase 5, classify all critical and high findings
-by type and route accordingly.
+Before shutting down reviewers or proceeding to Phase 5, classify all findings by type and route
+accordingly.
 
 #### Finding Classification Rules
 
@@ -1186,6 +1188,8 @@ by type and route accordingly.
 | **Security design** | Trust boundary crossed without validation in the *architecture* (not code-level); auth layer structurally absent; attack surface created by the design decision itself | Phase 2.5 (Security Design re-run) |
 | **Scope creep** | Behavior implemented that was not in `architect-plan.json` components; feature added beyond specified scope | Human escalation via AskUserQuestion |
 | **Implementation** | Code-level bugs, injection vulnerabilities, naming/quality issues, performance bottlenecks — addressable with targeted code changes | Phase 5 Fixer (existing flow) |
+| **Test coverage** | Missing tests, untested code paths, coverage gaps identified by reviewers | Phase 5 Test Coverage Agent |
+| **Documentation** | Missing or incorrect documentation for implemented features | Phase 6 Docs agent |
 
 **Classification rule of thumb:** If the fix requires changing the architect's plan, it is design-level or security design. If the fix is a code change within the existing plan, it is implementation. When ambiguous, classify as implementation (Fixer is cheaper than re-running Phase 3).
 
@@ -1346,11 +1350,11 @@ Phase 4 escalation events.
 ### Step 4.5.4: Merge Into Phase 5 Consolidated Findings
 
 Add all actionable STRUCT findings to the consolidated findings list that Phase 5 Fixer receives.
-Phase 5 treats STRUCT findings identically to Phase 4 findings — same severity triage, same fix
+Phase 5 treats STRUCT findings identically to Phase 4 findings — same priority order, same fix
 protocol.
 
-If ALL structural findings are clean (zero critical or high), note this in the audit trail and
-skip_fixer remains unchanged from Phase 4's determination.
+If ALL structural findings are clean (zero findings of any severity), note this in the audit
+trail and skip_phase5 remains unchanged from Phase 4's determination.
 
 ### Step 4.5.5: Shutdown Structural Analysts
 
@@ -1361,12 +1365,13 @@ SendMessage(type="shutdown_request", recipient="structural-integration", content
 
 ---
 
-## Phase 5: Fix & Simplify
+## Phase 5: Fix, Test Coverage & Simplify
 
 ### Step 5.1: Skip Check
 
-If `skip_fixer = true` (all Phase 4 AND Phase 4.5 reviews clean): skip Phase 5 entirely. Mark
-Phase 5 task as completed with note "No findings — skipped." Proceed to Phase 6.
+If `skip_phase5 = true` (all Phase 4 AND Phase 4.5 reviews report zero findings of any
+severity): skip Phase 5 entirely. Mark Phase 5 task as completed with note "No findings —
+skipped." Proceed to Phase 6.
 
 ### Step 5.2: Spawn Fixer
 
@@ -1377,8 +1382,8 @@ Agent(name="fixer", subagent_type="general-purpose", model="sonnet",
             "CONSOLIDATED FINDINGS:\n<JSON findings from synthesis>")
 ```
 
-Fixer addresses must-fix first, then should-fix. It sends a `FixSummary` message to the lead
-when done.
+Fixer addresses all findings: critical first, then high, then medium, then low. It sends a
+`FixSummary` message to the lead when done.
 
 ### Step 5.2.1: Handle Fixer Deferrals
 
@@ -1392,9 +1397,27 @@ or `deferred_items` fields — check all three due to naming inconsistency). For
 
 If no deferred items exist, skip this step.
 
+### Step 5.2.5: Spawn Test Coverage Agent (conditional)
+
+If ANY Phase 4 or Phase 4.5 reviewer identified test coverage gaps, missing tests, or untested
+code paths, spawn the Test Coverage Agent:
+
+```
+Agent(name="test-coverage-agent", subagent_type="general-purpose", model="sonnet",
+     team_name="swarm-impl", mode="bypassPermissions",
+     prompt="[context bundle]\n\n[test coverage agent prompt from agent-prompts.md]\n\n"
+            "TEST COVERAGE FINDINGS:\n<JSON test findings from Phase 4/4.5>\n\n"
+            "PHASE 3 TEST SUMMARIES:\n<TestHandoff summaries from Phase 3 Test-Writer>")
+```
+
+The Test Coverage Agent writes tests for coverage gaps identified during review. Wait for the
+`TestCoverageResult` message. Write it to `{run_dir}/test-coverage-result.json`.
+
+If no test coverage gaps were identified by any reviewer, skip this step.
+
 ### Step 5.3: Code-Simplifier Pass
 
-After fixer completes (and deferrals are handled), spawn code-simplifier:
+After fixer and test coverage agent complete (and deferrals are handled), spawn code-simplifier:
 
 ```
 Agent(name="code-simplifier", subagent_type="code-quality:code-simplifier", model="sonnet",
@@ -1408,7 +1431,7 @@ swarm run (check git diff to identify scope).
 
 ### Step 5.4: Re-test Affected Tests
 
-After fixer and simplifier complete, run tests for the affected files only:
+After fixer, test coverage agent, and simplifier complete, run tests for the affected files only:
 
 ```bash
 # Python: run only tests for modified modules
@@ -1424,13 +1447,14 @@ cycle for post-review failures).
 ### Step 5.5: Commit
 
 ```bash
-git add <all files modified by fixer and simplifier>
+git add <all files modified by fixer, test coverage agent, and simplifier>
 git commit -m "fix: address review findings from security/QA/performance review"
 ```
 
-If fixer and simplifier touched different file sets, they can be committed separately:
+If fixer, test coverage agent, and simplifier touched different file sets, they can be committed separately:
 ```bash
 git commit -m "fix: address security and quality review findings"
+git commit -m "test: add coverage for review-identified gaps"
 git commit -m "refactor: simplify implementation after review"
 ```
 
@@ -1438,6 +1462,7 @@ git commit -m "refactor: simplify implementation after review"
 
 ```
 SendMessage(type="shutdown_request", recipient="fixer", content="Fix phase complete.")
+SendMessage(type="shutdown_request", recipient="test-coverage-agent", content="Test coverage phase complete.")
 SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simplify phase complete.")
 ```
 
@@ -1553,7 +1578,7 @@ The Lessons Extractor reads the swarm audit trail and writes principle-level les
 `hack/LESSONS.md` (or equivalent memory directory). It does NOT touch PROJECT.md, SESSIONS.md,
 or TODO.md — those are the Docs agent's responsibility.
 
-### Step 6.7: Shutdown Lessons Extractor
+### Step 6.8: Shutdown Lessons Extractor
 
 ```
 SendMessage(type="shutdown_request", recipient="lessons-extractor",
@@ -1588,7 +1613,7 @@ Skill(skill="quality-gate")
 ```
 
 The quality-gate skill runs automated multi-pass review:
-- 5 rotating adversarial lenses (Correctness, Completeness, Robustness, Simplicity, Adversarial)
+- 6 rotating adversarial lenses (Correctness, Completeness, Robustness, Simplicity, Adversarial, Structural)
 - Action audit each round — catches identified-but-unactioned items
 - Fresh-context subagent reviews (2 subagents × 2 passes)
 - Blocking memory and artifact gates
@@ -1642,7 +1667,7 @@ Run directory: {run_dir}
 - Files modified: N
 - Lines added: +N / Lines removed: -N
 - Tests added: N
-- Review findings fixed: N (M optional, skipped)
+- Review findings fixed: N (M deferred)
 - Blocked items: N
 
 ## Pipeline Execution
@@ -1655,12 +1680,12 @@ Run directory: {run_dir}
 
 ## Review Findings
 
-| Reviewer | Findings | Must-Fix | Should-Fix | Optional |
-|----------|----------|----------|------------|---------|
-| security | 3 | 1 | 1 | 1 |
-| qa | 5 | 0 | 3 | 2 |
-| code-reviewer | 2 | 0 | 1 | 1 |
-| performance | 1 | 0 | 0 | 1 |
+| Reviewer | Findings | Critical | High | Medium | Low |
+|----------|----------|----------|------|--------|-----|
+| security | 3 | 1 | 1 | 1 | 0 |
+| qa | 5 | 0 | 2 | 2 | 1 |
+| code-reviewer | 2 | 0 | 0 | 1 | 1 |
+| performance | 1 | 0 | 0 | 0 | 1 |
 
 ## Blocked Items
 
@@ -1695,7 +1720,7 @@ Fixer deferred items: [none / list with reasons]
 ## Remaining Tech Debt
 
 - [ ] session-cleanup blocked — needs manual implementation
-- [ ] ui-reviewer flagged 2 optional a11y improvements (skipped as optional)
+- [ ] ui-reviewer flagged 2 low a11y improvements (deferred — requires design input)
 ```
 
 Get line stats:
@@ -1846,6 +1871,7 @@ TeamCreate:
 | 4.5 | structural-concurrency | general-purpose | opus | default | No |
 | 4.5 | structural-integration | general-purpose | opus | default | No |
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
+| 5 | test-coverage-agent | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | code-simplifier | code-quality:code-simplifier | sonnet | bypassPermissions | Yes |
 | 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
 | 6 | docs-reviewer | general-purpose | sonnet | default | No |
@@ -1854,8 +1880,8 @@ TeamCreate:
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 22 (17 core + 5 optional domain reviewers).
-Minimum agent count: 17 (all domain reviewers skipped, all conditional phases run).
+Maximum agent count: 23 (18 core + 5 optional domain reviewers).
+Minimum agent count: 18 (all domain reviewers skipped, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.

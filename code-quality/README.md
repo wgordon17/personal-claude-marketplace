@@ -25,7 +25,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
 | `/swarm` | Full agent team implementation via TeamCreate | Manual |
 | `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
-| `/pr-review` | Multi-agent PR review with confidence scoring | Manual |
+| `/pr-review` | Multi-agent PR review with finding verification | Manual |
 | `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
 | `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
 | `/incremental-planning` | Planning workflow with per-task review and assumption surfacing | Manual |

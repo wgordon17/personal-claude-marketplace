@@ -162,7 +162,9 @@ LEAD (you)
 
 ---
 
-## When to Use /map-reduce vs. Alternatives
+## Scope Matching
+
+Match the tool to the task scope:
 
 | Scenario | Recommended Approach |
 |----------|----------------------|
@@ -174,6 +176,16 @@ LEAD (you)
 | Tightly coupled codebase (>50% cross-imports) | Single agent (chunking is meaningless) |
 | Full implementation task | `/swarm` |
 | Codebase cleanup | `/unfuck` |
+
+### Work Completion Principle
+
+Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
+If the task requires a mapper, spawn the mapper. If a finding needs fixing, fix it.
+The only valid reasons to skip work are: (1) the user explicitly opted out,
+(2) the work is genuinely out of scope, or (3) the task shape genuinely doesn't match
+map-reduce (see table above).
+
+"It would be expensive" is NEVER a valid reason to skip work or reduce mapper count.
 
 ---
 

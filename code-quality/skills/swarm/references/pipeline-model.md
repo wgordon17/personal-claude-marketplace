@@ -164,6 +164,44 @@ The Lead tracks which components have completed and gates each dependent compone
 prerequisites. A component in Group 2 does not start until its Group 1 dependency sends a
 passing `TestResult`.
 
+### Fan-Out Mode (Parallel Mini-Pipelines)
+
+When the architect's dependency graph contains 2+ independent component groups (no shared files,
+no dependency edges between groups) AND the total component count exceeds 3, the Lead spawns
+**separate pipeline teams** for each independent group rather than routing all components through
+one Implementer.
+
+**Decision heuristic:**
+```
+IF architect.components.count > 3 AND architect.independent_groups.count > 1:
+    Fan out independent groups to parallel mini-pipelines
+ELSE:
+    Use single pipeline (Sequential, Full Pipeline, or Mixed mode)
+```
+
+**Each mini-pipeline is a complete team:**
+```
+Group 1:  Implementer-1 (sonnet, worktree) → Reviewer-1 (opus) → Test-Writer-1 (sonnet) → Test-Runner-1 (haiku)
+Group 2:  Implementer-2 (sonnet, worktree) → Reviewer-2 (opus) → Test-Writer-2 (sonnet) → Test-Runner-2 (haiku)
+```
+
+**Why fan out instead of serializing through one pipeline:**
+- Each Implementer's context stays small (only its group's components)
+- No lossy HandoffRequest→HandoffSummary→respawn cycle needed
+- Independent groups can complete at different speeds without blocking each other
+- Each Reviewer sees only the components it needs to review — no context contamination
+
+**Coordination:**
+- The Lead assigns merge priority per group (based on architect's merge order)
+- Groups merge sequentially by priority after all their components pass tests
+- If a merge conflict occurs between groups, the Lead resolves it or escalates to the user
+- The watchdog monitors all pipeline teams simultaneously (one CronCreate job)
+
+**Merge order:** Groups that touch foundational files (schemas, interfaces, shared utilities)
+merge first. Groups that build on those foundations merge after.
+
+**The decision to fan out is based on the dependency graph, never on cost or token concerns.**
+
 ---
 
 ## Backpressure Handling
@@ -301,16 +339,17 @@ the Lead synthesizes them and shuts down all reviewers before proceeding to Phas
 
 ### Phase 5: Fix Team Spawn (conditional)
 
-If any reviewer reported critical or high findings, spawn the Fixer and Code-Simplifier:
+If any reviewer reported findings of any severity, spawn Phase 5 agents:
 
 ```
 Lead spawns sequentially:
-  fixer            (general-purpose, sonnet)                   -- addresses findings
-  code-simplifier  (code-quality:code-simplifier, sonnet)   -- post-fix pass
+  fixer                (general-purpose, sonnet)                   -- addresses ALL findings
+  test-coverage-agent  (general-purpose, sonnet)                   -- writes tests for coverage gaps
+  code-simplifier      (code-quality:code-simplifier, sonnet)      -- post-fix pass
 ```
 
-These two run sequentially: Fixer first, Code-Simplifier after Fixer completes. Shut down both
-before Phase 6.
+These run sequentially: Fixer first, then Test Coverage Agent (if coverage gaps exist), then
+Code-Simplifier after both complete. Shut down all before Phase 6.
 
 ### Phase 6: Docs & Lessons
 
@@ -347,7 +386,7 @@ Single agent, shut down after it sends `VerificationResult`.
 | 3 | Architect (standby) + Implementer, Reviewer, Test-Writer, Test-Runner | 6 (5 + Lead) |
 | 4 | Security, QA, Code-Reviewer, Performance (+ optionals) | 5-10 + Lead |
 | 4.5 | Structural Analyst ×2 | 3 (2 + Lead) |
-| 5 | Fixer, then Code-Simplifier | 2 + Lead |
+| 5 | Fixer, Test Coverage Agent, then Code-Simplifier | 3 + Lead |
 | 6 | Docs, then Lessons Extractor | 2 (sequential) |
 | 7 | Verifier | 2 |
 

@@ -404,6 +404,33 @@ The Fixer sends this to the Lead after completing Phase 5 work. Written to
 }
 ```
 
+### TestCoverageResult
+
+Sent by the Test Coverage Agent to the Lead after writing tests for Phase 4/4.5 coverage gaps.
+Written to `{run_dir}/test-coverage-result.json`.
+
+```json
+{
+  "schema": "TestCoverageResult",
+  "tests_written": [
+    {
+      "finding_id": "string — the review finding ID this test addresses",
+      "test_file": "string — path to test file created or modified",
+      "test_count": "number — count of new test cases written",
+      "description": "string — what the tests cover"
+    }
+  ],
+  "skipped": [
+    {
+      "finding_id": "string — finding ID that was not addressed",
+      "reason": "string — why (e.g. already covered by Phase 3 Test-Writer)"
+    }
+  ],
+  "total_new_tests": "number — total count of new test cases across all files",
+  "turn_count": "number — agent turn count for context health monitoring"
+}
+```
+
 ---
 
 ## Escalation Events Schema
@@ -596,6 +623,7 @@ hack/swarm/
     ├── security-design-review.json # Security design review (Phase 2.5, if run)
     ├── escalations.json            # Escalation events (Phase 4, always present)
     ├── fix-summary.json            # Fixer's summary (Phase 5, if run)
+    ├── test-coverage-result.json   # Test Coverage Agent's results (Phase 5, if coverage gaps)
     ├── verification-result.json    # Verifier's final test results (Phase 7)
     ├── swarm-report.md             # Human-readable completion report
     └── reviews/
@@ -607,7 +635,8 @@ hack/swarm/
         ├── api.json                # API reviewer findings (if triggered)
         ├── db.json                 # DB reviewer findings (if triggered)
         ├── structural-concurrency.json  # Phase 4.5 Concurrency & State analyst findings
-        └── structural-integration.json  # Phase 4.5 Integration & Contract analyst findings
+        ├── structural-integration.json  # Phase 4.5 Integration & Contract analyst findings
+        └── docs-review.json            # Docs Reviewer findings (Phase 6, if run)
 ```
 
 The Lead resolves `{run_dir}` once in Phase 0 and passes it to all agents in their context
