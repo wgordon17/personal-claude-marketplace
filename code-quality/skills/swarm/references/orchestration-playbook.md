@@ -1165,13 +1165,15 @@ Read all review JSON files. Categorize findings:
 
 | Category | Criteria | Action |
 |----------|----------|--------|
-| critical/high | Critical/high security findings; critical/high QA findings | Send to Fixer |
+| critical/high | Critical/high security findings; critical/high QA findings | Send to Fixer (priority) |
 | medium | Medium security; medium QA; high performance | Send to Fixer |
-| low/informational | Low/informational security; low QA; informational | Note in report only |
+| low/informational | Low/informational security; low QA; informational | Send to Fixer |
+| test coverage | Missing tests, untested paths, coverage gaps | Send to Test Coverage Agent |
 
-Build a consolidated findings list for the fixer. Group by file when possible.
+Build a consolidated findings list for the Fixer (all severities) and a test coverage
+findings list for the Test Coverage Agent. Group by file when possible.
 
-If ALL reviews report zero critical and zero high findings, set a flag: `skip_fixer = true`.
+If ALL reviews report zero findings of any severity, set a flag: `skip_phase5 = true`.
 
 ### Step 4.5: Escalation Routing
 
@@ -1349,8 +1351,8 @@ Add all actionable STRUCT findings to the consolidated findings list that Phase 
 Phase 5 treats STRUCT findings identically to Phase 4 findings — same severity triage, same fix
 protocol.
 
-If ALL structural findings are clean (zero critical or high), note this in the audit trail and
-skip_fixer remains unchanged from Phase 4's determination.
+If ALL structural findings are clean (zero findings of any severity), note this in the audit
+trail and skip_phase5 remains unchanged from Phase 4's determination.
 
 ### Step 4.5.5: Shutdown Structural Analysts
 
@@ -1365,8 +1367,9 @@ SendMessage(type="shutdown_request", recipient="structural-integration", content
 
 ### Step 5.1: Skip Check
 
-If `skip_fixer = true` (all Phase 4 AND Phase 4.5 reviews clean): skip Phase 5 entirely. Mark
-Phase 5 task as completed with note "No findings — skipped." Proceed to Phase 6.
+If `skip_phase5 = true` (all Phase 4 AND Phase 4.5 reviews report zero findings of any
+severity): skip Phase 5 entirely. Mark Phase 5 task as completed with note "No findings —
+skipped." Proceed to Phase 6.
 
 ### Step 5.2: Spawn Fixer
 

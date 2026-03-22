@@ -301,16 +301,17 @@ the Lead synthesizes them and shuts down all reviewers before proceeding to Phas
 
 ### Phase 5: Fix Team Spawn (conditional)
 
-If any reviewer reported critical or high findings, spawn the Fixer and Code-Simplifier:
+If any reviewer reported findings of any severity, spawn Phase 5 agents:
 
 ```
 Lead spawns sequentially:
-  fixer            (general-purpose, sonnet)                   -- addresses findings
-  code-simplifier  (code-quality:code-simplifier, sonnet)   -- post-fix pass
+  fixer                (general-purpose, sonnet)                   -- addresses ALL findings
+  test-coverage-agent  (general-purpose, sonnet)                   -- writes tests for coverage gaps
+  code-simplifier      (code-quality:code-simplifier, sonnet)      -- post-fix pass
 ```
 
-These two run sequentially: Fixer first, Code-Simplifier after Fixer completes. Shut down both
-before Phase 6.
+These run sequentially: Fixer first, then Test Coverage Agent (if coverage gaps exist), then
+Code-Simplifier after both complete. Shut down all before Phase 6.
 
 ### Phase 6: Docs & Lessons
 
