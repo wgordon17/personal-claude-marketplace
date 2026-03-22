@@ -162,7 +162,9 @@ LEAD (you)
 
 ---
 
-## When to Use /map-reduce vs. Alternatives
+## Scope Matching
+
+Match the tool to the task scope:
 
 | Scenario | Recommended Approach |
 |----------|----------------------|

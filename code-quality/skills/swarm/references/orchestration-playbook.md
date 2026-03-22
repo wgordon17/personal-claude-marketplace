@@ -1188,6 +1188,8 @@ accordingly.
 | **Security design** | Trust boundary crossed without validation in the *architecture* (not code-level); auth layer structurally absent; attack surface created by the design decision itself | Phase 2.5 (Security Design re-run) |
 | **Scope creep** | Behavior implemented that was not in `architect-plan.json` components; feature added beyond specified scope | Human escalation via AskUserQuestion |
 | **Implementation** | Code-level bugs, injection vulnerabilities, naming/quality issues, performance bottlenecks — addressable with targeted code changes | Phase 5 Fixer (existing flow) |
+| **Test coverage** | Missing tests, untested code paths, coverage gaps identified by reviewers | Phase 5 Test Coverage Agent |
+| **Documentation** | Missing or incorrect documentation for implemented features | Phase 6 Docs agent |
 
 **Classification rule of thumb:** If the fix requires changing the architect's plan, it is design-level or security design. If the fix is a code change within the existing plan, it is implementation. When ambiguous, classify as implementation (Fixer is cheaper than re-running Phase 3).
 
@@ -1576,7 +1578,7 @@ The Lessons Extractor reads the swarm audit trail and writes principle-level les
 `hack/LESSONS.md` (or equivalent memory directory). It does NOT touch PROJECT.md, SESSIONS.md,
 or TODO.md — those are the Docs agent's responsibility.
 
-### Step 6.7: Shutdown Lessons Extractor
+### Step 6.8: Shutdown Lessons Extractor
 
 ```
 SendMessage(type="shutdown_request", recipient="lessons-extractor",
@@ -1611,7 +1613,7 @@ Skill(skill="quality-gate")
 ```
 
 The quality-gate skill runs automated multi-pass review:
-- 5 rotating adversarial lenses (Correctness, Completeness, Robustness, Simplicity, Adversarial)
+- 6 rotating adversarial lenses (Correctness, Completeness, Robustness, Simplicity, Adversarial, Structural)
 - Action audit each round — catches identified-but-unactioned items
 - Fresh-context subagent reviews (2 subagents × 2 passes)
 - Blocking memory and artifact gates

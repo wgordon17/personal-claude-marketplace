@@ -322,8 +322,9 @@ The verifier assigns each finding to a category based on its nature (not its sev
 
 ### Filter
 
-Remove findings with verdict `false_positive`. Keep all `verified` and `needs_context`
-findings.
+Remove findings with verdict `false_positive`. Keep all `verified`, `needs_context`, and
+`unverified` findings. Treat `unverified` findings as `needs_context` for output purposes —
+they appear in the Needs Context section with the verification failure note.
 
 ---
 
@@ -392,7 +393,11 @@ Findings with verdict `needs_context` appear in a dedicated section at the botto
 are items the verifier could not confirm or deny and require human judgment. They are NOT
 hidden or filtered — they are surfaced transparently.
 
-### No Verified Findings
+### No Findings After Verification
+
+Use this path only when `verified_count == 0` AND `needs_context_count == 0` (all findings
+were false positives, or no findings were reported). If `needs_context_count > 0`, use the
+"Findings Exist" path — it has the Needs Context section for those items.
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -407,7 +412,7 @@ No verified issues found.
 Checked for: security, test coverage, performance, code quality, correctness, historical consistency.
 
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | All resolved as false positives
+Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -429,6 +434,7 @@ After output, return to the original branch or worktree recorded in Phase 0.
 | Lock/generated files only | Stop: "PR #N changes only lock/generated files. No review needed." |
 | Cannot checkout branch | Auto-stash and retry. If stash fails, stop: "Cannot checkout PR branch and stash failed." |
 | All findings false positive | Output "no findings" report format (not an error) |
+| Verification JSON parse fails | All findings get `unverified` verdict, treated as `needs_context` in output |
 
 ---
 

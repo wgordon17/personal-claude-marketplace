@@ -635,7 +635,8 @@ hack/swarm/
         ├── api.json                # API reviewer findings (if triggered)
         ├── db.json                 # DB reviewer findings (if triggered)
         ├── structural-concurrency.json  # Phase 4.5 Concurrency & State analyst findings
-        └── structural-integration.json  # Phase 4.5 Integration & Contract analyst findings
+        ├── structural-integration.json  # Phase 4.5 Integration & Contract analyst findings
+        └── docs-review.json            # Docs Reviewer findings (Phase 6, if run)
 ```
 
 The Lead resolves `{run_dir}` once in Phase 0 and passes it to all agents in their context

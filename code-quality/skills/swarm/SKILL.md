@@ -2,7 +2,7 @@
 name: swarm
 description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
-  of 15+ specialized agents (Architect, Security Design Reviewer, Implementer,
+  of 18+ specialized agents (Architect, Security Design Reviewer, Implementer,
   Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer, Performance,
   Fixer, Test Coverage Agent, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
   communication, Cynefin domain classification, audit trails, and early user
@@ -492,6 +492,7 @@ Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
      v
 Phase 6: Docs & Memory
   +-- Docs agent: repo docs + hack/ updates
+  +-- Docs Reviewer: verify Docs agent's work
   +-- Lessons Extractor: audit trail → hack/LESSONS.md
      |
      v
