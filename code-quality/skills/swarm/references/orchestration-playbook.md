@@ -1664,7 +1664,7 @@ Run directory: {run_dir}
 - Files modified: N
 - Lines added: +N / Lines removed: -N
 - Tests added: N
-- Review findings fixed: N (M optional, skipped)
+- Review findings fixed: N (M deferred)
 - Blocked items: N
 
 ## Pipeline Execution
@@ -1677,12 +1677,12 @@ Run directory: {run_dir}
 
 ## Review Findings
 
-| Reviewer | Findings | Must-Fix | Should-Fix | Optional |
-|----------|----------|----------|------------|---------|
-| security | 3 | 1 | 1 | 1 |
-| qa | 5 | 0 | 3 | 2 |
-| code-reviewer | 2 | 0 | 1 | 1 |
-| performance | 1 | 0 | 0 | 1 |
+| Reviewer | Findings | Critical | High | Medium | Low |
+|----------|----------|----------|------|--------|-----|
+| security | 3 | 1 | 1 | 1 | 0 |
+| qa | 5 | 0 | 2 | 2 | 1 |
+| code-reviewer | 2 | 0 | 0 | 1 | 1 |
+| performance | 1 | 0 | 0 | 0 | 1 |
 
 ## Blocked Items
 
@@ -1717,7 +1717,7 @@ Fixer deferred items: [none / list with reasons]
 ## Remaining Tech Debt
 
 - [ ] session-cleanup blocked — needs manual implementation
-- [ ] ui-reviewer flagged 2 optional a11y improvements (skipped as optional)
+- [ ] ui-reviewer flagged 2 low a11y improvements (deferred — requires design input)
 ```
 
 Get line stats:

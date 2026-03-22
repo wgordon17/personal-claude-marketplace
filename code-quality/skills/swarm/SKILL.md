@@ -4,7 +4,7 @@ description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
   of 15+ specialized agents (Architect, Security Design Reviewer, Implementer,
   Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer, Performance,
-  Fixer, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
+  Fixer, Test Coverage Agent, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
   communication, Cynefin domain classification, audit trails, and early user
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
