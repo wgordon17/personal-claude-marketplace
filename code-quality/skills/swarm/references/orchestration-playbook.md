@@ -1348,7 +1348,7 @@ Phase 4 escalation events.
 ### Step 4.5.4: Merge Into Phase 5 Consolidated Findings
 
 Add all actionable STRUCT findings to the consolidated findings list that Phase 5 Fixer receives.
-Phase 5 treats STRUCT findings identically to Phase 4 findings — same severity triage, same fix
+Phase 5 treats STRUCT findings identically to Phase 4 findings — same priority order, same fix
 protocol.
 
 If ALL structural findings are clean (zero findings of any severity), note this in the audit
@@ -1429,7 +1429,7 @@ swarm run (check git diff to identify scope).
 
 ### Step 5.4: Re-test Affected Tests
 
-After fixer and simplifier complete, run tests for the affected files only:
+After fixer, test coverage agent, and simplifier complete, run tests for the affected files only:
 
 ```bash
 # Python: run only tests for modified modules
@@ -1445,11 +1445,11 @@ cycle for post-review failures).
 ### Step 5.5: Commit
 
 ```bash
-git add <all files modified by fixer and simplifier>
+git add <all files modified by fixer, test coverage agent, and simplifier>
 git commit -m "fix: address review findings from security/QA/performance review"
 ```
 
-If fixer and simplifier touched different file sets, they can be committed separately:
+If fixer, test coverage agent, and simplifier touched different file sets, they can be committed separately:
 ```bash
 git commit -m "fix: address security and quality review findings"
 git commit -m "refactor: simplify implementation after review"

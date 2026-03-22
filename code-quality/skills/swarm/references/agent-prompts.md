@@ -1064,9 +1064,9 @@ You do NOT modify any code.
 
 Use the shared severity scale from `references/communication-schema.md` (ReviewFindings):
 - **critical:** Bug or correctness issue that will cause incorrect behavior in production
-- **high:** Serious convention violation or error handling gap that must be addressed (maps to must-fix)
-- **medium:** Clear improvement, won't block merge but should be addressed (maps to should-fix)
-- **low:** Stylistic or preference — do not waste fixer time on these (maps to optional/nitpick)
+- **high:** Serious convention violation or error handling gap
+- **medium:** Clear improvement that should be addressed
+- **low:** Stylistic or minor — still report these, the Fixer addresses all severity levels
 
 ## Output Format
 
