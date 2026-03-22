@@ -228,7 +228,7 @@ solvable as stated?
 | Phase 3: Pipelined Implementation | Yes | Standard pipeline. |
 | Phase 4: Parallel Review | Yes | Standard. |
 | Phase 4.5: Structural Design Review | Yes | Always runs. |
-| Phase 5: Fix & Simplify | Conditional | Only if Phase 4/4.5 finds critical/high issues. |
+| Phase 5: Fix, Test Coverage & Simplify | Conditional | Only if Phase 4/4.5 finds any issues. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Standard. Quality-gate invoked here. |
 
@@ -244,7 +244,7 @@ solvable as stated?
 | Phase 3: Pipelined Implementation | Yes | Standard pipeline. Parallel where possible. |
 | Phase 4: Parallel Review | Yes | Standard. May require domain expert reviewer. |
 | Phase 4.5: Structural Design Review | Yes | Always runs. |
-| Phase 5: Fix & Simplify | Conditional | Only if Phase 4/4.5 finds critical/high issues. |
+| Phase 5: Fix, Test Coverage & Simplify | Conditional | Only if Phase 4/4.5 finds any issues. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Standard. Quality-gate invoked here. |
 
@@ -260,7 +260,7 @@ solvable as stated?
 | Phase 3: Pipelined Implementation | Yes | Smaller components. Explicit checkpoints between. |
 | Phase 4: Parallel Review | Yes | Reviewer assesses probe results, not just correctness. |
 | Phase 4.5: Structural Design Review | Yes | Always runs. Probe results may reveal structural issues. |
-| Phase 5: Fix & Simplify | Conditional | Only if Phase 4/4.5 finds critical/high issues. |
+| Phase 5: Fix, Test Coverage & Simplify | Conditional | Only if Phase 4/4.5 finds any issues. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Quality-gate invoked here. Include re-classification assessment. |
 
@@ -276,7 +276,7 @@ solvable as stated?
 | Phase 3: Pipelined Implementation | Yes | Single implementer. Stabilization action only. |
 | Phase 4: Parallel Review | Yes | Lightweight. Verify stabilization works. |
 | Phase 4.5: Structural Design Review | Yes | Always runs. Stabilization may introduce structural issues. |
-| Phase 5: Fix & Simplify | Conditional | Standard. |
+| Phase 5: Fix, Test Coverage & Simplify | Conditional | Standard. |
 | Phase 6: Docs & Memory | Yes | Standard. |
 | Phase 7: Verification & Completion | Yes | Quality-gate invoked here. Must re-classify domain after stabilization. |
 
