@@ -586,7 +586,6 @@ Overall: [PASS / NEEDS WORK]
 | `code-quality:qa` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `code-quality:performance` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `code-quality:code-reviewer` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
-| `verification-before-completion` | Embedded in Final Verification step. |
 | `session-end` | Complementary — quality-gate reviews accuracy; session-end does final save. |
 | `swarm` Phase 7 | Invokes quality-gate as the final validation step. |
 

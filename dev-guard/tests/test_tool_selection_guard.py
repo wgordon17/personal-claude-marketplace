@@ -876,6 +876,9 @@ class TestTerminalPipeNoop:
             # Mid-pipe middle segment (position 1 of 3) → allowed (feeds downstream)
             ('cmd1 | echo "data" | wc -c', 0, None),
             ('cmd1 | printf "%s" x | wc', 0, None),
+            # ANSI-C quoting in terminal position → blocked
+            ("git status | echo $'done'", 2, "directly"),
+            ("git log | printf $'result\\n'", 2, "directly"),
         ],
         ids=[
             "echo-terminal-block",
@@ -888,6 +891,8 @@ class TestTerminalPipeNoop:
             "printf-midpipe-3stage-allow",
             "echo-middle-segment-allow",
             "printf-middle-segment-allow",
+            "echo-ansi-c-terminal-block",
+            "printf-ansi-c-terminal-block",
         ],
     )
     def test_terminal_pipe_noop(self, command, expected_exit, expected_msg):

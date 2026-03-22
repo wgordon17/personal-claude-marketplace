@@ -1,6 +1,6 @@
 {
   "name": "code-quality",
   "description": "Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research, business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, map-reduce, speculative, reflect, and index-repo",
-  "version": "3.5.0",
+  "version": "3.4.0",
   "author": { "name": "wgordon17" }
 }

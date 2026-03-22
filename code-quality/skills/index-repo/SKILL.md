@@ -10,7 +10,7 @@ allowed-tools: [Read, Glob, Grep, Write, Bash]
 # Repository Indexing
 
 Generate a compact PROJECT_INDEX.md (~3K tokens) that gives any agent full project orientation
-without reading the entire codebase (~50-60K tokens). 94% token reduction.
+without reading the entire codebase (~50-60K tokens).
 
 ## When to Use
 

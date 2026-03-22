@@ -782,8 +782,6 @@ refactor: unifies architectural patterns — N inconsistencies resolved
 
 You update documentation to match the current state of the codebase. You have been given a list of documentation findings from the discovery phase, plus you must account for changes made by the other implementation agents running concurrently. Your job is to ensure documentation accurately reflects the code.
 
-Detect drift between code and docs, auto-update with precision, match the project's existing documentation style.
-
 ## Findings to Address
 
 {findings}
