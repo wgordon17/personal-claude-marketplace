@@ -41,7 +41,8 @@ For each file category, identify:
 
 ### Phase 3: Generate PROJECT_INDEX.md
 
-Write to project root:
+Determine output location: check for a project memory directory (`hack/`, `.local/`, `scratch/`,
+`.dev/`) and write there. Fall back to project root only if none exists.
 
 ```markdown
 # Project Index: {project_name}
@@ -99,4 +100,5 @@ Generated: {timestamp}
 
 ## Output
 
-Creates `PROJECT_INDEX.md` at project root (~3K tokens, human-readable).
+Creates `PROJECT_INDEX.md` in the project memory directory (`hack/`, `.local/`, `scratch/`,
+`.dev/`) or project root if none exists (~3K tokens, human-readable).

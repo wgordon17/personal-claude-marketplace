@@ -48,7 +48,7 @@ This parallelism saves time since `code-quality:index-repo` and tool detection a
 
 ### Step 0.1: Generate repo index
 
-Spawn a `setup-indexer` teammate to invoke the `code-quality:index-repo` skill. This creates `PROJECT_INDEX.md` at the project root, giving every agent a ~3K-token project reference instead of reading the full codebase.
+Spawn a `setup-indexer` teammate to invoke the `code-quality:index-repo` skill. This creates `PROJECT_INDEX.md` in the project memory directory (`hack/`, `.local/`, `scratch/`, `.dev/`, or project root as fallback), giving every agent a ~3K-token project reference instead of reading the full codebase.
 
 ### Step 0.2: Detect project languages
 
