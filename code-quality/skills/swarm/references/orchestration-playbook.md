@@ -18,7 +18,7 @@ point is documented here.
 | 3 | Pipelined Implementation | Persistent team | implementer, reviewer, test-writer, test-runner |
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
-| 5 | Fix & Simplify | Sequential pair | fixer, code-simplifier |
+| 5 | Fix, Test Coverage & Simplify | Sequential trio | fixer, test-coverage-agent, code-simplifier |
 | 6 | Docs & Memory | Sequential trio | docs (sonnet), docs-reviewer (sonnet), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
@@ -241,7 +241,7 @@ t3 = TaskCreate("Phase 3: Pipelined implementation", "All components through pip
                 activeForm="Implementing components") → addBlockedBy: [t2_7]
 t4 = TaskCreate("Phase 4: Parallel review", "Security, QA, code-review, performance",
                 activeForm="Running parallel review") → addBlockedBy: [t3]
-t5 = TaskCreate("Phase 5: Fix & simplify", "Fixer + code-simplifier",
+t5 = TaskCreate("Phase 5: Fix, test coverage & simplify", "Fixer + test-coverage-agent + code-simplifier",
                 activeForm="Fixing review findings") → addBlockedBy: [t4]
 t6 = TaskCreate("Phase 6: Docs & memory", "Update documentation and project memory",
                 activeForm="Updating documentation") → addBlockedBy: [t5]
@@ -558,7 +558,7 @@ Evaluate whether this phase applies before spawning any agents:
 | Task has a single component with no stated approach uncertainty | Skip — proceed to Phase 3 |
 | Architect classified domain as Chaotic (stabilization brief only) | Skip — proceed to Phase 3 |
 | Architect classified domain as Clear (best practice, no real alternatives) | Skip — proceed to Phase 3 |
-| When in doubt | Skip — speculative adds cost, require a positive signal |
+| When in doubt | Skip — require an explicit positive signal from architect or lead |
 
 If skipping: note the reason in the audit trail (`.swarm-run` entry) and proceed to Phase 3.
 
@@ -639,7 +639,7 @@ Create the directory structure:
 ### Step 2.7.4: Spawn Competitors
 
 Default to 2 competitors unless the architect described 3+ meaningfully distinct approaches.
-Maximum 3 competitors in the swarm context (cost constraint).
+Maximum 3 competitors in the swarm context.
 
 For each contested component, spawn competitor agents simultaneously:
 
@@ -1177,8 +1177,8 @@ If ALL reviews report zero findings of any severity, set a flag: `skip_phase5 = 
 
 ### Step 4.5: Escalation Routing
 
-Before shutting down reviewers or proceeding to Phase 5, classify all critical and high findings
-by type and route accordingly.
+Before shutting down reviewers or proceeding to Phase 5, classify all findings by type and route
+accordingly.
 
 #### Finding Classification Rules
 
@@ -1363,7 +1363,7 @@ SendMessage(type="shutdown_request", recipient="structural-integration", content
 
 ---
 
-## Phase 5: Fix & Simplify
+## Phase 5: Fix, Test Coverage & Simplify
 
 ### Step 5.1: Skip Check
 
@@ -1380,8 +1380,8 @@ Agent(name="fixer", subagent_type="general-purpose", model="sonnet",
             "CONSOLIDATED FINDINGS:\n<JSON findings from synthesis>")
 ```
 
-Fixer addresses must-fix first, then should-fix. It sends a `FixSummary` message to the lead
-when done.
+Fixer addresses all findings: critical first, then high, then medium, then low. It sends a
+`FixSummary` message to the lead when done.
 
 ### Step 5.2.1: Handle Fixer Deferrals
 
@@ -1395,9 +1395,27 @@ or `deferred_items` fields — check all three due to naming inconsistency). For
 
 If no deferred items exist, skip this step.
 
+### Step 5.2.5: Spawn Test Coverage Agent (conditional)
+
+If ANY Phase 4 or Phase 4.5 reviewer identified test coverage gaps, missing tests, or untested
+code paths, spawn the Test Coverage Agent:
+
+```
+Agent(name="test-coverage-agent", subagent_type="general-purpose", model="sonnet",
+     team_name="swarm-impl", mode="bypassPermissions",
+     prompt="[context bundle]\n\n[test coverage agent prompt from agent-prompts.md]\n\n"
+            "TEST COVERAGE FINDINGS:\n<JSON test findings from Phase 4/4.5>\n\n"
+            "PHASE 3 TEST SUMMARIES:\n<TestHandoff summaries from Phase 3 Test-Writer>")
+```
+
+The Test Coverage Agent writes tests for coverage gaps identified during review. Wait for the
+`TestCoverageResult` message. Write it to `{run_dir}/test-coverage-result.json`.
+
+If no test coverage gaps were identified by any reviewer, skip this step.
+
 ### Step 5.3: Code-Simplifier Pass
 
-After fixer completes (and deferrals are handled), spawn code-simplifier:
+After fixer and test coverage agent complete (and deferrals are handled), spawn code-simplifier:
 
 ```
 Agent(name="code-simplifier", subagent_type="code-quality:code-simplifier", model="sonnet",
@@ -1441,6 +1459,7 @@ git commit -m "refactor: simplify implementation after review"
 
 ```
 SendMessage(type="shutdown_request", recipient="fixer", content="Fix phase complete.")
+SendMessage(type="shutdown_request", recipient="test-coverage-agent", content="Test coverage phase complete.")
 SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simplify phase complete.")
 ```
 
@@ -1849,6 +1868,7 @@ TeamCreate:
 | 4.5 | structural-concurrency | general-purpose | opus | default | No |
 | 4.5 | structural-integration | general-purpose | opus | default | No |
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
+| 5 | test-coverage-agent | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | code-simplifier | code-quality:code-simplifier | sonnet | bypassPermissions | Yes |
 | 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
 | 6 | docs-reviewer | general-purpose | sonnet | default | No |
@@ -1857,8 +1877,8 @@ TeamCreate:
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 22 (17 core + 5 optional domain reviewers).
-Minimum agent count: 17 (all domain reviewers skipped, all conditional phases run).
+Maximum agent count: 23 (18 core + 5 optional domain reviewers).
+Minimum agent count: 18 (all domain reviewers skipped, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.
