@@ -1,8 +1,8 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research, business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, map-reduce, and speculative.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research, business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, map-reduce, speculative, reflect, and index-repo.
 
-## Agents (5)
+## Agents (7)
 
 | Agent | Purpose | Model |
 |-------|---------|-------|
@@ -11,8 +11,10 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:qa` | Code quality, test strategy, tech debt | Sonnet |
 | `code-quality:performance` | Performance profiling and optimization | Sonnet |
 | `code-quality:test-runner` | Efficient test execution specialist | Haiku |
+| `code-quality:code-reviewer` | Plan alignment, code quality, convention compliance, doc accuracy | Sonnet |
+| `code-quality:code-simplifier` | Dead code removal, unnecessary abstraction cleanup, clarity improvement | Sonnet |
 
-## Skills (15)
+## Skills (17)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -31,6 +33,8 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/lsp-navigation` | Semantic code navigation via LSP | PROACTIVE |
 | `/uv-python` | Python tooling enforcement (uv over pip) | PROACTIVE |
 | `/test-runner` | Efficient test execution patterns | Manual |
+| `/reflect` | Mid-task self-reflection checkpoint via Serena metacognitive tools | Manual |
+| `/index-repo` | Repository indexing for token-efficient codebase orientation | Manual |
 
 ## Commands (4)
 
@@ -48,7 +52,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 - **Serena MCP** — Optional. Enhances `/incremental-planning` Phase 1 with `get_symbols_overview`.
 - **Sequential-Thinking MCP** — Optional. Used in `/incremental-planning` and `/roadmap` for scope boundary reasoning.
 - **claude-mem MCP** — Optional. Searches past work and decisions in `/incremental-planning` Phase 1.
-- **SuperClaude** — Optional. The `/unfuck` skill references SuperClaude skills. Degrades gracefully without them.
+- **Serena reflection tools** — Optional. Enables `/reflect` skill's metacognitive checkpoints (`think_about_task_adherence`, etc.). Enable via `included_optional_tools` in `~/.serena/serena_config.yml`.
 
 ## Installation
 

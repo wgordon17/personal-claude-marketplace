@@ -8,8 +8,8 @@ description: >-
   "unify the architecture", "security review and fix", or wants a thorough, automated cleanup
   of their entire repository. Launches a full agent swarm to discover issues, plan fixes, and
   implement changes autonomously. Combines detailed custom analysis with existing skills
-  (file-audit, security-review, sc:cleanup, sc:improve, docs-sync, sc:index-repo,
-  code-quality:architect, code-quality:security, code-quality:qa, code-simplifier,
+  (file-audit, code-quality:index-repo, code-quality:code-simplifier,
+  code-quality:architect, code-quality:security, code-quality:qa, code-quality:code-reviewer,
   code-quality:test-runner) into a unified cleanup workflow.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
 ---
@@ -40,7 +40,7 @@ Phase 4 verifies everything passes and generates a report.
 
 ### Phase 0: Index & Setup
 1. Create TeamCreate swarm: `cleanup-swarm`
-2. Spawn parallel setup teammates for: repo indexing (`sc:index-repo`), language detection, tool detection
+2. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection
 3. Create feature branch: `cleanup/comprehensive-YYYY-MM-DD` (from `origin/main`)
 4. Create `hack/unfuck/YYYY-MM-DD/discovery/` directory for agent output (date-scoped per run)
 5. Collect setup results and build context bundle for discovery agents
@@ -59,11 +59,11 @@ All agents run simultaneously in background. Each writes structured JSON finding
 |-------|------|---------------|----------------|--------|
 | dead-code-hunter | Unused code, exports, imports, files, deps | `file-audit` | Knip, Vulture, deadcode | `dead-code.json` |
 | duplicate-detector | Copy-paste code, near-duplicates, redundant wrappers | `file-audit` | jscpd | `duplicates.json` |
-| security-auditor | OWASP Top 10, secrets, CVEs, auth gaps | `security-review`, `code-quality:security` | Semgrep, gitleaks, Bandit | `security.json` |
-| architecture-reviewer | Circular deps, divergent patterns, god objects | `code-quality:architect`, `sc:analyze` | dependency-cruiser, Madge | `architecture.json` |
+| security-auditor | OWASP Top 10, secrets, CVEs, auth gaps | `code-quality:security` | Semgrep, gitleaks, Bandit | `security.json` |
+| architecture-reviewer | Circular deps, divergent patterns, god objects | `code-quality:architect` | dependency-cruiser, Madge | `architecture.json` |
 | ai-slop-detector | Over-abstraction, unnecessary wrappers, catch-rethrow, comment noise | (novel — see `references/ai-slop-checklist.md`) | — | `ai-slop.json` |
 | complexity-auditor | Long functions, deep nesting, magic values, parameter bloat | `code-quality:qa` | radon | `complexity.json` |
-| documentation-auditor | README drift, broken links, stale TODOs, missing docs | `docs-sync`, `file-audit` | — | `documentation.json` |
+| documentation-auditor | README drift, broken links, stale TODOs, missing docs | `file-audit` | — | `documentation.json` |
 
 **Model note:** ai-slop-detector uses `opus` (detecting AI patterns requires stronger judgment).
 All others use `sonnet`.
@@ -106,8 +106,8 @@ The orchestrator assigns categories in priority order (security → dead code �
 
 1. Run full test suite via `code-quality:test-runner`
 2. Run code quality checks on all modified files
-3. Apply `superpowers:verification-before-completion` patterns
-4. Invoke `sc:reflect` to verify completeness against the original cleanup plan
+3. Apply `code-quality:quality-gate` verification patterns
+4. Invoke `code-quality:reflect` to verify completeness against the original cleanup plan
 5. Generate `hack/unfuck/YYYY-MM-DD/cleanup-report.md` with:
    - Summary stats (files modified, lines added/removed, net delta, issues fixed by category)
    - Per-category breakdown with specific changes and commit SHAs

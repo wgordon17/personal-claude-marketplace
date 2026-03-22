@@ -14,7 +14,7 @@ structure. This file provides the specific questions and techniques for each len
 - What edge cases aren't handled?
 - What happens with empty/null/zero/negative/max values?
 - Are error paths correct (not just happy path)?
-- **Tool:** Invoke `sc:analyze` on all modified code files.
+- **Tool:** Spawn domain reviewers (`code-quality:security`, `code-quality:qa`, `code-quality:performance`) on all modified code files.
 - **Reasoning:** Use `sequential-thinking` MCP to decompose correctness check step-by-step.
 - **First-principles:** "What are the fundamental invariants this code must maintain? Derive
   them from the requirements, not from what the code currently does."
@@ -49,7 +49,7 @@ structure. This file provides the specific questions and techniques for each len
 - What could be deleted and nothing would break?
 - What's AI slop? (narrating obvious, sycophantic names, filler docstrings, hedge comments)
 - Commented-out code? Unused imports? Dead branches?
-- **Tool:** Invoke `sc:improve` for dead code, unused imports, over-abstraction.
+- **Tool:** Spawn `code-quality:code-simplifier` for dead code, unused imports, over-abstraction.
 
 ### Round 5: Adversarial
 

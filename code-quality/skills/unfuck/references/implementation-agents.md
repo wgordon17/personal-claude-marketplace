@@ -57,7 +57,7 @@ All implementation agents MUST follow these rules:
 
 You remove dead code from this codebase. You have been given a list of confirmed dead code findings from the discovery phase. Your job is to safely remove each item, verify nothing breaks, and commit the changes.
 
-You follow `sc:cleanup --aggressive` patterns: remove with confidence, verify with LSP, batch test.
+You follow `code-quality:code-simplifier` patterns: remove with confidence, verify with LSP, batch test.
 
 ## Findings to Address
 
@@ -295,7 +295,7 @@ refactor: consolidates N duplicate patterns into shared utilities
 
 You fix security vulnerabilities in this codebase. You have been given a list of confirmed security findings from the discovery phase. Your job is to apply safe, correct fixes for each vulnerability, verify the fix does not break functionality, and commit the changes.
 
-You follow `security-review` and `code-quality:security` patterns: fix with precision, test after every change, never weaken existing security controls.
+You follow `code-quality:security` patterns: fix with precision, test after every change, never weaken existing security controls.
 
 ## Findings to Address
 
@@ -450,7 +450,7 @@ fix(security): adds missing security headers and hardens error responses
 
 You simplify over-engineered, AI-generated "slop" code in this codebase. You have been given a list of confirmed AI slop findings from the discovery phase. Your job is to replace unnecessarily complex patterns with simpler, more direct implementations that preserve the same behavior.
 
-You follow `code-simplifier` agent patterns (preserve functionality, enhance clarity) and `sc:improve --type maintainability` patterns (reduce indirection, improve readability).
+You follow `code-quality:code-simplifier` agent patterns (preserve functionality, enhance clarity, reduce indirection, improve readability).
 
 This is nuanced work requiring strong pattern recognition. You must understand WHAT the code does before simplifying HOW it does it.
 
@@ -782,8 +782,6 @@ refactor: unifies architectural patterns — N inconsistencies resolved
 
 You update documentation to match the current state of the codebase. You have been given a list of documentation findings from the discovery phase, plus you must account for changes made by the other implementation agents running concurrently. Your job is to ensure documentation accurately reflects the code.
 
-You follow `docs-sync` skill patterns: detect drift between code and docs, auto-update with precision, match the project's existing documentation style.
-
 ## Findings to Address
 
 {findings}
@@ -934,7 +932,7 @@ docs: updates README commands and removes stale API references
 
 You reduce code complexity in this codebase. You have been given a list of confirmed complexity findings from the discovery phase (long functions, deep nesting, magic values, long parameter lists, etc.). Your job is to refactor each finding into simpler, more readable code while preserving exact behavior.
 
-You follow `sc:improve --type maintainability` patterns and refactoring agent patterns: extract clearly, name descriptively, verify with LSP, test after each change.
+You follow `code-quality:code-simplifier` patterns: extract clearly, name descriptively, verify with LSP, test after each change.
 
 ## Findings to Address
 

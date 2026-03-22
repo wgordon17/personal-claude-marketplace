@@ -286,7 +286,7 @@ Spawn all Phase 4 reviewers simultaneously at the start of Phase 4:
 Lead spawns (all at once):
   security    (code-quality:security, opus)        -- reads all modified files
   qa          (code-quality:qa, opus)              -- reads all modified files
-  code-reviewer (superpowers:code-reviewer, sonnet) -- reads all modified files
+  code-reviewer (code-quality:code-reviewer, sonnet) -- reads all modified files
   performance (code-quality:performance, sonnet)   -- reads all modified files
   [optional] ui-reviewer, api-reviewer, db-reviewer
 ```
@@ -306,7 +306,7 @@ If any reviewer reported critical or high findings, spawn the Fixer and Code-Sim
 ```
 Lead spawns sequentially:
   fixer            (general-purpose, sonnet)                   -- addresses findings
-  code-simplifier  (code-simplifier:code-simplifier, sonnet)   -- post-fix pass
+  code-simplifier  (code-quality:code-simplifier, sonnet)   -- post-fix pass
 ```
 
 These two run sequentially: Fixer first, Code-Simplifier after Fixer completes. Shut down both

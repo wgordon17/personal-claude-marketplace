@@ -465,8 +465,18 @@ class TestSimplerPatterns:
             ('echo "hello" | grep hello', 0, None),
             ('printf "hello world"', 2, "directly"),
             ('printf "%s" x | wc -c', 0, None),
+            # $'...' ANSI-C quoting form
+            ("echo $'hello'", 2, "directly"),
+            ("printf $'result\\n'", 2, "directly"),
         ],
-        ids=["echo-noop", "echo-pipe-allow", "printf-noop", "printf-pipe-allow"],
+        ids=[
+            "echo-noop",
+            "echo-pipe-allow",
+            "printf-noop",
+            "printf-pipe-allow",
+            "echo-ansi-c-noop",
+            "printf-ansi-c-noop",
+        ],
     )
     def test_simpler_patterns(self, command, expected_exit, expected_msg):
         result = run_bash(command)
@@ -836,6 +846,56 @@ class TestPipeSegments:
         ],
     )
     def test_pipe_segments(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Terminal pipe segment noop blocking
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestTerminalPipeNoop:
+    """echo/printf as the terminal (last) pipe segment is a noop — the output goes
+    to the user, not downstream. Should be blocked, unlike mid-pipe echo/printf
+    which feeds the next command."""
+
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # Terminal echo/printf → blocked (outputs to user)
+            ('git status | echo "done"', 2, "directly"),
+            ('git log | printf "result"', 2, "directly"),
+            ('cmd1 | cmd2 | echo "finished"', 2, "directly"),
+            ('cmd1 | cmd2 | printf "ok"', 2, "directly"),
+            # Mid-pipe echo/printf → allowed (feeds downstream)
+            ('echo "data" | wc -c', 0, None),
+            ('printf "%s" x | wc -c', 0, None),
+            ('echo "val" | sort | wc', 0, None),
+            ('printf "%s" x | sort | wc', 0, None),
+            # Mid-pipe middle segment (position 1 of 3) → allowed (feeds downstream)
+            ('cmd1 | echo "data" | wc -c', 0, None),
+            ('cmd1 | printf "%s" x | wc', 0, None),
+            # ANSI-C quoting in terminal position → blocked
+            ("git status | echo $'done'", 2, "directly"),
+            ("git log | printf $'result\\n'", 2, "directly"),
+        ],
+        ids=[
+            "echo-terminal-block",
+            "printf-terminal-block",
+            "echo-terminal-3pipe-block",
+            "printf-terminal-3pipe-block",
+            "echo-midpipe-allow",
+            "printf-midpipe-allow",
+            "echo-midpipe-3stage-allow",
+            "printf-midpipe-3stage-allow",
+            "echo-middle-segment-allow",
+            "printf-middle-segment-allow",
+            "echo-ansi-c-terminal-block",
+            "printf-ansi-c-terminal-block",
+        ],
+    )
+    def test_terminal_pipe_noop(self, command, expected_exit, expected_msg):
         result = run_bash(command)
         assert_guard(result, expected_exit, expected_msg)
 
