@@ -231,13 +231,9 @@ Write all structured outputs to `hack/speculative/YYYY-MM-DD/`:
 
 ---
 
-## Cost Awareness
+## Scope Matching
 
-This skill spawns 2-4 competitor agents plus a judge. Each competitor runs a full implementation.
-Use it only when the choice between approaches has real consequences and "try both" is genuinely
-better than the architect choosing one.
-
-### When to Use /speculative vs. Alternatives
+This skill runs competing implementations in parallel. Match tool to task:
 
 | Scenario | Recommended Approach |
 |----------|----------------------|
@@ -249,13 +245,23 @@ better than the architect choosing one.
 | Simple feature (1-3 files, obvious approach) | Single targeted subagent |
 | Large feature needing full pipeline rigor | `/swarm` (optionally with Phase 2.7 speculative fork) |
 
-### Model Cost Hierarchy
+### Model Assignment
 
 | Role | Model | Rationale |
 |------|-------|-----------|
-| Competitors | sonnet | Implementation work — capable but cost-efficient |
-| Judge | opus | Judgment-heavy evaluation — worth the cost for fair comparison |
+| Competitors | sonnet | Implementation work |
+| Judge | opus | Judgment-heavy evaluation — fair comparison requires strong reasoning |
 | Synthesis (Phase 3.5) | sonnet | Mechanical combination of known elements |
+
+### Work Completion Principle
+
+Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
+If the task requires an agent, spawn the agent. If a finding needs fixing, fix it.
+The only valid reasons to skip work are: (1) the user explicitly opted out,
+(2) the skip condition in the phase table applies, or (3) the work is genuinely
+out of scope for the current task.
+
+"It would be expensive" is NEVER a valid reason to skip work.
 
 ---
 

@@ -68,7 +68,7 @@ Select the lens set for the detected type (see `references/lens-rubrics.md`).
 
 ## Layer 1: Self-Review Loop
 
-**6 rounds maximum (Round 6: Structural applies to Code/Mixed only). Exit early if a round produces zero findings AND the action audit is clean.**
+**6 rounds (Round 6: Structural applies to Code/Mixed only). All rounds are mandatory — do not exit early.**
 
 Each round uses a different adversarial lens. Rotating lenses prevent anchoring fatigue and ensure
 comprehensive coverage from different angles.
@@ -206,18 +206,18 @@ Execute this protocol for EVERY round:
    If no → fix remaining items before proceeding to next round.
 ```
 
-### Early Exit
+### No Early Exit
 
-**Rounds 1-3 always run.** Correctness, Completeness, and Robustness are critical lenses that
-catch categorically different issues — a clean Round 1 says nothing about Round 2.
+**All 6 rounds are mandatory for Code and Mixed work types.** Each round uses a categorically
+different lens — a clean Round 3 says nothing about Round 4 (Simplicity catches AI slop and
+over-engineering), Round 5 (Adversarial catches what you rationalized away), and Round 6
+(Structural catches integration issues invisible to single-component review).
 
-Starting from Round 4: if a round produces zero findings AND the action audit is clean, skip
-remaining rounds. Do NOT exit early just because you "feel done" — the `think_about_whether_you_are_done`
-tool must confirm.
+For non-Code work types: Rounds 1-5 always run. Round 6 (Structural) is skipped since it
+targets code architecture integration.
 
-**Note on Round 6 (Structural):** Only applies to Code and Mixed work types. Skip for all
-other types. Structural lens focuses on integration architecture, not the current change in
-isolation — it may find issues even when Rounds 1-5 were clean.
+Do NOT exit early because a round "produced zero findings." Each lens catches categorically
+different issues. The next round will find what this round cannot see.
 
 ---
 

@@ -1,10 +1,10 @@
 ---
 name: pr-review
 description: |
-  Multi-agent PR review with confidence scoring. Use when asked to "review PR",
+  Multi-agent PR review with finding verification. Use when asked to "review PR",
   "review this PR", "code review", or given a PR URL to review. Spawns 6 parallel specialized
   reviewers (security, QA, performance, code quality, correctness, git history),
-  scores findings for confidence via batched scoring, filters false positives, and prints a
+  verifies findings by investigating source code, categorizes by type, and prints a
   structured report to the terminal. Never comments on GitHub PRs.
 allowed-tools: [Read, Glob, Grep, Bash, Agent]
 ---
@@ -12,8 +12,10 @@ allowed-tools: [Read, Glob, Grep, Bash, Agent]
 # PR Review Skill
 
 Multi-agent pull request review. Spawns 6 parallel Sonnet reviewers (security, QA, performance,
-code quality, correctness, git history), scores all findings in a single batched Haiku call,
-filters by confidence threshold, and prints a structured terminal report.
+code quality, correctness, git history), each required to investigate and verify findings before
+reporting. A Sonnet verification agent then reads source files to confirm or disprove each
+finding. Results are categorized by type (testing gaps, correctness, security, architecture,
+decisions needed, etc.) and printed as a structured terminal report.
 
 **Never comments on GitHub PRs.** Output is terminal-only.
 
@@ -21,13 +23,9 @@ filters by confidence threshold, and prints a structured terminal report.
 
 ```
 /pr-review <PR-URL>
-/pr-review <PR-URL> --threshold 60
 ```
 
 - `<PR-URL>` — required. Full GitHub PR URL (e.g. `https://github.com/owner/repo/pull/123`).
-- `--threshold` — optional integer 0-100. Minimum confidence score for a finding to appear in
-  the report. Default: 50. Lower values include more findings (less filtering); higher values
-  include only high-certainty findings.
 
 ---
 
@@ -37,7 +35,6 @@ filters by confidence threshold, and prints a structured terminal report.
 
 Extract from `$ARGUMENTS`:
 - PR URL (first token — required; error if absent)
-- `--threshold N` (optional integer; default 50; error if not 0-100)
 
 ### Preflight Checks
 
@@ -255,14 +252,15 @@ severity, evidence, source reviewer.
 
 ---
 
-## Phase 3 — Confidence Scoring (batched)
+## Phase 3 — Verification (batched)
 
-Spawn a **single** Haiku agent with ALL findings in one call. Do NOT spawn one agent per finding —
-that pattern is catastrophically slow in Claude Code where each Agent() has significant startup
-overhead. A single batched call takes ~10 seconds; per-finding agents with 15-20 findings would
-take 2-5 minutes.
+If no findings were reported by any reviewer, skip verification and proceed directly to
+Phase 4 with the 'no findings' output path.
 
-If no findings were reported by any reviewer, skip the scorer entirely and proceed directly to Phase 4 with the 'no findings' output path.
+Spawn a **single** Sonnet agent with ALL findings in one call. Do NOT spawn one agent per
+finding — that pattern is catastrophically slow in Claude Code where each Agent() has
+significant startup overhead. A single batched call takes ~15 seconds; per-finding agents
+with 15-20 findings would take 2-5 minutes.
 
 Build the findings JSON array:
 ```json
@@ -281,30 +279,51 @@ Build the findings JSON array:
 ```
 
 For each finding, extract ±10 lines from the diff around the finding's file:line location and
-include it as the `diff_context` field. This gives the scorer surrounding context to distinguish
-real issues from false positives.
+include it as the `diff_context` field. This gives the verifier surrounding context to
+investigate each finding.
 
 ```
 Agent(
-  description="Confidence scoring for PR #{number} findings",
-  model="haiku",
-  prompt=<Confidence Scorer template from references/reviewer-prompts.md, placeholders substituted>
+  description="Finding verification for PR #{number}",
+  model="sonnet",
+  prompt=<Finding Verifier template from references/reviewer-prompts.md, placeholders substituted>
 )
 ```
 
-The scorer receives: `{findings_json}` (the array above), `{claude_md_rules}`, and `{contributing_md_rules}`.
+The verifier receives: `{findings_json}` (the array above), `{claude_md_rules}`,
+`{contributing_md_rules}`, and `{changed_files}`.
 
-It returns: `[{finding_id, score, justification}, ...]`
+The verifier **investigates each finding** — it reads the actual source files, traces call
+chains, and checks whether the finding is real. It does NOT just score confidence from the
+diff context. It returns a JSON array with a verdict for each finding:
+`[{finding_id, verdict, investigation_summary, category}, ...]`
 
-Parse the scorer's response as JSON. If parsing fails, extract JSON from between the first `[`
-and last `]` markers. If that also fails, skip scoring and include all findings with a default
-confidence of 50 and a note: "Confidence scoring failed — showing all findings unfiltered."
+Verdicts: `verified` (confirmed real), `false_positive` (investigated and disproven),
+`needs_context` (cannot confirm or deny — requires human judgment).
+
+Parse the verifier's response as JSON. If parsing fails, extract JSON from between the first
+`[` and last `]` markers. If that also fails, include all findings with verdict `unverified`
+and a note: "Verification failed — showing all findings unverified."
+
+### Categorize
+
+The verifier assigns each finding to a category based on its nature (not its severity):
+
+| Category | Examples |
+|----------|----------|
+| **Testing Gaps** | Missing tests, untested paths, coverage gaps |
+| **Correctness** | Logic errors, wrong behavior, contract violations |
+| **Security** | Vulnerabilities, auth issues, injection, secrets |
+| **Architecture** | Design issues, pattern violations, structural problems |
+| **Decisions Needed** | Ambiguous intent, trade-offs requiring human judgment |
+| **Performance** | Bottlenecks, N+1, memory issues |
+| **Style & Conventions** | CLAUDE.md violations, naming, code quality |
+| **Historical** | Pattern contradictions, churn, reverted patterns |
 
 ### Filter
 
-Apply the threshold (default 50). Keep findings where `score >= threshold`.
-
-If ALL findings are filtered out, proceed to Phase 4 with the "no findings" output path.
+Remove findings with verdict `false_positive`. Keep all `verified` and `needs_context`
+findings.
 
 ---
 
@@ -323,34 +342,57 @@ PR: {owner}/{repo}#{number} — "{title}"
 Branch: {head_branch} → {base_branch}
 Files changed: {changedFiles} | Additions: +{additions} | Deletions: -{deletions}
 
-Findings: {passing_count} (filtered from {total_raw} at confidence ≥{threshold})
+Findings: {verified_count} verified, {needs_context_count} needs context
+  (from {total_raw} raw findings — {false_positive_count} false positives removed)
 
-CRITICAL ({critical_count})
-  1. [{Reviewer}:{score}] {description}
+TESTING GAPS
+  1. [{Reviewer}] {description} [{severity}]
      {file}:{line}
      Evidence: {evidence}
 
-HIGH ({high_count})
+CORRECTNESS
   ...
 
-MEDIUM ({medium_count})
+SECURITY
   ...
 
-LOW ({low_count})
+ARCHITECTURE
   ...
+
+DECISIONS NEEDED
+  ...
+
+PERFORMANCE
+  ...
+
+STYLE & CONVENTIONS
+  ...
+
+HISTORICAL
+  ...
+
+─── Needs Context ({needs_context_count}) ───
+  1. [{Reviewer}] {description} [{severity}]
+     {file}:{line}
+     Investigation: {investigation_summary}
 
 Reviewed by: {reviewer_list}
-Confidence threshold: {threshold} | Total raw findings: {total_raw} | Filtered: {filtered_count}
+Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Group findings by severity (CRITICAL → HIGH → MEDIUM → LOW). Within each severity group, sort by
-confidence score descending. For the `[Reviewer:score]` tag, use the short reviewer name:
-Security, QA, Performance, Code Quality, Correctness, Git History.
+Group findings by **category** (Testing Gaps → Correctness → Security → Architecture →
+Decisions Needed → Performance → Style & Conventions → Historical). Within each category,
+sort by severity (CRITICAL → HIGH → MEDIUM → LOW). For the `[Reviewer]` tag, use the short
+reviewer name: Security, QA, Performance, Code Quality, Correctness, Git History.
 
-Omit severity sections with zero findings.
+Omit category sections with zero findings.
 
-### No Findings Above Threshold
+Findings with verdict `needs_context` appear in a dedicated section at the bottom — these
+are items the verifier could not confirm or deny and require human judgment. They are NOT
+hidden or filtered — they are surfaced transparently.
+
+### No Verified Findings
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -361,11 +403,11 @@ PR: {owner}/{repo}#{number} — "{title}"
 Branch: {head_branch} → {base_branch}
 Files changed: {changedFiles} | Additions: +{additions} | Deletions: -{deletions}
 
-No issues found above confidence threshold (≥{threshold}).
+No verified issues found.
 Checked for: security, test coverage, performance, code quality, correctness, historical consistency.
 
 Reviewed by: {reviewer_list}
-Confidence threshold: {threshold} | Total raw findings: {total_raw} | All filtered
+Total raw: {total_raw} | All resolved as false positives
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -380,14 +422,13 @@ After output, return to the original branch or worktree recorded in Phase 0.
 | Condition | Action |
 |-----------|--------|
 | No `gh` CLI | Error: "gh CLI not found. Install it from https://cli.github.com and authenticate with `gh auth login`." |
-| PR URL missing | Error: "Usage: /pr-review <PR-URL> [--threshold N]" |
+| PR URL missing | Error: "Usage: /pr-review <PR-URL>" |
 | PR in wrong repo | Error: "PR is from {url_owner}/{url_repo} but CWD is in {local_repo}. cd to the correct repo first." |
 | PR is closed/merged | Stop: "PR #N is already {state}. Nothing to review." |
 | PR is draft | Warn and continue: "Note: PR #N is a draft. Proceeding anyway." |
 | Lock/generated files only | Stop: "PR #N changes only lock/generated files. No review needed." |
 | Cannot checkout branch | Auto-stash and retry. If stash fails, stop: "Cannot checkout PR branch and stash failed." |
-| --threshold out of range | Error: "--threshold must be between 0 and 100." |
-| All findings filtered | Output "no findings" report format (not an error) |
+| All findings false positive | Output "no findings" report format (not an error) |
 
 ---
 
@@ -402,11 +443,11 @@ runtime; this skill owns its own copies adapted for PR review context.
 
 | Placeholder | Value | Used by |
 |-------------|-------|---------|
-| `{pr_description}` | "PR #N: {title}\n\n{body}" | All reviewers (not Scorer) |
+| `{pr_description}` | "PR #N: {title}\n\n{body}" | All reviewers (not Verifier) |
 | `{diff}` | Local `git diff` against merge base | Security, QA, Performance, Code Quality, Correctness |
-| `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Scorer |
-| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers + Scorer |
-| `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers (not Scorer) |
+| `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Verifier |
+| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers + Verifier |
+| `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers + Verifier |
 | `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer only |
 | `{git_history_context}` | Pre-collected blame/log output | Git History Reviewer only |
-| `{findings_json}` | JSON array of all findings | Confidence Scorer only |
+| `{findings_json}` | JSON array of all findings with diff_context | Finding Verifier only |
