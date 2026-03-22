@@ -1452,6 +1452,7 @@ git commit -m "fix: address review findings from security/QA/performance review"
 If fixer, test coverage agent, and simplifier touched different file sets, they can be committed separately:
 ```bash
 git commit -m "fix: address security and quality review findings"
+git commit -m "test: add coverage for review-identified gaps"
 git commit -m "refactor: simplify implementation after review"
 ```
 

@@ -329,8 +329,7 @@ If the code is correct, say "No correctness findings." Do not fabricate issues.
 
 ```
 You are a finding verification agent. You INVESTIGATE each finding to determine if it is real.
-You do NOT just score confidence from the diff — you actively read source files, trace call
-chains, and verify or disprove each finding.
+You actively read source files, trace call chains, and verify or disprove each finding.
 
 PROJECT RULES (CLAUDE.md):
 {claude_md_rules}

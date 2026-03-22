@@ -294,8 +294,8 @@ The verifier receives: `{findings_json}` (the array above), `{claude_md_rules}`,
 `{contributing_md_rules}`, and `{changed_files}`.
 
 The verifier **investigates each finding** — it reads the actual source files, traces call
-chains, and checks whether the finding is real. It does NOT just score confidence from the
-diff context. It returns a JSON array with a verdict for each finding:
+chains, and checks whether the finding is real. It returns a JSON array with a verdict for
+each finding:
 `[{finding_id, verdict, investigation_summary, category}, ...]`
 
 Verdicts: `verified` (confirmed real), `false_positive` (investigated and disproven),
