@@ -56,7 +56,7 @@ Determine work type from session activity:
 | Signal | Work Type |
 |--------|-----------|
 | `git diff` has results | **Code** |
-| Plan file written to `hack/plans/` | **Planning** |
+| Plan file written to `{memory_dir}/plans/` | **Planning** |
 | Research/analysis conversation, no file edits | **Research** |
 | Edits to `.md`, `.yaml`, `.json`, `.toml` config | **Config/Artifact** |
 | Short Q&A, no tool use | **Question** |
@@ -405,22 +405,25 @@ not re-running them.
 Cannot proceed past this gate without completing all applicable checks.
 Memory that drifts from reality is worse than no memory.
 
+Update project memory files per the content placement rules in
+`code-quality/references/project-memory-reference.md`. Key surfaces:
+
 | Memory Surface | Action |
 |----------------|--------|
-| **hack/TODO.md** | Mark completed items `[x]` with date. Add new tasks. Remove stale items. |
-| **hack/PROJECT.md** | Document decisions, gotchas, architecture changes from this work. |
-| **hack/NEXT.md** | Update pointer to actual next task. |
-| **hack/SESSIONS.md** | Append 3-5 bullet summary (if session-end isn't imminent). |
-| **hack/plans/** | Delete completed plans. Update partial plans with progress. Delete superseded plans. |
+| **{memory_dir}/TODO.md** | Mark completed items `[x]` with date. Add new tasks. Remove stale items. |
+| **{memory_dir}/PROJECT.md** | Document decisions, gotchas, architecture changes from this work. |
+| **{memory_dir}/NEXT.md** | Update pointer to actual next task. |
+| **{memory_dir}/SESSIONS.md** | Append 3-5 bullet summary (if session-end isn't imminent). |
+| **{memory_dir}/plans/** | Delete completed plans. Update partial plans with progress. Delete superseded plans. |
 | **claude-mem** | Search for related observations. Flag stale ones. Save new cross-session insights. |
 | **Serena memories** | List, verify accuracy, update stale, write new project knowledge. |
 | **Auto-memory** | Check project memory path, verify and update if relevant. |
-| **hack/LESSONS.md** | Check if current work produced principle-level lessons worth capturing. If human corrections or rejected approaches occurred, extract and write lessons before proceeding. |
+| **{memory_dir}/LESSONS.md** | Check if current work produced principle-level lessons worth capturing. If human corrections or rejected approaches occurred, extract and write lessons before proceeding. |
 
-**Skip conditions:** hack/ doesn't exist → skip hack/ checks. No plans directory → skip plan
-checks. claude-mem MCP unavailable → skip claude-mem checks. Serena MCP unavailable → skip
-Serena memory checks. Pure question with no persistent insights → skip memory saves.
-hack/LESSONS.md doesn't exist → skip LESSONS check.
+**Skip conditions:** No memory dir found (per Directory Detection section of the reference) → skip
+memory-dir checks. No plans directory → skip plan checks. claude-mem MCP unavailable → skip
+claude-mem checks. Serena MCP unavailable → skip Serena memory checks. Pure question with no
+persistent insights → skip memory saves. LESSONS.md doesn't exist → skip LESSONS check.
 
 ---
 
@@ -490,14 +493,14 @@ confirming each applicable item.
 
 Durable means: **another agent in a fresh session can find the work without being told where
 to look.** PRs show up in `gh pr list`. Commits show up in `git log`. Plan files show up in
-`hack/plans/`. Project decisions show up in `hack/PROJECT.md`. Conversation-only knowledge
+`{memory_dir}/plans/`. Project decisions show up in `{memory_dir}/PROJECT.md`. Conversation-only knowledge
 and working-tree-only changes fail this test.
 
 | Work Type | Persistence Check |
 |-----------|-------------------|
 | **Code** | Changes are on a **pushed feature branch with a PR** (verifiable via `gh pr view`). Not just committed locally — pushed and PR-visible. Uncommitted or committed-but-not-pushed work is NOT durable. |
-| **Planning** | Plan written to `hack/plans/YYYY-MM-DD-<topic>.md`. New tasks added to `hack/TODO.md`. Decisions documented in `hack/PROJECT.md`. |
-| **Research** | Findings written to `hack/research/YYYY-MM-DD-<topic>.md` (if hack/ exists), or to `hack/PROJECT.md`, or saved to claude-mem. Key findings must survive session end. |
+| **Planning** | Plan written to `{memory_dir}/plans/{run-id}-<topic>.md`. New tasks added to `{memory_dir}/TODO.md`. Decisions documented in `{memory_dir}/PROJECT.md`. |
+| **Research** | Findings written to `{memory_dir}/research/{run-id}-<topic>.md` (if memory dir exists), or to `{memory_dir}/PROJECT.md`, or saved to claude-mem. Key findings must survive session end. |
 | **All types** | For each significant artifact, state WHERE it is persisted and HOW a future agent finds it. "It's in the working tree" or "it's in the conversation" fails this gate. |
 
 **Skip conditions:** Pure question with no artifacts → skip. Work explicitly scoped as

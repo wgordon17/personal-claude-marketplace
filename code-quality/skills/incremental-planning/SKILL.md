@@ -102,8 +102,8 @@ specific questions — not generic ones.
 ### Actions
 
 - Launch an **Explore agent** (`Agent` with `subagent_type: "Explore"`) for relevant codebase areas
-- Read `hack/PROJECT.md` (or equivalent memory file) for past architectural decisions
-- Read `hack/LESSONS.md` for relevant past lessons (if exists). Silently incorporate applicable
+- Read `PROJECT.md` from the memory directory (detect using `code-quality/references/project-memory-reference.md` Directory Detection section) for past architectural decisions
+- Read `LESSONS.md` (if exists) from the memory directory for relevant past lessons. Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without
   announcing each one. Do not quote lessons verbatim in chat.
 - Search **claude-mem** MCP for relevant past work, decisions, and learnings
@@ -215,16 +215,17 @@ Now write the plan. One section at a time.
 
 Before creating the plan file, check where it belongs:
 
-1. Check if the project uses a local memory directory — look for `hack/`, `.local/`,
-   `scratch/`, or `.dev/` in the project root (check in this order)
-2. **If found:** Create plans in `{memory-dir}/plans/YYYY-MM-DD-<feature>.md`
+1. Detect the project memory directory using the convention in
+   `code-quality/references/project-memory-reference.md` (Directory Detection section).
+2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
+   create the plan at `{memory_dir}/plans/{run-id}-<feature>.md`
    (create the `plans/` subdirectory if it doesn't exist)
-3. **If none found:** Fall back to `~/.claude/plans/YYYY-MM-DD-<feature>.md`
+3. **If none found:** Fall back to `~/.claude/plans/{run-id}-<feature>.md`
    (create `~/.claude/plans/` if it doesn't exist)
 
 **Do NOT create a `hack/` directory if one doesn't exist.** That's a project-level decision.
 
-Announce the location: "Plan file: `hack/plans/2026-02-15-session-auth.md`"
+Announce the location: "Plan file: `hack/plans/feat-auth-1711388400-session-auth.md`"
 
 ### Writing Sequence
 
@@ -487,6 +488,6 @@ NEVER IN CHAT: Full plan content, task details, code blocks from the plan
 
 ### Plan File Location
 ```
-1. hack/plans/ (or .local/plans/, scratch/plans/, .dev/plans/) → if memory dir exists
-2. ~/.claude/plans/ → fallback for all other cases
+1. {memory_dir}/plans/{run-id}-<feature>.md → if memory dir exists (detect per project-memory-reference.md)
+2. ~/.claude/plans/{run-id}-<feature>.md → fallback for all other cases
 ```

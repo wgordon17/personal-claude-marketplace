@@ -10,11 +10,7 @@ Prepare for productive work by loading existing project memory or setting up a n
 
 ### Step 1: Detect Project State
 
-Check for existing memory directories in this order:
-1. `hack/`
-2. `.local/`
-3. `scratch/`
-4. `.dev/`
+Detect the project memory directory using the convention in `code-quality/references/project-memory-reference.md` (Directory Detection section).
 
 **If memory directory exists:** → Execute **Existing Project Flow**
 **If no memory directory:** → Execute **New Project Flow**

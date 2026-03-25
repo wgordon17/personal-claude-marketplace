@@ -122,24 +122,29 @@ If a PR exists, note it — commits to this branch will update the PR automatica
 
 | Current state | Action |
 |---------------|--------|
-| Already on `swarm/YYYY-MM-DD-*` or matching feature branch | Use it |
-| On main/master | Create `swarm/YYYY-MM-DD-<task-slug>` |
+| Already on `swarm/*` or matching feature branch | Use it |
+| On main/master | Create `swarm/{run-id}-<task-slug>` |
 | On unrelated feature branch | Ask user: use current branch or create new one? |
 | `--worktree` flag in task description | Use `EnterWorktree` |
 
-Branch creation:
+Branch creation uses the run-ID convention from `code-quality/references/project-memory-reference.md`
+(Run-ID Naming Convention section). Generate the run-ID first, then create the branch:
 ```bash
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | sed 's/^-//;s/-$//' | cut -c1-40)
+BRANCH_SLUG=${BRANCH_SLUG:-detached}
+TIMESTAMP=$(date +%s)
+RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
 git fetch origin main
-git switch -c swarm/$(date +%Y-%m-%d)-<task-slug> origin/main
+git switch -c swarm/${RUN_ID}-<task-slug> origin/main
 ```
 
 The task slug is a 2-4 word kebab-case summary of the task. Example:
-`swarm/2026-02-27-add-oauth-integration`
+`swarm/feat-auth-1711388400-add-oauth-integration`
 
 ### Step 0.4: Plan File Detection
 
 ```
-Glob("hack/plans/*.md")
+Glob("{memory_dir}/plans/*.md")
 ```
 
 Read any plan file whose name or content matches the task description. If found:
@@ -181,12 +186,21 @@ aggressive recycling thresholds in Phase 3 (recycle at 15 turns instead of 25).
 
 ### Step 0.6: Create Audit Trail Directory
 
-```
-{run_dir} = hack/swarm/YYYY-MM-DD
+Generate the run-ID (if not already done in Step 0.3) using the exact commands from
+`code-quality/references/project-memory-reference.md` (Run-ID Naming Convention section):
+```bash
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | sed 's/^-//;s/-$//' | cut -c1-40)
+BRANCH_SLUG=${BRANCH_SLUG:-detached}
+TIMESTAMP=$(date +%s)
+RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
 ```
 
-Use today's date. If the directory already exists (re-run), append sequence number:
-`hack/swarm/2026-02-27-2`
+Detect the project memory directory using `code-quality/references/project-memory-reference.md`
+(Directory Detection section). Then:
+
+```
+{run_dir} = {memory_dir}/swarm/{run-id}
+```
 
 Create structure:
 ```
@@ -201,8 +215,9 @@ so the directory is not empty:
 ```json
 {
   "task": "<user task description>",
-  "started": "2026-02-27T10:00:00Z",
-  "branch": "swarm/2026-02-27-<slug>",
+  "started": "<ISO 8601 timestamp>",
+  "run_id": "<run-id>",
+  "branch": "swarm/<run-id>-<slug>",
   "baseline_tests": {"passed": 47, "failed": 0}
 }
 ```
@@ -623,12 +638,18 @@ Weights must sum to 1.0.
 
 ### Step 2.7.3: Create Speculative Run Directory
 
-```
-{speculative_run_dir} = hack/speculative/YYYY-MM-DD
+Generate a new run-ID for the speculative fork (same convention from
+`code-quality/references/project-memory-reference.md`):
+```bash
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | sed 's/^-//;s/-$//' | cut -c1-40)
+BRANCH_SLUG=${BRANCH_SLUG:-detached}
+TIMESTAMP=$(date +%s)
+SPEC_RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
 ```
 
-If that directory already exists (a separate /speculative run happened today), append a sequence
-number: `hack/speculative/YYYY-MM-DD-2`.
+```
+{speculative_run_dir} = {memory_dir}/speculative/{spec-run-id}
+```
 
 Create the directory structure:
 ```
@@ -1501,13 +1522,8 @@ documentation needs updating (README behavior descriptions, API docs, config doc
 
 ### Step 6.3: Project Memory
 
-The docs agent detects the memory directory by checking in order:
-```
-Glob("hack/PROJECT.md")     → hack/ directory
-Glob(".local/PROJECT.md")   → .local/ directory
-Glob("scratch/PROJECT.md")  → scratch/ directory
-Glob(".dev/PROJECT.md")     → .dev/ directory
-```
+The docs agent detects the memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
 
 If found, update:
 
@@ -1575,7 +1591,7 @@ Agent(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
 ```
 
 The Lessons Extractor reads the swarm audit trail and writes principle-level lessons to
-`hack/LESSONS.md` (or equivalent memory directory). It does NOT touch PROJECT.md, SESSIONS.md,
+`{memory_dir}/LESSONS.md`. It does NOT touch PROJECT.md, SESSIONS.md,
 or TODO.md — those are the Docs agent's responsibility.
 
 ### Step 6.8: Shutdown Lessons Extractor
@@ -1749,7 +1765,7 @@ Full report: {run_dir}/swarm-report.md
 ```
 
 **Persistence requirement:** The Lead (not the Docs agent) MUST write blocked and deferred
-items to `hack/TODO.md` (or the project's task tracking file) in this step. The Docs agent
+items to `{memory_dir}/TODO.md` (or the project's task tracking file) in this step. The Docs agent
 doesn't know about deferred items — only the Lead has this context from Step 5.2.1 TaskCreate
 entries. Use `- [ ] <item>: <reason> (swarm YYYY-MM-DD)` format. A swarm-report.md in a dated
 directory is not discoverable by future agents — project memory files are.

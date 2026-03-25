@@ -1228,7 +1228,7 @@ You have access to: Read, Write, Edit, Glob, Grep, Bash, LSP, Agent, AskUserQues
    - `CHANGELOG.md` (or `HISTORY.md`, `CHANGES.md`)
    - `docs/` directory
    - `API.md` or `api/` docs
-   - Project memory files: `hack/PROJECT.md`, `hack/TODO.md`
+   - Project memory files: `{memory_dir}/PROJECT.md`, `{memory_dir}/TODO.md`
 
 3. **Find inline documentation:**
    - Docstrings in Python files

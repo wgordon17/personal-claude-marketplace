@@ -104,10 +104,10 @@ Store as `{claude_md_rules}` and `{contributing_md_rules}`.
 
 ### Discover Implementation Plan
 
-Search for a plan file that matches the PR's topic. Check both the repo root and any active
-worktree:
-- `hack/plans/` — glob for files whose name relates to the PR title or branch name
-- If the current repo is in a worktree, also check the main worktree's `hack/plans/`
+Search for a plan file that matches the PR's topic. Detect the memory directory using the
+convention in `code-quality/references/project-memory-reference.md` (Directory Detection and
+Worktree Resolution sections), then check `{memory_dir}/plans/` for files whose name relates
+to the PR title or branch name.
 
 If a matching plan file is found, read it and store as `{plan_content}`. If no plan exists,
 use: `"No implementation plan found."` The Correctness Reviewer uses this to detect plan drift.

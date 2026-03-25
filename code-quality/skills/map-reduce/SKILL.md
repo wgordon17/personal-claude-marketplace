@@ -73,8 +73,10 @@ LEAD (you)
    If the user wants more than 8, use AskUserQuestion to confirm — document in fidelity-guide.md
    that uncapped splitting is a known fidelity risk.
 
-5. **Create audit trail:** `hack/map-reduce/YYYY-MM-DD/` (append `-2`, `-3` for multiple runs).
-   Write `hack/map-reduce/YYYY-MM-DD/chunks/` subdirectory for ChunkResult files.
+5. **Create audit trail:** Generate a run-ID using the convention in
+   `code-quality/references/project-memory-reference.md` (Run-ID Naming Convention section).
+   Create `{memory_dir}/map-reduce/{run-id}/` and `{memory_dir}/map-reduce/{run-id}/chunks/`
+   subdirectory for ChunkResult files.
 
 6. **Create tasks upfront:** use TaskCreate with addBlockedBy for the full task graph (one task
    per chunk + one for reduction + one for delivery) so progress is visible from the start.
@@ -210,7 +212,7 @@ Never leave an orphaned cron job.
 
 ```
 hack/map-reduce/
-└── YYYY-MM-DD/
+└── {run-id}/                   # e.g. feat-auth-1711388400
     ├── chunks/
     │   ├── chunk-1.json        # ChunkResult from mapper 1
     │   ├── chunk-2.json        # ChunkResult from mapper 2

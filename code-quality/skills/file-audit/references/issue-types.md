@@ -382,10 +382,10 @@ Issues where code behavior differs from documented behavior in project memory fi
 
 **Severity:** warning
 
-**Detection:** Comparison of actual code behavior vs CONTEXT.md claims.
+**Detection:** Comparison of actual code behavior vs PROJECT.md claims.
 
 **Criteria:**
-- CONTEXT.md describes one behavior, code implements different behavior
+- PROJECT.md describes one behavior, code implements different behavior
 - Architecture document says one thing, implementation does another
 
 **Example:**
@@ -395,10 +395,10 @@ Issues where code behavior differs from documented behavior in project memory fi
   "subtype": "code_doc_mismatch",
   "severity": "warning",
   "location": {"line": 1, "end_line": 100},
-  "description": "CONTEXT.md claims rate limiting on all endpoints, but this file has none",
+  "description": "PROJECT.md claims rate limiting on all endpoints, but this file has none",
   "code_behavior": "No rate limiting middleware or decorator detected",
-  "documented_behavior": "All endpoints have rate limiting (hack/CONTEXT.md:45)",
-  "suggested_fix": "Either add rate limiting or update CONTEXT.md to note exceptions"
+  "documented_behavior": "All endpoints have rate limiting ({memory_dir}/PROJECT.md:45)",
+  "suggested_fix": "Either add rate limiting or update PROJECT.md to note exceptions"
 }
 ```
 
@@ -423,7 +423,7 @@ Issues where code behavior differs from documented behavior in project memory fi
   "severity": "warning",
   "location": {"line": 1},
   "description": "TODO.md claims 'password reset flow complete' but no reset endpoint found",
-  "documented_behavior": "Password reset flow (hack/TODO.md:23, marked complete)",
+  "documented_behavior": "Password reset flow ({memory_dir}/TODO.md:23, marked complete)",
   "code_behavior": "No password reset endpoint in auth routes",
   "suggested_fix": "Either implement the feature or uncheck the TODO item"
 }
@@ -438,7 +438,7 @@ Issues where code behavior differs from documented behavior in project memory fi
 **Detection:** Significant functionality exists without documentation.
 
 **Criteria:**
-- Major feature (>100 lines) not mentioned in CONTEXT.md
+- Major feature (>100 lines) not mentioned in PROJECT.md
 - Public API not documented
 - Significant behavior not noted anywhere
 
@@ -450,9 +450,9 @@ Issues where code behavior differs from documented behavior in project memory fi
   "severity": "info",
   "location": {"line": 200, "end_line": 350},
   "symbol": "AdminDashboard",
-  "description": "AdminDashboard class (150 lines) not documented in CONTEXT.md",
+  "description": "AdminDashboard class (150 lines) not documented in PROJECT.md",
   "code_behavior": "Full admin dashboard implementation with user management",
-  "suggested_fix": "Add section to CONTEXT.md describing admin dashboard architecture"
+  "suggested_fix": "Add section to PROJECT.md describing admin dashboard architecture"
 }
 ```
 

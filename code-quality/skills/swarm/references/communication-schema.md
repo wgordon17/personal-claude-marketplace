@@ -18,7 +18,7 @@ the `key_files` list after the Architect completes.
   "project": "string — project name from repo root",
   "task": "string — original user task description, verbatim",
   "branch": "string — current git branch name",
-  "run_dir": "string — absolute or repo-relative path to hack/swarm/YYYY-MM-DD",
+  "run_dir": "string — absolute or repo-relative path to hack/swarm/{run-id}",
   "key_files": [
     "string — file paths identified by architect as central to this task"
   ],
@@ -618,7 +618,7 @@ date append a sequence number.
 
 ```
 hack/swarm/
-└── YYYY-MM-DD/               # or YYYY-MM-DD-2, YYYY-MM-DD-3 for multiple runs
+└── {run-id}/                 # e.g. feat-auth-1711388400
     ├── architect-plan.json         # Architect's component decomposition plan
     ├── security-design-review.json # Security design review (Phase 2.5, if run)
     ├── escalations.json            # Escalation events (Phase 4, always present)

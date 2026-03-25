@@ -26,12 +26,12 @@ before spawning the mapper (so the mapper can read it on startup if preferred ov
       "exported_symbols": ["string — function/class names exported from this file"]
     }
   ],
-  "output_path": "string — where to write ChunkResult (e.g. 'hack/map-reduce/YYYY-MM-DD/chunks/chunk-1.json')",
+  "output_path": "string — where to write ChunkResult (e.g. 'hack/map-reduce/{run-id}/chunks/chunk-1.json')",
   "context": {
     "project": "string — project name",
     "task": "string — original user task description",
     "branch": "string — current git branch name",
-    "run_dir": "string — path to hack/map-reduce/YYYY-MM-DD",
+    "run_dir": "string — path to hack/map-reduce/{run-id}",
     "tool_guard": "Use Read/Write/Edit/Glob/Grep/Bash for file ops. No raw shell for file reads."
   }
 }
@@ -105,12 +105,12 @@ size limits).
   "failed_chunks": ["string — chunk_ids that returned status 'failed'"],
   "chunk_results_dir": "string — path to {run_dir}/chunks/ directory",
   "reduction_instructions": "string — how to synthesize: deduplicate, cross-validate, rank by severity, merge evidence",
-  "output_path": "string — where to write ReductionResult (e.g. 'hack/map-reduce/YYYY-MM-DD/reduction-result.json')",
+  "output_path": "string — where to write ReductionResult (e.g. 'hack/map-reduce/{run-id}/reduction-result.json')",
   "context": {
     "project": "string — project name",
     "task": "string — original user task description",
     "branch": "string — current git branch name",
-    "run_dir": "string — path to hack/map-reduce/YYYY-MM-DD",
+    "run_dir": "string — path to hack/map-reduce/{run-id}",
     "tool_guard": "Use Read/Write/Edit/Glob/Grep/Bash for file ops. No raw shell for file reads."
   }
 }
@@ -174,7 +174,7 @@ promotes or invalidates all `chunk-local` findings from mappers before writing o
 
 ```
 hack/map-reduce/
-└── YYYY-MM-DD/               # or YYYY-MM-DD-2, YYYY-MM-DD-3 for multiple runs
+└── {run-id}/                 # e.g. feat-auth-1711388400
     ├── chunks/
     │   ├── chunk-1.json      # ChunkResult from mapper 1 (written by mapper)
     │   ├── chunk-2.json      # ChunkResult from mapper 2

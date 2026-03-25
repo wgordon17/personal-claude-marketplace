@@ -1,7 +1,7 @@
 # LESSONS.md Template
 
 Structured learning system for capturing principle-level insights across sessions.
-Lives at `hack/LESSONS.md` (or equivalent memory directory). Created on first use.
+Lives at `{memory_dir}/LESSONS.md` (detect directory per `code-quality/references/project-memory-reference.md`). Created on first use.
 
 ## File Format
 

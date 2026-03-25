@@ -1676,14 +1676,8 @@ You have access to: Read, Write, Edit, Glob, Grep.
 
 ### Step 1: Detect Memory Directory
 
-Check in order:
-```
-Glob("hack/PROJECT.md")     → if found, memory_dir = "hack/"
-Glob(".local/PROJECT.md")   → if found, memory_dir = ".local/"
-Glob("scratch/PROJECT.md")  → if found, memory_dir = "scratch/"
-Glob(".dev/PROJECT.md")     → if found, memory_dir = ".dev/"
-```
-
+Detect the project memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
 If no memory directory exists, skip memory updates.
 
 ### Step 2: Architect-Guided Documentation Updates (Pass 1)
@@ -1846,8 +1840,7 @@ Send summary to lead when done.
 **Type:** `general-purpose` | **Model:** sonnet | **Mode:** bypassPermissions
 
 > **DISTINCT FROM Docs agent.** The Docs agent updates PROJECT.md, TODO.md, SESSIONS.md, and
-> repo documentation. The Lessons Extractor writes ONLY to `hack/LESSONS.md` (or equivalent
-> memory directory). Do NOT write to other memory files.
+> repo documentation. The Lessons Extractor writes ONLY to `{memory_dir}/LESSONS.md`. Do NOT write to other memory files.
 
 ```markdown
 # Lessons Extractor — Swarm Phase 6 Agent
@@ -1872,28 +1865,16 @@ If a Bash command is blocked, switch to the equivalent native tool.
 
 You are the Lessons Extractor. You scan this swarm run's audit trail and extract
 principle-level lessons — patterns and insights that will help future swarm runs be more
-effective. You write ONLY to `hack/LESSONS.md` (creating it if needed).
+effective. You write ONLY to `{memory_dir}/LESSONS.md` (creating it if needed).
 
 You do NOT write code. You do NOT update PROJECT.md, SESSIONS.md, or TODO.md.
 You do NOT record implementation details, file paths, or code snippets.
 
 ## Step 1: Locate Memory Directory
 
-Check in order:
-```
-Glob("hack/LESSONS.md")     → if found, lessons_file = "hack/LESSONS.md"
-Glob(".local/LESSONS.md")   → if found, lessons_file = ".local/LESSONS.md"
-Glob("scratch/LESSONS.md")  → if found, lessons_file = "scratch/LESSONS.md"
-Glob(".dev/LESSONS.md")     → if found, lessons_file = ".dev/LESSONS.md"
-```
-
-If none found, also check if the memory directory itself exists:
-```
-Glob("hack/PROJECT.md")     → memory_dir = "hack/"
-Glob(".local/PROJECT.md")   → memory_dir = ".local/"
-```
-
-Set `lessons_file = {memory_dir}/LESSONS.md`. If no memory directory exists at all, skip
+Detect the project memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
+Set `lessons_file = {memory_dir}/LESSONS.md`. If no memory directory exists, skip
 writing and report that no memory directory was found.
 
 ## Step 2: Read the Audit Trail

@@ -35,16 +35,20 @@ You are analyzing a single file as part of a comprehensive code quality audit. Y
 **Project Root:** {{PROJECT_ROOT}}
 **Known Dependencies:** {{DEPENDENCIES}}
 
-### Project Memory (from hack/ directory)
+### Project Memory
 
-**CONTEXT.md Summary:**
-{{CONTEXT_MD_SUMMARY}}
+Detect the memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
+Memory files are read from `{memory_dir}/`.
+
+**PROJECT.md Summary:**
+{{PROJECT_MD_SUMMARY}}
 
 **TODO.md Summary:**
 {{TODO_MD_SUMMARY}}
 
-**NOTES.md Summary:**
-{{NOTES_MD_SUMMARY}}
+**LESSONS.md Summary:**
+{{LESSONS_MD_SUMMARY}}
 
 ---
 
@@ -135,8 +139,8 @@ If Context7 is unavailable, note `"context7_validated": false` in the dependency
 
 Compare the file's actual behavior against project memory:
 
-1. **Check CONTEXT.md claims:**
-   - Does this file implement what CONTEXT.md says it should?
+1. **Check PROJECT.md claims:**
+   - Does this file implement what PROJECT.md says it should?
    - Are there architectural claims that don't match reality?
 
 2. **Check TODO.md completions:**
@@ -180,7 +184,7 @@ Compile all findings into issues:
 | LSP findReferences = 0 | unused_code.unreferenced_function |
 | Context7 deprecation warning | incorrect_usage.deprecated_api |
 | Context7 signature mismatch | incorrect_usage.wrong_signature |
-| Code vs CONTEXT.md mismatch | documentation_drift.code_doc_mismatch |
+| Code vs PROJECT.md mismatch | documentation_drift.code_doc_mismatch |
 | TODO marked done but missing | documentation_drift.missing_feature |
 
 For each issue, provide:
@@ -276,7 +280,7 @@ This is a deep audit. Take time to:
 Every issue must have concrete evidence:
 - "LSP findReferences returned empty"
 - "Context7 docs state: '@validator is deprecated'"
-- "CONTEXT.md claims rate limiting but none found"
+- "PROJECT.md claims rate limiting but none found"
 
 Never flag issues based on suspicion alone.
 
@@ -292,7 +296,7 @@ Every issue should have a clear suggested fix:
 - Remove X
 - Replace X with Y
 - Add error handling for Z
-- Update CONTEXT.md to reflect actual behavior
+- Update PROJECT.md to reflect actual behavior
 
 ### Handle Errors Gracefully
 If LSP fails:
@@ -318,9 +322,9 @@ When generating the prompt, substitute these variables:
 | `{{LANGUAGE}}` | Detected from extension (.py, .ts, .go, etc.) |
 | `{{PROJECT_ROOT}}` | Git root or specified project directory |
 | `{{DEPENDENCIES}}` | From package.json, pyproject.toml, go.mod |
-| `{{CONTEXT_MD_SUMMARY}}` | First 500 chars or key points from hack/CONTEXT.md |
-| `{{TODO_MD_SUMMARY}}` | Active items from hack/TODO.md |
-| `{{NOTES_MD_SUMMARY}}` | Key gotchas from hack/NOTES.md |
+| `{{PROJECT_MD_SUMMARY}}` | First 500 chars or key points from `{memory_dir}/PROJECT.md` |
+| `{{TODO_MD_SUMMARY}}` | Active items from `{memory_dir}/TODO.md` |
+| `{{LESSONS_MD_SUMMARY}}` | Key lessons from `{memory_dir}/LESSONS.md` |
 
 ---
 
@@ -357,9 +361,9 @@ prompt = ANALYZER_TEMPLATE.format(
     LANGUAGE=language,
     PROJECT_ROOT="/path/to/project",
     DEPENDENCIES="fastapi, sqlalchemy, bcrypt, pydantic",
-    CONTEXT_MD_SUMMARY=project_memory.get("context", "No CONTEXT.md found"),
+    PROJECT_MD_SUMMARY=project_memory.get("project", "No PROJECT.md found"),
     TODO_MD_SUMMARY=project_memory.get("todo", "No TODO.md found"),
-    NOTES_MD_SUMMARY=project_memory.get("notes", "No NOTES.md found")
+    LESSONS_MD_SUMMARY=project_memory.get("lessons", "No LESSONS.md found")
 )
 
 result = Agent(
