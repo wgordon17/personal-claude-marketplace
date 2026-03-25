@@ -256,7 +256,7 @@ Mitigation strategies:
 - If launching many agents (5+), stagger launches slightly or have agents
   append to the end instead of inserting at the top
 - For very high-volume sessions, consider having agents write to individual
-  files (`hack/bugs/BUG-NNN.md`) and consolidate afterward
+  files (`{memory_dir}/bugs/BUG-NNN.md`) and consolidate afterward
 
 ## Quick Reference
 
