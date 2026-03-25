@@ -25,7 +25,8 @@ All artifacts for a single `/unfuck` run go under a run-ID-scoped directory for 
 Generate the run-ID using the exact commands from `code-quality/references/project-memory-reference.md`
 (Run-ID Naming Convention section):
 ```bash
-BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | cut -c1-40)
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | cut -c1-40 | sed 's/^-//;s/-$//')
+BRANCH_SLUG=${BRANCH_SLUG:-detached}
 TIMESTAMP=$(date +%s)
 RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
 ```
