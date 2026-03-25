@@ -130,7 +130,7 @@ If a PR exists, note it — commits to this branch will update the PR automatica
 Branch creation uses the run-ID convention from `code-quality/references/project-memory-reference.md`
 (Run-ID Naming Convention section). Generate the run-ID first, then create the branch:
 ```bash
-BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | sed 's/^-//;s/-$//' | cut -c1-40)
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | cut -c1-40 | sed 's/^-//;s/-$//')
 BRANCH_SLUG=${BRANCH_SLUG:-detached}
 TIMESTAMP=$(date +%s)
 RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
@@ -189,7 +189,7 @@ aggressive recycling thresholds in Phase 3 (recycle at 15 turns instead of 25).
 Generate the run-ID (if not already done in Step 0.3) using the exact commands from
 `code-quality/references/project-memory-reference.md` (Run-ID Naming Convention section):
 ```bash
-BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | sed 's/^-//;s/-$//' | cut -c1-40)
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | cut -c1-40 | sed 's/^-//;s/-$//')
 BRANCH_SLUG=${BRANCH_SLUG:-detached}
 TIMESTAMP=$(date +%s)
 RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
@@ -641,7 +641,7 @@ Weights must sum to 1.0.
 Generate a new run-ID for the speculative fork (same convention from
 `code-quality/references/project-memory-reference.md`):
 ```bash
-BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | sed 's/^-//;s/-$//' | cut -c1-40)
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | cut -c1-40 | sed 's/^-//;s/-$//')
 BRANCH_SLUG=${BRANCH_SLUG:-detached}
 TIMESTAMP=$(date +%s)
 SPEC_RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
