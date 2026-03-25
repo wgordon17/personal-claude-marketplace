@@ -18,17 +18,19 @@ autonomously, documenting root causes and resolution plans in a central tracking
 
 This skill activates when:
 - User says they want to report bugs/issues for investigation
-- User describes a bug and a `hack/BUGS.md` exists or needs to be created
+- User describes a bug and a `BUGS.md` exists in the memory directory or needs to be created
 - User asks to "hunt bugs", "audit the UI", or "investigate issues"
 
 ## Phase 1: Setup
 
 ### Check for Existing BUGS.md
 
-Before starting, check if `hack/BUGS.md` already exists:
+Before starting, detect the memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
+Then check if `{memory_dir}/BUGS.md` already exists:
 
 ```
-Read hack/BUGS.md
+Read {memory_dir}/BUGS.md
 ```
 
 **If it exists:** Review it for stale entries.
@@ -41,6 +43,7 @@ Read hack/BUGS.md
 - Determine the next bug ID from the highest existing BUG-NNN + 1
 
 **If it doesn't exist:** Create it with the template below and confirm to the user.
+**If no memory directory found:** Skip BUGS.md and notify the user that tracking requires a memory directory.
 
 ### BUGS.md Template
 
@@ -124,7 +127,7 @@ You are investigating a bug for [project description] at [absolute project path]
 4. [Verify the issue — confirm the bug exists by reading the relevant code paths]
 
 ## Output
-READ [absolute path to hack/BUGS.md] first to find the insertion point, then EDIT it
+READ [absolute path to {memory_dir}/BUGS.md] first to find the insertion point, then EDIT it
 to insert a new entry at the top (after the HTML template comment, before the first
 existing BUG entry). Use this exact format:
 
@@ -191,7 +194,7 @@ Do NOT dump the full agent report into the conversation.
 
 When the user is done reporting bugs or asks to review status:
 
-1. Read `hack/BUGS.md` and summarize:
+1. Read `{memory_dir}/BUGS.md` and summarize:
    - Total bugs documented
    - Breakdown by severity (Critical/High/Medium/Low)
    - Breakdown by status (Investigating/Root Cause Found/Fix Ready/Fixed)
@@ -230,7 +233,7 @@ The agent starts fresh with no conversation context. Include:
 
 ### Direct the Output Location
 
-Always include the absolute path to BUGS.md and the exact BUG-NNN ID to use.
+Always include the absolute path to `{memory_dir}/BUGS.md` and the exact BUG-NNN ID to use.
 Agents should READ the file first (to find the insertion point) then EDIT it.
 
 ### Keep Investigation Focused
@@ -259,7 +262,7 @@ Mitigation strategies:
 
 ### Setup
 ```
-1. Check for hack/BUGS.md → clean up or create
+1. Detect memory dir (per project-memory-reference.md) → check for {memory_dir}/BUGS.md → clean up or create
 2. Determine next BUG-NNN ID
 3. Confirm readiness to user
 ```

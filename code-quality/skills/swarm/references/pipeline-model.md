@@ -355,7 +355,7 @@ Code-Simplifier after both complete. Shut down all before Phase 6.
 
 ```
 Lead spawns sequentially:
-  docs               (general-purpose, sonnet)  -- updates docs and hack/ memory
+  docs               (general-purpose, sonnet)  -- updates docs and project memory
   docs-reviewer      (general-purpose, sonnet)  -- verifies docs agent's work (read-only)
   lessons-extractor  (general-purpose, sonnet)  -- extracts principle-level lessons from swarm run
 ```
@@ -363,7 +363,7 @@ Lead spawns sequentially:
 Three agents, run sequentially. Docs agent completes first, then Docs Reviewer verifies the
 documentation changes (critical/high findings route back to Docs for fixes, max 1 iteration).
 After Docs Reviewer confirms clean, Lessons Extractor reads the audit trail and writes to
-`hack/LESSONS.md`. Shut down each after it reports completion.
+`{memory_dir}/LESSONS.md`. Shut down each after it reports completion.
 
 ### Phase 7: Verifier
 

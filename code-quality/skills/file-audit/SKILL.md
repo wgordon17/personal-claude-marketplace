@@ -33,7 +33,7 @@ Comprehensive, resumable code quality audit system that analyzes every non-gitig
 ORCHESTRATOR (you)
 ├── Phase 1: Discovery
 │   ├── git ls-files (find non-gitignored files)
-│   ├── Read project memory (hack/CONTEXT.md, TODO.md, NOTES.md)
+│   ├── Read project memory ({memory_dir}/PROJECT.md, {memory_dir}/TODO.md, {memory_dir}/LESSONS.md)
 │   └── Initialize queue.json
 │
 ├── Phase 2: Parallel Analysis
@@ -58,19 +58,22 @@ ORCHESTRATOR (you)
 
 ### Step 1: Initialization
 
+Detect the memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
+
 ```bash
 # Check for existing queue
-if hack/file-audit/queue.json exists:
+if {memory_dir}/file-audit/queue.json exists:
     Resume from last batch position
 else:
     # Discover files
     git ls-files --cached --others --exclude-standard
 
-    # Read project memory
-    Read hack/CONTEXT.md, hack/TODO.md, hack/NOTES.md (if exist)
+    # Read project memory (files per project-memory-reference.md Memory Files section)
+    Read {memory_dir}/PROJECT.md, {memory_dir}/TODO.md, {memory_dir}/LESSONS.md (if exist)
 
     # Create queue
-    Initialize hack/file-audit/queue.json with all files as "pending"
+    Initialize {memory_dir}/file-audit/queue.json with all files as "pending"
 ```
 
 ### Step 2: Parallel Processing Loop
@@ -122,7 +125,7 @@ IF total_files <= 20 (or /map-reduce unavailable):
    - Issues by category (unused_code, incorrect_usage, duplication, documentation_drift)
    - Issues by severity (error, warning, info)
 3. Generate consolidated TODO list
-4. Write hack/file-audit/inventory.json
+4. Write {memory_dir}/file-audit/inventory.json
 ```
 
 ---
@@ -141,9 +144,9 @@ Language: {language}
 ## Project Context
 Dependencies: {project_dependencies}
 Project Memory:
-- CONTEXT.md: {context_md_summary}
+- PROJECT.md: {project_md_summary}
 - TODO.md: {todo_md_summary}
-- NOTES.md: {notes_md_summary}
+- LESSONS.md: {lessons_md_summary}
 
 ## Your Task
 
@@ -165,7 +168,7 @@ Project Memory:
    - Check for: deprecated APIs, wrong signatures, missing error handling
 
 5. **Documentation Drift Check**
-   - Compare code behavior vs CONTEXT.md claims
+   - Compare code behavior vs PROJECT.md claims
    - Flag mismatches
 
 6. **Pattern Extraction**
@@ -231,7 +234,7 @@ IMPORTANT:
 
 ## Output Files
 
-### hack/file-audit/queue.json
+### {memory_dir}/file-audit/queue.json
 
 ```json
 {
@@ -248,7 +251,7 @@ IMPORTANT:
 }
 ```
 
-### hack/file-audit/inventory.json
+### {memory_dir}/file-audit/inventory.json
 
 ```json
 {
@@ -304,7 +307,7 @@ IMPORTANT:
 - `near_duplicate`: Very similar code (structural hash + >80% similarity)
 
 ### documentation_drift
-- `code_doc_mismatch`: Code behavior differs from CONTEXT.md claims
+- `code_doc_mismatch`: Code behavior differs from PROJECT.md claims
 - `missing_feature`: Documented feature not implemented in code
 - `undocumented_feature`: Significant code without documentation
 
@@ -324,7 +327,7 @@ IMPORTANT:
 
 When `/file-audit --resume` is invoked:
 
-1. Read `hack/file-audit/queue.json`
+1. Read `{memory_dir}/file-audit/queue.json`
 2. Find files with `status: "pending"` or `status: "in_progress"`
 3. Reset any `in_progress` to `pending` (they were interrupted)
 4. Continue from next pending batch
@@ -357,11 +360,12 @@ When LSP is unavailable for a file type:
 
 ## Integration with Project Memory
 
-The analyzer reads `hack/` files to:
+The analyzer reads project memory files (detected per `code-quality/references/project-memory-reference.md`) to:
 
-1. **Understand intended behavior**: CONTEXT.md describes architecture
+1. **Understand intended behavior**: `PROJECT.md` describes architecture and decisions
 2. **Check for drift**: Compare code vs documented intent
 3. **Identify stale docs**: Flag when code changed but docs didn't
-4. **Understand priorities**: TODO.md shows active work
+4. **Understand priorities**: `TODO.md` shows active work
+5. **Apply lessons**: `LESSONS.md` provides principle-level context for the project
 
 This enables detection of `documentation_drift` issues that pure code analysis would miss.

@@ -20,13 +20,22 @@ This is the complete coordination reference for the `/unfuck` cleanup skill. The
 
 ### Run directory
 
-All artifacts for a single `/unfuck` run go under a date-scoped directory so multiple runs don't clash:
+All artifacts for a single `/unfuck` run go under a run-ID-scoped directory for uniqueness:
+
+Generate the run-ID using the exact commands from `code-quality/references/project-memory-reference.md`
+(Run-ID Naming Convention section):
+```bash
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | cut -c1-40)
+TIMESTAMP=$(date +%s)
+RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
+```
+
+Detect the project memory directory using `code-quality/references/project-memory-reference.md`
+(Directory Detection section). Then:
 
 ```
-{run_dir} = hack/unfuck/YYYY-MM-DD
+{run_dir} = {memory_dir}/unfuck/{run-id}
 ```
-
-Use today's actual date (e.g., `hack/unfuck/2026-02-18`). If the directory already exists (re-run scenario), append a sequence number: `hack/unfuck/2026-02-18-2`.
 
 All paths in this playbook use `{run_dir}` to refer to this directory. The orchestrator resolves it once and passes the resolved path to all agents via the context bundle.
 
@@ -48,7 +57,7 @@ This parallelism saves time since `code-quality:index-repo` and tool detection a
 
 ### Step 0.1: Generate repo index
 
-Spawn a `setup-indexer` teammate to invoke the `code-quality:index-repo` skill. This creates `PROJECT_INDEX.md` in the project memory directory (`hack/`, `.local/`, `scratch/`, `.dev/`, or project root as fallback), giving every agent a ~3K-token project reference instead of reading the full codebase.
+Spawn a `setup-indexer` teammate to invoke the `code-quality:index-repo` skill. This creates `PROJECT_INDEX.md` in the project memory directory (per `code-quality/references/project-memory-reference.md`, Directory Detection section, or project root as fallback), giving every agent a ~3K-token project reference instead of reading the full codebase.
 
 ### Step 0.2: Detect project languages
 
@@ -100,12 +109,12 @@ If a tool is unavailable, record its fallback from `references/external-tools.md
 ### Step 0.4: Create feature branch
 
 ```bash
-git switch -c cleanup/comprehensive-YYYY-MM-DD origin/main
+git switch -c cleanup/comprehensive-${RUN_ID} origin/main
 ```
 
-Use today's actual date. Always branch from `origin/main` (fetch first if needed). If the branch already exists (re-run scenario), append a sequence number: `cleanup/comprehensive-YYYY-MM-DD-2`.
+Always branch from `origin/main` (fetch first if needed). The run-ID ensures uniqueness across runs.
 
-**IMPORTANT:** Do NOT use "unfuck" in the branch name — use professional naming like `cleanup/comprehensive-YYYY-MM-DD`.
+**IMPORTANT:** Do NOT use "unfuck" in the branch name — use professional naming like `cleanup/comprehensive-{run-id}`.
 
 ### Step 0.5: Create output directories
 
@@ -553,7 +562,7 @@ Or via Bash using the auto-detected test command from Phase 3.
 
 If final tests fail, identify which commit introduced the regression:
 ```bash
-git log --oneline cleanup/comprehensive-YYYY-MM-DD~N..HEAD
+git log --oneline cleanup/comprehensive-${RUN_ID}~N..HEAD
 ```
 Then bisect or check each commit's changes against the failing tests.
 
@@ -577,7 +586,7 @@ Agent(name="quality-review", subagent_type="general-purpose",
 Apply `code-quality:quality-gate` verification patterns:
 - Every commit compiles/parses cleanly
 - Test suite passes on HEAD
-- No uncommitted changes remain (except `hack/` artifacts)
+- No uncommitted changes remain (except `{memory_dir}/` artifacts)
 - No untracked source files created accidentally
 - Linter passes (if available)
 
@@ -590,7 +599,7 @@ Write `{run_dir}/cleanup-report.md`:
 
 Generated: YYYY-MM-DD HH:MM
 Project: <project name>
-Branch: cleanup/comprehensive-YYYY-MM-DD
+Branch: cleanup/comprehensive-{run-id}
 
 ## Summary
 - **Files modified:** N
@@ -705,7 +714,7 @@ If reflection identifies gaps, address them before announcing completion.
 Report to the user:
 
 ```
-Cleanup complete. Branch: cleanup/comprehensive-YYYY-MM-DD
+Cleanup complete. Branch: cleanup/comprehensive-{run-id}
 
 Summary: N files modified, -N lines net, N issues fixed across M categories.
 N items blocked (need manual review).
@@ -714,7 +723,7 @@ Full report: {run_dir}/cleanup-report.md
 Cleanup plan: {run_dir}/cleanup-plan.md
 
 Next steps:
-- Review the branch diff: git diff main..cleanup/comprehensive-YYYY-MM-DD
+- Review the branch diff: git diff main..cleanup/comprehensive-{run-id}
 - Check blocked items in the report (if any)
 - Create a PR when satisfied: `gh pr create`
 ```

@@ -10,11 +10,7 @@ Before ending this session, update the project's persistent memory in `hack/` (o
 
 ### Step 1: Locate Memory Directory
 
-Check for existing directories in this order:
-1. `hack/`
-2. `.local/`
-3. `scratch/`
-4. `.dev/`
+Detect the project memory directory using the convention in `code-quality/references/project-memory-reference.md` (Directory Detection section).
 
 If none exist and this session had meaningful work, create `hack/` and add it to `.gitignore`.
 
@@ -26,16 +22,7 @@ Read all markdown files in the memory directory to understand what's already doc
 
 ## Content Placement Rules (CRITICAL)
 
-**Where information belongs:**
-
-| Content Type | Correct File | WRONG Files |
-|--------------|--------------|-------------|
-| Decisions, rationale, gotchas | PROJECT.md | SESSIONS.md, NEXT.md |
-| Technical discoveries | PROJECT.md | SESSIONS.md |
-| Future tasks/todos | TODO.md | SESSIONS.md, NEXT.md |
-| What was done (3-5 bullets) | SESSIONS.md | - |
-| Next direction pointer | NEXT.md | - |
-| Principle-level lessons | LESSONS.md | PROJECT.md, SESSIONS.md |
+See `code-quality/references/project-memory-reference.md` (Content Placement Rules section) for the authoritative table of where each content type belongs.
 
 ---
 
@@ -148,10 +135,10 @@ After updating memory files, scan the session for lessons worth capturing:
 **Extraction process:**
 1. Identify principle-level patterns (not implementation-specific details)
 2. Format as: `- [Category] Pattern → What to do differently → Why it matters (YYYY-MM-DD)`
-3. Check existing `hack/LESSONS.md` for duplicates or contradictions
+3. Check existing `{memory_dir}/LESSONS.md` for duplicates or contradictions
 4. If contradicting an existing lesson, mark the old one `[SUPERSEDED by YYYY-MM-DD]`
-5. Append new lessons to the `## Active` section of `hack/LESSONS.md`
-6. If `hack/LESSONS.md` doesn't exist, create it with the Active and Archived sections
+5. Append new lessons to the `## Active` section of `{memory_dir}/LESSONS.md`
+6. If `{memory_dir}/LESSONS.md` doesn't exist, create it with the Active and Archived sections
 
 **Context compaction note:** In long sessions, early human corrections may be compacted
 out of context. If the session was long, ask the user:

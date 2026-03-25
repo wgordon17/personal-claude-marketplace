@@ -35,8 +35,9 @@ Gather the problem and success criteria before spawning anything.
    - Simplicity (is it the minimum necessary complexity?)
    - Add or substitute criteria based on user priorities
 
-3. Create the audit trail directory at `hack/speculative/YYYY-MM-DD/`. If the directory
-   already exists (multiple runs same day), append a sequence number.
+3. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+   (Run-ID Naming Convention section) and create the audit trail directory at
+   `{memory_dir}/speculative/{run-id}/`.
 
 4. Create all tasks upfront with `TaskCreate` so the plan is visible from the start.
 
@@ -153,7 +154,7 @@ User request
      v
 Phase 0: Specification
   +-- AskUserQuestion (ambiguity, criteria, competitor count)
-  +-- Create hack/speculative/YYYY-MM-DD/
+  +-- Generate run-ID, create {memory_dir}/speculative/{run-id}/
   +-- TaskCreate for all phases
      |
      v
@@ -215,7 +216,7 @@ the selection.
 
 ### Audit Trail
 
-Write all structured outputs to `hack/speculative/YYYY-MM-DD/`:
+Write all structured outputs to `{run_dir}/`:
 - `implementations/competitor-{id}.json` — each competitor's ImplementationResult
 - `judgment.json` — judge's JudgmentResult
 - `speculative-report.md` — final human-readable completion report

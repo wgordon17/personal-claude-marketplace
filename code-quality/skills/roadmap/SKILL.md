@@ -36,9 +36,10 @@ Before ingesting any plans, check whether an existing roadmap document already e
 
 ### Step 1: Locate plan directory
 
-Check for `hack/`, `.local/`, `scratch/`, `.dev/` in the project root (in this order).
+Detect the project memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
 
-- **If found:** Plan directory is `{memory-dir}/plans/`
+- **If found:** Plan directory is `{memory_dir}/plans/`
 - **If none found:** **Skip Phase 0** — proceed to Phase 1. Stateful roadmap management
   requires a project-local memory directory. `~/.claude/plans/` is shared across all projects
   and globbing it would surface cross-project roadmaps, leading to false positives and
@@ -364,12 +365,14 @@ Write the roadmap file following the schema in `references/phase-schema.md`.
 
 Use the same logic as `/incremental-planning`:
 
-1. Check for `hack/`, `.local/`, `scratch/`, `.dev/` in the project root (in this order)
-2. **If found:** Write to `{memory-dir}/plans/YYYY-MM-DD-roadmap-<name>.md`
+1. Detect the project memory directory using the convention in
+   `code-quality/references/project-memory-reference.md` (Directory Detection section).
+2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
+   write to `{memory_dir}/plans/{run-id}-roadmap-<name>.md`
    (create the `plans/` subdirectory if it doesn't exist)
-3. **If none found:** Fall back to `~/.claude/plans/YYYY-MM-DD-roadmap-<name>.md`
+3. **If none found:** Fall back to `~/.claude/plans/{run-id}-roadmap-<name>.md`
 
-**Announce location:** "Roadmap file: `hack/plans/2026-03-20-roadmap-auth-launch.md`"
+**Announce location:** "Roadmap file: `hack/plans/feat-auth-1711388400-roadmap-auth-launch.md`"
 
 Do NOT create a `hack/` directory if one doesn't exist.
 
@@ -564,8 +567,8 @@ NEVER IN CHAT: Full roadmap content, raw table data, raw diff content from subag
 ### Roadmap File Location (Phase 4 — document generation)
 
 ```
-1. hack/plans/ (or .local/plans/, scratch/plans/, .dev/plans/) → if memory dir exists
-2. ~/.claude/plans/ → fallback for all other cases
+1. {memory_dir}/plans/{run-id}-roadmap-<name>.md → if memory dir exists (detect per project-memory-reference.md)
+2. ~/.claude/plans/{run-id}-roadmap-<name>.md → fallback for all other cases
 ```
 
 **Phase 0 detection** only runs when a project memory dir exists (option 1 above).

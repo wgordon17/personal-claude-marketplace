@@ -70,8 +70,8 @@ Run the project test suite and record the baseline (pass/fail count, any pre-exi
 Check git status — ensure the working tree is clean, identify the current branch, and determine
 whether a feature branch is needed. If not already on a feature branch, create one from
 `upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
-depends on it for reliable agent operation (warn the user if disabled). Create the audit trail
-directory at `hack/swarm/YYYY-MM-DD/` (append sequence number if the directory already exists).
+depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `code-quality/references/project-memory-reference.md`
+(Run-ID Naming Convention section) and create the audit trail directory at `hack/swarm/{run-id}/`.
 Call `TeamCreate("swarm-impl")`, then create all tasks upfront with `addBlockedBy` dependencies
 so the full task graph is visible from the start.
 
@@ -102,7 +102,7 @@ The Cynefin classification (`cynefin_domain` and `domain_justification`) is writ
 `architect-plan.json` and is advisory — it informs how phases run, never whether mandatory phases
 run. The Lead reads the classification to inform Phase 2.5 skip decisions.
 
-Output is a structured JSON plan written to `hack/swarm/YYYY-MM-DD/architect-plan.json`
+Output is a structured JSON plan written to `{run_dir}/architect-plan.json`
 (see schema in `references/communication-schema.md`). The architect also identifies global risks,
 data model changes, API surface changes, and **documentation impact** — a `documentation_impact`
 array listing which documentation surfaces are affected and why (READMEs, manifests, registries,
@@ -234,7 +234,7 @@ tasks. The Lead decides based on the dependency graph — never based on cost or
 
 Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, and any
 auto-detected optional reviewers (UI, API, DB). All reviewers operate in read-only mode on the
-completed implementation. Each writes structured JSON findings to `hack/swarm/YYYY-MM-DD/reviews/`
+completed implementation. Each writes structured JSON findings to `{run_dir}/reviews/`
 (see schema in `references/communication-schema.md`). The Lead collects ALL findings and
 synthesizes into a consolidated view. Every finding — regardless of severity — is routed to
 Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
@@ -352,8 +352,8 @@ The Docs agent performs three passes:
 corresponding documentation needs updating (README behavior descriptions, API docs, config docs,
 CONTRIBUTING.md). Update only what is directly affected.
 
-The Docs agent also detects the project's memory directory (`hack/`, `.local/`, `scratch/`,
-`.dev/`) and updates PROJECT.md with architectural decisions, TODO.md with completed and new
+The Docs agent also detects the project's memory directory (per `code-quality/references/project-memory-reference.md`,
+Directory Detection section) and updates PROJECT.md with architectural decisions, TODO.md with completed and new
 items, and SESSIONS.md with a 3-5 bullet summary.
 
 **Skip conditions for Phase 6 docs (memory updates always run):**
@@ -391,8 +391,9 @@ schema with `DOC-R` prefix. Critical/High findings are routed back to the Docs a
 in the audit trail.
 
 After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
-agent scans the swarm run's audit trail and extracts principle-level lessons to `hack/LESSONS.md`
-(creating the file if it does not exist). It reads:
+agent scans the swarm run's audit trail and extracts principle-level lessons to
+`{memory_dir}/LESSONS.md` (creating the file if it does not exist, where `{memory_dir}` is the
+project memory directory detected per `code-quality/references/project-memory-reference.md`). It reads:
 - `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged
 - `{run_dir}/reviews/` — recurring finding patterns across reviewers
 - `{run_dir}/escalations.json` — escalation events (if the file exists)
@@ -413,7 +414,7 @@ Verifier reports green, invoke the `quality-gate` skill for automated multi-pass
 rotating adversarial lenses, fresh-context subagent reviews, and blocking memory/artifact gates.
 If there are 20 or more modified files, run an `/unfuck` sweep to
 catch any issues introduced at scale. Generate the final audit report at
-`hack/swarm/YYYY-MM-DD/swarm-report.md`. Announce completion with a summary and report path.
+`{run_dir}/swarm-report.md`. Announce completion with a summary and report path.
 Shut down all teammates via `SendMessage(type="shutdown_request")` and call `TeamDelete`.
 
 ---
@@ -427,7 +428,7 @@ User request
 Phase 0: Pre-flight
   +-- Baseline tests
   +-- Git branch check/create
-  +-- Create hack/swarm/YYYY-MM-DD/
+  +-- Generate run-ID, create {memory_dir}/swarm/{run-id}/
   +-- TeamCreate + TaskGraph
      |
      v
@@ -493,14 +494,14 @@ Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
 Phase 6: Docs & Memory
   +-- Docs agent: repo docs + hack/ updates
   +-- Docs Reviewer: verify Docs agent's work
-  +-- Lessons Extractor: audit trail → hack/LESSONS.md
+  +-- Lessons Extractor: audit trail → {memory_dir}/LESSONS.md
      |
      v
 Phase 7: Verification & Completion
   +-- Verifier: full test + lint
   +-- quality-gate skill
   +-- /unfuck sweep (if 20+ files changed)
-  +-- Generate swarm-report.md
+  +-- Generate {run_dir}/swarm-report.md
   +-- Shutdown all teammates, TeamDelete
 ```
 
@@ -560,7 +561,7 @@ and report to the user with full context.
 
 ### Audit Trail
 
-Write all structured outputs to `hack/swarm/YYYY-MM-DD/`:
+Write all structured outputs to `{run_dir}/`:
 - `architect-plan.json` — architect's component plan
 - `reviews/security.json`, `reviews/qa.json`, etc. — review findings
 - `escalations.json` — escalation events for Lessons extraction
@@ -580,7 +581,7 @@ After escalation, wait for user input before proceeding.
   "project": "<project name>",
   "task": "<original task description>",
   "branch": "<current git branch>",
-  "run_dir": "hack/swarm/YYYY-MM-DD",
+  "run_dir": "{memory_dir}/swarm/{run-id}",
   "key_files": ["<files identified by architect as central>"],
   "tool_guard": "Use Read/Write/Edit/Glob/Grep/Bash for file ops. No raw shell for file reads."
 }

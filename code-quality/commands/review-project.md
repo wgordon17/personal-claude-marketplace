@@ -19,7 +19,9 @@ Perform comprehensive project review and TODO validation with **actual testing a
 
 ## Your Task
 
-Run thorough validation of all items in `hack/TODO.md` by TESTING implementations, not just checking files.
+First, detect the project memory directory using the convention in `code-quality/references/project-memory-reference.md` (Directory Detection section). All `{memory_dir}` references below resolve to the detected directory.
+
+Run thorough validation of all items in `{memory_dir}/TODO.md` by TESTING implementations, not just checking files.
 
 ---
 
@@ -88,9 +90,9 @@ Continuing with project review...
 ### 1a. Extract Claims from Project Memory
 
 **Sources to parse:**
-1. **hack/PROJECT.md** - Architecture decisions, migrations, removals, gotchas
-2. **hack/SESSIONS.md** - Session summaries of work completed
-3. **hack/TODO.md** - Completed items (marked `[x]`)
+1. **{memory_dir}/PROJECT.md** - Architecture decisions, migrations, removals, gotchas
+2. **{memory_dir}/SESSIONS.md** - Session summaries of work completed
+3. **{memory_dir}/TODO.md** - Completed items (marked `[x]`)
 
 **Example claims to extract:**
 - "Migrated all fonts from Roboto to Inter"
@@ -173,14 +175,14 @@ Verify:
 
 **After verification, archive all except last 2-3 sessions:**
 
-1. Create archive file: `hack/archived/SESSIONS-archive-[YYYY-MM].md`
+1. Create archive file: `{memory_dir}/archived/SESSIONS-archive-[YYYY-MM].md`
 2. Move verified sessions older than last 3 to archive
 3. Add footer to SESSIONS.md:
 
 ```markdown
 ---
 ## Archived Sessions
-Previous sessions archived to: `hack/archived/SESSIONS-archive-*.md`
+Previous sessions archived to: `{memory_dir}/archived/SESSIONS-archive-*.md`
 Note: These should rarely be needed. If you find yourself referencing
 archives frequently, important context may be missing from PROJECT.md.
 ```
@@ -303,10 +305,10 @@ Only after user has answered clarification questions:
 - Items removed as irrelevant: W
 
 ## Files Modified
-- PROJECT.md: [changes]
-- TODO.md: [changes]
-- SESSIONS.md: [changes]
-- hack/archived/: [if created]
+- {memory_dir}/PROJECT.md: [changes]
+- {memory_dir}/TODO.md: [changes]
+- {memory_dir}/SESSIONS.md: [changes]
+- {memory_dir}/archived/: [if created]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

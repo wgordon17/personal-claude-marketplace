@@ -41,8 +41,9 @@ Phase 4 verifies everything passes and generates a report.
 ### Phase 0: Index & Setup
 1. Create TeamCreate swarm: `cleanup-swarm`
 2. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection
-3. Create feature branch: `cleanup/comprehensive-YYYY-MM-DD` (from `origin/main`)
-4. Create `hack/unfuck/YYYY-MM-DD/discovery/` directory for agent output (date-scoped per run)
+3. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+   (Run-ID Naming Convention section) and create feature branch: `cleanup/comprehensive-{run-id}` (from `origin/main`)
+4. Create `{memory_dir}/unfuck/{run-id}/discovery/` directory for agent output
 5. Collect setup results and build context bundle for discovery agents
 
 ### Phase 1: Discovery (7 parallel agents)
@@ -53,7 +54,7 @@ retry-on-failure for individual discovery agents, and structured ReductionResult
 If /map-reduce skill is unavailable, fall back to direct parallel agents as described below.
 
 All agents run simultaneously in background. Each writes structured JSON findings to
-`hack/unfuck/YYYY-MM-DD/discovery/`. Full prompts in `references/discovery-agents.md`.
+`{run_dir}/discovery/`. Full prompts in `references/discovery-agents.md`.
 
 | Agent | Role | Paired Skills | External Tools | Output |
 |-------|------|---------------|----------------|--------|
@@ -83,7 +84,7 @@ When falling back to direct approach, it reads the raw discovery JSON files dire
    if available, or manual dedup otherwise)
 3. Cross-references compound patterns (dead + divergent = safe to remove)
 4. Prioritizes: security → dead code → duplicates → AI slop → complexity → architecture → docs
-5. Writes `hack/unfuck/YYYY-MM-DD/cleanup-plan.md` with per-finding detail
+5. Writes `{run_dir}/cleanup-plan.md` with per-finding detail
 6. Creates TaskList with one task per category
 7. Sends summary to orchestrator; orchestrator **AskUserQuestion** if: public API deletions,
    5+ file architectural changes, ambiguous findings, security policy decisions, or >100 total findings
@@ -108,7 +109,7 @@ The orchestrator assigns categories in priority order (security → dead code �
 2. Run code quality checks on all modified files
 3. Apply `code-quality:quality-gate` verification patterns
 4. Invoke `code-quality:reflect` to verify completeness against the original cleanup plan
-5. Generate `hack/unfuck/YYYY-MM-DD/cleanup-report.md` with:
+5. Generate `{run_dir}/cleanup-report.md` with:
    - Summary stats (files modified, lines added/removed, net delta, issues fixed by category)
    - Per-category breakdown with specific changes and commit SHAs
    - Blocked items (test failures, needs-review) with stash names and manual fix guidance
@@ -119,7 +120,7 @@ The orchestrator assigns categories in priority order (security → dead code �
 
 ## Git Workflow
 
-- Creates feature branch: `cleanup/comprehensive-YYYY-MM-DD` (from `origin/main`)
+- Creates feature branch: `cleanup/comprehensive-{run-id}` (from `origin/main`)
 - One commit per cleanup category (security, dead-code, duplicates, ai-slop, complexity, architecture, docs)
 - Conventional commit messages
 - Blocked categories are stashed with descriptive names for manual recovery
@@ -137,10 +138,10 @@ The orchestrator assigns categories in priority order (security → dead code �
 
 | File | Purpose | Persistent |
 |------|---------|------------|
-| `hack/unfuck/YYYY-MM-DD/cleanup-plan.md` | Prioritized findings with fix strategies | Yes |
-| `hack/unfuck/YYYY-MM-DD/cleanup-report.md` | Final report with stats and blocked items | Yes |
-| `hack/unfuck/YYYY-MM-DD/discovery/*.json` | Raw agent findings (7 files) | Cleaned up |
-| `hack/unfuck/YYYY-MM-DD/available-tools.json` | Detected external tools | Cleaned up |
+| `{run_dir}/cleanup-plan.md` | Prioritized findings with fix strategies | Yes |
+| `{run_dir}/cleanup-report.md` | Final report with stats and blocked items | Yes |
+| `{run_dir}/discovery/*.json` | Raw agent findings (7 files) | Cleaned up |
+| `{run_dir}/available-tools.json` | Detected external tools | Cleaned up |
 
 ## References
 

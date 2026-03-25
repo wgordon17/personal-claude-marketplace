@@ -16,7 +16,7 @@ Every agent receives this bundle when spawned. The Lead constructs it in Phase 0
   "project": "string — project name from repo root",
   "task": "string — original user task description, verbatim",
   "branch": "string — current git branch name",
-  "run_dir": "string — absolute or repo-relative path to hack/speculative/YYYY-MM-DD",
+  "run_dir": "string — absolute or repo-relative path to hack/speculative/{run-id}",
   "tool_guard": "Use Read/Write/Edit/Glob/Grep/Bash for file ops. No raw shell for file reads."
 }
 ```
@@ -178,7 +178,7 @@ same date append a sequence number.
 
 ```
 hack/speculative/
-└── YYYY-MM-DD/                    # or YYYY-MM-DD-2, YYYY-MM-DD-3 for multiple runs
+└── {run-id}/                      # e.g. feat-auth-1711388400
     ├── implementations/
     │   ├── competitor-1.json          # competitor-1's ImplementationResult
     │   ├── competitor-2.json          # competitor-2's ImplementationResult

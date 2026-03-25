@@ -190,8 +190,8 @@ Where `{plan-name}` is the plan filename without date prefix and `.md` extension
 spaces and underscores replaced by hyphens.
 
 Examples:
-- Plan file: `hack/plans/2026-03-20-auth-refactor.md` → Branch: `roadmap/phase-1/auth-refactor`
-- Plan file: `hack/plans/2026-03-20-db-migration.md` → Branch: `roadmap/phase-2/db-migration`
+- Plan file: `hack/plans/{run-id}-auth-refactor.md` → Branch: `roadmap/phase-1/auth-refactor`
+- Plan file: `hack/plans/{run-id}-db-migration.md` → Branch: `roadmap/phase-2/db-migration`
 
 Branches must not collide across tracks in the same phase or across phases.
 
@@ -207,8 +207,8 @@ Two plans where Plan B depends on files created by Plan A's first two tasks.
 # Roadmap: Auth Refactor + Session Storage
 
 **Source plans:**
-- /home/user/project/hack/plans/2026-03-20-auth-refactor.md
-- /home/user/project/hack/plans/2026-03-20-session-storage.md
+- /home/user/project/hack/plans/{run-id}-auth-refactor.md
+- /home/user/project/hack/plans/{run-id}-session-storage.md
 
 **Total phases:** 2
 **Critical path:** Auth Refactor (Phase 1, Tasks 1-2) → Session Storage (Phase 2) — session
@@ -221,7 +221,7 @@ storage depends on the auth middleware interface defined in Tasks 1-2 of Auth Re
 
 | Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
 |-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/2026-03-20-auth-refactor.md | Tasks 1-2 | roadmap/phase-1/auth-refactor | None | /swarm | Complicated |
+| A | /home/user/project/hack/plans/{run-id}-auth-refactor.md | Tasks 1-2 | roadmap/phase-1/auth-refactor | None | /swarm | Complicated |
 
 **Sync point:** All tracks must complete before Phase 2 begins.
 **Merge order:** Track A only.
@@ -233,8 +233,8 @@ storage depends on the auth middleware interface defined in Tasks 1-2 of Auth Re
 
 | Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
 |-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/2026-03-20-auth-refactor.md | Tasks 3-5 | roadmap/phase-2/auth-refactor | None | /swarm | Complicated |
-| B | /home/user/project/hack/plans/2026-03-20-session-storage.md | All | roadmap/phase-2/session-storage | None | /swarm | Clear |
+| A | /home/user/project/hack/plans/{run-id}-auth-refactor.md | Tasks 3-5 | roadmap/phase-2/auth-refactor | None | /swarm | Complicated |
+| B | /home/user/project/hack/plans/{run-id}-session-storage.md | All | roadmap/phase-2/session-storage | None | /swarm | Clear |
 
 **Sync point:** All tracks must complete before merging to main. Final phase.
 **Merge order:** Track A first (touches middleware layer), then Track B (additive session layer, no conflicts expected).
@@ -251,9 +251,9 @@ and Plan B's API layer (Phase 2) before it can implement the frontend.
 # Roadmap: Full Stack Feature Launch
 
 **Source plans:**
-- /home/user/project/hack/plans/2026-03-20-db-schema.md
-- /home/user/project/hack/plans/2026-03-20-api-layer.md
-- /home/user/project/hack/plans/2026-03-20-frontend-ui.md
+- /home/user/project/hack/plans/{run-id}-db-schema.md
+- /home/user/project/hack/plans/{run-id}-api-layer.md
+- /home/user/project/hack/plans/{run-id}-frontend-ui.md
 
 **Total phases:** 3
 **Critical path:** DB Schema (Phase 1) → API Layer (Phase 2) → Frontend UI (Phase 3) —
@@ -266,8 +266,8 @@ each layer depends on the contract defined by the layer below it.
 
 | Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
 |-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/2026-03-20-db-schema.md | All | roadmap/phase-1/db-schema | None | /swarm | Complicated |
-| B | /home/user/project/hack/plans/2026-03-20-api-layer.md | Tasks 1-2 | roadmap/phase-1/api-layer | None | /swarm | Complicated |
+| A | /home/user/project/hack/plans/{run-id}-db-schema.md | All | roadmap/phase-1/db-schema | None | /swarm | Complicated |
+| B | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 1-2 | roadmap/phase-1/api-layer | None | /swarm | Complicated |
 
 **Sync point:** All tracks must complete before Phase 2 begins.
 **Merge order:** Track A first (schema migrations must land before API references them), then Track B.
@@ -279,7 +279,7 @@ each layer depends on the contract defined by the layer below it.
 
 | Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
 |-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/2026-03-20-api-layer.md | Tasks 3-7 | roadmap/phase-2/api-layer | None | /swarm | Complicated |
+| A | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 3-7 | roadmap/phase-2/api-layer | None | /swarm | Complicated |
 
 **Sync point:** All tracks must complete before Phase 3 begins.
 **Merge order:** Track A only.
@@ -291,8 +291,8 @@ each layer depends on the contract defined by the layer below it.
 
 | Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
 |-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/2026-03-20-frontend-ui.md | All | roadmap/phase-3/frontend-ui | None | /swarm | Complex |
-| B | /home/user/project/hack/plans/2026-03-20-api-layer.md | Tasks 8-9 | roadmap/phase-3/api-layer | None | /swarm | Clear |
+| A | /home/user/project/hack/plans/{run-id}-frontend-ui.md | All | roadmap/phase-3/frontend-ui | None | /swarm | Complex |
+| B | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 8-9 | roadmap/phase-3/api-layer | None | /swarm | Clear |
 
 **Sync point:** All tracks must complete before merging to main. Final phase.
 **Merge order:** Track B first (API hardening is additive), then Track A (frontend may reference finalized API contracts).

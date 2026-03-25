@@ -107,13 +107,18 @@ Include viewpoints from:
 
 ### Output Location
 
-If a `hack/` directory exists in the current working directory, write the research report to a file:
+Detect the project memory directory using the convention in
+`code-quality/references/project-memory-reference.md` (Directory Detection section).
 
-1. Create `hack/research/` if it does not exist
-2. Write the report to `hack/research/YYYY-MM-DD-<topic>.md` (use today's date and a short kebab-case topic slug, e.g. `2026-03-16-vertex-ai-pricing.md`)
-3. After writing, tell the user the file path
+If a memory directory is found, write the research report to a file:
 
-If no `hack/` directory exists, deliver the report in the conversation only.
+1. Generate a run ID per the Run-ID Naming Convention in that reference.
+2. Create `{memory_dir}/research/` if it does not exist.
+3. Write the report to `{memory_dir}/research/{run-id}-<topic>.md`
+   (e.g. `hack/research/feat-auth-1711388400-vertex-ai-pricing.md`).
+4. After writing, tell the user the file path.
+
+If no memory directory exists, deliver the report in the conversation only.
 
 ### Research Report Structure
 
