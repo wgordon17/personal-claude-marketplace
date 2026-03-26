@@ -27,9 +27,9 @@ Stdout schema:
     "findings": list[str] | null   -- null on pass, specific issues on fail
   }
 
-Exit codes:
+Exit codes (internal to subprocess, consumed by stop-hook.py):
   0 -- pass (allow stop)
-  2 -- fail (block stop, Claude should continue)
+  2 -- fail (stop-hook.py translates to JSON block on its stdout)
 
 Fails open (exits 0) on any infrastructure error (import, auth, timeout, parse).
 

@@ -816,13 +816,17 @@ def main() -> None:
 
     # ── Fast-exit: AskUserQuestion is last tool call ─────────────────────
     # Agent's final action was asking the user — legitimate pause for context.
+    # Only fast-exit when no write activity occurred this turn. If the agent
+    # made changes AND asked a question, still route through the LLM evaluator.
     if new_tool_calls and new_tool_calls[-1] == _QUESTION_TOOL:
-        _log_stop_event(session_id, "ask_user_question")
-        state = _update_session_state(
-            state, session_id, current_diff_hash, len(all_tool_calls), file_size
-        )
-        _save_state(state)
-        _exit_pass()
+        _pre_write = _detect_write_signals(new_tool_calls)
+        if not _pre_write and not diff_changed:
+            _log_stop_event(session_id, "ask_user_question")
+            state = _update_session_state(
+                state, session_id, current_diff_hash, len(all_tool_calls), file_size
+            )
+            _save_state(state)
+            _exit_pass()
 
     # ── Detect signals ───────────────────────────────────────────────────────
     write_signals = _detect_write_signals(new_tool_calls)

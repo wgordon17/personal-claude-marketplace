@@ -480,6 +480,41 @@ class TestAskUserQuestionFastExit:
         assert output["decision"] == "block"
         assert "Tests not run" in output["reason"]
 
+    def test_ask_user_question_last_but_edit_also_used_invokes_llm(self, tmp_path):
+        """Edit + AskUserQuestion (last) → no fast-exit because write signals present."""
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Tests not run."])
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Implement the auth module."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"type": "tool_use", "name": "AskUserQuestion", "id": "t2"},
+            {
+                "role": "assistant",
+                "content": "I've started the implementation. Should I add OAuth2 as well?",
+            },
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message=(
+                "I've started the implementation. Should I add OAuth2 as well?"
+            ),
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # Write signals present → LLM invoked despite AskUserQuestion being last
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Tests not run" in output["reason"]
+
 
 # ── Signal detection: write tools ─────────────────────────────────────────────
 
