@@ -278,22 +278,22 @@ class TestQuestionClassification:
         assert result.returncode == 0
 
     def test_factual_question_does_not_exit_via_meta_opinion(self, tmp_path):
-        """Factual question with no tools → exit-with-guidance path, still exits 0."""
+        """Factual question with no tools → fast-exit path, exits 0."""
         result = self._run_with_user_message(
             tmp_path,
             "What is the Python version requirement?",
             "Python 3.10+.",
         )
-        # Read-only + factual question → exit-with-guidance (exit 0)
+        # Read-only + factual question → fast-exit (exit 0)
         assert result.returncode == 0
 
 
-# ── Exit-with-guidance ────────────────────────────────────────────────────────
+# ── Fast-exit: research and read-only paths ──────────────────────────────────
 
 
-class TestExitWithGuidance:
-    def test_research_short_response_guidance_message(self, tmp_path):
-        """WebSearch used + short response → prints guidance to stdout."""
+class TestResearchAndReadOnlyFastExit:
+    def test_research_short_response_exits_0(self, tmp_path):
+        """WebSearch used + short response → fast-exit 0."""
         transcript = tmp_path / "transcript.jsonl"
         session_id = str(uuid.uuid4())
         entries = [
@@ -314,13 +314,9 @@ class TestExitWithGuidance:
         )
         result = run_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
-        assert (
-            "verify external claims" in result.stdout.lower()
-            or "research done" in result.stdout.lower()
-        )
 
     def test_context7_mcp_counts_as_research(self, tmp_path):
-        """Context7 MCP tool (prefix match) triggers research guidance."""
+        """Context7 MCP tool (prefix match) triggers research fast-exit."""
         transcript = tmp_path / "transcript.jsonl"
         session_id = str(uuid.uuid4())
         entries = [
@@ -339,13 +335,9 @@ class TestExitWithGuidance:
         )
         result = run_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
-        assert (
-            "verify external claims" in result.stdout.lower()
-            or "research done" in result.stdout.lower()
-        )
 
     def test_github_mcp_search_code_counts_as_research(self, tmp_path):
-        """Selective GitHub MCP tool triggers research guidance."""
+        """Selective GitHub MCP tool triggers research fast-exit."""
         transcript = tmp_path / "transcript.jsonl"
         session_id = str(uuid.uuid4())
         entries = [
@@ -364,13 +356,9 @@ class TestExitWithGuidance:
         )
         result = run_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
-        assert (
-            "verify external claims" in result.stdout.lower()
-            or "research done" in result.stdout.lower()
-        )
 
     def test_github_mcp_list_issues_not_research(self, tmp_path):
-        """Non-research GitHub MCP tool (list_issues) does NOT trigger research guidance."""
+        """Non-research GitHub MCP tool (list_issues) does NOT trigger research fast-exit."""
         transcript = tmp_path / "transcript.jsonl"
         session_id = str(uuid.uuid4())
         entries = [
@@ -389,12 +377,9 @@ class TestExitWithGuidance:
         )
         result = run_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
-        # Should NOT get research guidance — this is project management, not research
-        assert "verify external claims" not in result.stdout.lower()
-        assert "research done" not in result.stdout.lower()
 
-    def test_read_only_factual_question_guidance_message(self, tmp_path):
-        """Read tool + factual question → prints guidance to stdout."""
+    def test_read_only_factual_question_exits_0(self, tmp_path):
+        """Factual question with no tools → fast-exit 0."""
         transcript = tmp_path / "transcript.jsonl"
         session_id = str(uuid.uuid4())
         entries = [
@@ -410,8 +395,6 @@ class TestExitWithGuidance:
             last_assistant_message="It reads files.",
         )
         result = run_hook(payload, state_path=tmp_path / "state.json")
-        assert result.returncode == 0
-        # Either guidance message or plain exit 0 — both acceptable for factual + no tools
         assert result.returncode == 0
 
 

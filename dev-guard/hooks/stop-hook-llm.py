@@ -166,9 +166,13 @@ def _build_prompt(ctx: dict) -> str:
         "requires user input before proceeding? Questions about user preferences "
         "('Should I use approach A or B?'), scope ('Which files should this apply to?'), "
         "or missing context ('What is the expected behavior?') are GOOD — they prevent "
-        "wasted work on wrong assumptions. If the assistant needs information it cannot "
-        "determine from the codebase alone, PASS. Only flag as incomplete if the assistant "
-        "could answer its own question using available tools (Read, Grep, WebSearch, etc.)."
+        "wasted work on wrong assumptions. This criterion applies when the question is "
+        "asked BEFORE work is attempted, not as a trailing qualifier after claiming "
+        "completion. If the final message both claims work is done AND asks a question, "
+        "evaluate the completion claim under CLAIM ACCURACY first. If the assistant needs "
+        "information it cannot determine from the codebase alone and has NOT yet acted, "
+        "PASS. Only flag as incomplete if the assistant could answer its own question "
+        "using available tools (Read, Grep, WebSearch, etc.)."
     )
     criteria.append(
         "DEFERRED WORK: Does the final message punt ACTIONABLE work to the user that "

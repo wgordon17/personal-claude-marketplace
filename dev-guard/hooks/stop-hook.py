@@ -873,15 +873,15 @@ def main() -> None:
         _save_state(state)
         _exit_pass()
 
-    # ── Exit-with-guidance: Research + short response ────────────────────────
+    # ── Fast-exit: Research + short response ────────────────────────────────
     if research_used and response_is_short and not write_signals and not diff_changed:
         state = _update_session_state(
             state, session_id, current_diff_hash, len(all_tool_calls), file_size
         )
         _save_state(state)
-        _exit_pass("Research done, verify external claims if any.")
+        _exit_pass()
 
-    # ── Exit-with-guidance: Read-only + question ─────────────────────────────
+    # ── Fast-exit: Read-only + factual question ──────────────────────────────
     if (
         not write_signals
         and not diff_changed
@@ -894,7 +894,7 @@ def main() -> None:
             state, session_id, current_diff_hash, len(all_tool_calls), file_size
         )
         _save_state(state)
-        _exit_pass("Answer based on code exploration.")
+        _exit_pass()
 
     # ── Build trigger reasons ────────────────────────────────────────────────
     trigger_reasons: list[str] = []
