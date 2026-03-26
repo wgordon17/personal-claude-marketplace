@@ -162,13 +162,25 @@ def _build_prompt(ctx: dict) -> str:
         "not deferred without explicit user agreement."
     )
     criteria.append(
-        "DEFERRED WORK: Does the final message punt work to the user that Claude should "
-        "have done itself? Phrases like 'should be verified', 'needs to be confirmed', "
-        "'you should check', 'verify against your', 'please verify', "
+        "LEGITIMATE PAUSE: Is the assistant asking a genuine clarifying question that "
+        "requires user input before proceeding? Questions about user preferences "
+        "('Should I use approach A or B?'), scope ('Which files should this apply to?'), "
+        "or missing context ('What is the expected behavior?') are GOOD — they prevent "
+        "wasted work on wrong assumptions. If the assistant needs information it cannot "
+        "determine from the codebase alone, PASS. Only flag as incomplete if the assistant "
+        "could answer its own question using available tools (Read, Grep, WebSearch, etc.)."
+    )
+    criteria.append(
+        "DEFERRED WORK: Does the final message punt ACTIONABLE work to the user that "
+        "Claude should have done itself? Phrases like 'should be verified', 'needs to be "
+        "confirmed', 'you should check', 'verify against your', 'please verify', "
         "'you may want to update' — when the assistant has tools (Read, Grep, "
         "WebSearch, LSP, MCP servers) to do that verification — mean the assistant "
         "identified work that needs doing and punted it. That is incomplete work. "
-        "If it should be verified, verify it. If it needs checking, check it."
+        "If it should be verified, verify it. If it needs checking, check it. "
+        "NOTE: Asking a clarifying question before acting is NOT deferred work — "
+        "it is prudent information gathering. Only flag as deferred when the assistant "
+        "has both the tools AND the context to complete the work independently."
     )
 
     if work_type in ("code_config", "mixed"):
@@ -240,6 +252,9 @@ def _build_prompt(ctx: dict) -> str:
         "- findings must be null when decision=pass.",
         "- Be precise. Do not fail for cosmetic issues or minor style choices.",
         "- When in doubt, pass. The goal is catching genuinely incomplete or incorrect work.",
+        "- If the assistant needs user input but stopped with a text question instead of "
+        "using AskUserQuestion, include in findings: 'Use AskUserQuestion tool to ask "
+        "the user — it raises a notification so they know you need input.'",
     ]
 
     return "\n".join(lines)

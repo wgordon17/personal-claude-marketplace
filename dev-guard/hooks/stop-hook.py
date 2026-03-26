@@ -61,6 +61,9 @@ _WRITE_TOOLS = frozenset({"Edit", "Write", "NotebookEdit"})
 # Agent/task tool names
 _AGENT_TOOLS = frozenset({"Agent", "Task", "TeamCreate"})
 
+# Interactive question tool — agent is legitimately asking the user
+_QUESTION_TOOL = "AskUserQuestion"
+
 # Factual question patterns (no ML)
 _FACTUAL_PATTERNS = re.compile(
     r"\b(version|api|schema|support|require|format|compatible|"
@@ -727,14 +730,16 @@ def _exit_pass(message: str | None = None) -> NoReturn:
 
 
 def _exit_block(findings: list[str] | None) -> NoReturn:
-    """Exit 2 with findings printed to stderr."""
-    if findings:
-        print("Stop hook findings:", file=sys.stderr)
-        for finding in findings:
-            print(f"  - {finding}", file=sys.stderr)
-    else:
-        print("Stop hook: quality check failed. Please review your work.", file=sys.stderr)
-    sys.exit(2)
+    """Exit 0 with decision=block JSON on stdout.
+
+    Uses structured JSON output instead of exit 2 + stderr. This avoids the
+    misleading 'Stop hook error' UI label (anthropics/claude-code#34600) and
+    gives the agent a clean ``reason`` string as its next instruction.
+    """
+    reason = " ".join(findings) if findings else "Quality check failed. Please review your work."
+    output = {"decision": "block", "reason": reason}
+    print(json.dumps(output))
+    sys.exit(0)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -809,6 +814,16 @@ def main() -> None:
     # ── Git diff check ───────────────────────────────────────────────────────
     current_diff_hash = _git_diff_hash(cwd)
     diff_changed = bool(current_diff_hash and current_diff_hash != last_diff_hash)
+
+    # ── Fast-exit: AskUserQuestion is last tool call ─────────────────────
+    # Agent's final action was asking the user — legitimate pause for context.
+    if new_tool_calls and new_tool_calls[-1] == _QUESTION_TOOL:
+        _log_stop_event(session_id, "ask_user_question")
+        state = _update_session_state(
+            state, session_id, current_diff_hash, len(all_tool_calls), file_size
+        )
+        _save_state(state)
+        _exit_pass()
 
     # ── Detect signals ───────────────────────────────────────────────────────
     write_signals = _detect_write_signals(new_tool_calls)

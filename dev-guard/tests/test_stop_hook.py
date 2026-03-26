@@ -415,6 +415,68 @@ class TestExitWithGuidance:
         assert result.returncode == 0
 
 
+# ── Fast-exit: AskUserQuestion ────────────────────────────────────────────────
+
+
+class TestAskUserQuestionFastExit:
+    def test_ask_user_question_last_tool_exits_0(self, tmp_path):
+        """AskUserQuestion as last tool call → fast-exit 0 (agent asked user)."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix the authentication bug."},
+            {"type": "tool_use", "name": "Read", "id": "t1"},
+            {"type": "tool_use", "name": "AskUserQuestion", "id": "t2"},
+            {
+                "role": "assistant",
+                "content": "Should I use OAuth2 or session-based auth for this fix?",
+            },
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="Should I use OAuth2 or session-based auth for this fix?",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        # Should NOT contain decision=block JSON
+        if result.stdout.strip():
+            assert "block" not in result.stdout
+
+    def test_ask_user_question_not_last_tool_does_not_fast_exit(self, tmp_path):
+        """AskUserQuestion followed by Edit → no fast-exit (agent kept working)."""
+        write_mock_llm(tmp_path / "plugin", decision="pass")
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"type": "tool_use", "name": "AskUserQuestion", "id": "t1"},
+            {"type": "tool_use", "name": "Edit", "id": "t2"},
+            {
+                "role": "assistant",
+                "content": "I've completed the fix. The changes are ready.",
+            },
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="I've completed the fix. The changes are ready.",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # Should NOT fast-exit — AskUserQuestion was not the last tool call
+        assert result.returncode == 0  # LLM mock returns pass
+
+
 # ── Signal detection: write tools ─────────────────────────────────────────────
 
 
@@ -447,8 +509,8 @@ class TestWriteToolSignals:
         )
         assert result.returncode == 0
 
-    def test_edit_tool_llm_fail_exits_2(self, tmp_path):
-        """Edit tool + completion claim + mock LLM fail → exit 2."""
+    def test_edit_tool_llm_fail_blocks_via_json(self, tmp_path):
+        """Edit tool + completion claim + mock LLM fail → exit 0 with decision=block JSON."""
         write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Tests were not run."])
         session_id, transcript, msg = self._make_transcript_with_tool(tmp_path, "Edit")
         payload = make_payload(
@@ -461,8 +523,10 @@ class TestWriteToolSignals:
             state_path=tmp_path / "state.json",
             plugin_root=str(tmp_path / "plugin"),
         )
-        assert result.returncode == 2
-        assert "Tests were not run" in result.stderr
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Tests were not run" in output["reason"]
 
     def test_write_tool_triggers_llm_path(self, tmp_path):
         write_mock_llm(tmp_path / "plugin", decision="pass")
@@ -650,7 +714,7 @@ class TestLLMSubprocess:
         result = run_hook(payload, state_path=state_path, plugin_root=str(tmp_path / "plugin"))
         assert result.returncode == 0
 
-    def test_llm_fail_exits_2_with_findings(self, tmp_path):
+    def test_llm_fail_blocks_with_findings_in_reason(self, tmp_path):
         write_mock_llm(
             tmp_path / "plugin",
             decision="fail",
@@ -658,16 +722,20 @@ class TestLLMSubprocess:
         )
         payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
         result = run_hook(payload, state_path=state_path, plugin_root=str(tmp_path / "plugin"))
-        assert result.returncode == 2
-        assert "No tests run" in result.stderr
-        assert "TODOs remain" in result.stderr
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "No tests run" in output["reason"]
+        assert "TODOs remain" in output["reason"]
 
-    def test_llm_fail_exits_2_no_findings_still_has_message(self, tmp_path):
+    def test_llm_fail_no_findings_still_has_reason(self, tmp_path):
         write_mock_llm(tmp_path / "plugin", decision="fail", findings=None)
         payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
         result = run_hook(payload, state_path=state_path, plugin_root=str(tmp_path / "plugin"))
-        assert result.returncode == 2
-        assert result.stderr.strip()  # something printed
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert output["reason"]  # non-empty reason
 
     def test_missing_llm_script_fails_open(self, tmp_path):
         """No stop-hook-llm.py → subprocess fails → fail-open → exit 0."""
@@ -909,8 +977,10 @@ class TestHackDirModified:
             plugin_root=str(tmp_path / "plugin"),
         )
         # LLM was invoked (not fast-exited) and returned fail
-        assert result.returncode == 2
-        assert "Planning incomplete" in result.stderr
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Planning incomplete" in output["reason"]
 
     def test_hack_research_with_websearch_triggers_llm(self, tmp_path):
         """WebSearch + hack/research/ modified → research trigger → LLM invoked."""
@@ -950,8 +1020,10 @@ class TestHackDirModified:
             state_path=tmp_path / "state.json",
             plugin_root=str(tmp_path / "plugin"),
         )
-        assert result.returncode == 2
-        assert "Research incomplete" in result.stderr
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Research incomplete" in output["reason"]
 
     def test_hack_dir_old_file_does_not_trigger(self, tmp_path):
         """File in hack/plans/ older than 5 minutes → no planning trigger."""
