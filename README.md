@@ -77,14 +77,6 @@ Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__gith
 
 **Enabled toolsets:** `default`, `actions`, `orgs`, `labels`, `notifications`, `discussions`, `gists`, `projects`, `code_security`, `secret_protection`, `dependabot`, `security_advisories`, `github_support_docs_search`
 
-### CMUX Integration
-
-| Plugin | Description | Components | Docs |
-|--------|-------------|------------|------|
-| cmux-integration | Bridges Claude Code hook events to CMUX terminal's CLI API | 6 hooks | [README](cmux-integration/README.md) |
-
-Requires [CMUX](https://github.com/wgordon17/cmux) terminal. Provides desktop notifications, sidebar status, and activity logging.
-
 ### Development Guard
 
 | Plugin | Description | Components | Docs |
@@ -109,7 +101,6 @@ claude plugin install dev-guard@personal-claude-marketplace
 claude plugin install code-quality@personal-claude-marketplace
 claude plugin install git-tools@personal-claude-marketplace
 claude plugin install github-mcp@personal-claude-marketplace
-claude plugin install cmux-integration@personal-claude-marketplace  # Optional: requires CMUX terminal
 
 # Install LSP plugins (pick what you need)
 claude plugin install pyright-uvx@personal-claude-marketplace
