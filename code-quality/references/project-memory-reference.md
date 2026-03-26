@@ -64,7 +64,7 @@ Example: `feat-auth-1711388400`
 ### Generation (EXACT — all skills MUST use this)
 
 ```bash
-BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | sed 's/^-//;s/-$//' | cut -c1-40)
+BRANCH_SLUG=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-' | sed 's/[^a-z0-9-]//g' | sed 's/-\{2,\}/-/g' | cut -c1-40 | sed 's/^-//;s/-$//')
 BRANCH_SLUG=${BRANCH_SLUG:-detached}
 TIMESTAMP=$(date +%s)
 RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"

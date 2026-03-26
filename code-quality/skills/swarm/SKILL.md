@@ -71,7 +71,7 @@ Check git status — ensure the working tree is clean, identify the current bran
 whether a feature branch is needed. If not already on a feature branch, create one from
 `upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
 depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `code-quality/references/project-memory-reference.md`
-(Run-ID Naming Convention section) and create the audit trail directory at `hack/swarm/{run-id}/`.
+(Run-ID Naming Convention section) and create the audit trail directory at `{memory_dir}/swarm/{run-id}/`.
 Call `TeamCreate("swarm-impl")`, then create all tasks upfront with `addBlockedBy` dependencies
 so the full task graph is visible from the start.
 

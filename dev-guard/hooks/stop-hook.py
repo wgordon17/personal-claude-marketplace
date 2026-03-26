@@ -497,16 +497,22 @@ def _detect_research_tools(tool_calls: list[str]) -> bool:
 
 
 def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:
-    """Check if hack/plans/ or hack/research/ files were recently modified."""
+    """Check if plans/ or research/ files were recently modified in the memory dir."""
     result = {"plans": False, "research": False}
     now = time.time()
     recent_threshold = _HACK_RECENT_SECONDS
     try:
-        hack_path = Path(cwd) / "hack"
-        if not hack_path.is_dir():
+        # Detect memory directory (priority order per project-memory-reference.md)
+        memory_path = None
+        for dirname in ("hack", ".local", "scratch", ".dev"):
+            candidate = Path(cwd) / dirname
+            if candidate.is_dir():
+                memory_path = candidate
+                break
+        if memory_path is None:
             return result
         for subdir, key in [("plans", "plans"), ("research", "research")]:
-            sub_path = hack_path / subdir
+            sub_path = memory_path / subdir
             if sub_path.is_dir():
                 for fpath in sub_path.iterdir():
                     if fpath.is_file():
