@@ -735,7 +735,9 @@ def _exit_block(findings: list[str] | None) -> NoReturn:
     misleading 'Stop hook error' UI label (anthropics/claude-code#34600) and
     gives the agent a clean ``reason`` string as its next instruction.
     """
-    reason = " ".join(findings) if findings else "Quality check failed. Please review your work."
+    reason = "\n- ".join(findings) if findings else "Quality check failed. Please review your work."
+    if findings and len(findings) > 1:
+        reason = "- " + reason  # prefix first item with bullet too
     output = {"decision": "block", "reason": reason}
     print(json.dumps(output))
     sys.exit(0)
