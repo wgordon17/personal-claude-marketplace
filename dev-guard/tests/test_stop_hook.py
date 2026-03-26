@@ -447,8 +447,9 @@ class TestAskUserQuestionFastExit:
             assert "block" not in result.stdout
 
     def test_ask_user_question_not_last_tool_does_not_fast_exit(self, tmp_path):
-        """AskUserQuestion followed by Edit → no fast-exit (agent kept working)."""
-        write_mock_llm(tmp_path / "plugin", decision="pass")
+        """AskUserQuestion followed by Edit → no fast-exit, LLM invoked."""
+        # Use fail-returning mock to prove LLM was actually invoked (not fast-exited)
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Tests not run."])
         transcript = tmp_path / "transcript.jsonl"
         session_id = str(uuid.uuid4())
         entries = [
@@ -473,8 +474,11 @@ class TestAskUserQuestionFastExit:
             state_path=tmp_path / "state.json",
             plugin_root=str(tmp_path / "plugin"),
         )
-        # Should NOT fast-exit — AskUserQuestion was not the last tool call
-        assert result.returncode == 0  # LLM mock returns pass
+        # LLM was invoked (not fast-exited) and returned block
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Tests not run" in output["reason"]
 
 
 # ── Signal detection: write tools ─────────────────────────────────────────────

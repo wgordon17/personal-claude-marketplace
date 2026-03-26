@@ -10,8 +10,7 @@ question classification, work-type determination), and either exits 0 (allow
 stop) or delegates to stop-hook-llm.py for LLM evaluation.
 
 Exit codes:
-  0 -- allow stop (fast-exit or LLM pass)
-  2 -- block stop, Claude should continue (LLM fail)
+  0 -- always. Allow stop (plain exit) or block via JSON {"decision":"block","reason":"..."}
 
 State file: ~/.claude/stop-hook-state.json (overridable via STOP_HOOK_STATE_PATH)
 """
