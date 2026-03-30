@@ -1466,6 +1466,13 @@ class TestGitBranchEnforcement:
 class TestWorktreeStash:
     """Worktree-namespaced stash enforcement: blocks bare stash ops in worktrees."""
 
+    # Fake stash list: index 0 belongs to my-feature, index 1 does not
+    FAKE_STASH_LIST = (
+        "On worktree-my-feature: wt/my-feature: save wip\n"
+        "On main: unrelated stash from main\n"
+        "On worktree-other: wt/other-branch: someone elses work\n"
+    )
+
     @staticmethod
     def _env(tmp_path, worktree_name="my-feature"):
         return {
@@ -1473,6 +1480,7 @@ class TestWorktreeStash:
             "GUARD_DB_PATH": str(tmp_path / "test.db"),
             "PYTEST_CURRENT_TEST": "yes",
             "_GUARD_TEST_WORKTREE": worktree_name,
+            "_GUARD_TEST_STASH_LIST": TestWorktreeStash.FAKE_STASH_LIST,
         }
 
     @staticmethod
@@ -1545,17 +1553,17 @@ class TestWorktreeStash:
         )
         assert result.returncode == 0
 
-    def test_pop_with_ref_allowed(self, tmp_path):
-        """'git stash pop stash@{N}' is allowed (agent found the right index)."""
+    def test_pop_with_matching_ref_allowed(self, tmp_path):
+        """'git stash pop stash@{0}' allowed when stash belongs to this worktree."""
         result = run_guard(
             "Bash",
-            {"command": "git stash pop stash@{2}"},
+            {"command": "git stash pop stash@{0}"},
             env=self._env(tmp_path),
         )
         assert result.returncode == 0
 
-    def test_apply_with_ref_allowed(self, tmp_path):
-        """'git stash apply stash@{0}' is allowed."""
+    def test_apply_with_matching_ref_allowed(self, tmp_path):
+        """'git stash apply stash@{0}' allowed when stash belongs to this worktree."""
         result = run_guard(
             "Bash",
             {"command": "git stash apply stash@{0}"},
@@ -1563,15 +1571,44 @@ class TestWorktreeStash:
         )
         assert result.returncode == 0
 
-    def test_drop_with_ref_allowed(self, tmp_path):
-        """'git stash drop stash@{1}' is allowed."""
+    def test_drop_with_matching_ref_allowed(self, tmp_path):
+        """'git stash drop stash@{0}' allowed when stash belongs to this worktree."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash drop stash@{0}"},
+            env=self._env(tmp_path),
+        )
+        # drop with matching ref → worktree check passes, then stash-drop ASK rule fires
+        assert result.returncode == 0
+
+    # ── BLOCKED: pop/apply/drop targeting another worktree's stash ──
+
+    def test_pop_wrong_owner_blocked(self, tmp_path):
+        """'git stash pop stash@{1}' blocked when stash belongs to another worktree."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash pop stash@{1}"},
+            env=self._env(tmp_path),
+        )
+        assert_guard(result, 2, "does not belong to")
+
+    def test_apply_wrong_owner_blocked(self, tmp_path):
+        """'git stash apply stash@{2}' blocked when stash belongs to another worktree."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash apply stash@{2}"},
+            env=self._env(tmp_path),
+        )
+        assert_guard(result, 2, "does not belong to")
+
+    def test_drop_wrong_owner_blocked(self, tmp_path):
+        """'git stash drop stash@{1}' blocked when stash belongs to another worktree."""
         result = run_guard(
             "Bash",
             {"command": "git stash drop stash@{1}"},
             env=self._env(tmp_path),
         )
-        # drop with ref in a worktree → worktree check passes, then stash-drop ASK rule fires
-        assert result.returncode == 0
+        assert_guard(result, 2, "does not belong to")
 
     def test_stash_list_allowed(self, tmp_path):
         """'git stash list' is always allowed in a worktree."""
