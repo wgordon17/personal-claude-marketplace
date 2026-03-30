@@ -1575,9 +1575,10 @@ def _check_worktree_stash(cmd: str) -> None:
             )
         return
 
-    # pop/apply/drop without a specific stash ref
+    # pop/apply/drop — require stash ref AND verify it belongs to this worktree
     if subcmd in ("pop", "apply", "drop"):
-        if not re.search(r"stash@\{", cmd):
+        ref_match = re.search(r"stash@\{(\d+)\}", cmd)
+        if not ref_match:
             _exit_with_decision(
                 f"In a worktree, bare 'git stash {subcmd}' risks targeting "
                 f"another worktree's stash.\n"
@@ -1587,6 +1588,47 @@ def _check_worktree_stash(cmd: str) -> None:
                 rule_name=f"worktree-stash-bare-{subcmd}",
                 matched_segment=cmd,
             )
+        else:
+            # Verify the stash at this index belongs to this worktree
+            stash_ref = f"stash@{{{ref_match.group(1)}}}"
+            try:
+                # Test hook: inject fake stash list output
+                test_stash = (
+                    os.environ.get("_GUARD_TEST_STASH_LIST")
+                    if os.environ.get("PYTEST_CURRENT_TEST")
+                    else None
+                )
+                if test_stash is not None:
+                    stash_output = test_stash
+                else:
+                    r = subprocess.run(
+                        ["git", "stash", "list", "--format=%gs"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    stash_output = r.stdout if r.returncode == 0 else ""
+                lines = stash_output.strip().splitlines()
+                idx = int(ref_match.group(1))
+                if idx < len(lines):
+                    msg = lines[idx]
+                    if prefix not in msg:
+                        _exit_with_decision(
+                            f"{stash_ref} does not belong to "
+                            f"this worktree ({wt_name}).\n"
+                            f"Stash message: {msg}\n"
+                            f"Find your stashes: "
+                            f"git stash list --grep='{prefix}'",
+                            "block",
+                            rule_name="worktree-stash-wrong-owner",
+                            matched_segment=cmd,
+                        )
+            except (
+                subprocess.SubprocessError,
+                FileNotFoundError,
+                OSError,
+            ):
+                pass  # Fail open if we can't verify
         return
 
     # clear is always dangerous in worktrees
