@@ -1495,6 +1495,112 @@ def _check_git_trusted_dirs(cmd: str) -> None:
     )
 
 
+def _get_worktree_name() -> str | None:
+    """Return the worktree directory name if CWD is inside a git worktree, else None.
+
+    A git worktree has --git-dir pointing to .git/worktrees/<name> while
+    --git-common-dir points to the main repo's .git.  When they differ,
+    we're in a worktree and the name is the last path component of --git-dir.
+
+    During tests, honours _GUARD_TEST_WORKTREE env var.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        wt = os.environ.get("_GUARD_TEST_WORKTREE")
+        if wt is not None:
+            return wt or None  # empty string → None
+    try:
+        git_dir = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        git_common = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        git_dir_abs = str(Path(git_dir).resolve())
+        git_common_abs = str(Path(git_common).resolve())
+        if git_dir_abs != git_common_abs:
+            return Path(git_dir_abs).name
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+_STASH_OP_RE = re.compile(r"git\s+stash(?:\s+(\w+))?")
+_STASH_READ_SUBCMDS = {"list", "show", "branch"}
+
+
+def _check_worktree_stash(cmd: str) -> None:
+    """Block bare git stash operations in worktrees; require worktree-namespaced stashes.
+
+    In a worktree, stash is repo-wide and shared across all worktrees.
+    Concurrent agents can pop each other's work.  This enforces:
+      - push: must use ``-m 'wt/<worktree>: ...'``
+      - pop/apply/drop: must specify ``stash@{N}`` (after finding it via
+        ``git stash list --grep='wt/<worktree>'``)
+      - bare ``git stash`` (implicit push): blocked
+      - list/show: always allowed
+    """
+    m = _STASH_OP_RE.search(cmd)
+    if not m:
+        return
+
+    subcmd = m.group(1)  # None for bare "git stash"
+
+    # Read-only stash operations are always fine
+    if subcmd in _STASH_READ_SUBCMDS:
+        return
+
+    wt_name = _get_worktree_name()
+    if wt_name is None:
+        return  # Not in a worktree — regular stash rules apply
+
+    prefix = f"wt/{wt_name}"
+
+    # Bare "git stash" or "git stash push" without -m wt/<name>
+    if subcmd is None or subcmd == "push":
+        # Check for -m with worktree prefix
+        if not re.search(r"""-m\s+['"]?wt/""" + re.escape(wt_name), cmd):
+            _exit_with_decision(
+                f"In a worktree, stashes must be namespaced to prevent cross-worktree collisions.\n"
+                f"Use: git stash push -m '{prefix}: <description>'\n"
+                f"Then retrieve with: git stash list --grep='{prefix}'",
+                "block",
+                rule_name="worktree-stash-unnamed",
+                matched_segment=cmd,
+            )
+        return
+
+    # pop/apply/drop without a specific stash ref
+    if subcmd in ("pop", "apply", "drop"):
+        if not re.search(r"stash@\{", cmd):
+            _exit_with_decision(
+                f"In a worktree, bare 'git stash {subcmd}' risks targeting "
+                f"another worktree's stash.\n"
+                f"First find your stash: git stash list --grep='{prefix}'\n"
+                f"Then: git stash {subcmd} stash@{{N}}",
+                "block",
+                rule_name=f"worktree-stash-bare-{subcmd}",
+                matched_segment=cmd,
+            )
+        return
+
+    # clear is always dangerous in worktrees
+    if subcmd == "clear":
+        _exit_with_decision(
+            "git stash clear in a worktree would destroy ALL stashes across ALL worktrees.\n"
+            f"Drop individual stashes instead: git stash list "
+            f"--grep='{prefix}' then git stash drop stash@{{N}}",
+            "block",
+            rule_name="worktree-stash-clear",
+            matched_segment=cmd,
+        )
+
+
 def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
     """Check a command against git safety rules. Exits on block or ask match."""
     # Early exit: not a git command
@@ -1550,6 +1656,9 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
             rule_name="branch-needs-fetch",
             matched_segment=cmd,
         )
+
+    # Worktree stash safety — must come before generic stash-drop ASK rule
+    _check_worktree_stash(cmd)
 
     # ASK rules — prompt user for confirmation
     for name, check_fn, message in GIT_ASK_RULES:
