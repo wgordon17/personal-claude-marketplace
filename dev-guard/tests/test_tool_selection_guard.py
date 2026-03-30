@@ -891,6 +891,7 @@ class TestTerminalPipeNoop:
             "printf-midpipe-3stage-allow",
             "echo-middle-segment-allow",
             "printf-middle-segment-allow",
+            # ANSI-C quoting in terminal position → blocked
             "echo-ansi-c-terminal-block",
             "printf-ansi-c-terminal-block",
         ],
@@ -1448,12 +1449,176 @@ class TestGitBranchEnforcement:
             "chain-fetch-and-upstream",
         ],
     )
-    def test_branch_enforcement(self, command, expected_exit, expected_msg):
-        result = run_bash(command)
+    def test_branch_enforcement(self, command, expected_exit, expected_msg, tmp_path):
+        env = {**os.environ, "GUARD_DB_PATH": str(tmp_path / "test.db")}
+        result = run_guard("Bash", {"command": command}, env=env)
         if expected_exit == "ask":
             assert_ask_decision(result, expected_msg)
         else:
             assert_guard(result, expected_exit, expected_msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Worktree stash safety
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestWorktreeStash:
+    """Worktree-namespaced stash enforcement: blocks bare stash ops in worktrees."""
+
+    @staticmethod
+    def _env(tmp_path, worktree_name="my-feature"):
+        return {
+            **os.environ,
+            "GUARD_DB_PATH": str(tmp_path / "test.db"),
+            "PYTEST_CURRENT_TEST": "yes",
+            "_GUARD_TEST_WORKTREE": worktree_name,
+        }
+
+    @staticmethod
+    def _env_no_worktree(tmp_path):
+        return {
+            **os.environ,
+            "GUARD_DB_PATH": str(tmp_path / "test.db"),
+            "PYTEST_CURRENT_TEST": "yes",
+            "_GUARD_TEST_WORKTREE": "",  # empty → not in worktree
+        }
+
+    # ── BLOCKED: bare stash in worktree ──
+
+    def test_bare_stash_blocked(self, tmp_path):
+        """Bare 'git stash' (implicit push) is blocked in a worktree."""
+        result = run_guard("Bash", {"command": "git stash"}, env=self._env(tmp_path))
+        assert_guard(result, 2, "wt/my-feature")
+
+    def test_stash_push_no_name_blocked(self, tmp_path):
+        """'git stash push' without -m is blocked in a worktree."""
+        result = run_guard("Bash", {"command": "git stash push"}, env=self._env(tmp_path))
+        assert_guard(result, 2, "wt/my-feature")
+
+    def test_stash_push_wrong_name_blocked(self, tmp_path):
+        """'git stash push -m' with wrong prefix is blocked."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash push -m 'wt/other-branch: stuff'"},
+            env=self._env(tmp_path),
+        )
+        assert_guard(result, 2, "wt/my-feature")
+
+    def test_bare_pop_blocked(self, tmp_path):
+        """Bare 'git stash pop' is blocked in a worktree."""
+        result = run_guard("Bash", {"command": "git stash pop"}, env=self._env(tmp_path))
+        assert_guard(result, 2, "wt/my-feature")
+
+    def test_bare_apply_blocked(self, tmp_path):
+        """Bare 'git stash apply' is blocked in a worktree."""
+        result = run_guard("Bash", {"command": "git stash apply"}, env=self._env(tmp_path))
+        assert_guard(result, 2, "wt/my-feature")
+
+    def test_bare_drop_blocked(self, tmp_path):
+        """Bare 'git stash drop' is blocked in a worktree."""
+        result = run_guard("Bash", {"command": "git stash drop"}, env=self._env(tmp_path))
+        assert_guard(result, 2, "wt/my-feature")
+
+    def test_stash_clear_blocked(self, tmp_path):
+        """'git stash clear' is always blocked in a worktree."""
+        result = run_guard("Bash", {"command": "git stash clear"}, env=self._env(tmp_path))
+        assert_guard(result, 2, "ALL worktrees")
+
+    # ── ALLOWED: properly namespaced stash in worktree ──
+
+    def test_stash_push_correct_name_allowed(self, tmp_path):
+        """'git stash push -m wt/<name>: ...' is allowed."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash push -m 'wt/my-feature: save wip'"},
+            env=self._env(tmp_path),
+        )
+        assert result.returncode == 0
+
+    def test_stash_push_double_quotes_allowed(self, tmp_path):
+        """Double-quoted worktree name also works."""
+        result = run_guard(
+            "Bash",
+            {"command": 'git stash push -m "wt/my-feature: save wip"'},
+            env=self._env(tmp_path),
+        )
+        assert result.returncode == 0
+
+    def test_pop_with_ref_allowed(self, tmp_path):
+        """'git stash pop stash@{N}' is allowed (agent found the right index)."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash pop stash@{2}"},
+            env=self._env(tmp_path),
+        )
+        assert result.returncode == 0
+
+    def test_apply_with_ref_allowed(self, tmp_path):
+        """'git stash apply stash@{0}' is allowed."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash apply stash@{0}"},
+            env=self._env(tmp_path),
+        )
+        assert result.returncode == 0
+
+    def test_drop_with_ref_allowed(self, tmp_path):
+        """'git stash drop stash@{1}' is allowed."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash drop stash@{1}"},
+            env=self._env(tmp_path),
+        )
+        # drop with ref in a worktree → worktree check passes, then stash-drop ASK rule fires
+        assert result.returncode == 0
+
+    def test_stash_list_allowed(self, tmp_path):
+        """'git stash list' is always allowed in a worktree."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash list"},
+            env=self._env(tmp_path),
+        )
+        assert result.returncode == 0
+
+    def test_stash_show_allowed(self, tmp_path):
+        """'git stash show' is always allowed in a worktree."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash show stash@{0}"},
+            env=self._env(tmp_path),
+        )
+        assert result.returncode == 0
+
+    def test_stash_list_grep_allowed(self, tmp_path):
+        """'git stash list --grep' is allowed (how agents find their stash)."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash list --grep='wt/my-feature'"},
+            env=self._env(tmp_path),
+        )
+        assert result.returncode == 0
+
+    # ── NOT IN WORKTREE: all stash ops pass through ──
+
+    def test_bare_stash_outside_worktree_allowed(self, tmp_path):
+        """Bare 'git stash' outside a worktree is not blocked by this rule."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash"},
+            env=self._env_no_worktree(tmp_path),
+        )
+        assert result.returncode == 0
+
+    def test_bare_pop_outside_worktree_allowed(self, tmp_path):
+        """Bare 'git stash pop' outside a worktree is not blocked by this rule."""
+        result = run_guard(
+            "Bash",
+            {"command": "git stash pop"},
+            env=self._env_no_worktree(tmp_path),
+        )
+        assert result.returncode == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
