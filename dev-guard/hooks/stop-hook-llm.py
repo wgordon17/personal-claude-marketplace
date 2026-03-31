@@ -150,7 +150,15 @@ def _build_prompt(ctx: dict) -> str:
 
     criteria: list[str] = []
 
-    # Universal criteria
+    # Universal criteria — USER DIRECTIVE first
+    criteria.append(
+        "USER STOP DIRECTIVE: If the user's most recent message explicitly tells the "
+        "assistant to stop, pause, wait, slow down, or otherwise cease working "
+        "(e.g. 'stop', 'slow your roll', 'hold on', 'wait', 'pause', 'that's enough', "
+        "'chill', 'easy'), the assistant stopping IS the correct and complete response. "
+        "PASS immediately. Prior incomplete work is irrelevant — the user has overridden "
+        "the task. Do NOT evaluate other criteria."
+    )
     criteria.append(
         "CLAIM ACCURACY: Do the claims in the final message match the work evidence? "
         "Check that tools listed as used appear in the tools list, that git changes "

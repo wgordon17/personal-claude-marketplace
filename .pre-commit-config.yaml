@@ -14,3 +14,11 @@ repos:
         entry: uvx claudelint --strict
         pass_filenames: false
         files: \.(json|md|yaml)$
+
+      - id: test-llm
+        name: LLM integration tests
+        language: system
+        entry: make test-llm
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
