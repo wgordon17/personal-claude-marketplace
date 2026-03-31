@@ -408,7 +408,7 @@ def test_technical_stop_vocabulary_not_treated_as_directive(
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# FAIL scenarios: negation — user says "don't stop" (NOT a stop directive)
+# FAIL scenarios: negation — user says "don't stop" but work NOT done
 # The assistant should continue working; if it didn't do the work → FAIL.
 # ═════════════════════════════════════════════════════════════════════════════
 
