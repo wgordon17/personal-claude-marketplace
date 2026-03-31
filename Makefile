@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm prek
+.PHONY: all lint format test test-llm prek prek-install
 
 all: lint test  ## Full check suite (lint + test)
 
@@ -18,3 +18,6 @@ test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 
 prek:  ## Run pre-commit on all files
 	uvx prek run --all-files
+
+prek-install:  ## Install pre-commit + pre-push hooks
+	uvx prek install --install-hooks --hook-type pre-commit --hook-type pre-push
