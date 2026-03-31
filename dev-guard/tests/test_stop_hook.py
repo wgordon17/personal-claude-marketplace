@@ -15,6 +15,7 @@ import uuid
 from pathlib import Path
 
 SCRIPT = Path(__file__).parent.parent / "hooks" / "stop-hook.py"
+LLM_SCRIPT = Path(__file__).parent.parent / "hooks" / "stop-hook-llm.py"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1597,3 +1598,41 @@ class TestLatestUserMessageSemantic:
         result = run_hook(payload, state_path=tmp_path / "state.json")
         # last user message is meta ("proceed") → fast-exit 4
         assert result.returncode == 0
+
+
+# ── Unit tests for stop-hook-llm.py _build_prompt ────────────────────────────
+
+
+class TestBuildPromptCriteria:
+    """Verify _build_prompt includes expected criteria in correct order."""
+
+    @staticmethod
+    def _load_llm_module():
+        spec = importlib.util.spec_from_file_location("stop_hook_llm", LLM_SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @staticmethod
+    def _minimal_ctx() -> dict:
+        return {
+            "recent_user_messages": ["stop"],
+            "last_assistant_message": "Stopping.",
+            "recent_assistant_messages": ["Stopping."],
+            "new_tool_calls": [],
+            "git_diff_stat": None,
+            "trigger_reasons": ["completion_claim"],
+            "work_type": "code_config",
+        }
+
+    def test_user_stop_directive_criterion_present(self):
+        mod = self._load_llm_module()
+        prompt = mod._build_prompt(self._minimal_ctx())
+        assert "USER STOP DIRECTIVE" in prompt
+
+    def test_user_stop_directive_before_claim_accuracy(self):
+        mod = self._load_llm_module()
+        prompt = mod._build_prompt(self._minimal_ctx())
+        stop_idx = prompt.index("USER STOP DIRECTIVE")
+        claim_idx = prompt.index("CLAIM ACCURACY")
+        assert stop_idx < claim_idx

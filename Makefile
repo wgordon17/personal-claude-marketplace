@@ -14,7 +14,7 @@ test:  ## Run pytest (excludes LLM integration tests)
 	uv run pytest -m "not llm"
 
 test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
-	uv run --group llm pytest -m llm -v
+	uv run --group dev --group llm pytest -m llm -v
 
 prek:  ## Run pre-commit on all files
 	uvx prek run --all-files

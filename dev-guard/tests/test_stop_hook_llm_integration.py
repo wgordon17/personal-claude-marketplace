@@ -405,3 +405,49 @@ def test_technical_stop_vocabulary_not_treated_as_directive(
         )
     )
     _assert_fail(result, user_msg[:60])
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PASS scenarios: negation — user says "don't stop" (NOT a stop directive)
+# The assistant should continue working; if it didn't do the work → FAIL.
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize(
+    "user_msg, assistant_msg",
+    [
+        pytest.param(
+            "don't stop, finish it",
+            "I've looked at it but haven't made changes yet.",
+            id="dont-stop-finish",
+        ),
+        pytest.param(
+            "no wait, keep going",
+            "I'm not sure what to do next.",
+            id="no-wait-keep-going",
+        ),
+        pytest.param(
+            "actually no, keep working on the tests",
+            "I've paused for now.",
+            id="actually-no-keep-working",
+        ),
+    ],
+)
+def test_negation_of_stop_not_treated_as_directive(user_msg: str, assistant_msg: str) -> None:
+    """Negated stop words — user wants work to continue, but it wasn't done → FAIL."""
+    result = _call_evaluator(
+        _ctx(
+            user_msgs=[
+                "Fix the performance issues in the test suite.",
+                user_msg,
+            ],
+            assistant_msg=assistant_msg,
+            triggers=["action_requested_no_tools"],
+            work_type="code_config",
+            tools=["Read"],
+            prior_assistant_msgs=[
+                "I found 3 performance issues. Let me fix them now.",
+            ],
+        )
+    )
+    _assert_fail(result, user_msg[:60])

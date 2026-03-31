@@ -150,7 +150,7 @@ def _build_prompt(ctx: dict) -> str:
 
     criteria: list[str] = []
 
-    # Universal criteria — USER DIRECTIVE first (short-circuit)
+    # Universal criteria — USER DIRECTIVE first
     criteria.append(
         "USER STOP DIRECTIVE: If the user's most recent message explicitly tells the "
         "assistant to stop, pause, wait, slow down, or otherwise cease working "
