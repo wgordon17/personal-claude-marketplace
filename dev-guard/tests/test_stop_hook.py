@@ -499,6 +499,142 @@ class TestAskUserQuestionFastExit:
         assert "Tests not run" in output["reason"]
 
 
+# ── Fast-exit: user stop directive ─────────────────────────────────────────────
+
+
+class TestStopDirectiveFastExit:
+    """User explicitly says stop/pause/wait → fast-exit 0, regardless of prior work."""
+
+    def _run_with_stop_directive(
+        self,
+        tmp_path,
+        user_msg: str,
+        *,
+        tool_calls: list[dict] | None = None,
+        assistant_msg: str = "Stopping here. What's on your mind?",
+        mock_llm_decision: str = "fail",
+    ) -> subprocess.CompletedProcess:
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix the performance issues in the test suite."},
+            {"role": "assistant", "content": "Looking into it."},
+        ]
+        # Add tool calls from prior work
+        for tc in tool_calls or []:
+            entries.append(tc)
+        entries += [
+            {"role": "user", "content": user_msg},
+            {"role": "assistant", "content": assistant_msg},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        # Set up a fail-returning mock LLM — if fast-exit works, it won't be called
+        write_mock_llm(tmp_path / "plugin", decision=mock_llm_decision, findings=["Incomplete."])
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message=assistant_msg,
+        )
+        return run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+
+    def test_slow_your_roll_exits_0(self, tmp_path):
+        """'slow your roll' with prior tool calls → fast-exit 0."""
+        result = self._run_with_stop_directive(
+            tmp_path,
+            "Ok, slow your roll",
+            tool_calls=[
+                {"type": "tool_use", "name": "Read", "id": "t1"},
+                {"type": "tool_use", "name": "Grep", "id": "t2"},
+            ],
+        )
+        assert result.returncode == 0
+        # Should NOT contain decision=block — fast-exited before LLM
+        stdout = result.stdout.strip()
+        if stdout:
+            assert "block" not in stdout
+
+    def test_stop_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "stop")
+        assert result.returncode == 0
+
+    def test_hold_on_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "Hold on")
+        assert result.returncode == 0
+
+    def test_wait_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "wait")
+        assert result.returncode == 0
+
+    def test_pause_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "pause")
+        assert result.returncode == 0
+
+    def test_thats_enough_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "That's enough")
+        assert result.returncode == 0
+
+    def test_chill_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "chill")
+        assert result.returncode == 0
+
+    def test_stop_working_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "stop working")
+        assert result.returncode == 0
+
+    def test_pump_the_brakes_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "pump the brakes")
+        assert result.returncode == 0
+
+    def test_dont_continue_exits_0(self, tmp_path):
+        result = self._run_with_stop_directive(tmp_path, "don't continue")
+        assert result.returncode == 0
+
+    def test_stop_and_fix_is_redirection_not_stop(self, tmp_path):
+        """'stop and fix X' contains action word → NOT a stop directive → LLM invoked."""
+        result = self._run_with_stop_directive(
+            tmp_path,
+            "Stop, fix the other bug instead",
+            tool_calls=[{"type": "tool_use", "name": "Edit", "id": "t1"}],
+        )
+        # LLM mock returns fail → should see block
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_dont_stop_is_not_stop_directive(self, tmp_path):
+        """'don't stop' negation → NOT a stop directive → LLM invoked."""
+        result = self._run_with_stop_directive(
+            tmp_path,
+            "Don't stop, keep going",
+            tool_calls=[{"type": "tool_use", "name": "Edit", "id": "t1"}],
+        )
+        # LLM mock returns fail → should see block
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_stop_with_write_tools_still_fast_exits(self, tmp_path):
+        """Stop directive takes precedence even when write tools were used."""
+        result = self._run_with_stop_directive(
+            tmp_path,
+            "Ok slow your roll",
+            tool_calls=[
+                {"type": "tool_use", "name": "Edit", "id": "t1"},
+                {"type": "tool_use", "name": "Write", "id": "t2"},
+            ],
+        )
+        assert result.returncode == 0
+        stdout = result.stdout.strip()
+        if stdout:
+            assert "block" not in stdout
+
+
 # ── Signal detection: write tools ─────────────────────────────────────────────
 
 
@@ -1278,6 +1414,71 @@ class TestDetectDocGap:
     def test_cargo_toml_counts_as_docs(self):
         """Cargo.toml is a manifest -> counts as docs (case-insensitive)."""
         assert self.mod._detect_doc_gap(["src/main.rs", "Cargo.toml"]) is False
+
+
+class TestIsStopDirective:
+    """Unit tests for _is_stop_directive detection logic."""
+
+    def setup_method(self):
+        self.mod = _load_stop_hook_module()
+
+    def test_slow_your_roll(self):
+        assert self.mod._is_stop_directive("Ok, slow your roll") is True
+
+    def test_stop(self):
+        assert self.mod._is_stop_directive("stop") is True
+
+    def test_stop_working(self):
+        assert self.mod._is_stop_directive("stop working") is True
+
+    def test_hold_on(self):
+        assert self.mod._is_stop_directive("Hold on") is True
+
+    def test_wait(self):
+        assert self.mod._is_stop_directive("wait") is True
+
+    def test_pause(self):
+        assert self.mod._is_stop_directive("Pause") is True
+
+    def test_chill(self):
+        assert self.mod._is_stop_directive("chill") is True
+
+    def test_thats_enough(self):
+        assert self.mod._is_stop_directive("that's enough") is True
+
+    def test_pump_the_brakes(self):
+        assert self.mod._is_stop_directive("pump the brakes") is True
+
+    def test_dont_continue(self):
+        assert self.mod._is_stop_directive("don't continue") is True
+
+    def test_whoa(self):
+        assert self.mod._is_stop_directive("whoa") is True
+
+    def test_take_a_step_back(self):
+        assert self.mod._is_stop_directive("take a step back") is True
+
+    def test_redirection_stop_and_fix(self):
+        """'stop and fix X' has action word → False."""
+        assert self.mod._is_stop_directive("Stop, fix the other bug instead") is False
+
+    def test_redirection_wait_and_create(self):
+        assert self.mod._is_stop_directive("Wait, create a new file first") is False
+
+    def test_negation_dont_stop(self):
+        assert self.mod._is_stop_directive("Don't stop, keep going") is False
+
+    def test_negation_do_not_pause(self):
+        assert self.mod._is_stop_directive("Do not pause") is False
+
+    def test_none_returns_false(self):
+        assert self.mod._is_stop_directive(None) is False
+
+    def test_empty_returns_false(self):
+        assert self.mod._is_stop_directive("") is False
+
+    def test_unrelated_message(self):
+        assert self.mod._is_stop_directive("How does the API work?") is False
 
 
 # ── Unit tests for _parse_transcript ─────────────────────────────────────────

@@ -90,6 +90,36 @@ _ACTION_WORDS = re.compile(
     re.IGNORECASE,
 )
 
+# User directives to stop/pause/wait — explicit commands to cease working
+_STOP_DIRECTIVES = re.compile(
+    r"\b(?:"
+    r"stop(?:\s+(?:working|that|it|now|here|everything))?"
+    r"|slow\s+(?:your\s+roll|down|it\s+down)"
+    r"|hold\s+(?:on|up|off)"
+    r"|hang\s+on"
+    r"|wait(?:\s+(?:a\s+(?:sec|second|minute|moment|bit)|up))?"
+    r"|pause"
+    r"|that(?:'s| is)\s+enough"
+    r"|enough(?:\s+(?:for\s+now|already))?"
+    r"|pump\s+the\s+brakes"
+    r"|don(?:'t| not)\s+(?:do\s+anything|continue|proceed|go\s+further)"
+    r"|stand\s+down"
+    r"|cool\s+(?:it|your\s+jets)"
+    r"|chill"
+    r"|whoa"
+    r"|knock\s+it\s+off"
+    r"|cut\s+it\s+out"
+    r"|take\s+a\s+(?:break|breather|step\s+back)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Negated stop directives — "don't stop", "keep going", etc.
+_ANTI_STOP = re.compile(
+    r"(?:don(?:'t| not)|do not|keep)\s+(?:stop|pause|wait|hold)",
+    re.IGNORECASE,
+)
+
 # Completion claim patterns — must appear at END of message
 # ($ = end-of-string, no MULTILINE).
 # This prevents false positives on mid-paragraph claims like
@@ -549,6 +579,25 @@ def _classify_question(user_message: str | None) -> str | None:
     return None
 
 
+# ── Stop Directive Detection ─────────────────────────────────────────
+
+
+def _is_stop_directive(user_message: str | None) -> bool:
+    """Return True if the user's message is an explicit stop/pause directive.
+
+    Excludes redirections like 'stop and fix X' (action words after stop)
+    and negations like "don't stop".
+    """
+    if not user_message:
+        return False
+    if _ANTI_STOP.search(user_message):
+        return False
+    if not _STOP_DIRECTIVES.search(user_message):
+        return False
+    # "stop and fix X" is a redirection, not a stop directive
+    return not _ACTION_WORDS.search(user_message)
+
+
 # ── Work Type Determination ──────────────────────────────────────────────────
 
 
@@ -815,6 +864,17 @@ def main() -> None:
     # ── Git diff check ───────────────────────────────────────────────────────
     current_diff_hash = _git_diff_hash(cwd)
     diff_changed = bool(current_diff_hash and current_diff_hash != last_diff_hash)
+
+    # ── Fast-exit: User explicitly said stop/pause/wait ─────────────────
+    # If the user's most recent message is an explicit stop directive,
+    # the assistant stopping IS the correct behavior. No LLM needed.
+    if _is_stop_directive(latest_user_message):
+        _log_stop_event(session_id, "user_stop_directive")
+        state = _update_session_state(
+            state, session_id, current_diff_hash, len(all_tool_calls), file_size
+        )
+        _save_state(state)
+        _exit_pass()
 
     # ── Fast-exit: AskUserQuestion is last tool call ─────────────────────
     # Agent's final action was asking the user — legitimate pause for context.
