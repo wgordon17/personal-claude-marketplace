@@ -1636,3 +1636,9 @@ class TestBuildPromptCriteria:
         stop_idx = prompt.index("USER STOP DIRECTIVE")
         claim_idx = prompt.index("CLAIM ACCURACY")
         assert stop_idx < claim_idx
+
+    def test_user_stop_directive_has_redirection_clause(self):
+        mod = self._load_llm_module()
+        prompt = mod._build_prompt(self._minimal_ctx())
+        assert "REDIRECTION" in prompt
+        assert "continuation directive" in prompt

@@ -152,12 +152,17 @@ def _build_prompt(ctx: dict) -> str:
 
     # Universal criteria — USER DIRECTIVE first
     criteria.append(
-        "USER STOP DIRECTIVE: If the user's most recent message explicitly tells the "
-        "assistant to stop, pause, wait, slow down, or otherwise cease working "
-        "(e.g. 'stop', 'slow your roll', 'hold on', 'wait', 'pause', 'that's enough', "
-        "'chill', 'easy'), the assistant stopping IS the correct and complete response. "
-        "PASS immediately. Prior incomplete work is irrelevant — the user has overridden "
-        "the task. Do NOT evaluate other criteria."
+        "USER STOP DIRECTIVE: If the user's most recent message is PRIMARILY a stop "
+        "directive — telling the assistant to stop, pause, wait, slow down, or cease "
+        "working (e.g. 'stop', 'slow your roll', 'hold on', 'wait', 'pause', "
+        "'that's enough', 'chill', 'easy') — WITHOUT also giving continuation "
+        "instructions, follow-up tasks, or redirections in the same message, "
+        "then the assistant stopping IS the correct response. PASS immediately. "
+        "Prior incomplete work is irrelevant — the user has overridden the task. "
+        "Do NOT evaluate other criteria. "
+        "If the message combines a stop word WITH a continuation directive "
+        "(e.g. 'hold on, then keep going', 'wait, do X first, then continue'), "
+        "it is a REDIRECTION — do NOT short-circuit, evaluate all criteria normally."
     )
     criteria.append(
         "CLAIM ACCURACY: Do the claims in the final message match the work evidence? "

@@ -370,6 +370,48 @@ def test_incomplete_work_fails(
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# FAIL scenarios: stop word + continuation directive = redirection, not stop
+# The assistant should follow the redirection but stopped and deferred → FAIL.
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize(
+    "user_msg, assistant_msg",
+    [
+        pytest.param(
+            "hold on, tell me what's going on, then get back to work",
+            "I was comparing the two plugins but I'm not sure what to focus on. "
+            "Can you clarify what you'd like me to investigate?",
+            id="hold-on-then-get-back-to-work",
+        ),
+        pytest.param(
+            "wait, explain your approach, then continue with the implementation",
+            "I was going to refactor the module. Should I proceed?",
+            id="wait-explain-then-continue",
+        ),
+    ],
+)
+def test_stop_with_continuation_directive_fails(user_msg: str, assistant_msg: str) -> None:
+    """Stop word + continuation directive — assistant deferred instead of continuing → FAIL."""
+    result = _call_evaluator(
+        _ctx(
+            user_msgs=[
+                "Investigate the safety-net vs dev-guard overlap.",
+                user_msg,
+            ],
+            assistant_msg=assistant_msg,
+            triggers=["completion_claim"],
+            work_type="code_config",
+            tools=["Read", "Grep"],
+            prior_assistant_msgs=[
+                "I'll compare the two plugins now.",
+            ],
+        )
+    )
+    _assert_fail(result, user_msg[:60])
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # FAIL scenarios: stop words in technical context (NOT stop directives)
 # These messages use "stop/wait/pause" as technical vocabulary, not directives.
 # The assistant should have done work but didn't → FAIL.
