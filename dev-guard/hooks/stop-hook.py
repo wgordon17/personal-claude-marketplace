@@ -498,6 +498,9 @@ def _detect_research_tools(tool_calls: list[str]) -> bool:
     return False
 
 
+_CORE_MEMORY_FILES = ("PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md")
+
+
 def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:
     """Check if plans/ or research/ files were recently modified in the memory dir."""
     result = {"plans": False, "research": False}
@@ -509,6 +512,9 @@ def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:
         for dirname in ("hack", ".local", "scratch", ".dev"):
             candidate = Path(cwd) / dirname
             if candidate.is_dir():
+                core_count = sum(1 for f in _CORE_MEMORY_FILES if (candidate / f).is_file())
+                if core_count < 2:
+                    continue  # not a validated memory directory
                 memory_path = candidate
                 break
         if memory_path is None:

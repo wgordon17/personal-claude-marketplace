@@ -10,9 +10,9 @@ Before ending this session, update the project's persistent memory in `hack/` (o
 
 ### Step 1: Locate Memory Directory
 
-Detect the project memory directory using the convention in `code-quality/references/project-memory-reference.md` (Directory Detection section).
+Detect the project memory directory using the convention in `code-quality/references/project-memory-reference.md` (Directory Detection section), which requires a directory to both exist and contain at least 2 of the 5 core memory files.
 
-If none exist and this session had meaningful work, create `hack/` and add it to `.gitignore`.
+If no directory passes content validation and this session had meaningful work, create `hack/` and add it to `.gitignore`.
 
 ### Step 2: Read Current State
 

@@ -41,10 +41,12 @@ specialist agent.
 | 4 | QA | code-quality:qa | opus | No | Patterns, conventions, code quality |
 | 4 | Code-Reviewer | code-quality:code-reviewer | sonnet | No | Broader review, complements QA |
 | 4 | Performance | code-quality:performance | sonnet | No | Bottlenecks, N+1, memory issues |
+| 4 | Plan Adherence | code-quality:plan-adherence | opus | No | Verify implementation matches incremental plan |
 | 4.5 | Structural Analyst (×2) | general-purpose | opus | No | Adversarial structural design review |
 | 5 | Fixer | general-purpose | sonnet | Yes | Address ALL review findings |
 | 5 | Test Coverage Agent | general-purpose | sonnet | Yes | Write tests for coverage gaps from Phase 4 |
 | 5 | Code-Simplifier | code-quality:code-simplifier | sonnet | Yes | Post-fix simplification pass |
+| 5.5 | Plan File Updater | general-purpose | sonnet | Yes | Update plan file checkboxes after Lead reconciliation |
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |
@@ -233,11 +235,20 @@ tasks. The Lead decides based on the dependency graph — never based on cost or
 ### Phase 4: Parallel Review
 
 Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, and any
-auto-detected optional reviewers (UI, API, DB). All reviewers operate in read-only mode on the
+auto-detected optional reviewers (UI, API, DB). Also spawn the Plan Adherence reviewer if an
+incremental plan file is found (see below). All reviewers operate in read-only mode on the
 completed implementation. Each writes structured JSON findings to `{run_dir}/reviews/`
 (see schema in `references/communication-schema.md`). The Lead collects ALL findings and
 synthesizes into a consolidated view. Every finding — regardless of severity — is routed to
 Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
+
+**Plan Adherence reviewer:** Before spawning Phase 4 agents, search `{memory_dir}/plans/` for an
+incremental plan file whose `**Branch:**` header field matches the swarm's current feature branch.
+If no Branch header match is found, fall back to filename matching using the branch slug. If a
+plan file is found, spawn the `code-quality:plan-adherence` agent (opus model, read-only) alongside
+the other Phase 4 reviewers. Provide it: the incremental plan file path, `{run_dir}/architect-plan.json`,
+and the full diff (`git diff origin/main..HEAD`). If no incremental plan file is found, skip the
+Plan Adherence reviewer entirely — `architect-plan.json` alone is insufficient to trigger this agent.
 
 **Escalation Routing (before proceeding to Phase 5):**
 
@@ -251,6 +262,7 @@ After synthesizing findings, classify each finding by type and route accordingly
 | Implementation | Bugs, quality issues, code-level security vulnerabilities, performance bottlenecks | Route to Phase 5 Fixer |
 | Test coverage | Missing tests, untested paths, coverage gaps for the deliverable | Route to Phase 5 Test Coverage Agent |
 | Documentation | Missing or incorrect documentation for implemented features | Route to Phase 6 Docs agent |
+| Plan drift | Implementation diverges from plan task spec, missing tasks, unimplemented steps | Route to Phase 5 Fixer for fixable items; AskUserQuestion for scope-level deviations |
 
 **Escalation counter:** Track a `design_escalation_count` across the swarm run. Each time findings
 trigger a return to Phase 2 (design-level) or Phase 2.5 (security design), increment the counter.
@@ -325,6 +337,33 @@ to confirm all new tests pass.
 over-engineering, unnecessary abstractions, and complexity introduced during implementation or
 fixing. Skip Code-Simplifier only if neither the Fixer nor the Test Coverage Agent made any
 changes. Re-run affected tests after any fixes to confirm nothing regressed.
+
+### Phase 5.5: Plan Reconciliation
+
+If no incremental plan file exists (as determined during Phase 4 plan file discovery), skip this
+phase entirely.
+
+If a plan file was found, the Lead performs reconciliation:
+
+1. **Discover the plan file** — Use the same Branch-header matching used in Phase 4: search
+   `{memory_dir}/plans/` for a file whose `**Branch:**` field matches the swarm's feature branch.
+   Fall back to branch-slug filename matching if no header match is found.
+
+2. **Cross-reference tasks against the cumulative diff** — Run `git diff origin/main..HEAD` to
+   produce the full cumulative diff. Read the plan file and extract every task (checked and
+   unchecked). For each task, determine whether the diff fully addresses it.
+
+3. **Escalate unaddressed tasks** — For any task that is not fully addressed by the diff, use
+   `AskUserQuestion` to escalate with: the task description, what was done toward it (if anything),
+   and what remains unimplemented. Do NOT silently skip unaddressed tasks.
+
+4. **Spawn a plan file updater** — After escalation decisions are made, spawn a general-purpose
+   sonnet agent (Can Edit: Yes) with the plan file path and reconciliation results. This agent:
+   - Checks off tasks that were completed (`[x]`)
+   - Marks tasks skipped by user decision as `[SKIPPED by user]`
+   - Marks tasks blocked due to unresolved issues as `[BLOCKED: reason]`
+
+   The Lead does NOT write to the plan file directly (Can Edit: No).
 
 ### Phase 6: Docs & Memory
 
@@ -491,6 +530,13 @@ Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
   +-- Code-Simplifier: post-fix pass
      |
      v
+Phase 5.5: Plan Reconciliation (if incremental plan file found)
+  +-- Lead: discover plan file via Branch-header matching
+  +-- Lead: cross-reference tasks against git diff origin/main..HEAD
+  +-- Lead: AskUserQuestion for any unaddressed tasks
+  +-- Plan File Updater (sonnet): check off completed, mark skipped/blocked
+     |
+     v
 Phase 6: Docs & Memory
   +-- Docs agent: repo docs + hack/ updates
   +-- Docs Reviewer: verify Docs agent's work
@@ -600,6 +646,7 @@ After escalation, wait for user input before proceeding.
 | Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings of any severity |
 | Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
 | Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |
+| Phase 5.5: Plan Reconciliation | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. |
 | Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
 | /unfuck sweep | Fewer than 20 files modified and not an architectural change |
 | NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
@@ -630,7 +677,7 @@ prefer opus — one strong pass beats multiple weaker passes.
 
 | Model | Used For |
 |-------|---------|
-| opus | Architect, Reviewer, Security, QA, Structural Analysts — judgment-heavy tasks |
+| opus | Architect, Reviewer, Security, QA, Structural Analysts, **Plan Adherence** — judgment-heavy tasks |
 | sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Docs, Lessons Extractor |
 | haiku | Test-Runner, Verifier — execution-only tasks |
 

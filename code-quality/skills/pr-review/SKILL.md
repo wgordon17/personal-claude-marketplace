@@ -2,8 +2,8 @@
 name: pr-review
 description: |
   Multi-agent PR review with finding verification. Use when asked to "review PR",
-  "review this PR", "code review", or given a PR URL to review. Spawns 6 parallel specialized
-  reviewers (security, QA, performance, code quality, correctness, git history),
+  "review this PR", "code review", or given a PR URL to review. Spawns 7 parallel specialized
+  reviewers (security, QA, performance, code quality, correctness, git history, plan adherence),
   verifies findings by investigating source code, categorizes by type, and prints a
   structured report to the terminal. Never comments on GitHub PRs.
 allowed-tools: [Read, Glob, Grep, Bash, Agent]
@@ -11,11 +11,12 @@ allowed-tools: [Read, Glob, Grep, Bash, Agent]
 
 # PR Review Skill
 
-Multi-agent pull request review. Spawns 6 parallel Sonnet reviewers (security, QA, performance,
-code quality, correctness, git history), each required to investigate and verify findings before
-reporting. A Sonnet verification agent then reads source files to confirm or disprove each
-finding. Results are categorized by type (testing gaps, correctness, security, architecture,
-decisions needed, etc.) and printed as a structured terminal report.
+Multi-agent pull request review. Spawns 7 parallel reviewers (6 Sonnet + 1 Opus) — security, QA,
+performance, code quality, correctness, git history, and plan adherence — each required to
+investigate and verify findings before reporting. A Sonnet verification agent then reads source
+files to confirm or disprove each finding. Results are categorized by type (testing gaps,
+correctness, security, architecture, decisions needed, etc.) and printed as a structured terminal
+report.
 
 **Never comments on GitHub PRs.** Output is terminal-only.
 
@@ -106,11 +107,19 @@ Store as `{claude_md_rules}` and `{contributing_md_rules}`.
 
 Search for a plan file that matches the PR's topic. Detect the memory directory using the
 convention in `code-quality/references/project-memory-reference.md` (Directory Detection and
-Worktree Resolution sections), then check `{memory_dir}/plans/` for files whose name relates
-to the PR title or branch name.
+Worktree Resolution sections).
 
-If a matching plan file is found, read it and store as `{plan_content}`. If no plan exists,
-use: `"No implementation plan found."` The Correctness Reviewer uses this to detect plan drift.
+**Primary:** Search `{memory_dir}/plans/` files and parse each file's `**Branch:**` header
+field. Match the value against the PR's head branch name. If a match is found, this is the
+plan file.
+
+**Fallback:** If no `**Branch:**` header match is found, check `{memory_dir}/plans/` for
+files whose name relates to the PR title or branch name.
+
+If a matching plan file is found, read it and store as `{plan_content}` and record the file
+path as `{plan_file_path}`. If no plan exists, use `"No implementation plan found."` for
+`{plan_content}` and `""` (empty string) for `{plan_file_path}`. The Correctness Reviewer
+and Plan Adherence Reviewer use this to detect plan drift.
 
 ### Fetch PR Diff
 
@@ -163,14 +172,15 @@ Assemble these values — they are passed to reviewers in Phase 2:
 - `{changed_files}` = newline-separated list of changed file paths
 - `{git_history_context}` = combined blame/log output from above
 - `{plan_content}` = implementation plan content or placeholder
+- `{plan_file_path}` = path to discovered plan file or empty string
 
 ---
 
 ## Phase 1 — Reviewer Applicability
 
-Determine which of the 6 reviewers apply based on changed file types.
+Determine which of the 7 reviewers apply based on changed file types.
 
-Default: all 6 reviewers run. Skip a reviewer only if its domain has zero applicability:
+Default: all 7 reviewers run. Skip a reviewer only if its domain has zero applicability:
 
 | Reviewer | Skip condition |
 |----------|----------------|
@@ -180,6 +190,7 @@ Default: all 6 reviewers run. Skip a reviewer only if its domain has zero applic
 | Code Quality | (never skip) |
 | Correctness | (never skip) |
 | Git History | Skip only if git history collection returned empty (e.g., brand-new repo with no history) |
+| Plan Adherence | Skip if no implementation plan found in Phase 0 |
 
 Record which reviewers will run.
 
@@ -188,7 +199,8 @@ Record which reviewers will run.
 ## Phase 2 — Parallel Review
 
 Read `references/reviewer-prompts.md`. For each applicable reviewer, locate the corresponding
-prompt template, substitute all placeholders with actual values, and spawn a Sonnet agent.
+prompt template, substitute all placeholders with actual values, and spawn an agent. Most
+reviewers use `model="sonnet"`; the Plan Adherence Reviewer uses `model="opus"`.
 
 Spawn all applicable reviewers simultaneously (parallel Agent calls).
 
@@ -243,6 +255,21 @@ Agent(
 The Git History Reviewer receives `{git_history_context}` (from Phase 0) instead of `{diff}`.
 It also receives `{pr_description}`, `{changed_files}`, `{claude_md_rules}`, and `{contributing_md_rules}`. Do NOT re-collect git history here —
 use the output already stored from Phase 0.
+
+### Plan Adherence Reviewer (7th, parallel with above)
+
+Only spawned if a plan was found in Phase 0 (i.e., `{plan_file_path}` is non-empty).
+
+```
+Agent(
+  description="Plan adherence review of PR #{number}",
+  model="opus",
+  prompt=<Plan Adherence Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+)
+```
+
+The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{diff}`,
+`{changed_files}`, `{pr_description}`, `{claude_md_rules}`, and `{contributing_md_rules}`.
 
 ### Collect Findings
 
@@ -454,6 +481,7 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Verifier |
 | `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers + Verifier |
 | `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers + Verifier |
-| `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer only |
+| `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer, Plan Adherence Reviewer |
+| `{plan_file_path}` | Path to discovered plan file or empty string | Plan Adherence Reviewer only |
 | `{git_history_context}` | Pre-collected blame/log output | Git History Reviewer only |
 | `{findings_json}` | JSON array of all findings with diff_context | Finding Verifier only |

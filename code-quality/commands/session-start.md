@@ -123,6 +123,9 @@ echo "hack/" >> .gitignore
 
 Or use `.local/`, `scratch/`, or `.dev/` if user prefers.
 
+> **Note:** `session-start` and `session-end` are the only paths for creating memory directories. Other skills must
+> not create the directory — they should skip memory operations if no validated dir is found.
+
 ### Step 4: Initialize Memory Files
 
 **NEXT.md:**
