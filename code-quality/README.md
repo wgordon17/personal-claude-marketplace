@@ -1,18 +1,19 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research, business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, map-reduce, speculative, reflect, and index-repo.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research, business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, map-reduce, speculative, reflect, and index-repo.
 
-## Agents (7)
+## Agents (8)
 
 | Agent | Purpose | Model |
 |-------|---------|-------|
-| `code-quality:architect` | System architecture design and evaluation | Sonnet |
+| `code-quality:architect` | System architecture design and evaluation | Opus |
 | `code-quality:security` | Application security review (OWASP) | Sonnet |
 | `code-quality:qa` | Code quality, test strategy, tech debt | Sonnet |
 | `code-quality:performance` | Performance profiling and optimization | Sonnet |
 | `code-quality:test-runner` | Efficient test execution specialist | Haiku |
 | `code-quality:code-reviewer` | Plan alignment, code quality, convention compliance, doc accuracy | Sonnet |
 | `code-quality:code-simplifier` | Dead code removal, unnecessary abstraction cleanup, clarity improvement | Sonnet |
+| `code-quality:plan-adherence` | Plan file verification, task completion tracking, file structure reconciliation | Opus |
 
 ## Skills (17)
 

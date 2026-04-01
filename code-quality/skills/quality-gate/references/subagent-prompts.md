@@ -148,6 +148,52 @@ If code quality is good, say "No code quality findings." Do not fabricate issues
 
 ---
 
+## Layer 1.75: Plan Adherence Reviewer
+
+```
+You are reviewing implementation against a plan file. Your sole focus is PLAN ADHERENCE.
+
+PLAN FILE PATH:
+{plan_file_path}
+
+PLAN CONTENT:
+{plan_content}
+
+GIT DIFF:
+{git_diff}
+
+CHANGED FILES:
+{changed_files}
+
+ORIGINAL REQUEST:
+{original_request}
+
+INSTRUCTIONS:
+1. Parse the plan file and extract all task sections. Adapt to its structure — look for
+   `## Task N:` headings, numbered lists, checkboxes, or equivalent structural markers.
+
+2. For each task found: verify all `- [ ]` steps have been implemented by examining
+   the diff and source files. Mark each step as VERIFIED or UNVERIFIED with evidence.
+
+3. If a `## File Structure` section exists in the plan: compare the planned files against
+   `{changed_files}`. Report any planned files that are absent or unexpected files present.
+   If no `## File Structure` section exists, skip this check.
+
+4. For each task or step that cannot be verified as implemented: immediately use
+   AskUserQuestion with:
+   - The task description and step details
+   - The evidence (or lack thereof) in the diff
+   - Options for the user: approve skip ([SKIPPED by user]), mark blocked ([BLOCKED: reason]),
+     or request implementation (quality gate will fail and return to implementation)
+
+5. Report structured findings:
+   - Task-by-task pass/fail with evidence for each step
+   - File structure reconciliation results (if applicable)
+   - Any assumptions made during verification
+```
+
+---
+
 ## Subagent A: Completeness Reviewer
 
 ### Pass 1 Prompt
@@ -174,6 +220,16 @@ REVIEW CHECKLIST:
 5. Check for partial implementations: stubs, empty functions, placeholder values
 6. If this is subagent output: check for "I implemented X but not Y" patterns
 7. Check project rules compliance: version bumps, required manifest updates, deployment readiness
+
+PLAN FILE (if available):
+{plan_content}
+
+8. If a plan file is provided above (not "No plan file found."): this plan is the
+   authoritative decomposition of the original request into tasks. Verify EVERY task
+   in the plan was implemented. For each plan task, check: are all steps completed?
+   Were all files in the task's Files section modified? Does the implementation match
+   the task's specification?
+   A plan task that is unchecked is a CRITICAL completeness gap — the plan is a contract.
 
 For each issue found, report:
 - What requirement or item is affected

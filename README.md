@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Code quality agents, development utilities, and orchestration skills | 7 agents, 17 skills, 4 commands | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 17 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -28,6 +28,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `code-quality:test-runner` - Efficient test execution specialist
 - `code-quality:code-reviewer` - Plan alignment, code quality, convention compliance, doc accuracy
 - `code-quality:code-simplifier` - Dead code removal, unnecessary abstraction cleanup, clarity improvement
+- `code-quality:plan-adherence` - Plan file verification, task completion tracking, escalation
 
 **Skills:**
 - `/deep-research` - Multi-hop research (40+ sources, multi-perspective analysis)

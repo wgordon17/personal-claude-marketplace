@@ -248,6 +248,10 @@ Write the plan file with a header containing:
 - **Architecture Summary:** — 2-3 sentences
 - **Tech Stack:**
 - **Key Decisions:** — from Phase 2
+- **Branch:** — The current git branch name at plan-writing time, or "not yet created" if the
+  plan is written before branching. Example: `**Branch:** feat/my-feature`
+  The `**Branch:**` field is used by the plan-adherence agent for cross-session plan discovery.
+  Always populate it, even if the branch doesn't exist yet — update it when the branch is created.
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.

@@ -37,13 +37,14 @@ digraph quality_gate {
   detect [label="Step 0: Detect work type"];
   layer1 [label="Layer 1: Self-Review Loop\n6 rounds, rotating lenses"];
   layer1_5 [label="Layer 1.5: Domain Expert Review\n4 parallel reviewers (code/mixed only)"];
+  layer1_75 [label="Layer 1.75: Plan Adherence Review\n(BLOCKING when plan file found)"];
   layer2 [label="Layer 2: Fresh-Context Subagents\n2 subagents x 2 passes"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
   docs [label="Documentation Gate (BLOCKING)"];
   nodataloss [label="No Data Loss Gate (BLOCKING)"];
   final [label="Final Verification"];
-  detect -> layer1 -> layer1_5 -> layer2 -> memory -> artifact -> docs -> nodataloss -> final;
+  detect -> layer1 -> layer1_5 -> layer1_75 -> layer2 -> memory -> artifact -> docs -> nodataloss -> final;
 }
 ```
 
@@ -293,6 +294,40 @@ or "findings noted for later," stop. Fix the critical/high findings now.
 
 ---
 
+## Layer 1.75: Plan Adherence Review
+
+**Trigger:** Detect plan file. Search `{memory_dir}/plans/` for files whose `**Branch:**` header
+matches the current git branch (exact string match). Fallback: match plan filenames where the
+branch slug prefix matches the current branch slug. If multiple match, use the most recent by
+unix timestamp. If none found, skip Layer 1.75 with note: "No plan file found — skipping plan
+adherence check."
+
+**Gate behavior:** When a plan IS found, Layer 1.75 is BLOCKING — cannot proceed to Layer 2
+without completing plan verification. REQUIRED gate when a plan file exists.
+
+**Execution:** Spawn the plan-adherence agent (opus) with:
+- Plan file path
+- Plan file content (`{plan_content}`)
+- `git diff`
+- Changed file list
+- Original user request
+
+Store `{plan_content}` in context so Layer 2 Subagent A can receive it.
+
+**Escalation handling:** If the plan-adherence agent triggers AskUserQuestion for unchecked
+tasks, the quality gate waits for user responses. User can:
+- Approve skip (`[SKIPPED by user]`)
+- Mark blocked (`[BLOCKED: reason]`)
+- Request implementation (quality gate fails, returns to implementation)
+
+**Output:** Plan Adherence findings included in quality gate output report.
+
+**Failure handling:** If the agent crashes or times out, retry once. If the second attempt
+fails, mark as `[UNREVIEWED]` and proceed with note. If AskUserQuestion is unavailable, report
+unchecked tasks as CRITICAL findings.
+
+---
+
 ## Layer 2: Fresh-Context Subagent Reviews
 
 Same-context review has an anchoring ceiling. Fresh-context subagents break through it by
@@ -328,6 +363,9 @@ Collect:
 - Work type classification from Step 0
 - CLAUDE.md / CONTRIBUTING.md project rules (if they exist) — subagents need these
   to check project convention compliance
+- `{plan_content}` — plan content discovered by Layer 1.75 (if a plan was found). Pass to
+  Subagent A (Completeness Reviewer) via the `{plan_content}` placeholder. Value is the plan
+  file content or `'No plan file found.'` if Layer 1.75 was skipped.
 
 ### Subagent Execution (2 passes each — BOTH mandatory)
 
@@ -548,6 +586,12 @@ Layer 1.5 — Domain Expert Review: [N/A for non-code | COMPLETE]
   Critical/High fixed before Layer 2: [count]
   Medium/Low recorded: [count]
 
+Layer 1.75 — Plan Adherence: [N/A (no plan) | COMPLETE]
+  Plan file: [path or "not found"]
+  Tasks verified: [N/M]
+  Tasks escalated: [count] ([approved/blocked/failed])
+  File structure: [MATCH | N discrepancies]
+
 Layer 2 — Subagent Reviews:
   Subagent A (Completeness): [count] findings across 2 passes — agent ID: [id]
   Subagent B (Adversarial): [count] findings across 2 passes — agent ID: [id]
@@ -584,6 +628,7 @@ Overall: [PASS / NEEDS WORK]
 | Skill | Relationship |
 |-------|-------------|
 | `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens) for dead code removal. |
+| `code-quality:plan-adherence` | Spawned in Layer 1.75 for plan file verification (planning/mixed work types). |
 | `code-quality:reflect` | Invoked for metacognitive checkpoints via Serena reflection tools. |
 | `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `code-quality:qa` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |

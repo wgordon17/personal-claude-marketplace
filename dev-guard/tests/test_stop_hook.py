@@ -965,7 +965,11 @@ class TestMalformedInput:
 class TestHackDirModified:
     def test_hack_plans_recently_modified_triggers_llm(self, tmp_path):
         """Recently modified file in hack/plans/ → planning trigger → LLM invoked."""
-        hack_plans = tmp_path / "hack" / "plans"
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        (hack / "PROJECT.md").write_text("# Project")
+        (hack / "SESSIONS.md").write_text("# Sessions")
+        hack_plans = hack / "plans"
         hack_plans.mkdir(parents=True)
         (hack_plans / "2026-03-16-test.md").write_text("# Plan")
 
@@ -1007,7 +1011,11 @@ class TestHackDirModified:
 
     def test_hack_research_with_websearch_triggers_llm(self, tmp_path):
         """WebSearch + hack/research/ modified → research trigger → LLM invoked."""
-        hack_research = tmp_path / "hack" / "research"
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        (hack / "PROJECT.md").write_text("# Project")
+        (hack / "SESSIONS.md").write_text("# Sessions")
+        hack_research = hack / "research"
         hack_research.mkdir(parents=True)
         (hack_research / "2026-03-16-test.md").write_text("# Research")
 
@@ -1050,7 +1058,11 @@ class TestHackDirModified:
 
     def test_hack_dir_old_file_does_not_trigger(self, tmp_path):
         """File in hack/plans/ older than 5 minutes → no planning trigger."""
-        hack_plans = tmp_path / "hack" / "plans"
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        (hack / "PROJECT.md").write_text("# Project")
+        (hack / "SESSIONS.md").write_text("# Sessions")
+        hack_plans = hack / "plans"
         hack_plans.mkdir(parents=True)
         old_file = hack_plans / "old-plan.md"
         old_file.write_text("# Old plan")
@@ -1102,6 +1114,67 @@ class TestHackDirModified:
         )
         result = run_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
+
+
+# ── Module loader for unit tests ──────────────────────────────────────────────
+
+
+def _load_stop_hook_module():
+    """Import stop-hook.py as a module for unit testing internal functions."""
+    spec = importlib.util.spec_from_file_location("stop_hook", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# ── Unit tests for _check_hack_dir_modified ───────────────────────────────────
+
+
+class TestCheckHackDirModified:
+    """Unit tests for _check_hack_dir_modified internal function."""
+
+    def setup_method(self):
+        self.mod = _load_stop_hook_module()
+
+    def test_hack_dir_without_core_files_not_detected(self, tmp_path):
+        """hack/ with plans/ but no core memory files → content validation fails → no trigger."""
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        # Create plans/ with a recently-modified file
+        hack_plans = hack / "plans"
+        hack_plans.mkdir(parents=True)
+        (hack_plans / "my-plan.md").write_text("# Plan")
+        # Do NOT create any core memory files — directory should be rejected
+
+        result = self.mod._check_hack_dir_modified(str(tmp_path))
+        assert result == {"plans": False, "research": False}
+
+    def test_hack_dir_with_one_core_file_not_detected(self, tmp_path):
+        """hack/ with exactly 1 core memory file is below the 2-file threshold → no trigger."""
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        # Create exactly 1 core memory file (threshold requires 2+)
+        (hack / "PROJECT.md").write_text("# Project")
+        # Create plans/ with a recently-modified file
+        hack_plans = hack / "plans"
+        hack_plans.mkdir(parents=True)
+        (hack_plans / "my-plan.md").write_text("# Plan")
+
+        result = self.mod._check_hack_dir_modified(str(tmp_path))
+        assert result == {"plans": False, "research": False}
+
+    def test_hack_dir_with_two_core_files_detected(self, tmp_path):
+        """hack/ with 2+ core memory files passes validation → plans trigger works."""
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        (hack / "PROJECT.md").write_text("# Project")
+        (hack / "SESSIONS.md").write_text("# Sessions")
+        hack_plans = hack / "plans"
+        hack_plans.mkdir(parents=True)
+        (hack_plans / "my-plan.md").write_text("# Plan")
+
+        result = self.mod._check_hack_dir_modified(str(tmp_path))
+        assert result == {"plans": True, "research": False}
 
 
 # ── State migration: old format ───────────────────────────────────────────────
@@ -1211,14 +1284,6 @@ class TestMultiFireIntegration:
 
 
 # ── Unit tests for _detect_doc_gap ───────────────────────────────────────────
-
-
-def _load_stop_hook_module():
-    """Import stop-hook.py as a module for unit testing internal functions."""
-    spec = importlib.util.spec_from_file_location("stop_hook", SCRIPT)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 class TestDetectDocGap:

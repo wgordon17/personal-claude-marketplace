@@ -82,13 +82,6 @@ if [[ -n "$DUPLICATE_SCOPES" ]]; then
     echo ""
 fi
 
-# Provide suggestion
-if [[ $WIP_COMMITS -gt 0 ]] || [[ -n "$DUPLICATE_SCOPES" ]]; then
-    echo "💡 Consider squashing related commits before pushing:"
-    echo "   git rebase -i $BASE_BRANCH"
-    echo ""
-fi
-
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 

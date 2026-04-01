@@ -26,6 +26,10 @@ structure. This file provides the specific questions and techniques for each len
 - What was requested but not delivered?
 - What was identified by you or a subagent but not actioned?
 - What was deferred without the user explicitly requesting deferral?
+- If a plan file was found in Layer 1.75: cross-reference every atomic requirement from the
+  original request against the plan's task list, then verify each plan task against the
+  implementation. The plan is a more granular decomposition of the request — use it as the
+  primary completeness checklist when available.
 - Are all code paths covered? All branches implemented?
 - **Project rules:** Re-read CLAUDE.md/CONTRIBUTING.md. Check version bumps, manifest
   updates, deployment readiness. Will this change actually reach users after merge?
@@ -163,6 +167,8 @@ failure, concurrency, and abnormal load?"
 - What was in the original request that isn't in the plan?
 - Are edge cases and failure modes addressed?
 - Is scope explicitly bounded (what's in, what's out)?
+- If reviewing implementation of a plan: verify every task in the plan file has been addressed.
+  Walk through the plan task-by-task, not just the original request.
 - **Reasoning:** Use `sequential-thinking` MCP to walk through each step.
 - **First-principles:** "What are the fundamental requirements? Is each one addressed by
   a concrete step?"

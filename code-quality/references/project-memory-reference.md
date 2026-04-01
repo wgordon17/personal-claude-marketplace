@@ -11,7 +11,7 @@ this file. Do not maintain ad-hoc memory conventions elsewhere — point here.
 
 ## Directory Detection
 
-Skills detect the memory directory by checking for existence in priority order. Use the first match found.
+Skills detect the memory directory using a two-stage check. Use the first directory that passes both stages.
 
 | Priority | Directory | Notes |
 |----------|-----------|-------|
@@ -20,8 +20,18 @@ Skills detect the memory directory by checking for existence in priority order. 
 | 3 | `scratch/` | Alternative naming convention |
 | 4 | `.dev/` | Alternative for dev-only scratch space |
 
-**Detection rule:** Check each directory for existence in order; use the first one found. If none exist, skip memory
-operations — do not create the directory. Skills that only read memory must never create the memory directory.
+**Detection rule:** For each directory in priority order:
+1. Check that the directory exists.
+2. Verify it contains at least 2 of the 5 core memory files: `PROJECT.md`, `TODO.md`, `SESSIONS.md`, `NEXT.md`, `LESSONS.md`.
+
+Use the first directory that passes both checks. If none pass, treat as "no memory directory" — skip memory operations.
+
+> **Why bare existence is insufficient:** Many projects use `hack/` for build scripts (Go convention), `scratch/` for
+> experiments, etc. Content validation prevents these false positives.
+
+**Creation gatekeeper:** If no directory passes validation, skip memory operations. Only `session-start` and
+`session-end` may create and initialize a new memory directory. All other skills must skip memory operations when
+no validated directory is found.
 
 **Worktree resolution:** See [Worktree Resolution](#worktree-resolution) for git worktree handling.
 
@@ -130,13 +140,15 @@ Skills running inside a git worktree must resolve where to find (and write) memo
 
 ### Resolution Order
 
-1. **Symlink check:** If the memory dir exists as a symlink in the current worktree, follow it. Use the resolved path.
-2. **Main worktree fallback:** If no memory dir in current worktree, locate the main worktree:
+1. **Symlink check:** If a validated memory dir (per the [Detection Rule](#directory-detection)) exists as a symlink
+   in the current worktree, follow it. Use the resolved path.
+2. **Main worktree fallback:** If no validated memory dir in the current worktree, locate the main worktree:
    ```bash
    git worktree list --porcelain | head -1 | sed 's/^worktree //'
    ```
-   Use `{main_worktree_path}/{memory_dir}/` (e.g., `{main_worktree_path}/hack/`).
-3. **No memory dir anywhere:** Skip memory operations entirely. Do not create the directory.
+   Apply the two-stage detection rule against `{main_worktree_path}` (e.g., check `{main_worktree_path}/hack/`
+   for existence + content). Use the first directory that passes.
+3. **No validated memory dir anywhere:** Skip memory operations entirely. Do not create the directory.
 
 ### Read vs. Write Behavior
 
