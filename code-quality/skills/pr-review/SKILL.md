@@ -477,7 +477,7 @@ runtime; this skill owns its own copies adapted for PR review context.
 | Placeholder | Value | Used by |
 |-------------|-------|---------|
 | `{pr_description}` | "PR #N: {title}\n\n{body}" | All reviewers (not Verifier) |
-| `{diff}` | Local `git diff` against merge base | Security, QA, Performance, Code Quality, Correctness |
+| `{diff}` | Local `git diff` against merge base | Security, QA, Performance, Code Quality, Correctness, Plan Adherence |
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Verifier |
 | `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers + Verifier |
 | `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers + Verifier |
