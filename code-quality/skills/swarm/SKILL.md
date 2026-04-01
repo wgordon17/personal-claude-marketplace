@@ -46,7 +46,7 @@ specialist agent.
 | 5 | Fixer | general-purpose | sonnet | Yes | Address ALL review findings |
 | 5 | Test Coverage Agent | general-purpose | sonnet | Yes | Write tests for coverage gaps from Phase 4 |
 | 5 | Code-Simplifier | code-quality:code-simplifier | sonnet | Yes | Post-fix simplification pass |
-| 5.5 | Plan File Updater | general-purpose | sonnet | Yes | Update plan file checkboxes after Lead reconciliation |
+| 5.5 | Plan File Updater (conditional) | general-purpose | sonnet | Yes | Update plan file checkboxes after Lead reconciliation |
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |

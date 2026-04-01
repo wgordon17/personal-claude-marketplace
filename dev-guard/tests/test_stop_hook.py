@@ -1152,6 +1152,19 @@ class TestCheckHackDirModified:
         result = self.mod._check_hack_dir_modified(str(tmp_path))
         assert result == {"plans": False, "research": False}
 
+    def test_hack_dir_with_two_core_files_detected(self, tmp_path):
+        """hack/ with 2+ core memory files passes validation → plans trigger works."""
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        (hack / "PROJECT.md").write_text("# Project")
+        (hack / "SESSIONS.md").write_text("# Sessions")
+        hack_plans = hack / "plans"
+        hack_plans.mkdir(parents=True)
+        (hack_plans / "my-plan.md").write_text("# Plan")
+
+        result = self.mod._check_hack_dir_modified(str(tmp_path))
+        assert result == {"plans": True, "research": False}
+
 
 # ── State migration: old format ───────────────────────────────────────────────
 
