@@ -1116,6 +1116,17 @@ class TestHackDirModified:
         assert result.returncode == 0
 
 
+# ── Module loader for unit tests ──────────────────────────────────────────────
+
+
+def _load_stop_hook_module():
+    """Import stop-hook.py as a module for unit testing internal functions."""
+    spec = importlib.util.spec_from_file_location("stop_hook", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 # ── Unit tests for _check_hack_dir_modified ───────────────────────────────────
 
 
@@ -1273,14 +1284,6 @@ class TestMultiFireIntegration:
 
 
 # ── Unit tests for _detect_doc_gap ───────────────────────────────────────────
-
-
-def _load_stop_hook_module():
-    """Import stop-hook.py as a module for unit testing internal functions."""
-    spec = importlib.util.spec_from_file_location("stop_hook", SCRIPT)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 class TestDetectDocGap:
