@@ -310,14 +310,19 @@ adherence check."
 **Gate behavior:** When a plan IS found, Layer 1.75 is BLOCKING — cannot proceed to Layer 2
 without completing plan verification. REQUIRED gate when a plan file exists.
 
-**Execution:** Spawn the plan-adherence agent (opus) with:
-- Plan file path
-- Plan file content (`{plan_content}`)
-- `git diff`
-- Changed file list
-- Original user request
+**Execution:**
 
-Store `{plan_content}` in context so Layer 2 Subagent A can receive it.
+```
+Agent(
+  description="Plan adherence review",
+  subagent_type="code-quality:plan-adherence",
+  model="opus",
+  prompt=<see references/subagent-prompts.md, Layer 1.75: Plan Adherence Reviewer>
+)
+```
+
+Provide: plan file path, plan file content (`{plan_content}`), `git diff`, changed file list,
+original user request. Store `{plan_content}` in context so Layer 2 Subagent A can receive it.
 
 **Escalation handling:** If the plan-adherence agent triggers AskUserQuestion for unchecked
 tasks, the quality gate waits for user responses. User can:
@@ -596,7 +601,7 @@ Layer 1.5 — Domain Expert Review: [N/A for non-code | COMPLETE]
 Layer 1.75 — Plan Adherence: [N/A (no plan) | COMPLETE]
   Plan file: [path or "not found"]
   Tasks verified: [N/M]
-  Tasks escalated: [count] ([approved/blocked/failed])
+  Tasks escalated: [count] ([approved/blocked/returned-for-implementation])
   File structure: [MATCH | N discrepancies]
 
 Layer 2 — Subagent Reviews:

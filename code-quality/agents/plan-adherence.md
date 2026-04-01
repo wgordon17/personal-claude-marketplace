@@ -3,7 +3,7 @@ name: plan-adherence
 description: "Verifies implementation against plan file tasks. Reads plan, extracts tasks/checkboxes, verifies each against git diff and source code, escalates unchecked tasks via AskUserQuestion."
 model: opus
 color: orange
-tools: Read, Glob, Grep, LSP, AskUserQuestion
+tools: Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage
 ---
 
 # code-quality:plan-adherence — Plan Adherence Verification Agent
@@ -68,6 +68,10 @@ For each task or step that is UNVERIFIED or NOT FOUND, immediately use AskUserQu
 - Options for the user: (a) approve skip, (b) mark as blocked, (c) investigate further
 
 Do this per unverified item — do not batch into a single question unless tasks are clearly dependent.
+
+**Non-interactive fallback:** If AskUserQuestion is unavailable (e.g., non-interactive context,
+swarm Phase 4, or permission mode blocks it), report all UNVERIFIED items as CRITICAL findings in
+the output report instead of escalating interactively.
 
 ## Output Format
 

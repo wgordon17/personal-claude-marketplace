@@ -62,7 +62,7 @@ more complexity than they remove.
 - Unused imports, variables, functions, classes, files
 - Unreachable branches (after unconditional return/raise/break)
 - Feature flags for features that shipped months ago
-- TODO comments older than 6 months with no associated ticket
+- TODO comments with no associated ticket (use `git log -S 'TODO' -- <file>` to check age if needed)
 
 ## What NOT to Simplify
 

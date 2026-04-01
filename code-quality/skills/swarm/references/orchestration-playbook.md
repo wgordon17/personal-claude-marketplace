@@ -20,6 +20,7 @@ point is documented here.
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
 | 5 | Fix, Test Coverage & Simplify | Sequential trio | fixer, test-coverage-agent, code-simplifier |
+| 5.5 | Plan Reconciliation | Lead + single agent (conditional) | plan-file-updater (sonnet) |
 | 6 | Docs & Memory | Sequential trio | docs (sonnet), docs-reviewer (sonnet), then lessons-extractor (sonnet) |
 | 7 | Verification & Completion | Single agent + lead | verifier (haiku) |
 
@@ -1196,6 +1197,11 @@ Agent(name="plugin-validator", subagent_type="general-purpose", model="sonnet",
 Agent(name="skill-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[skill-reviewer prompt — include skill validation checklist]")
+
+# Conditional: only if incremental plan file found via Branch-header matching
+Agent(name="plan-adherence", subagent_type="code-quality:plan-adherence", model="opus",
+     team_name="swarm-impl",
+     prompt="[context bundle]\n\n[plan-adherence prompt from agent-prompts.md]")
 ```
 
 **Note on plugin-dev agents:** The `plugin-dev:plugin-validator` and `plugin-dev:skill-reviewer`
@@ -1215,6 +1221,7 @@ Each reviewer writes structured JSON to its output file and sends a brief summar
 | ui-reviewer | `{run_dir}/reviews/ui.json` |
 | api-reviewer | `{run_dir}/reviews/api.json` |
 | db-reviewer | `{run_dir}/reviews/db.json` |
+| plan-adherence | `{run_dir}/reviews/plan-adherence.json` |
 
 The lead monitors incoming SendMessage summaries. When all spawned reviewers have reported, proceed
 to synthesis. If a reviewer goes idle without reporting, check if its output file exists:
@@ -1255,6 +1262,7 @@ accordingly.
 | **Scope creep** | Behavior implemented that was not in `architect-plan.json` components; feature added beyond specified scope | Human escalation via AskUserQuestion |
 | **Implementation** | Code-level bugs, injection vulnerabilities, naming/quality issues, performance bottlenecks — addressable with targeted code changes | Phase 5 Fixer (existing flow) |
 | **Test coverage** | Missing tests, untested code paths, coverage gaps identified by reviewers | Phase 5 Test Coverage Agent |
+| **Plan drift** | Implementation diverges from plan task spec, missing tasks, unimplemented steps | Phase 5 Fixer for fixable items; AskUserQuestion for scope-level deviations |
 | **Documentation** | Missing or incorrect documentation for implemented features | Phase 6 Docs agent |
 
 **Classification rule of thumb:** If the fix requires changing the architect's plan, it is design-level or security design. If the fix is a code change within the existing plan, it is implementation. When ambiguous, classify as implementation (Fixer is cheaper than re-running Phase 3).
@@ -1530,6 +1538,61 @@ git commit -m "refactor: simplify implementation after review"
 SendMessage(type="shutdown_request", recipient="fixer", content="Fix phase complete.")
 SendMessage(type="shutdown_request", recipient="test-coverage-agent", content="Test coverage phase complete.")
 SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simplify phase complete.")
+```
+
+---
+
+## Phase 5.5: Plan Reconciliation (conditional)
+
+**Skip when:** No incremental plan file found in `{memory_dir}/plans/` matching the feature
+branch (same discovery mechanism as Phase 4).
+
+After Phase 5 fixes are complete, the Lead reconciles the implementation against the
+incremental plan file.
+
+### Step 5.5.1: Discover the Plan File
+
+Use the same Branch-header matching from Phase 4: search `{memory_dir}/plans/` for a file
+whose `**Branch:**` field matches the swarm's feature branch. Fall back to branch-slug filename
+matching if no header match is found.
+
+### Step 5.5.2: Cross-Reference Tasks Against Cumulative Diff
+
+Run `git diff origin/main..HEAD` to produce the full cumulative diff. Read the plan file and
+extract every task (checked and unchecked). For each task, determine whether the diff fully
+addresses it.
+
+### Step 5.5.3: Escalate Unaddressed Tasks
+
+For any task not fully addressed by the diff, use `AskUserQuestion` to escalate with: the task
+description, what was done toward it (if anything), and what remains unimplemented. Do NOT
+silently skip unaddressed tasks.
+
+### Step 5.5.4: Spawn Plan File Updater
+
+After escalation decisions are made, spawn a general-purpose sonnet agent (Can Edit: Yes) with
+the plan file path and reconciliation results:
+
+```
+Agent(
+  name="plan-file-updater",
+  subagent_type="general-purpose",
+  model="sonnet",
+  mode="bypassPermissions",
+  prompt="Update the plan file at {plan_file_path}:
+    - Check off tasks that were completed ([x])
+    - Mark tasks skipped by user decision as [SKIPPED by user]
+    - Mark tasks blocked due to unresolved issues as [BLOCKED: reason]
+    Reconciliation results: {reconciliation_summary}"
+)
+```
+
+The Lead does NOT write to the plan file directly (Can Edit: No).
+
+### Step 5.5.5: Clean Up
+
+```
+SendMessage(type="shutdown_request", recipient="plan-file-updater", content="Plan update complete.")
 ```
 
 ---
@@ -1925,6 +1988,7 @@ TeamCreate:
 | 4 | qa-reviewer | code-quality:qa | opus | default | No |
 | 4 | code-reviewer | code-quality:code-reviewer | sonnet | default | No |
 | 4 | performance-reviewer | code-quality:performance | sonnet | default | No |
+| 4 | plan-adherence (conditional) | code-quality:plan-adherence | opus | default | No |
 | 4 | ui-reviewer (optional) | general-purpose | sonnet | default | No |
 | 4 | api-reviewer (optional) | general-purpose | sonnet | default | No |
 | 4 | db-reviewer (optional) | general-purpose | sonnet | default | No |
@@ -1935,6 +1999,7 @@ TeamCreate:
 | 5 | fixer | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | test-coverage-agent | general-purpose | sonnet | bypassPermissions | Yes |
 | 5 | code-simplifier | code-quality:code-simplifier | sonnet | bypassPermissions | Yes |
+| 5.5 | plan-file-updater (conditional) | general-purpose | sonnet | bypassPermissions | Yes |
 | 6 | docs | general-purpose | sonnet | bypassPermissions | Yes |
 | 6 | docs-reviewer | general-purpose | sonnet | default | No |
 | 6 | lessons-extractor | general-purpose | sonnet | bypassPermissions | Yes |
@@ -1942,8 +2007,8 @@ TeamCreate:
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 24 (19 core + 5 optional domain reviewers).
-Minimum agent count: 19 (all domain reviewers skipped, all conditional phases run).
+Maximum agent count: 26 (21 core + 5 optional domain reviewers).
+Minimum agent count: 21 (all domain reviewers skipped, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.
