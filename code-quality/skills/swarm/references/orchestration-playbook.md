@@ -15,6 +15,7 @@ point is documented here.
 | 2 | Architect | Single agent | architect (opus) |
 | 2.5 | Security Design Review | Single agent (conditional) | security-design (opus) |
 | 2.7 | Speculative Fork | N competitors + judge (conditional) | competitor-N (sonnet, worktree), judge (opus) |
+| 2.8 | Pre-Implementation Simplification Review | Single agent (conditional) | reduction-analyst (opus) |
 | 3 | Pipelined Implementation | Persistent team | implementer, reviewer, test-writer, test-runner |
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
@@ -252,8 +253,10 @@ t2_5 = TaskCreate("Phase 2.5: Security design review", "STRIDE analysis of archi
                 activeForm="Security design review") → addBlockedBy: [t2]
 t2_7 = TaskCreate("Phase 2.7: Speculative fork (conditional)", "Competing implementations for contested components — skip if not triggered",
                 activeForm="Running speculative fork") → addBlockedBy: [t2_5]
+t2_8 = TaskCreate("Phase 2.8: Reduction review (conditional)", "Pre-implementation simplification analysis",
+                activeForm="Reviewing for simplification") → addBlockedBy: [t2_7]
 t3 = TaskCreate("Phase 3: Pipelined implementation", "All components through pipeline",
-                activeForm="Implementing components") → addBlockedBy: [t2_7]
+                activeForm="Implementing components") → addBlockedBy: [t2_8]
 t4 = TaskCreate("Phase 4: Parallel review", "Security, QA, code-review, performance",
                 activeForm="Running parallel review") → addBlockedBy: [t3]
 t5 = TaskCreate("Phase 5: Fix, test coverage & simplify", "Fixer + test-coverage-agent + code-simplifier",
@@ -770,6 +773,48 @@ Write a summary entry to `{run_dir}/.swarm-run` noting:
 
 The full speculative run record is at `{speculative_run_dir}/`. The swarm's run_dir audit trail
 only contains the summary reference.
+
+---
+
+## Phase 2.8: Pre-Implementation Simplification Review (conditional)
+
+**Skip when:** Config-only, docs-only, or test-only changes. Tasks where the architect's plan
+modifies fewer than 3 files total.
+
+After the architect plan is finalized (including any Phase 2.7 resolution), spawn a Reduction
+Analyst to review the plan against the existing codebase for simplification opportunities.
+
+### Step 2.8.1: Spawn Reduction Analyst
+
+```
+Agent(
+  name="reduction-analyst",
+  subagent_type="general-purpose",
+  model="opus",
+  prompt=<see references/agent-prompts.md, Agent 1.8: Reduction Analyst>
+)
+```
+
+The Reduction Analyst is read-only. It writes `{run_dir}/reduction-review.json` with:
+- `removals_recommended`: existing code to delete during implementation
+- `abstractions_flagged`: proposed abstractions to simplify or skip
+- `dependency_alternatives`: libraries that could replace custom implementations
+- `net_complexity_assessment`: expected impact on codebase size
+
+### Step 2.8.2: Lead Integration
+
+After the Reduction Analyst completes:
+1. Read `reduction-review.json`
+2. For each `removals_recommended` entry: add deletion instructions to the relevant component
+   in `architect-plan.json` (e.g., "Before implementing component X, delete file Y")
+3. For each accepted `dependency_alternatives`: update `architect-plan.json` with the library
+   reference instead of custom implementation spec
+4. For each rejected recommendation: log the rejection and justification in the audit trail
+5. `abstractions_flagged` items: simplify the component spec in `architect-plan.json`
+
+Do NOT AskUserQuestion for Reduction Analyst recommendations unless they fundamentally change
+the scope (e.g., "delete the entire module and use library X instead"). Routine simplification
+is the Lead's judgment call.
 
 ---
 
@@ -1871,6 +1916,7 @@ TeamCreate:
 | Phase | Name | Type | Model | Mode | Can Write |
 |-------|------|------|-------|------|-----------|
 | 2-3 | architect | code-quality:architect | opus | default | No |
+| 2.8 | reduction-analyst | general-purpose | opus | default | No |
 | 3 | implementer | general-purpose | sonnet | bypassPermissions | Yes |
 | 3 | reviewer | general-purpose | opus | default | No |
 | 3 | test-writer | general-purpose | sonnet | bypassPermissions | Yes |
@@ -1896,8 +1942,8 @@ TeamCreate:
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 23 (18 core + 5 optional domain reviewers).
-Minimum agent count: 18 (all domain reviewers skipped, all conditional phases run).
+Maximum agent count: 24 (19 core + 5 optional domain reviewers).
+Minimum agent count: 19 (all domain reviewers skipped, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.

@@ -46,14 +46,25 @@ structure. This file provides the specific questions and techniques for each len
 - What happens when external services are unavailable?
 - **First-principles:** "What are the fundamental ways this category of system fails?"
 
-### Round 4: Simplicity
+### Round 4: Simplicity (BLOCKING)
 
+**This round is a blocking sub-gate.** Dead code, unnecessary abstractions, and unused imports
+are CRITICAL findings that must be fixed before proceeding to Round 5. These are objectively
+wasteful — not judgment calls.
+
+- Calculate net lines delta: `git diff --stat` on all changes. Pass the delta to the
+  code-simplifier as context ("This work adds +N/-M lines, net +X").
+- Apply the full checklist from `code-quality/references/simplification-checklist.md`.
 - What's over-engineered for the current requirement?
-- What abstractions exist for a single consumer?
+- What abstractions exist for a single consumer? (Rule of Three: don't abstract until third use)
 - What could be deleted and nothing would break?
 - What's AI slop? (narrating obvious, sycophantic names, filler docstrings, hedge comments)
 - Commented-out code? Unused imports? Dead branches?
+- For each new dependency or custom implementation: does a well-maintained library solve this?
+  (See `code-quality/references/dependency-evaluation.md`)
 - **Tool:** Spawn `code-quality:code-simplifier` for dead code, unused imports, over-abstraction.
+- **Gate:** Fix all CRITICAL simplification findings (dead code, unnecessary abstractions,
+  unused imports) before proceeding. MEDIUM/LOW findings (style, naming) can proceed.
 
 ### Round 5: Adversarial
 
