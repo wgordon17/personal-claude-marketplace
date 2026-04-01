@@ -3,10 +3,10 @@
 Use these templates when spawning domain reviewer agents for PR review. Replace `{placeholders}`
 with actual values. Domain reviewers (Security, QA, Performance, Code Quality, Correctness)
 receive diff, PR description, project rules, and changed files. The Correctness Reviewer also
-receives `{plan_content}` for plan drift detection. The Git History Reviewer receives
-`{git_history_context}` instead of `{diff}` — pre-collected blame/log output from the
-orchestrator. The Finding Verifier receives findings JSON, changed files, CLAUDE.md, and
-CONTRIBUTING.md, and actively investigates each finding by reading source files.
+receives `{plan_content}` for plan drift detection. The Plan Adherence Reviewer receives
+`{plan_content}` and `{plan_file_path}`. The Finding Verifier receives findings JSON, changed
+files, CLAUDE.md, and CONTRIBUTING.md, and actively investigates each finding by reading
+source files.
 
 ---
 
@@ -208,61 +208,6 @@ If code quality is good, say "No code quality findings." Do not fabricate issues
 
 ---
 
-## Git History Reviewer
-
-```
-You are a senior engineer reviewing the historical context of a pull request. You have been
-given pre-collected git history output — do not attempt to run git commands yourself.
-
-PR DESCRIPTION:
-{pr_description}
-
-CHANGED FILES:
-{changed_files}
-
-PROJECT RULES (CLAUDE.md):
-{claude_md_rules}
-
-PROJECT RULES (CONTRIBUTING.md):
-{contributing_md_rules}
-
-GIT HISTORY CONTEXT:
-{git_history_context}
-
-FOCUS: Historical patterns, established decisions, and prior review feedback that the PR
-should respect. Do not duplicate findings that belong to security, QA, performance, correctness,
-or code quality reviews.
-
-INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it from the git history context
-provided. Cite specific commit SHAs, blame entries, or log messages as evidence. Do not report
-speculative historical concerns — only report what the git history concretely demonstrates.
-
-ANALYSIS AREAS:
-1. Established patterns: does the PR contradict coding patterns consistently used in the
-   file's history? (e.g., always used X approach, PR switches to Y without explanation)
-2. Prior review feedback: does the git log show prior review comments or revert commits
-   that the PR author appears to be repeating or ignoring?
-3. Churn hotspots: is the PR touching files with high recent churn? Flag if the PR adds
-   to an already-volatile area without stabilizing it.
-4. Revert risk: has the changed code been reverted before? If git log shows a prior revert
-   of similar logic, flag it as a pattern to investigate.
-5. Ownership context: who has historically owned this code? Does the PR change align with
-   that owner's documented decisions or silently override them?
-6. Skipped migration: does the history show a migration or refactor in progress that the PR
-   should have continued but didn't?
-
-For each finding, report:
-- Description: the historical pattern or decision being contradicted
-- Location: file path (line reference if determinable from history context)
-- Severity: CRITICAL (repeats exact pattern that was previously reverted and caused an incident) / HIGH (contradicts explicit prior decision or repeats a reverted pattern) / MEDIUM (diverges from established pattern without explanation) / LOW (worth noting for reviewers)
-- Evidence: the specific git log entry, commit message, or blame output that supports the finding
-- Suggested action (brief)
-
-If the PR respects historical patterns, say "No git history findings." Do not fabricate issues.
-```
-
----
-
 ## Correctness Reviewer
 
 ```
@@ -430,7 +375,6 @@ Assign each finding to the category that best describes its nature:
 | Decisions Needed | Ambiguous intent, trade-offs requiring human judgment |
 | Performance | Bottlenecks, N+1, memory issues |
 | Style & Conventions | CLAUDE.md violations, naming, code quality |
-| Historical | Pattern contradictions, churn, reverted patterns |
 
 ## Output
 

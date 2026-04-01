@@ -2,8 +2,8 @@
 name: pr-review
 description: |
   Multi-agent PR review with finding verification. Use when asked to "review PR",
-  "review this PR", "code review", or given a PR URL to review. Spawns 7 parallel specialized
-  reviewers (security, QA, performance, code quality, correctness, git history, plan adherence),
+  "review this PR", "code review", or given a PR URL to review. Spawns 6 parallel specialized
+  reviewers (security, QA, performance, code quality, correctness, plan adherence),
   verifies findings by investigating source code, categorizes by type, and prints a
   structured report to the terminal. Never comments on GitHub PRs.
 allowed-tools: [Read, Glob, Grep, Bash, Agent]
@@ -11,12 +11,11 @@ allowed-tools: [Read, Glob, Grep, Bash, Agent]
 
 # PR Review Skill
 
-Multi-agent pull request review. Spawns 7 parallel reviewers (6 Sonnet + 1 Opus) — security, QA,
-performance, code quality, correctness, git history, and plan adherence — each required to
-investigate and verify findings before reporting. A Sonnet verification agent then reads source
-files to confirm or disprove each finding. Results are categorized by type (testing gaps,
-correctness, security, architecture, decisions needed, etc.) and printed as a structured terminal
-report.
+Multi-agent pull request review. Spawns 6 parallel reviewers (5 Sonnet + 1 Opus) — security, QA,
+performance, code quality, correctness, and plan adherence — each required to investigate and
+verify findings before reporting. A Sonnet verification agent then reads source files to confirm
+or disprove each finding. Results are categorized by type (testing gaps, correctness, security,
+architecture, decisions needed, etc.) and printed as a structured terminal report.
 
 **Never comments on GitHub PRs.** Output is terminal-only.
 
@@ -135,33 +134,6 @@ diff string.
 
 Store as `{diff}`.
 
-### Pre-Collect Git History Context
-
-Pre-collect git history context in the orchestrator to avoid redundant git commands across
-multiple reviewer agents.
-
-For each changed file (cap at 15 files; if more, select the 15 with the most changed lines):
-
-Skip files that are newly created in the PR (diff header shows `--- /dev/null`) — new files have no blame history.
-
-1. **Commit history:**
-   ```
-   git log --oneline -20 -- <file>
-   ```
-
-2. **Blame for changed hunks only** (not full-file blame — that produces unbounded output):
-   Parse `@@ -a,b +c,d @@` headers from `{diff}` for this file.
-   For each hunk: `start = a`, `end = a + b - 1` (using the `-a,b` side — the old-file lines).
-   If `b = 0` (addition-only hunk with no prior lines), skip blame for that hunk.
-   Run: `git blame origin/{base_branch} -L <start>,<end> -- <file>`
-   Using the old-file side shows who last touched the lines being modified — the actual
-   historical context the Git History Reviewer needs. Blaming the new-file side (`+c,d`)
-   would only show the PR author's own commits.
-
-If more than 15 files changed, append a note listing the skipped files.
-
-Store the combined output as `{git_history_context}`.
-
 ### Build Input Context
 
 Assemble these values — they are passed to reviewers in Phase 2:
@@ -170,7 +142,6 @@ Assemble these values — they are passed to reviewers in Phase 2:
 - `{claude_md_rules}` = CLAUDE.md content or placeholder
 - `{contributing_md_rules}` = CONTRIBUTING.md content or placeholder
 - `{changed_files}` = newline-separated list of changed file paths
-- `{git_history_context}` = combined blame/log output from above
 - `{plan_content}` = implementation plan content or placeholder
 - `{plan_file_path}` = path to discovered plan file or empty string
 
@@ -178,9 +149,9 @@ Assemble these values — they are passed to reviewers in Phase 2:
 
 ## Phase 1 — Reviewer Applicability
 
-Determine which of the 7 reviewers apply based on changed file types.
+Determine which of the 6 reviewers apply based on changed file types.
 
-Default: all 7 reviewers run. Skip a reviewer only if its domain has zero applicability:
+Default: all 6 reviewers run. Skip a reviewer only if its domain has zero applicability:
 
 | Reviewer | Skip condition |
 |----------|----------------|
@@ -189,7 +160,6 @@ Default: all 7 reviewers run. Skip a reviewer only if its domain has zero applic
 | QA | (never skip) |
 | Code Quality | (never skip) |
 | Correctness | (never skip) |
-| Git History | Skip only if git history collection returned empty (e.g., brand-new repo with no history) |
 | Plan Adherence | Skip if no implementation plan found in Phase 0 |
 
 Record which reviewers will run.
@@ -242,21 +212,7 @@ Each domain reviewer receives: `{pr_description}`, `{diff}`, `{claude_md_rules}`
 `{contributing_md_rules}`, `{changed_files}`. The Correctness Reviewer also receives
 `{plan_content}` — see below.
 
-### Git History Reviewer (6th, parallel with above)
-
-```
-Agent(
-  description="Git history review of PR #{number}",
-  model="sonnet",
-  prompt=<Git History Reviewer template from references/reviewer-prompts.md, placeholders substituted>
-)
-```
-
-The Git History Reviewer receives `{git_history_context}` (from Phase 0) instead of `{diff}`.
-It also receives `{pr_description}`, `{changed_files}`, `{claude_md_rules}`, and `{contributing_md_rules}`. Do NOT re-collect git history here —
-use the output already stored from Phase 0.
-
-### Plan Adherence Reviewer (7th, parallel with above)
+### Plan Adherence Reviewer (6th, parallel with above)
 
 Only spawned if a plan was found in Phase 0 (i.e., `{plan_file_path}` is non-empty).
 
@@ -274,7 +230,7 @@ The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{di
 ### Collect Findings
 
 After all agents complete, collect all findings into a consolidated list. Assign each finding a
-unique ID (e.g., `sec-1`, `qa-1`, `perf-1`, `cq-1`, `cor-1`, `gh-1`). Preserve: description, file:line,
+unique ID (e.g., `sec-1`, `qa-1`, `perf-1`, `cq-1`, `cor-1`, `pa-1`). Preserve: description, file:line,
 severity, evidence, source reviewer.
 
 ---
@@ -345,7 +301,6 @@ The verifier assigns each finding to a category based on its nature (not its sev
 | **Decisions Needed** | Ambiguous intent, trade-offs requiring human judgment |
 | **Performance** | Bottlenecks, N+1, memory issues |
 | **Style & Conventions** | CLAUDE.md violations, naming, code quality |
-| **Historical** | Pattern contradictions, churn, reverted patterns |
 
 ### Filter
 
@@ -396,9 +351,6 @@ PERFORMANCE
 STYLE & CONVENTIONS
   ...
 
-HISTORICAL
-  ...
-
 ─── Needs Context ({needs_context_count}) ───
   1. [{Reviewer}] {description} [{severity}]
      {file}:{line}
@@ -410,9 +362,9 @@ Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {
 ```
 
 Group findings by **category** (Testing Gaps → Correctness → Security → Architecture →
-Decisions Needed → Performance → Style & Conventions → Historical). Within each category,
+Decisions Needed → Performance → Style & Conventions). Within each category,
 sort by severity (CRITICAL → HIGH → MEDIUM → LOW). For the `[Reviewer]` tag, use the short
-reviewer name: Security, QA, Performance, Code Quality, Correctness, Git History.
+reviewer name: Security, QA, Performance, Code Quality, Correctness, Plan Adherence.
 
 Omit category sections with zero findings.
 
@@ -436,7 +388,7 @@ Branch: {head_branch} → {base_branch}
 Files changed: {changedFiles} | Additions: +{additions} | Deletions: -{deletions}
 
 No verified issues found.
-Checked for: security, test coverage, performance, code quality, correctness, historical consistency.
+Checked for: security, test coverage, performance, code quality, correctness, plan adherence.
 
 Reviewed by: {reviewer_list}
 Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0
@@ -483,5 +435,4 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers + Verifier |
 | `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer, Plan Adherence Reviewer |
 | `{plan_file_path}` | Path to discovered plan file or empty string | Plan Adherence Reviewer only |
-| `{git_history_context}` | Pre-collected blame/log output | Git History Reviewer only |
 | `{findings_json}` | JSON array of all findings with diff_context | Finding Verifier only |

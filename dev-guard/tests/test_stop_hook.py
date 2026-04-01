@@ -1176,6 +1176,35 @@ class TestCheckHackDirModified:
         result = self.mod._check_hack_dir_modified(str(tmp_path))
         assert result == {"plans": True, "research": False}
 
+    def test_hack_fails_validation_falls_back_to_local(self, tmp_path):
+        """hack/ has 1 core file (fails), .local/ has 2 (passes) → .local/ plans detected."""
+        hack = tmp_path / "hack"
+        hack.mkdir(parents=True)
+        (hack / "PROJECT.md").write_text("# Project")
+        local = tmp_path / ".local"
+        local.mkdir(parents=True)
+        (local / "PROJECT.md").write_text("# Project")
+        (local / "SESSIONS.md").write_text("# Sessions")
+        local_plans = local / "plans"
+        local_plans.mkdir(parents=True)
+        (local_plans / "my-plan.md").write_text("# Plan")
+
+        result = self.mod._check_hack_dir_modified(str(tmp_path))
+        assert result == {"plans": True, "research": False}
+
+    def test_all_candidate_dirs_fail_validation(self, tmp_path):
+        """All four candidate dirs exist but none have 2+ core files → no trigger."""
+        for dirname in ("hack", ".local", "scratch", ".dev"):
+            d = tmp_path / dirname
+            d.mkdir(parents=True)
+            (d / "PROJECT.md").write_text("# Project")
+            plans = d / "plans"
+            plans.mkdir(parents=True)
+            (plans / "my-plan.md").write_text("# Plan")
+
+        result = self.mod._check_hack_dir_modified(str(tmp_path))
+        assert result == {"plans": False, "research": False}
+
 
 # ── State migration: old format ───────────────────────────────────────────────
 

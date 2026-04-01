@@ -2,9 +2,10 @@
 name: swarm
 description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
-  of 18+ specialized agents (Architect, Security Design Reviewer, Implementer,
-  Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer, Performance,
-  Fixer, Test Coverage Agent, Code-Simplifier, Docs, Lessons Extractor, Verifier) with structured JSON
+  of 21+ specialized agents (Architect, Security Design Reviewer, Reduction Analyst,
+  Implementer, Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer,
+  Performance, Plan Adherence, Fixer, Test Coverage Agent, Code-Simplifier, Docs,
+  Docs Reviewer, Lessons Extractor, Verifier) with structured JSON
   communication, Cynefin domain classification, audit trails, and early user
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
@@ -33,6 +34,7 @@ specialist agent.
 | 2.5 | Security Design | code-quality:security | opus | No | Pre-implementation threat surface review |
 | 2.7 | Speculative Competitors (×N) | general-purpose | sonnet | Yes | Competing implementations in isolated worktrees (conditional) |
 | 2.7 | Speculative Judge | general-purpose | opus | No | Evaluate competitors, select winner (conditional) |
+| 2.8 | Reduction Analyst | general-purpose | opus | No | Pre-implementation simplification review |
 | 3 | Implementer | general-purpose | sonnet | Yes | Write code, component by component |
 | 3 | Reviewer | general-purpose | opus | No | Review each component before testing |
 | 3 | Test-Writer | general-purpose | sonnet | Yes | Write tests for reviewed components |
@@ -191,6 +193,51 @@ set — Complex-domain tasks benefit most from speculative execution.
 - Clear-domain tasks where the architect chose one approach without hesitation
 - Tasks with a single component and no stated approach trade-offs
 - Tasks where the user specified an explicit implementation approach in Phase 1
+
+### Phase 2.8: Pre-Implementation Simplification Review
+
+Before any code is written, the Lead spawns a **Reduction Analyst** (general-purpose,
+opus model, read-only) to review the architect's plan against the existing codebase and recommend
+simplifications. This phase catches over-engineering *before* implementation, when changes are
+cheapest.
+
+The Reduction Analyst receives:
+- `architect-plan.json` (proposed components, files to create/modify)
+- The existing codebase context (key files from architect's `key_files` list)
+- Security constraints from Phase 2.5 (if any)
+
+The Reduction Analyst evaluates:
+
+1. **Existing code that can be removed:** Does the plan replace existing functionality? If so,
+   identify the old code for deletion. Implementation should prefer removing the old path over
+   adding a compatibility layer.
+
+2. **Proposed abstractions that are premature:** Does any proposed component introduce
+   an interface with one implementation, a factory for one type, or a plugin architecture with
+   one plugin? Flag these for simplification.
+
+3. **Dependency opportunities:** For each proposed custom implementation, check whether a
+   well-maintained library already solves the problem (per
+   `code-quality/references/dependency-evaluation.md`). Use WebSearch to verify recency and
+   popularity against today's actual date.
+
+4. **Net complexity assessment:** Will the plan result in a net increase or decrease in codebase
+   complexity? If net increase, recommend specific reductions (merge files, inline abstractions,
+   delete superseded code).
+
+Output: `{run_dir}/reduction-review.json` with:
+- `removals_recommended`: files/functions/classes to delete during implementation
+- `abstractions_flagged`: proposed abstractions to simplify or skip
+- `dependency_alternatives`: libraries that could replace custom code
+- `net_complexity_assessment`: expected impact on codebase size and complexity
+
+The Lead integrates reduction recommendations into the architect plan before Phase 3:
+- Accepted removals → added to implementation instructions ("delete X before building Y")
+- Accepted dependency alternatives → architect plan updated with library references
+- Rejected recommendations → documented in audit trail with justification
+
+**Skip conditions:** Config-only, docs-only, or test-only changes. Tasks where the architect's
+plan modifies fewer than 3 files total.
 
 ### Phase 3: Pipelined Implementation
 
@@ -502,6 +549,13 @@ Phase 2.7: Speculative Fork (conditional)
   +-- (optional) Phase 3.5 synthesis if hybrid recommended and approved
      |
      v
+Phase 2.8: Pre-Implementation Simplification Review (conditional)
+  +-- Reduction Analyst (opus, read-only): reviews plan against codebase
+  +-- Identifies: removable code, premature abstractions, dependency alternatives
+  +-- Net complexity assessment: will this increase or decrease codebase size?
+  +-- Lead integrates accepted recommendations into architect plan
+     |
+     v
 Phase 3: Pipelined Implementation
   +-------------------------------------------------------+
   | Implementer --> Reviewer --> Test-Writer --> Test-Runner |
@@ -641,6 +695,7 @@ After escalation, wait for user input before proceeding.
 |---------------|-----------|
 | Phase 2.5: Security Design Review | Config-only, docs-only, or test-only changes that don't touch auth/data/network/API surfaces. Clear-domain tasks without auth/data/network/API involvement. |
 | Phase 2.7: Speculative Fork | Architect did NOT flag `speculative_fork_recommended: true` AND Lead does not identify 2+ incompatible approach choices. Skip for single-component tasks and tasks where the user specified an approach. |
+| Phase 2.8: Reduction Review | Config-only, docs-only, or test-only changes. Tasks where architect plan modifies fewer than 3 files total. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
 | Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
 | Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings of any severity |
@@ -677,7 +732,7 @@ prefer opus — one strong pass beats multiple weaker passes.
 
 | Model | Used For |
 |-------|---------|
-| opus | Architect, Reviewer, Security, QA, Structural Analysts, **Plan Adherence** — judgment-heavy tasks |
+| opus | Architect, Reduction Analyst, Reviewer, Security, QA, Structural Analysts, **Plan Adherence** — judgment-heavy tasks |
 | sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Docs, Lessons Extractor |
 | haiku | Test-Runner, Verifier — execution-only tasks |
 
@@ -699,7 +754,7 @@ agent that does the job right over multiple sonnet agents that require rework.
 | File | Content |
 |------|---------|
 | `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, TeamCreate config, and git workflow |
-| `references/agent-prompts.md` | Full prompt templates for all 15+ agents — role, boundaries, communication protocol, output format |
+| `references/agent-prompts.md` | Full prompt templates for all 17+ agents — role, boundaries, communication protocol, output format |
 | `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
 | `references/cynefin-reference.md` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |

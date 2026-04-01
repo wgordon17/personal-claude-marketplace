@@ -81,7 +81,7 @@ comprehensive coverage from different angles.
 | 1 | **Correctness** | What inputs produce wrong results? What assumptions are untested? |
 | 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. Includes documentation completeness (see below). |
 | 3 | **Robustness** | How does this fail? Bad input, missing deps, concurrent access, edge cases? |
-| 4 | **Simplicity** | What's over-engineered? What could be deleted? What's AI slop? |
+| 4 | **Simplicity (BLOCKING)** | What's over-engineered? What could be deleted? What's AI slop? Dead code, unnecessary abstractions, and unused imports are CRITICAL. |
 | 5 | **Adversarial** | You are a hostile reviewer. The author claims this is done. Prove them wrong. |
 | 6 | **Structural** | What design flaws, race conditions, or failure modes exist in this system's architecture — not just in the current change, but in how it integrates? (Code/Mixed only) |
 
@@ -94,7 +94,12 @@ work-type-specific lens prompts.
 - **Round 1:** Spawn domain reviewers (`code-quality:security`, `code-quality:qa`, `code-quality:performance`) for code files. Use `sequential-thinking` MCP for decomposed reasoning.
 - **Round 2:** Use `sequential-thinking` MCP. Apply first-principles: break original request into
   atomic requirements, check each independently.
-- **Round 4:** Spawn `code-quality:code-simplifier` for dead code, unused imports, over-abstraction.
+- **Round 4 (BLOCKING):** Calculate net lines delta (`git diff --stat`). Spawn
+  `code-quality:code-simplifier` with the delta as context. Apply the full checklist from
+  `code-quality/references/simplification-checklist.md`. Dead code, unnecessary abstractions,
+  and unused imports are CRITICAL findings — they BLOCK proceeding to Round 5. Fix all
+  CRITICAL simplification findings before continuing. These are objectively wasteful, not
+  judgment calls.
 - **Round 5:** First-principles: "State the fundamental purpose in one sentence. Review against
   that purpose, not the structure you created."
 
@@ -305,14 +310,19 @@ adherence check."
 **Gate behavior:** When a plan IS found, Layer 1.75 is BLOCKING — cannot proceed to Layer 2
 without completing plan verification. REQUIRED gate when a plan file exists.
 
-**Execution:** Spawn the plan-adherence agent (opus) with:
-- Plan file path
-- Plan file content (`{plan_content}`)
-- `git diff`
-- Changed file list
-- Original user request
+**Execution:**
 
-Store `{plan_content}` in context so Layer 2 Subagent A can receive it.
+```
+Agent(
+  description="Plan adherence review",
+  subagent_type="code-quality:plan-adherence",
+  model="opus",
+  prompt=<see references/subagent-prompts.md, Layer 1.75: Plan Adherence Reviewer>
+)
+```
+
+Provide: plan file path, plan file content (`{plan_content}`), `git diff`, changed file list,
+original user request. Store `{plan_content}` in context so Layer 2 Subagent A can receive it.
 
 **Escalation handling:** If the plan-adherence agent triggers AskUserQuestion for unchecked
 tasks, the quality gate waits for user responses. User can:
@@ -577,6 +587,8 @@ Layer 1 — Self-Review:
   Issues fixed: [count]
   Identified-but-unactioned caught: [count]
   Project rules violations caught: [count]
+  Round 4 (Simplicity gate): [PASS — 0 CRITICAL | BLOCKED — N CRITICAL fixed]
+  Net lines delta: +[added] / -[removed] (net: [+/-X])
 
 Layer 1.5 — Domain Expert Review: [N/A for non-code | COMPLETE]
   Security reviewer: [count] findings ([critical/high/medium/low breakdown])
@@ -589,7 +601,7 @@ Layer 1.5 — Domain Expert Review: [N/A for non-code | COMPLETE]
 Layer 1.75 — Plan Adherence: [N/A (no plan) | COMPLETE]
   Plan file: [path or "not found"]
   Tasks verified: [N/M]
-  Tasks escalated: [count] ([approved/blocked/failed])
+  Tasks escalated: [count] ([approved/blocked/returned-for-implementation])
   File structure: [MATCH | N discrepancies]
 
 Layer 2 — Subagent Reviews:
@@ -627,7 +639,7 @@ Overall: [PASS / NEEDS WORK]
 
 | Skill | Relationship |
 |-------|-------------|
-| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens) for dead code removal. |
+| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens, BLOCKING sub-gate) for dead code, unnecessary abstractions. Uses `references/simplification-checklist.md` and `references/dependency-evaluation.md`. |
 | `code-quality:plan-adherence` | Spawned in Layer 1.75 for plan file verification (planning/mixed work types). |
 | `code-quality:reflect` | Invoked for metacognitive checkpoints via Serena reflection tools. |
 | `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
