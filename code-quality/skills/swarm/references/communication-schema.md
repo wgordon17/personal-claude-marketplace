@@ -121,7 +121,9 @@ Written by the Phase 2.5 security-design agent to `{run_dir}/security-design-rev
   "stride_findings": [
     {
       "category": "Spoofing | Tampering | Repudiation | InformationDisclosure | DenialOfService | ElevationOfPrivilege",
-      "severity": "critical | high | medium | low",
+      "classification": "needs-fix | needs-input",
+      "loe": "trivial | moderate | significant",
+      "input_needed": "string | null — what decision the user must make (required when classification is needs-input)",
       "component_id": "string — affected component ID from architect plan",
       "description": "string — threat description",
       "mitigation": "string — recommended mitigation"
@@ -140,9 +142,11 @@ Written by the Phase 2.5 security-design agent to `{run_dir}/security-design-rev
 ```
 
 **Verdict semantics:**
-- `proceed` — No Critical or High findings. Security constraints (if any) are appended to architect-plan.json and the pipeline continues.
-- `revise` — Critical or High findings require architect plan revision before implementation. Lead routes findings back to Architect.
-- `escalate` — Unresolvable Critical findings after 2 Architect↔Security iterations. Lead escalates to human via AskUserQuestion.
+- `proceed` — No `needs-fix` findings blocking implementation. Security constraints (if any) are appended to architect-plan.json and the pipeline continues.
+- `revise` — `needs-fix` findings require architect plan revision before implementation. Lead routes findings back to Architect.
+- `escalate` — Unresolvable findings after 2 Architect↔Security iterations. Lead escalates to human via AskUserQuestion.
+
+See `code-quality/references/finding-classification.md` for classification guidance and the anti-deferral principle.
 
 ---
 
@@ -225,7 +229,8 @@ Sent when the Reviewer completes assessment of a component.
   "verdict": "approved | rejected",
   "issues": [
     {
-      "severity": "critical | high | medium | low",
+      "classification": "needs-fix | needs-input",
+      "loe": "trivial | moderate | significant",
       "file": "string — file path",
       "line": "integer | null — line number if known",
       "description": "string — what is wrong",
@@ -328,29 +333,29 @@ and sends a summary to the Lead.
   "timestamp": "string — ISO 8601 datetime",
   "summary": {
     "total_findings": "integer",
-    "by_severity": {
-      "critical": "integer",
-      "high": "integer",
-      "medium": "integer",
-      "low": "integer",
-      "informational": "integer"
-    },
+    "needs_fix_count": "integer",
+    "needs_input_count": "integer",
     "verdict": "clean | findings"
   },
   "findings": [
     {
       "id": "string — unique ID with prefix (see table below)",
-      "severity": "critical | high | medium | low | informational",
+      "classification": "needs-fix | needs-input",
+      "loe": "trivial | moderate | significant — required for Fixer-pipeline, optional for advisory",
       "category": "string — issue category (e.g. injection, auth, complexity, naming)",
       "file": "string — file path",
       "line": "integer | null — line number if applicable",
       "description": "string — clear description of the issue",
       "evidence": "string — quoted code snippet or specific observation",
       "suggested_fix": "string — specific, actionable recommendation",
-      "risk": "string — what could go wrong if this is not addressed"
+      "risk": "string — what could go wrong if this is not addressed",
+      "input_needed": "string | null — what decision the user must make (required when classification is needs-input)"
     }
   ]
 }
+```
+
+See `code-quality/references/finding-classification.md` for classification guidance and the anti-deferral principle.
 ```
 
 ### Finding ID Prefix Convention
@@ -380,13 +385,21 @@ The Fixer sends this to the Lead after completing Phase 5 work. Written to
 {
   "schema": "FixSummary",
   "findings_fixed": ["string — finding IDs that were fully resolved"],
-  "findings_deferred": [
+  "needs_input_items": [
     {
-      "id": "string — finding ID",
-      "reason": "string — why it was deferred (e.g. requires architectural change, out of scope)"
+      "id": "string",
+      "loe": "trivial | moderate | significant",
+      "description": "string",
+      "input_needed": "string — what decision the user must make",
+      "suggested_action": "string — what the Fixer recommends"
     }
   ],
-  "files_modified": ["string — paths of files changed during fixing"],
+  "user_deferred": [
+    {
+      "id": "string",
+      "reason": "string — user's stated reason for deferral"
+    }
+  ],
   "fixes": [
     {
       "finding_id": "string",
@@ -395,12 +408,7 @@ The Fixer sends this to the Lead after completing Phase 5 work. Written to
       "line_range": "string | null — e.g. '42-48' for changed range"
     }
   ],
-  "deferred_items": [
-    {
-      "finding_id": "string",
-      "recommended_action": "string — what the team should do with this later"
-    }
-  ]
+  "files_modified": ["string — paths of files changed during fixing"]
 }
 ```
 
