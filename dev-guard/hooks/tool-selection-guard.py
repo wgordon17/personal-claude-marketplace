@@ -454,6 +454,10 @@ def _log_event(
         conn = _init_db()
         if conn is None:
             return
+        if isinstance(detail, dict):
+            detail = {
+                k: (_redact_secrets(v) if isinstance(v, str) else v) for k, v in detail.items()
+            }
         detail_str = json.dumps(detail) if detail is not None else None
         conn.execute(
             "INSERT INTO events "
@@ -555,6 +559,8 @@ def _exit_with_decision(
     *,
     rule_name: str | None = None,
     matched_segment: str | None = None,
+    category: str = "guard",
+    detail: object | None = None,
 ) -> None:
     """Exit with guidance, using the correct mechanism for the action type.
 
@@ -563,16 +569,19 @@ def _exit_with_decision(
       "ask":   checks trust first, then outputs hookSpecificOutput JSON with
                permissionDecision "ask", exits 0 (prompts user for confirmation).
       "block": prints guidance to stderr, exits 2.
+
+    category: audit log category (default "guard"; URL callers pass "url").
+    detail: optional dict logged as JSON; string values are redacted via _redact_secrets.
     """
     if action == "allow":
         # Allow: log and output allow decision
-        _log_event("guard", "allowed", rule=rule_name, command=matched_segment)
+        _log_event(category, "allowed", rule=rule_name, command=matched_segment, detail=detail)
         print(_hook_output("allow", guidance))
         sys.exit(0)
     elif action == "ask":
         # Ask: check trust first
         if rule_name and _check_trust(rule_name, matched_segment, _session_id):
-            _log_event("guard", "trusted", rule=rule_name, command=matched_segment)
+            _log_event(category, "trusted", rule=rule_name, command=matched_segment, detail=detail)
             reason = f"[trusted] [{rule_name}] {guidance}" if rule_name else f"[trusted] {guidance}"
             print(_hook_output("allow", reason))
             sys.exit(0)
@@ -599,13 +608,13 @@ def _exit_with_decision(
             )
         enhanced_reason = "\n".join(parts)
 
-        _log_event("guard", "ask", rule=rule_name, command=matched_segment)
+        _log_event(category, "ask", rule=rule_name, command=matched_segment, detail=detail)
         print(_hook_output("ask", enhanced_reason))
         sys.exit(0)
     else:
         # Block
         msg = f"[{rule_name}] {guidance}" if rule_name else guidance
-        _log_event("guard", "blocked", rule=rule_name, command=matched_segment)
+        _log_event(category, "blocked", rule=rule_name, command=matched_segment, detail=detail)
         print(msg, file=sys.stderr)
         sys.exit(2)
 
@@ -819,13 +828,19 @@ def _check_fetch_command(cmd: str) -> bool:
         result = _check_url_rules(url)
         if result:
             rule_name, guidance, action = result
-            _log_url_event(url, rule_name, _LOG_ACTION_FOR.get(action, action), "Bash")
             full_guidance = (
                 f"{guidance}\n"
                 "If you've confirmed raw fetch is appropriate, "
                 "prefix with `ALLOW_FETCH=1`."
             )
-            _exit_with_decision(full_guidance, action, rule_name=rule_name, matched_segment=cmd)
+            _exit_with_decision(
+                full_guidance,
+                action,
+                rule_name=rule_name,
+                matched_segment=url,
+                category="url",
+                detail={"tool": "Bash", "phase": "pre"},
+            )
         else:
             _log_url_event(url, None, "allowed", "Bash")
     return True
@@ -3471,8 +3486,14 @@ def _handle_webfetch(tool_input: dict) -> None:
         result = _check_url_rules(url)
         if result:
             rule_name, guidance, action = result
-            _log_url_event(url, rule_name, _LOG_ACTION_FOR.get(action, action), "WebFetch")
-            _exit_with_decision(guidance, action, rule_name=rule_name, matched_segment=url)
+            _exit_with_decision(
+                guidance,
+                action,
+                rule_name=rule_name,
+                matched_segment=url,
+                category="url",
+                detail={"tool": "WebFetch", "phase": "pre"},
+            )
         else:
             _log_url_event(url, None, "allowed", "WebFetch")
     sys.exit(0)
