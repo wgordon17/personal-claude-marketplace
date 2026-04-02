@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.13"
 # ///
 """Tool Selection Guard -- encourages right flows for Claude Code.
 
@@ -22,17 +22,14 @@ import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, NoReturn
 
 sys.path.insert(0, str(Path(__file__).parent))
+import tomllib
+
 from mcp_constants import MCP_READ_ONLY as _MCP_READ_ONLY  # noqa: E402
 from mcp_constants import MCP_THINK_PREFIX as _MCP_THINK_PREFIX  # noqa: E402
 from mcp_constants import mcp_key as _mcp_key  # noqa: E402
-
-try:
-    import tomllib
-except ImportError:
-    tomllib = None  # type: ignore[assignment]  # Python 3.10 fallback
 
 
 class CommandRule(NamedTuple):
@@ -311,11 +308,9 @@ _MAX_INPUT_BYTES = 10 * 1024 * 1024
 _MAX_COMMAND_LEN = 100_000  # 100KB — generous for any real command
 _MAX_MANIFEST_BYTES = 1_048_576
 _HOOK_EVENT_NAME = "PreToolUse"
-_SESSION_ID_KEY = "last_session_id"
 _DB_TIMEOUT_SEC = 5
+_SUBPROCESS_TIMEOUT_SEC: int = 5
 _DB_BUSY_TIMEOUT_MS = 1000
-_LOG_ACTION_FOR: dict[str, str] = {"ask": "asked", "block": "blocked", "allow": "allowed"}
-
 _DB_PATH = Path(
     os.environ.get("GUARD_DB_PATH", str(Path.home() / ".claude" / "logs" / "dev-guard.db"))
 )
@@ -454,13 +449,17 @@ def _log_event(
         conn = _init_db()
         if conn is None:
             return
+        if isinstance(detail, dict):
+            detail = {
+                k: (_redact_secrets(v) if isinstance(v, str) else v) for k, v in detail.items()
+            }
         detail_str = json.dumps(detail) if detail is not None else None
         conn.execute(
             "INSERT INTO events "
             "(ts, session_id, tool_use_id, category, rule, action, command, detail) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                datetime.datetime.now(datetime.UTC).isoformat(),
                 _session_id,
                 _tool_use_id,
                 category,
@@ -496,7 +495,7 @@ def _log_rtk_event(
             "(ts, session_id, tool_use_id, command, rtk_command, event_type, tee_path, detail) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                datetime.datetime.now(datetime.UTC).isoformat(),
                 _session_id,
                 _tool_use_id,
                 _redact_secrets(command),
@@ -555,6 +554,8 @@ def _exit_with_decision(
     *,
     rule_name: str | None = None,
     matched_segment: str | None = None,
+    category: str = "guard",
+    detail: dict[str, object] | None = None,
 ) -> None:
     """Exit with guidance, using the correct mechanism for the action type.
 
@@ -563,16 +564,19 @@ def _exit_with_decision(
       "ask":   checks trust first, then outputs hookSpecificOutput JSON with
                permissionDecision "ask", exits 0 (prompts user for confirmation).
       "block": prints guidance to stderr, exits 2.
+
+    category: audit log category (default "guard"; URL callers pass "url").
+    detail: optional dict logged as JSON; string values are redacted via _redact_secrets.
     """
     if action == "allow":
         # Allow: log and output allow decision
-        _log_event("guard", "allowed", rule=rule_name, command=matched_segment)
+        _log_event(category, "allowed", rule=rule_name, command=matched_segment, detail=detail)
         print(_hook_output("allow", guidance))
         sys.exit(0)
     elif action == "ask":
         # Ask: check trust first
         if rule_name and _check_trust(rule_name, matched_segment, _session_id):
-            _log_event("guard", "trusted", rule=rule_name, command=matched_segment)
+            _log_event(category, "trusted", rule=rule_name, command=matched_segment, detail=detail)
             reason = f"[trusted] [{rule_name}] {guidance}" if rule_name else f"[trusted] {guidance}"
             print(_hook_output("allow", reason))
             sys.exit(0)
@@ -599,13 +603,13 @@ def _exit_with_decision(
             )
         enhanced_reason = "\n".join(parts)
 
-        _log_event("guard", "ask", rule=rule_name, command=matched_segment)
+        _log_event(category, "ask", rule=rule_name, command=matched_segment, detail=detail)
         print(_hook_output("ask", enhanced_reason))
         sys.exit(0)
     else:
         # Block
         msg = f"[{rule_name}] {guidance}" if rule_name else guidance
-        _log_event("guard", "blocked", rule=rule_name, command=matched_segment)
+        _log_event(category, "blocked", rule=rule_name, command=matched_segment, detail=detail)
         print(msg, file=sys.stderr)
         sys.exit(2)
 
@@ -778,9 +782,9 @@ def _log_url_event(
     url: str, rule_name: str | None, action: str, tool: str, phase: str = "pre", **extra: object
 ) -> None:
     """Log a URL guard event to the unified SQLite audit log."""
-    detail = {"tool": tool, "phase": phase}
+    detail: dict[str, object] = {"tool": tool, "phase": phase}
     if extra:
-        detail.update(extra)
+        detail |= extra
     _log_event("url", action, rule=rule_name, command=url, detail=detail)
 
 
@@ -819,13 +823,19 @@ def _check_fetch_command(cmd: str) -> bool:
         result = _check_url_rules(url)
         if result:
             rule_name, guidance, action = result
-            _log_url_event(url, rule_name, _LOG_ACTION_FOR.get(action, action), "Bash")
             full_guidance = (
                 f"{guidance}\n"
                 "If you've confirmed raw fetch is appropriate, "
                 "prefix with `ALLOW_FETCH=1`."
             )
-            _exit_with_decision(full_guidance, action, rule_name=rule_name, matched_segment=cmd)
+            _exit_with_decision(
+                full_guidance,
+                action,
+                rule_name=rule_name,
+                matched_segment=url,
+                category="url",
+                detail={"tool": "Bash", "phase": "pre"},
+            )
         else:
             _log_url_event(url, None, "allowed", "Bash")
     return True
@@ -879,6 +889,23 @@ def _check_response_for_auth_failure(text: str, url: str, tool_name: str) -> Non
     )
 
 
+def _extract_response_text(tool_response: dict | str, tool_name: str) -> str:
+    """Extract plain text from a tool response for auth-failure detection.
+
+    Three branches:
+    - Bash dict: concatenate stdout + stderr (both may contain HTTP headers).
+    - Any non-Bash dict: stringify the whole dict (covers WebFetch and future tools).
+    - Plain string: return as-is.
+    """
+    if isinstance(tool_response, dict):
+        if tool_name == "Bash":
+            return str(tool_response.get("stdout", "")) + str(tool_response.get("stderr", ""))
+        return str(tool_response)
+    if isinstance(tool_response, str):
+        return tool_response
+    return ""
+
+
 def _handle_post_tool_use(data: dict) -> None:
     """Handle PostToolUse events: log response codes for fetch commands."""
     tool_name = data.get("tool_name", "")
@@ -899,24 +926,14 @@ def _handle_post_tool_use(data: dict) -> None:
         if not re.match(r"^\s*(curl|wget)\b", normalized):
             return
         urls = _extract_urls(command)
-        response_text = ""
-        if isinstance(tool_response, dict):
-            response_text = str(tool_response.get("stdout", "")) + str(
-                tool_response.get("stderr", "")
-            )
-        elif isinstance(tool_response, str):
-            response_text = tool_response
+        response_text = _extract_response_text(tool_response, "Bash")
         for url in urls:
             _check_response_for_auth_failure(response_text, url, "Bash")
     elif tool_name == "WebFetch":
         url = tool_input.get("url", "")
         if not url:
             return
-        response_text = ""
-        if isinstance(tool_response, dict):
-            response_text = str(tool_response)
-        elif isinstance(tool_response, str):
-            response_text = tool_response
+        response_text = _extract_response_text(tool_response, "WebFetch")
         _check_response_for_auth_failure(response_text, url, "WebFetch")
     elif tool_name == "Read":
         file_path = tool_input.get("file_path", "")
@@ -1513,13 +1530,13 @@ def _get_worktree_name() -> str | None:
             ["git", "rev-parse", "--git-dir"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=_SUBPROCESS_TIMEOUT_SEC,
         ).stdout.strip()
         git_common = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=_SUBPROCESS_TIMEOUT_SEC,
         ).stdout.strip()
         git_dir_abs = str(Path(git_dir).resolve())
         git_common_abs = str(Path(git_common).resolve())
@@ -1605,7 +1622,7 @@ def _check_worktree_stash(cmd: str) -> None:
                         ["git", "stash", "list", "--format=%gs"],
                         capture_output=True,
                         text=True,
-                        timeout=5,
+                        timeout=_SUBPROCESS_TIMEOUT_SEC,
                     )
                     stash_output = r.stdout if r.returncode == 0 else ""
                 lines = stash_output.strip().splitlines()
@@ -1670,7 +1687,7 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
                     ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=_SUBPROCESS_TIMEOUT_SEC,
                 ).stdout.strip()
             )
             if branch in _PROTECTED_BRANCHES:
@@ -1944,7 +1961,7 @@ def _add_trust(
                 match_pattern,
                 scope,
                 session_id if scope == "session" else None,
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                datetime.datetime.now(datetime.UTC).isoformat(),
             ),
         )
         conn.commit()
@@ -2260,7 +2277,9 @@ def _pgrep(pattern: str, *, full: bool = False) -> list[int]:
         cmd.append("-f")
     cmd.append(pattern)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=_SUBPROCESS_TIMEOUT_SEC
+        )
         if result.returncode != 0 or not result.stdout.strip():
             return []
         return [int(line) for line in result.stdout.strip().split("\n") if line.strip()]
@@ -2919,23 +2938,9 @@ def _handle_trust_command(argv: list[str]) -> int:
         if ns.scope == "session":
             sid = ns.session_id_override
             if not sid:
-                # Fallback: read from DB (works in single-session case)
-                try:
-                    conn = _init_db()
-                    if conn:
-                        cursor = conn.execute(
-                            "SELECT value FROM session_state WHERE key = ?",
-                            (_SESSION_ID_KEY,),
-                        )
-                        row = cursor.fetchone()
-                        if row:
-                            sid = row[0]
-                except (sqlite3.Error, OSError):
-                    pass
-            if not sid:
                 print(
-                    "No session ID found. Run a guard check first, "
-                    "provide --session-id, or use --scope always.",
+                    "Session-scoped trust requires --session-id. "
+                    "The session ID is shown in the trust hint when a rule fires.",
                     file=sys.stderr,
                 )
                 return 2
@@ -3194,13 +3199,9 @@ def _handle_session_start() -> None:
     if not conn:
         return
 
-    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    ts = datetime.datetime.now(datetime.UTC).isoformat()
     try:
-        # Store session → CWD mapping and update last_session_id
-        conn.execute(
-            "INSERT OR REPLACE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
-            (_SESSION_ID_KEY, session_id, ts),
-        )
+        # Store session → CWD mapping
         if cwd:
             conn.execute(
                 "INSERT OR REPLACE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
@@ -3219,7 +3220,7 @@ def _handle_session_start() -> None:
     if cwd:
         try:
             cutoff = (
-                datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+                datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=24)
             ).isoformat()
             # Join through session_state to find sessions with matching CWD
             row = conn.execute(
@@ -3322,7 +3323,7 @@ def _handle_session_end() -> int:
     if not conn:
         return 0
 
-    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    ts = datetime.datetime.now(datetime.UTC).isoformat()
     try:
         # Get tool call count
         row = conn.execute(
@@ -3359,15 +3360,25 @@ def _handle_session_end() -> int:
         conn.commit()
 
         # Prune old session keys (older than 30 days)
-        cutoff = (
-            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
-        ).isoformat()
-        conn.execute(
-            "DELETE FROM session_state WHERE updated_ts < ? AND key != ?", (cutoff, _SESSION_ID_KEY)
-        )
+        cutoff = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)).isoformat()
+        conn.execute("DELETE FROM session_state WHERE updated_ts < ?", (cutoff,))
         conn.commit()
     except (sqlite3.Error, OSError, ValueError, TypeError):
         pass
+
+    # Prune stale session-scoped trust entries (older than 48h)
+    # Separate try/except so failures are visible via stderr rather than silently swallowed.
+    try:
+        trust_cutoff = (
+            datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=48)
+        ).isoformat()
+        conn.execute(
+            "DELETE FROM trusted_rules WHERE scope = 'session' AND created_ts < ?",
+            (trust_cutoff,),
+        )
+        conn.commit()
+    except (sqlite3.Error, OSError) as e:
+        print(f"Warning: session trust TTL cleanup failed: {e}", file=sys.stderr)
 
     return 0
 
@@ -3403,17 +3414,12 @@ def _ensure_rtk_config() -> str | None:
         # Determine what needs patching
         patch_telemetry = False
         patch_tee = False
-        if tomllib is not None:
-            try:
-                parsed = tomllib.loads(content)
-                patch_telemetry = parsed.get("telemetry", {}).get("enabled") is True
-                patch_tee = parsed.get("tee", {}).get("mode", "") != "always"
-            except Exception:
-                return None  # Unparseable config — don't patch blindly
-        else:
-            # Python 3.10 fallback: string-based detection
-            patch_telemetry = "[telemetry]" in content and "enabled = true" in content
-            patch_tee = 'mode = "failures"' in content
+        try:
+            parsed = tomllib.loads(content)
+            patch_telemetry = parsed.get("telemetry", {}).get("enabled") is True
+            patch_tee = parsed.get("tee", {}).get("mode", "") != "always"
+        except Exception:
+            return None  # Unparseable config — don't patch blindly
 
         changes = []
 
@@ -3464,22 +3470,28 @@ def _parse_hook_input() -> dict:
         sys.exit(0)
 
 
-def _handle_webfetch(tool_input: dict) -> None:
-    """Check WebFetch URLs against auth rules. Exits after handling."""
+def _handle_webfetch(tool_input: dict) -> NoReturn:
+    """Check WebFetch URLs against auth rules. Always exits via sys.exit(0)."""
     url = tool_input.get("url", "")
     if url:
         result = _check_url_rules(url)
         if result:
             rule_name, guidance, action = result
-            _log_url_event(url, rule_name, _LOG_ACTION_FOR.get(action, action), "WebFetch")
-            _exit_with_decision(guidance, action, rule_name=rule_name, matched_segment=url)
+            _exit_with_decision(
+                guidance,
+                action,
+                rule_name=rule_name,
+                matched_segment=url,
+                category="url",
+                detail={"tool": "WebFetch", "phase": "pre"},
+            )
         else:
             _log_url_event(url, None, "allowed", "WebFetch")
     sys.exit(0)
 
 
-def _handle_bash_command(command: str) -> None:
-    """Process a Bash command through all guard checks."""
+def _handle_bash_command(command: str) -> NoReturn:
+    """Process a Bash command through all guard checks. Always exits."""
     if not command:
         sys.exit(0)
 
@@ -3565,6 +3577,45 @@ def _handle_bash_command(command: str) -> None:
     sys.exit(0)
 
 
+def _increment_tool_counter(session_id: str) -> None:
+    """Increment the per-session tool call counter in session_state (PreToolUse only)."""
+    try:
+        conn = _init_db()
+        if conn:
+            conn.execute(
+                "INSERT INTO session_state (key, value, updated_ts) "
+                "VALUES (?, '1', ?) "
+                "ON CONFLICT(key) DO UPDATE SET "
+                "value = CAST(value AS INTEGER) + 1, updated_ts = excluded.updated_ts",
+                (
+                    f"tools:{session_id}",
+                    datetime.datetime.now(datetime.UTC).isoformat(),
+                ),
+            )
+            conn.commit()
+    except (sqlite3.Error, OSError):
+        pass
+
+
+def _handle_mcp_tool(tool_name: str) -> NoReturn:
+    """Handle MCP tool auto-approval or passthrough.
+
+    Uses server-qualified keys to prevent cross-server name spoofing.
+    Known read-only tools (and sequential-thinking tools via _MCP_THINK_PREFIX)
+    are auto-approved; unknown MCP tools pass through to settings.json.
+
+    Always exits via sys.exit(0) — never returns to the caller.
+    """
+    key = _mcp_key(tool_name)
+    if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
+        _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
+        print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
+        sys.exit(0)
+    # Unknown MCP tools: passthrough to settings.json permissions
+    _log_event("guard", "mcp-passthrough", rule="mcp-unknown", command=tool_name)
+    sys.exit(0)
+
+
 def main() -> None:
     global _session_id, _tool_use_id
 
@@ -3606,22 +3657,6 @@ def main() -> None:
     # Extract session/tool context for logging
     _session_id = data.get("session_id")
     _tool_use_id = data.get("tool_use_id")
-    if _session_id:
-        try:
-            conn = _init_db()
-            if conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO session_state (key, value, updated_ts) "
-                    "VALUES (?, ?, ?)",
-                    (
-                        _SESSION_ID_KEY,
-                        _session_id,
-                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    ),
-                )
-                conn.commit()
-        except (sqlite3.Error, OSError):
-            pass
 
     # PostToolUse: observational logging only (no blocking)
     hook_event = data.get("hook_event_name", _HOOK_EVENT_NAME)
@@ -3631,22 +3666,7 @@ def main() -> None:
 
     # Increment tool call counter (PreToolUse only — Post hooks don't count)
     if _session_id:
-        try:
-            conn = _init_db()
-            if conn:
-                conn.execute(
-                    "INSERT INTO session_state (key, value, updated_ts) "
-                    "VALUES (?, '1', ?) "
-                    "ON CONFLICT(key) DO UPDATE SET "
-                    "value = CAST(value AS INTEGER) + 1, updated_ts = excluded.updated_ts",
-                    (
-                        f"tools:{_session_id}",
-                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    ),
-                )
-                conn.commit()
-        except (sqlite3.Error, OSError):
-            pass
+        _increment_tool_counter(_session_id)
 
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
@@ -3657,17 +3677,8 @@ def main() -> None:
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
 
-    # MCP tool auto-approval: known read-only tools bypass permission system
-    # Uses server-qualified keys to prevent cross-server name spoofing
     if tool_name.startswith("mcp__"):
-        key = _mcp_key(tool_name)
-        if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
-            _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
-            print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
-            sys.exit(0)
-        # Unknown MCP tools: passthrough to settings.json permissions
-        _log_event("guard", "mcp-passthrough", rule="mcp-unknown", command=tool_name)
-        sys.exit(0)
+        _handle_mcp_tool(tool_name)
 
     if tool_name != "Bash":
         sys.exit(0)

@@ -1,6 +1,6 @@
-.PHONY: all lint format test test-llm prek prek-install
+.PHONY: all lint format test test-llm typecheck prek prek-install
 
-all: lint test  ## Full check suite (lint + test)
+all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
 lint:  ## Ruff lint + format check
 	uv run ruff check .
@@ -15,6 +15,9 @@ test:  ## Run pytest (excludes LLM integration tests)
 
 test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 	uv run --group dev --group llm pytest -m llm -v
+
+typecheck:  ## Pyright type checking (dev-guard/hooks)
+	uv run pyright
 
 prek:  ## Run pre-commit on all files
 	uvx prek run --all-files

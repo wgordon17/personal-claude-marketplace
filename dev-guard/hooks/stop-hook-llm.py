@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.13"
 # dependencies = ["anthropic[vertex]>=0.40.0"]
 # ///
 """Stop Hook LLM Evaluator -- Sonnet quality gate via Vertex AI.
@@ -236,6 +236,14 @@ def _build_prompt(ctx: dict) -> str:
 
     if "subagent" in trigger_reasons:
         criteria.append(
+            "SUBAGENT WAIT: If the assistant spawned background agents and its final "
+            "message indicates it is WAITING for those agents to complete (e.g., "
+            "'Waiting for domain reviewers...', 'Launched 6 agents in parallel...'), "
+            "this is a LEGITIMATE MID-WORKFLOW PAUSE. The assistant will automatically "
+            "resume when agents return results. PASS immediately — do not evaluate "
+            "COMPLETENESS or SUBAGENT RESULTS criteria."
+        )
+        criteria.append(
             "SUBAGENT RESULTS: Were subagent results verified? "
             "Did the orchestrating turn confirm the work was complete?"
         )
@@ -280,7 +288,7 @@ def _build_prompt(ctx: dict) -> str:
 def _call_vertex(prompt: str) -> dict:
     """Call claude-sonnet-4-6 via Vertex AI. Returns parsed response dict."""
     try:
-        from anthropic import AnthropicVertex
+        from anthropic import AnthropicVertex  # type: ignore[import-untyped]
     except ImportError as e:
         _fail_open(f"anthropic[vertex] not available: {e}")
 
@@ -305,7 +313,7 @@ def _call_vertex(prompt: str) -> dict:
     text = ""
     for block in message.content:
         if hasattr(block, "text"):
-            text = block.text.strip()
+            text = block.text.strip()  # type: ignore[union-attr]
             break
 
     if not text:

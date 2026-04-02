@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.13"
 # ///
 """Stop Hook Main -- zero-dependency fast triage for Claude Code Stop events.
 
@@ -117,6 +117,7 @@ _COMPLETION_CLAIM_PATTERNS = [
         re.IGNORECASE,
     ),
 ]
+
 
 # Research tool names (native)
 _RESEARCH_TOOLS = frozenset({"WebSearch", "WebFetch"})
@@ -642,7 +643,7 @@ def _log_stop_event(
     if conn is None:
         return
     try:
-        ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        ts = datetime.datetime.now(datetime.UTC).isoformat()
         conn.execute(
             "INSERT INTO stop_hook_events "
             "(ts, session_id, outcome, trigger_reasons, work_type, llm_duration_ms, detail) "
@@ -663,8 +664,7 @@ def _log_stop_event(
 
         if random.randint(1, 20) == 1:
             cutoff = (
-                datetime.datetime.now(datetime.timezone.utc)
-                - datetime.timedelta(days=_LOG_RETENTION_DAYS)
+                datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=_LOG_RETENTION_DAYS)
             ).isoformat()
             conn.execute("DELETE FROM stop_hook_events WHERE ts < ?", (cutoff,))
             conn.commit()
@@ -910,7 +910,7 @@ def main() -> None:
         trigger_reasons.append("code_change")
     if research_used:
         trigger_reasons.append("research")
-    if "subagent" in write_signals:
+    if any(tc in _AGENT_TOOLS for tc in all_tool_calls):
         trigger_reasons.append("subagent")
     if hack_modified.get("plans"):
         trigger_reasons.append("planning")

@@ -109,7 +109,7 @@ def write_mock_llm(
     stub = textwrap.dedent(f"""\
         #!/usr/bin/env -S uv run
         # /// script
-        # requires-python = ">=3.10"
+        # requires-python = ">=3.13"
         # ///
         import json, sys
         result = json.loads({result_json!r})
@@ -283,7 +283,7 @@ class TestQuestionClassification:
         result = self._run_with_user_message(
             tmp_path,
             "What is the Python version requirement?",
-            "Python 3.10+.",
+            "Python 3.13+.",
         )
         # Read-only + factual question → fast-exit (exit 0)
         assert result.returncode == 0
@@ -1589,7 +1589,7 @@ class TestLLMContextFields:
         stub = textwrap.dedent("""\
             #!/usr/bin/env -S uv run
             # /// script
-            # requires-python = ">=3.10"
+            # requires-python = ">=3.13"
             # ///
             import json, sys
             ctx = json.loads(sys.stdin.read())
@@ -1631,7 +1631,7 @@ class TestLLMContextFields:
         stub = textwrap.dedent("""\
             #!/usr/bin/env -S uv run
             # /// script
-            # requires-python = ">=3.10"
+            # requires-python = ">=3.13"
             # ///
             import json, sys
             ctx = json.loads(sys.stdin.read())
@@ -1736,3 +1736,29 @@ class TestBuildPromptCriteria:
         prompt = mod._build_prompt(self._minimal_ctx())
         assert "REDIRECTION" in prompt
         assert "continuation directive" in prompt
+
+    def test_subagent_wait_criterion_present_when_subagent_in_triggers(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["subagent"]
+        ctx["work_type"] = "conversation"
+        prompt = mod._build_prompt(ctx)
+        assert "SUBAGENT WAIT" in prompt
+
+    def test_subagent_wait_criterion_before_subagent_results(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["subagent"]
+        ctx["work_type"] = "conversation"
+        prompt = mod._build_prompt(ctx)
+        wait_idx = prompt.index("SUBAGENT WAIT")
+        results_idx = prompt.index("SUBAGENT RESULTS")
+        assert wait_idx < results_idx
+
+    def test_subagent_wait_not_present_without_subagent_trigger(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["completion_claim"]
+        ctx["work_type"] = "code_config"
+        prompt = mod._build_prompt(ctx)
+        assert "SUBAGENT WAIT" not in prompt

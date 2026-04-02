@@ -8,7 +8,7 @@ make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
 make test         # uv run pytest (runs dev-guard/tests/)
 ```
 
-Python 3.10+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-guard/tests/`.
+Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-guard/tests/`.
 
 ## Critical Rules
 
