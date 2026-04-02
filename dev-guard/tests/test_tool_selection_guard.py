@@ -2080,6 +2080,39 @@ class TestURLGuardAuditLog:
         assert entries[0]["action"] == "allowed"
         assert entries[0]["tool"] == "WebFetch"
 
+    def test_blocked_url_produces_single_row_across_all_categories(self, tmp_path):
+        """BUG-007B: URL decisions produce exactly 1 total event row, not 2.
+
+        Before the double-logging fix, blocked URL events produced 2 rows:
+        one with category='url' (from _log_url_event) and one with category='guard'
+        (from _exit_with_decision). After the fix, only 1 row with category='url'.
+        """
+        _run_guard_with_db(
+            "Bash",
+            {"command": "curl https://api.github.com/repos/org/repo"},
+            tmp_path,
+        )
+        all_events = _read_all_events(tmp_path)
+        url_events = [e for e in all_events if e.get("command", "").endswith("/repos/org/repo")]
+        assert len(url_events) == 1, (
+            f"Expected 1 total event row, got {len(url_events)}: {url_events}"
+        )
+        assert url_events[0]["category"] == "url"
+
+    def test_webfetch_blocked_produces_single_row_across_all_categories(self, tmp_path):
+        """BUG-007B: WebFetch URL decisions also produce exactly 1 total event row."""
+        _run_guard_with_db(
+            "WebFetch",
+            {"url": "https://api.github.com/repos/org/repo", "prompt": "test"},
+            tmp_path,
+        )
+        all_events = _read_all_events(tmp_path)
+        url_events = [e for e in all_events if e.get("command", "").endswith("/repos/org/repo")]
+        assert len(url_events) == 1, (
+            f"Expected 1 total event row, got {len(url_events)}: {url_events}"
+        )
+        assert url_events[0]["category"] == "url"
+
     def test_non_fetch_command_not_logged(self, tmp_path):
         """Non-curl/wget bash commands should not produce URL log entries."""
         _run_guard_with_db("Bash", {"command": "git status"}, tmp_path)
