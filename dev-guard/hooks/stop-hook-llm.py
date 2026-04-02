@@ -236,6 +236,14 @@ def _build_prompt(ctx: dict) -> str:
 
     if "subagent" in trigger_reasons:
         criteria.append(
+            "SUBAGENT WAIT: If the assistant spawned background agents and its final "
+            "message indicates it is WAITING for those agents to complete (e.g., "
+            "'Waiting for domain reviewers...', 'Launched 6 agents in parallel...'), "
+            "this is a LEGITIMATE MID-WORKFLOW PAUSE. The assistant will automatically "
+            "resume when agents return results. PASS immediately — do not evaluate "
+            "COMPLETENESS or SUBAGENT RESULTS criteria."
+        )
+        criteria.append(
             "SUBAGENT RESULTS: Were subagent results verified? "
             "Did the orchestrating turn confirm the work was complete?"
         )

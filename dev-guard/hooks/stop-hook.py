@@ -118,6 +118,21 @@ _COMPLETION_CLAIM_PATTERNS = [
     ),
 ]
 
+# Subagent wait patterns — textual evidence of mid-workflow pause (criterion 2 secondary arm)
+# Uses [^\n]* instead of .* in the running arm for ReDoS mitigation.
+# Criterion 1 (Agent tool in all_tool_calls) is the primary security gate; this regex is a
+# usability broadener — content injection could match text but criterion 1 still requires a
+# real tool invocation.
+_SUBAGENT_WAIT_PATTERNS = re.compile(
+    r"waiting\s+for|"
+    r"launch(?:ing|ed)?\s+\d*\s*\w*\s*(?:agents?|reviewers?)|"
+    r"launched?\s+\d+|"
+    r"spawned?\s+\d+|"
+    r"running\s+[^\n]*\b(?:agents?|reviewers?|background)|"
+    r"let\s+me\s+wait|still\s+(?:running|working)|in\s+parallel",
+    re.IGNORECASE,
+)
+
 # Research tool names (native)
 _RESEARCH_TOOLS = frozenset({"WebSearch", "WebFetch"})
 
@@ -841,6 +856,40 @@ def main() -> None:
     completion_claim = _detect_completion_claim(last_assistant_message)
     research_used = _detect_research_tools(new_tool_calls)
     hack_modified = _check_hack_dir_modified(cwd)
+
+    # ── Fast-exit: Subagent wait (mid-workflow pause) ────────────────────────
+    # Fires AFTER signal detection, BEFORE question classification.
+    # AskUserQuestion fast-exit (above) handles user-input pauses;
+    # this handles agent-is-waiting-for-background-subagents pauses.
+    #
+    # All 6 criteria are conjunctive (ALL must be true for fast-exit):
+    #   1. Agent tool was used at any point in the session (all_tool_calls, not new_tool_calls,
+    #      so the signal persists across subsequent stop hook firings in a scolding loop).
+    #   2. Structural or textual evidence of active waiting: last tool in new_tool_calls is
+    #      an Agent tool OR the last assistant message matches _SUBAGENT_WAIT_PATTERNS.
+    #   3. No completion claim — agent isn't claiming work is done.
+    #   4. No git diff changes.
+    #   5. No file writes.
+    #   6. No MCP writes.
+    _last_new_tool = new_tool_calls[-1] if new_tool_calls else None
+    _subagent_active = any(tc in _AGENT_TOOLS for tc in all_tool_calls)
+    _wait_evidence = (_last_new_tool in _AGENT_TOOLS) or bool(
+        _SUBAGENT_WAIT_PATTERNS.search(last_assistant_message)
+    )
+    if (
+        _subagent_active
+        and _wait_evidence
+        and not completion_claim
+        and not diff_changed
+        and "write_tool" not in write_signals
+        and "mcp_write" not in write_signals
+    ):
+        print("Subagent wait — fast-exit (mid-workflow pause).", file=sys.stderr)
+        state = _update_session_state(
+            state, session_id, current_diff_hash, len(all_tool_calls), file_size
+        )
+        _save_state(state)
+        _exit_pass()
 
     # ── Question classification ──────────────────────────────────────────────
     question_type = _classify_question(latest_user_message)

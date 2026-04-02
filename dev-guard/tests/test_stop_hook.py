@@ -1736,3 +1736,262 @@ class TestBuildPromptCriteria:
         prompt = mod._build_prompt(self._minimal_ctx())
         assert "REDIRECTION" in prompt
         assert "continuation directive" in prompt
+
+    def test_subagent_wait_criterion_present_when_subagent_in_triggers(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["subagent"]
+        ctx["work_type"] = "conversation"
+        prompt = mod._build_prompt(ctx)
+        assert "SUBAGENT WAIT" in prompt
+
+    def test_subagent_wait_criterion_before_subagent_results(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["subagent"]
+        ctx["work_type"] = "conversation"
+        prompt = mod._build_prompt(ctx)
+        wait_idx = prompt.index("SUBAGENT WAIT")
+        results_idx = prompt.index("SUBAGENT RESULTS")
+        assert wait_idx < results_idx
+
+    def test_subagent_wait_not_present_without_subagent_trigger(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["completion_claim"]
+        ctx["work_type"] = "code_config"
+        prompt = mod._build_prompt(ctx)
+        assert "SUBAGENT WAIT" not in prompt
+
+
+# ── Subagent wait fast-exit ───────────────────────────────────────────────────
+
+
+class TestSubagentWaitFastExit:
+    """Verify subagent wait fast-exit: mid-workflow pauses pass without invoking LLM."""
+
+    def _setup(
+        self,
+        tmp_path: Path,
+        *,
+        tool_names: list[str],
+        assistant_msg: str,
+        user_msg: str = "Do the work.",
+        plugin_root: Path | None = None,
+    ) -> subprocess.CompletedProcess:
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries: list[dict] = [{"role": "user", "content": user_msg}]
+        for i, name in enumerate(tool_names):
+            entries.append({"type": "tool_use", "name": name, "id": f"t{i}"})
+        entries.append({"role": "assistant", "content": assistant_msg})
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message=assistant_msg,
+        )
+        kwargs: dict = {"state_path": tmp_path / "state.json"}
+        if plugin_root is not None:
+            kwargs["plugin_root"] = str(plugin_root)
+        return run_hook(payload, **kwargs)
+
+    def test_agent_spawned_waiting_message_fast_exits(self, tmp_path):
+        """Agent spawned + 'Waiting for reviewers...' → fast-exit (pass, no LLM)."""
+        # Use a fail mock so we know if LLM was invoked
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Should not reach LLM."])
+        result = self._setup(
+            tmp_path,
+            tool_names=["Read", "Agent"],
+            assistant_msg="Waiting for reviewers to complete their analysis.",
+            plugin_root=tmp_path / "plugin",
+        )
+        assert result.returncode == 0
+        # Fast-exit → no decision=block JSON on stdout
+        assert result.stdout.strip() == ""
+
+    def test_agent_spawned_last_tool_is_agent_fast_exits(self, tmp_path):
+        """Agent spawned + last tool is Agent (empty message) → fast-exit."""
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Should not reach LLM."])
+        result = self._setup(
+            tmp_path,
+            tool_names=["Read", "Agent"],
+            assistant_msg="",
+            plugin_root=tmp_path / "plugin",
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
+    def test_agent_spawned_completion_claim_routes_to_llm(self, tmp_path):
+        """Agent spawned + completion claim → routes to LLM (no fast-exit)."""
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Incomplete work."])
+        result = self._setup(
+            tmp_path,
+            tool_names=["Agent"],
+            assistant_msg="I've completed all the work. Everything is ready.",
+            plugin_root=tmp_path / "plugin",
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_agent_spawned_file_writes_routes_to_llm(self, tmp_path):
+        """Agent spawned + file writes (Edit) → routes to LLM (no fast-exit)."""
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Work incomplete."])
+        result = self._setup(
+            tmp_path,
+            tool_names=["Agent", "Edit"],
+            assistant_msg="Waiting for reviewers...",
+            plugin_root=tmp_path / "plugin",
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_agent_spawned_git_diff_routes_to_llm(self, tmp_path):
+        """Agent spawned + git diff changes → routes to LLM (no fast-exit).
+
+        Uses an actual git repo (the project itself) with an uncommitted change in tmp_path
+        to produce a non-empty diff hash. We verify this by running the hook in a real git
+        worktree and seeding a prior diff hash that won't match the current one.
+        """
+        import subprocess as _sp
+
+        # Set up a real git repo in tmp_path so git diff can return a hash
+        _sp.run(["git", "init", str(tmp_path)], capture_output=True)
+        _sp.run(
+            ["git", "commit", "--allow-empty", "-m", "init"],
+            capture_output=True,
+            cwd=str(tmp_path),
+            env={
+                **os.environ,
+                "GIT_AUTHOR_NAME": "test",
+                "GIT_AUTHOR_EMAIL": "t@t.com",
+                "GIT_COMMITTER_NAME": "test",
+                "GIT_COMMITTER_EMAIL": "t@t.com",
+            },
+        )
+        # Create an unstaged change to produce a non-empty git diff
+        (tmp_path / "change.txt").write_text("some change")
+        _sp.run(["git", "add", "change.txt"], capture_output=True, cwd=str(tmp_path))
+        # git diff (unstaged) needs a working tree change, not staged — use a tracked+modified file
+        (tmp_path / "tracked.txt").write_text("original")
+        _sp.run(["git", "add", "tracked.txt"], capture_output=True, cwd=str(tmp_path))
+        _sp.run(
+            ["git", "commit", "-m", "add tracked"],
+            capture_output=True,
+            cwd=str(tmp_path),
+            env={
+                **os.environ,
+                "GIT_AUTHOR_NAME": "test",
+                "GIT_AUTHOR_EMAIL": "t@t.com",
+                "GIT_COMMITTER_NAME": "test",
+                "GIT_COMMITTER_EMAIL": "t@t.com",
+            },
+        )
+        (tmp_path / "tracked.txt").write_text("modified")  # unstaged change → git diff non-empty
+
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Changes need review."])
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Do the work."},
+            {"type": "tool_use", "name": "Agent", "id": "t0"},
+            {"role": "assistant", "content": "Waiting for reviewers..."},
+        ]
+        write_transcript(transcript, entries)
+        # Seed with empty diff hash — current hash (non-empty) will differ → diff_changed=True
+        seed_state(tmp_path / "state.json", session_id, diff_hash="")
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="Waiting for reviewers...",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+        # diff_changed=True → subagent fast-exit blocked → routes to LLM → block
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_agent_spawned_mcp_writes_routes_to_llm(self, tmp_path):
+        """Agent spawned + MCP write tool → routes to LLM (no fast-exit)."""
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["MCP write detected."])
+        result = self._setup(
+            tmp_path,
+            tool_names=["Agent", "mcp__jira__createIssue"],
+            assistant_msg="Waiting for reviewers...",
+            plugin_root=tmp_path / "plugin",
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_no_agent_tool_waiting_message_no_fast_exit(self, tmp_path):
+        """No Agent tool + 'Waiting...' message → no fast-exit (subagent signal absent)."""
+        # With no Agent tool and "Waiting..." message, triggers may be empty → fast-exit 7.
+        # The key invariant: subagent fast-exit does NOT fire when no Agent tool was used.
+        # We verify this by checking that the subagent-specific fast-exit path doesn't trigger.
+        # (The hook may still fast-exit via other paths — that's fine.)
+        result = self._setup(
+            tmp_path,
+            tool_names=["Read"],
+            assistant_msg="Waiting for the system to respond.",
+        )
+        # Exit 0 is expected (non-agent paths still fast-exit), but NOT via subagent path.
+        # We verify by checking stderr does NOT contain the subagent fast-exit message.
+        assert result.returncode == 0
+        assert "Subagent wait" not in result.stderr
+
+    def test_agent_plus_read_grep_waiting_regex_fast_exits(self, tmp_path):
+        """Agent + Read/Grep + 'Waiting for reviewers...' (last tool is Read) → fast-exit via regex.
+
+        Covers multi-tool-call scenario: last tool is NOT Agent, but message matches pattern.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Should not reach LLM."])
+        result = self._setup(
+            tmp_path,
+            tool_names=["Agent", "Read", "Grep"],
+            assistant_msg="Waiting for reviewers to finish their analysis.",
+            plugin_root=tmp_path / "plugin",
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
+    def test_scolding_loop_agent_in_previous_eval_still_waiting(self, tmp_path):
+        """Scolding loop: Agent used in previous eval (all_tool_calls), new_tool_calls empty.
+
+        Simulates subsequent stop hook firing where new_tool_calls is empty but Agent was
+        used earlier. Uses all_tool_calls for criterion 1 so fast-exit persists.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Should not reach LLM."])
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Do the work."},
+            {"type": "tool_use", "name": "Agent", "id": "t0"},
+            {"role": "assistant", "content": "Still waiting for background agents..."},
+        ]
+        write_transcript(transcript, entries)
+        # Seed evaluated_tool_count=1 so new_tool_calls is empty (Agent already counted)
+        seed_state(tmp_path / "state.json", session_id, evaluated_tool_count=1)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message="Still waiting for background agents...",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+        # Fast-exit → no decision=block JSON (LLM not invoked)
+        assert result.stdout.strip() == ""
