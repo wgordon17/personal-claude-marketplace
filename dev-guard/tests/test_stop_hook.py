@@ -283,7 +283,7 @@ class TestQuestionClassification:
         result = self._run_with_user_message(
             tmp_path,
             "What is the Python version requirement?",
-            "Python 3.10+.",
+            "Python 3.13+.",
         )
         # Read-only + factual question → fast-exit (exit 0)
         assert result.returncode == 0

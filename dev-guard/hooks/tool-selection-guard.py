@@ -25,14 +25,11 @@ from pathlib import Path
 from typing import NamedTuple, NoReturn
 
 sys.path.insert(0, str(Path(__file__).parent))
+import tomllib
+
 from mcp_constants import MCP_READ_ONLY as _MCP_READ_ONLY  # noqa: E402
 from mcp_constants import MCP_THINK_PREFIX as _MCP_THINK_PREFIX  # noqa: E402
 from mcp_constants import mcp_key as _mcp_key  # noqa: E402
-
-try:
-    import tomllib
-except ImportError:
-    tomllib = None  # type: ignore[assignment]  # Python 3.10 fallback
 
 
 class CommandRule(NamedTuple):
@@ -3417,17 +3414,12 @@ def _ensure_rtk_config() -> str | None:
         # Determine what needs patching
         patch_telemetry = False
         patch_tee = False
-        if tomllib is not None:
-            try:
-                parsed = tomllib.loads(content)
-                patch_telemetry = parsed.get("telemetry", {}).get("enabled") is True
-                patch_tee = parsed.get("tee", {}).get("mode", "") != "always"
-            except Exception:
-                return None  # Unparseable config — don't patch blindly
-        else:
-            # Python 3.10 fallback: string-based detection
-            patch_telemetry = "[telemetry]" in content and "enabled = true" in content
-            patch_tee = 'mode = "failures"' in content
+        try:
+            parsed = tomllib.loads(content)
+            patch_telemetry = parsed.get("telemetry", {}).get("enabled") is True
+            patch_tee = parsed.get("tee", {}).get("mode", "") != "always"
+        except Exception:
+            return None  # Unparseable config — don't patch blindly
 
         changes = []
 
