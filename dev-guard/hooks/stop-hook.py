@@ -118,23 +118,6 @@ _COMPLETION_CLAIM_PATTERNS = [
     ),
 ]
 
-# Subagent wait patterns — textual evidence of mid-workflow pause (criterion 2 secondary arm).
-# Criterion 1 (Agent tool in all_tool_calls) is the primary security gate; this regex is a
-# usability broadener — content injection could match text but criterion 1 still requires a
-# real tool invocation.
-#
-# ReDoS note: filler arms use bounded [^\n]{0,100} instead of unbounded quantifiers
-# or adjacent optional quantifiers to prevent catastrophic backtracking.
-_SUBAGENT_WAIT_PATTERNS = re.compile(
-    r"waiting\s+for\s+[^\n]{0,100}(?:agents?|reviewers?|tasks?|results?|completion)|"
-    r"launch(?:ing|ed)?\s+[^\n]{0,100}(?:agents?|reviewers?)|"
-    r"launched?\s+\d+|"
-    r"spawned?\s+\d+|"
-    r"running\s+[^\n]{0,100}\b(?:agents?|reviewers?|background)|"
-    r"let\s+me\s+wait|still\s+(?:running|working)|"
-    r"(?:agents?|tasks?)\s+in\s+parallel",
-    re.IGNORECASE,
-)
 
 # Research tool names (native)
 _RESEARCH_TOOLS = frozenset({"WebSearch", "WebFetch"})
@@ -860,30 +843,6 @@ def main() -> None:
     research_used = _detect_research_tools(new_tool_calls)
     hack_modified = _check_hack_dir_modified(cwd)
 
-    # ── Fast-exit: Subagent wait (mid-workflow pause) ────────────────────────
-    # Fires AFTER signal detection, BEFORE question classification.
-    # All 6 criteria conjunctive — see _SUBAGENT_WAIT_PATTERNS comment for security model.
-    last_new_tool = new_tool_calls[-1] if new_tool_calls else None
-    subagent_active = any(tc in _AGENT_TOOLS for tc in all_tool_calls)
-    wait_evidence = (last_new_tool in _AGENT_TOOLS) or bool(
-        _SUBAGENT_WAIT_PATTERNS.search(last_assistant_message)
-    )
-    if (
-        subagent_active
-        and wait_evidence
-        and not completion_claim
-        and not diff_changed
-        and "write_tool" not in write_signals
-        and "mcp_write" not in write_signals
-    ):
-        _log_stop_event(session_id, "subagent_wait")
-        print("Subagent wait — fast-exit (mid-workflow pause).", file=sys.stderr)
-        state = _update_session_state(
-            state, session_id, current_diff_hash, len(all_tool_calls), file_size
-        )
-        _save_state(state)
-        _exit_pass()
-
     # ── Question classification ──────────────────────────────────────────────
     question_type = _classify_question(latest_user_message)
 
@@ -952,7 +911,7 @@ def main() -> None:
         trigger_reasons.append("code_change")
     if research_used:
         trigger_reasons.append("research")
-    if "subagent" in write_signals:
+    if any(tc in _AGENT_TOOLS for tc in all_tool_calls):
         trigger_reasons.append("subagent")
     if hack_modified.get("plans"):
         trigger_reasons.append("planning")

@@ -17,7 +17,7 @@ test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 	uv run --group dev --group llm pytest -m llm -v
 
 typecheck:  ## Pyright type checking (dev-guard/hooks)
-	uvx pyright@1.1.408
+	uv run pyright
 
 prek:  ## Run pre-commit on all files
 	uvx prek run --all-files
