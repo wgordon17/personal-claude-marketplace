@@ -787,9 +787,9 @@ def _log_url_event(
     url: str, rule_name: str | None, action: str, tool: str, phase: str = "pre", **extra: object
 ) -> None:
     """Log a URL guard event to the unified SQLite audit log."""
-    detail = {"tool": tool, "phase": phase}
+    detail: dict[str, object] = {"tool": tool, "phase": phase}
     if extra:
-        detail.update(extra)
+        detail |= extra
     _log_event("url", action, rule=rule_name, command=url, detail=detail)
 
 

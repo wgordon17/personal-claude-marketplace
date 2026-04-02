@@ -23,3 +23,8 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pyright]
+include = ["dev-guard/hooks"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"

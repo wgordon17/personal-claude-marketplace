@@ -288,7 +288,7 @@ def _build_prompt(ctx: dict) -> str:
 def _call_vertex(prompt: str) -> dict:
     """Call claude-sonnet-4-6 via Vertex AI. Returns parsed response dict."""
     try:
-        from anthropic import AnthropicVertex
+        from anthropic import AnthropicVertex  # type: ignore[import-untyped]
     except ImportError as e:
         _fail_open(f"anthropic[vertex] not available: {e}")
 
