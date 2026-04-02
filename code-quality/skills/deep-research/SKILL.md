@@ -46,15 +46,8 @@ After completing Phase 1 scope definition, classify the research mode via `AskUs
 
 **Present two options to the user:**
 
-- **External (Recommended)** — Pure external research (web sources, documentation, community). Use when the question is about technologies, patterns, or decisions unrelated to this codebase.
+- **External** — Pure external research (web sources, documentation, community). Use when the question is about technologies, patterns, or decisions unrelated to this codebase.
 - **Bridged** — Internal investigation first, then external research informed by the internal findings. Use when the question references this project's code, patterns, or architecture.
-
-**Default recommendation based on context signals:**
-
-- Signals suggesting **Bridged**: user's question references "our", "this project", "the codebase", "we", specific file paths, or internal component names.
-- Signals suggesting **External**: generic technology questions, no reference to internal code or project specifics.
-
-Present your recommended mode along with the reason, and ask the user to confirm or switch.
 
 **Routing:**
 - **External selected**: skip Phase 2.5, proceed directly to Phase 2.
