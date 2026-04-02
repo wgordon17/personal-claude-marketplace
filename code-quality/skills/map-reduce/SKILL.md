@@ -152,12 +152,12 @@ LEAD (you)
 2. **For analysis workloads:** present the synthesized summary and findings to the user.
    Offer to write a detailed report or create actionable TODO items.
 
-3. **For implementation workloads:** apply changes in priority order (by severity), run tests
-   after each batch, verify nothing regressed. Roll back on test failure.
+3. **For implementation workloads:** apply changes in priority order (needs-fix first, then
+   needs-input), run tests after each batch, verify nothing regressed. Roll back on test failure.
 
 4. **Write final report** to `{run_dir}/map-reduce-report.md` with:
    - Summary statistics (files analyzed, total findings, deduplicated, invalidated)
-   - Per-severity breakdown
+   - Per-classification breakdown (needs-fix / needs-input)
    - Cross-chunk issues (if any)
    - Fidelity warnings (if any)
    - Chunk failure list (if any chunks failed)

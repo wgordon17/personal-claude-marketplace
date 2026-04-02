@@ -231,7 +231,7 @@ The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{di
 
 After all agents complete, collect all findings into a consolidated list. Assign each finding a
 unique ID (e.g., `sec-1`, `qa-1`, `perf-1`, `cq-1`, `cor-1`, `pa-1`). Preserve: description, file:line,
-severity, evidence, source reviewer.
+classification, evidence, source reviewer.
 
 ---
 
@@ -253,7 +253,7 @@ Build the findings JSON array:
     "reviewer": "Security",
     "description": "...",
     "location": "file/path.py:42",
-    "severity": "HIGH",
+    "classification": "needs-fix | needs-input",
     "evidence": "...",
     "diff_context": "±10 lines of diff surrounding the finding location"
   },
@@ -279,7 +279,7 @@ The verifier receives: `{findings_json}` (the array above), `{claude_md_rules}`,
 The verifier **investigates each finding** — it reads the actual source files, traces call
 chains, and checks whether the finding is real. It returns a JSON array with a verdict for
 each finding:
-`[{finding_id, verdict, investigation_summary, category}, ...]`
+`[{finding_id, verdict, investigation_summary, category, classification}, ...]`
 
 Verdicts: `verified` (confirmed real), `false_positive` (investigated and disproven),
 `needs_context` (cannot confirm or deny — requires human judgment).
@@ -290,7 +290,7 @@ and a note: "Verification failed — showing all findings unverified."
 
 ### Categorize
 
-The verifier assigns each finding to a category based on its nature (not its severity):
+The verifier assigns each finding to a category based on its nature (not its classification):
 
 | Category | Examples |
 |----------|----------|
@@ -329,7 +329,7 @@ Findings: {verified_count} verified, {needs_context_count} needs context
   (from {total_raw} raw findings — {false_positive_count} false positives removed)
 
 TESTING GAPS
-  1. [{Reviewer}] {description} [{severity}]
+  1. [{Reviewer}] {description} [{classification}]
      {file}:{line}
      Evidence: {evidence}
 
@@ -352,7 +352,7 @@ STYLE & CONVENTIONS
   ...
 
 ─── Needs Context ({needs_context_count}) ───
-  1. [{Reviewer}] {description} [{severity}]
+  1. [{Reviewer}] {description} [{classification}]
      {file}:{line}
      Investigation: {investigation_summary}
 
@@ -363,7 +363,7 @@ Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {
 
 Group findings by **category** (Testing Gaps → Correctness → Security → Architecture →
 Decisions Needed → Performance → Style & Conventions). Within each category,
-sort by severity (CRITICAL → HIGH → MEDIUM → LOW). For the `[Reviewer]` tag, use the short
+sort by classification (needs-fix first, then needs-input). For the `[Reviewer]` tag, use the short
 reviewer name: Security, QA, Performance, Code Quality, Correctness, Plan Adherence.
 
 Omit category sections with zero findings.

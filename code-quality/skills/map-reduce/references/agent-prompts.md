@@ -79,9 +79,15 @@ For each file in your chunk:
 2. Perform the requested analysis or transformation
 3. Collect findings
 
-### Step 3: Classify Every Finding with a Confidence Level
+### Step 3: Classify Every Finding
 
-This is critical for result quality. Every finding MUST have a `confidence` field:
+This is critical for result quality. Every finding MUST have both a `classification` and a
+`confidence` field.
+
+> **Field distinction:**
+> - `classification` = finding actionability per `code-quality/references/finding-classification.md`.
+>   `needs-fix` = fix is clear and within agent capability. `needs-input` = requires user decision.
+> - `confidence` = mapper certainty given chunk-local view. Independent of classification.
 
 **Use `confidence: "verified"` when:**
 - The finding is entirely self-contained within your chunk
@@ -122,7 +128,7 @@ Format:
   "findings": [
     {
       "id": "MAP-{chunk_id}-001",
-      "severity": "critical | high | medium | low | informational",
+      "classification": "needs-fix | needs-input",
       "confidence": "verified | chunk-local",
       "file": "path/to/file.py",
       "line": 42,
@@ -142,7 +148,7 @@ Format:
 
 After writing your ChunkResult, send a brief summary to the lead via SendMessage:
 ```
-Chunk {chunk_id} complete. Status: complete. Found {N} findings ({X} verified, {Y} chunk-local).
+Chunk {chunk_id} complete. Status: complete. Found {N} findings ({X} needs-fix, {Y} needs-input; {Z} verified, {W} chunk-local).
 Output written to {output_path}. turn_count: {N}
 ```
 
@@ -216,7 +222,7 @@ For every finding with `confidence: "chunk-local"` and description related to a 
 For findings that appear in multiple chunks (same file, same line, same issue type):
 - Merge into a single finding
 - Combine evidence strings from all sources (keep both, separated by " | ")
-- Keep the highest severity across all instances
+- For classification conflicts, prefer `needs-fix` over `needs-input` (more actionable)
 - Record all source chunk_ids in `source_chunks`
 - Never silently drop a finding — if merging loses detail, keep the fuller description
 
@@ -228,10 +234,10 @@ symbol X in its evidence):
 - Record the conflict resolution in `fidelity_warnings`
 - Do NOT report the symbol as unused
 
-### Step 3: Rank by Severity
+### Step 3: Rank by Classification
 
-Sort final findings: critical → high → medium → low → informational. Within each severity
-level, sort by file path for consistency.
+Sort final findings: needs-fix first, then needs-input. Within each classification group,
+sort by file path for consistency.
 
 ### Step 4: Check Cross-Chunk Consistency (implementation workloads)
 
@@ -252,17 +258,12 @@ Format:
   "total_findings": {raw_count_before_dedup},
   "deduplicated_findings": {count_after_dedup},
   "invalidated_findings": {count_of_invalidated_chunk_local},
-  "by_severity": {
-    "critical": 0,
-    "high": 0,
-    "medium": 0,
-    "low": 0,
-    "informational": 0
-  },
+  "needs_fix_count": 0,
+  "needs_input_count": 0,
   "findings": [
     {
       "id": "MAP-chunk-1-001 or MERGED-001",
-      "severity": "critical | high | medium | low | informational",
+      "classification": "needs-fix | needs-input",
       "confidence": "verified",
       "file": "path/to/file.py",
       "line": 42,
@@ -291,7 +292,7 @@ After writing your ReductionResult, send a summary to the lead via SendMessage:
 ```
 Reduction complete. Status: complete.
 Raw findings: {total}, After dedup: {deduplicated}, Invalidated: {invalidated}.
-By severity: critical={N}, high={N}, medium={N}, low={N}, informational={N}.
+By classification: needs-fix={N}, needs-input={N}.
 Fidelity warnings: {count}. Cross-chunk issues: {count}.
 Output written to {output_path}.
 ```

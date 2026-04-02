@@ -47,6 +47,11 @@ Read {memory_dir}/BUGS.md
 
 ### BUGS.md Template
 
+> **Note on Impact vs Classification:** The `Impact` field (Critical/High/Medium/Low) describes
+> the bug's effect on users — it is NOT finding classification. All bugs are `needs-fix` by
+> definition; Impact conveys urgency and scope. See
+> `code-quality/references/finding-classification.md` for the classification taxonomy.
+
 ```markdown
 # Bug Investigation & Resolution Tracking
 
@@ -61,7 +66,7 @@ and documented here with root cause analysis and resolution plan.
 
 **Status:** Investigating | Root Cause Found | Fix Ready | Fixed
 **Reported:** YYYY-MM-DD
-**Severity:** Critical | High | Medium | Low
+**Impact:** Critical | High | Medium | Low
 
 ### Problem
 <What the user observed — plain language>
@@ -135,7 +140,7 @@ existing BUG entry). Use this exact format:
 
 **Status:** Root Cause Found
 **Reported:** [today's date]
-**Severity:** Critical | High | Medium | Low
+**Impact:** Critical | High | Medium | Low
 
 ### Problem
 <What the user observed — plain language>
@@ -185,7 +190,7 @@ The user wants to keep reporting bugs. Stay out of their way.
 When a background agent completes, summarize in 1-2 sentences:
 
 ```
-BUG-014 complete — [severity]. Root cause: [one sentence]. See BUGS.md for details.
+BUG-014 complete — [impact]. Root cause: [one sentence]. See BUGS.md for details.
 ```
 
 Do NOT dump the full agent report into the conversation.
@@ -196,7 +201,7 @@ When the user is done reporting bugs or asks to review status:
 
 1. Read `{memory_dir}/BUGS.md` and summarize:
    - Total bugs documented
-   - Breakdown by severity (Critical/High/Medium/Low)
+   - Breakdown by impact (Critical/High/Medium/Low)
    - Breakdown by status (Investigating/Root Cause Found/Fix Ready/Fixed)
    - Any agents still running
 
@@ -276,7 +281,7 @@ Mitigation strategies:
 
 ### Completion
 ```
-1. Summarize: "BUG-NNN complete — [severity]. Root cause: [one sentence]"
+1. Summarize: "BUG-NNN complete — [impact]. Root cause: [one sentence]"
 2. Don't dump full report
 ```
 

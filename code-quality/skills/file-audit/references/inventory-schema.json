@@ -21,7 +21,7 @@
       "properties": {
         "total_files": { "type": "integer", "minimum": 0 },
         "total_symbols": { "type": "integer", "minimum": 0 },
-        "issues_by_severity": {
+        "issues_by_diagnostic_level": {
           "type": "object",
           "properties": {
             "error": { "type": "integer", "minimum": 0 },
@@ -204,7 +204,7 @@
     },
     "issue": {
       "type": "object",
-      "required": ["type", "severity", "description"],
+      "required": ["type", "diagnostic_level", "description"],
       "properties": {
         "id": {
           "type": "string",
@@ -241,10 +241,10 @@
           ],
           "description": "Specific issue type"
         },
-        "severity": {
+        "diagnostic_level": {
           "type": "string",
           "enum": ["error", "warning", "info"],
-          "description": "Issue severity"
+          "description": "LSP-style diagnostic level (error/warning/info) — distinct from finding classification"
         },
         "location": {
           "type": "object",
@@ -386,7 +386,7 @@
     },
     "todoItem": {
       "type": "object",
-      "required": ["file", "issue_type", "action", "priority"],
+      "required": ["file", "issue_type", "action", "classification"],
       "properties": {
         "file": {
           "type": "string",
@@ -404,10 +404,10 @@
           "type": "string",
           "description": "What action to take"
         },
-        "priority": {
+        "classification": {
           "type": "string",
-          "enum": ["critical", "high", "medium", "low"],
-          "description": "Priority based on severity"
+          "enum": ["needs-fix", "needs-input"],
+          "description": "Finding actionability per code-quality/references/finding-classification.md"
         },
         "category": {
           "type": "string",
