@@ -3596,6 +3596,47 @@ def _handle_bash_command(command: str) -> None:
     sys.exit(0)
 
 
+def _increment_tool_counter(session_id: str) -> None:
+    """Increment the per-session tool call counter in session_state (PreToolUse only)."""
+    try:
+        conn = _init_db()
+        if conn:
+            conn.execute(
+                "INSERT INTO session_state (key, value, updated_ts) "
+                "VALUES (?, '1', ?) "
+                "ON CONFLICT(key) DO UPDATE SET "
+                "value = CAST(value AS INTEGER) + 1, updated_ts = excluded.updated_ts",
+                (
+                    f"tools:{session_id}",
+                    datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                ),
+            )
+            conn.commit()
+    except (sqlite3.Error, OSError):
+        pass
+
+
+def _handle_mcp_tool(tool_name: str) -> bool:
+    """Handle MCP tool auto-approval or passthrough.
+
+    Uses server-qualified keys to prevent cross-server name spoofing.
+    Known read-only tools (and sequential-thinking tools via _MCP_THINK_PREFIX)
+    are auto-approved; unknown MCP tools pass through to settings.json.
+
+    Returns True if the tool was handled (caller should return), False if not an MCP tool.
+    """
+    if not tool_name.startswith("mcp__"):
+        return False
+    key = _mcp_key(tool_name)
+    if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
+        _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
+        print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
+        sys.exit(0)
+    # Unknown MCP tools: passthrough to settings.json permissions
+    _log_event("guard", "mcp-passthrough", rule="mcp-unknown", command=tool_name)
+    sys.exit(0)
+
+
 def main() -> None:
     global _session_id, _tool_use_id
 
@@ -3662,22 +3703,7 @@ def main() -> None:
 
     # Increment tool call counter (PreToolUse only — Post hooks don't count)
     if _session_id:
-        try:
-            conn = _init_db()
-            if conn:
-                conn.execute(
-                    "INSERT INTO session_state (key, value, updated_ts) "
-                    "VALUES (?, '1', ?) "
-                    "ON CONFLICT(key) DO UPDATE SET "
-                    "value = CAST(value AS INTEGER) + 1, updated_ts = excluded.updated_ts",
-                    (
-                        f"tools:{_session_id}",
-                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    ),
-                )
-                conn.commit()
-        except (sqlite3.Error, OSError):
-            pass
+        _increment_tool_counter(_session_id)
 
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
@@ -3688,17 +3714,8 @@ def main() -> None:
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
 
-    # MCP tool auto-approval: known read-only tools bypass permission system
-    # Uses server-qualified keys to prevent cross-server name spoofing
-    if tool_name.startswith("mcp__"):
-        key = _mcp_key(tool_name)
-        if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
-            _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
-            print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
-            sys.exit(0)
-        # Unknown MCP tools: passthrough to settings.json permissions
-        _log_event("guard", "mcp-passthrough", rule="mcp-unknown", command=tool_name)
-        sys.exit(0)
+    if _handle_mcp_tool(tool_name):
+        return
 
     if tool_name != "Bash":
         sys.exit(0)
