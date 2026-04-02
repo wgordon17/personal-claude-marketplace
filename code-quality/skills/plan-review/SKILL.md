@@ -51,14 +51,17 @@ If no path was given:
    `.md` files, stop with:
    "No plan files found in `{memory_dir}/plans/`. Pass a plan file path explicitly: `/plan-review <path>`"
 
-3. Sort plan files by modification time, most recent first.
+3. **Primary: Branch-header matching** — Parse each plan file's `**Branch:**` header field.
+   Match against the current git branch (`git branch --show-current`). If exactly one plan
+   matches, use it. If multiple match, use the most recent by unix timestamp in the filename.
+   This matches the discovery convention used by pr-review, swarm, and quality-gate.
 
-4. If exactly one file is found, use it. Print: "Using plan: {filename}"
-
-5. If multiple files are found, present them via `AskUserQuestion`:
-   - Show each file's filename, the value of its first `**Goal:**` or `## Goal` line (if found),
-     and its relative age (e.g., "modified 2 hours ago").
-   - Ask the user to select one.
+4. **Fallback: mtime sorting with user selection** — If no Branch-header match is found (e.g.,
+   reviewing from `main` or a different branch), sort all plan files by modification time
+   (most recent first):
+   - If exactly one file exists, use it. Print: "Using plan: {filename}"
+   - If multiple files exist, present them via `AskUserQuestion` with each file's filename,
+     the value of its first `**Goal:**` or `## Goal` line (if found), and its relative age.
 
 ### Read Plan File
 
