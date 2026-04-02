@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 17 skills, 4 commands | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 18 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -39,6 +39,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/swarm` - Full agent team implementation via TeamCreate
 - `/quality-gate` - PROACTIVE multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates
 - `/pr-review` - Multi-agent PR review with finding verification
+- `/plan-review` - Multi-agent plan review with finding verification
 - `/map-reduce` - Parallelized workload processing with chunking, mapper agents, and reducer synthesis
 - `/speculative` - Competing implementations in isolated worktrees with judge selection
 - `/incremental-planning` - Incremental planning workflow with per-task review and assumption surfacing
@@ -211,9 +212,9 @@ These MCP servers enhance functionality but are not required for core operation 
 | **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
-| **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1. Alternative tools work. |
+| **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode. Alternative tools work. |
 | **[Sequential-Thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)** | code-quality | Soft | Reasoning about scope boundaries in `/incremental-planning` and `/roadmap`. Reasoning works without it. |
-| **[claude-mem](https://github.com/pchaganti/gx-claude-mem)** | code-quality | Soft | Search past work, decisions, and learnings in `/incremental-planning` Phase 1. Enhanced context, not required. |
+| **[claude-mem](https://github.com/pchaganti/gx-claude-mem)** | code-quality | Soft | Search past work, decisions, and learnings in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode. Enhanced context, not required. |
 
 ### External Plugin Dependencies
 
