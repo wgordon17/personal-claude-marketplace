@@ -49,7 +49,7 @@ structure. This file provides the specific questions and techniques for each len
 ### Round 4: Simplicity (BLOCKING)
 
 **This round is a blocking sub-gate.** Dead code, unnecessary abstractions, and unused imports
-are CRITICAL findings that must be fixed before proceeding to Round 5. These are objectively
+are `needs-fix` findings that must be fixed before proceeding to Round 5. These are objectively
 wasteful — not judgment calls.
 
 - Calculate net lines delta: `git diff --stat` on all changes. Pass the delta to the
@@ -63,8 +63,9 @@ wasteful — not judgment calls.
 - For each new dependency or custom implementation: does a well-maintained library solve this?
   (See `code-quality/references/dependency-evaluation.md`)
 - **Tool:** Spawn `code-quality:code-simplifier` for dead code, unused imports, over-abstraction.
-- **Gate:** Fix all CRITICAL simplification findings (dead code, unnecessary abstractions,
-  unused imports) before proceeding. MEDIUM/LOW findings (style, naming) can proceed.
+- **Gate:** Fix all `needs-fix` simplification findings (dead code, unnecessary abstractions,
+  unused imports) before proceeding. `needs-input` findings (architectural decisions) require
+  user confirmation before proceeding.
 
 ### Round 5: Adversarial
 
