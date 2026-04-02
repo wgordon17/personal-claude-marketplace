@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.13"
 # dependencies = ["anthropic[vertex]>=0.40.0"]
 # ///
 """Stop Hook LLM Evaluator -- Sonnet quality gate via Vertex AI.

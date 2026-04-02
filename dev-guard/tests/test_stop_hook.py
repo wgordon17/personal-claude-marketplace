@@ -109,7 +109,7 @@ def write_mock_llm(
     stub = textwrap.dedent(f"""\
         #!/usr/bin/env -S uv run
         # /// script
-        # requires-python = ">=3.10"
+        # requires-python = ">=3.13"
         # ///
         import json, sys
         result = json.loads({result_json!r})
@@ -1589,7 +1589,7 @@ class TestLLMContextFields:
         stub = textwrap.dedent("""\
             #!/usr/bin/env -S uv run
             # /// script
-            # requires-python = ">=3.10"
+            # requires-python = ">=3.13"
             # ///
             import json, sys
             ctx = json.loads(sys.stdin.read())
@@ -1631,7 +1631,7 @@ class TestLLMContextFields:
         stub = textwrap.dedent("""\
             #!/usr/bin/env -S uv run
             # /// script
-            # requires-python = ">=3.10"
+            # requires-python = ">=3.13"
             # ///
             import json, sys
             ctx = json.loads(sys.stdin.read())

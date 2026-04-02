@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.13"
 # ///
 """Stop Hook Main -- zero-dependency fast triage for Claude Code Stop events.
 
