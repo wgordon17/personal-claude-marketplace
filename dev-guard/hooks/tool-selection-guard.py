@@ -3480,8 +3480,8 @@ def _parse_hook_input() -> dict:
         sys.exit(0)
 
 
-def _handle_webfetch(tool_input: dict) -> None:
-    """Check WebFetch URLs against auth rules. Exits after handling."""
+def _handle_webfetch(tool_input: dict) -> NoReturn:
+    """Check WebFetch URLs against auth rules. Always exits via sys.exit(0)."""
     url = tool_input.get("url", "")
     if url:
         result = _check_url_rules(url)
@@ -3500,8 +3500,8 @@ def _handle_webfetch(tool_input: dict) -> None:
     sys.exit(0)
 
 
-def _handle_bash_command(command: str) -> None:
-    """Process a Bash command through all guard checks."""
+def _handle_bash_command(command: str) -> NoReturn:
+    """Process a Bash command through all guard checks. Always exits."""
     if not command:
         sys.exit(0)
 
