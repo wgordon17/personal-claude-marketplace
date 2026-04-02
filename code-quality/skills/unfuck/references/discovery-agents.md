@@ -166,11 +166,17 @@ Use the shared output schema with:
 - `category`: `"dead-code"`
 - `subcategory`: one of `"unused-export"`, `"orphan-file"`, `"unused-dependency"`, `"dead-feature"`, `"commented-code"`, `"dead-test"`
 
-### Severity Guide
-- **critical**: Not used for dead code (reserve for security/correctness)
-- **high**: Entire unused files, unused public API exports, unused dependencies adding bundle size
-- **medium**: Unused private functions, unused variables in non-trivial scope
-- **low**: Commented-out code, unused test utilities, minor dead branches
+### Classification Guide
+
+See `code-quality/references/finding-classification.md` for the full taxonomy and LoE scale.
+
+- **needs-fix**: Agent has sufficient context to remove the dead code independently. Default for all dead code findings.
+- **needs-input**: Fix requires a user decision (e.g., removing a public API export that may have external consumers, or dead code that could be intentional scaffolding for upcoming work).
+
+Assign `loe` per finding:
+- **trivial**: Single line/import removal, no callers
+- **moderate**: Multi-file cleanup (remove file + references in imports)
+- **significant**: Removing an entire unused module with multiple dependents to update
 
 ### Risk Guide
 - **low**: Zero references anywhere, not an entry point, safe to remove
@@ -311,11 +317,17 @@ Use the shared output schema with:
 - `category`: `"duplicate"`
 - `subcategory`: one of `"exact-duplicate"`, `"near-duplicate"`, `"redundant-wrapper"`, `"overlapping-module"`
 
-### Severity Guide
-- **critical**: Not used for duplicates
-- **high**: Exact duplicates of >20 lines, entire modules with overlapping responsibility
-- **medium**: Near-duplicates that should be consolidated, redundant wrappers with few callers
-- **low**: Minor copy-paste in tests, small redundant utilities
+### Classification Guide
+
+See `code-quality/references/finding-classification.md` for the full taxonomy and LoE scale.
+
+- **needs-fix**: Agent can determine the canonical version and consolidate independently. Default for exact duplicates and clear near-duplicates.
+- **needs-input**: Subtle behavioral differences that may be intentional, or consolidation that would cross architectural boundaries the agent cannot safely evaluate.
+
+Assign `loe` per finding:
+- **trivial**: Inline a single-use wrapper; remove one obvious copy
+- **moderate**: Consolidate 2-3 copies into a shared utility, update call sites
+- **significant**: Merge overlapping modules with many dependents; requires coordinated refactor
 
 ### Risk Guide
 - **low**: Clear duplicates with straightforward consolidation path
@@ -540,11 +552,17 @@ Use the shared output schema with:
 - `category`: `"security"`
 - `subcategory`: one of `"injection"`, `"broken-auth"`, `"data-exposure"`, `"xxe"`, `"broken-access-control"`, `"misconfiguration"`, `"xss"`, `"insecure-deserialization"`, `"vulnerable-dependency"`, `"insufficient-logging"`
 
-### Severity Guide
-- **critical**: Active vulnerabilities — exposed secrets in code, SQL injection with user input, RCE via command injection, authentication bypass
-- **high**: Authentication/authorization gaps, hardcoded credentials (even if not production), missing input validation at system boundaries
-- **medium**: Security misconfiguration, missing security headers, overly permissive CORS, components with known medium-severity CVEs
-- **low**: Best practice violations, informational findings, missing logging, minor configuration issues
+### Classification Guide
+
+See `code-quality/references/finding-classification.md` for the full taxonomy and LoE scale.
+
+- **needs-fix**: The vulnerability is clear and the fix is mechanical (replace string concat with parameterized query, remove hardcoded secret, add `Loader=yaml.SafeLoader`). Default for most security findings.
+- **needs-input**: Fix requires an architectural decision (e.g., "should we use env vars or a secrets manager?", "should this endpoint require auth?", updating a major dependency with breaking changes). Security policy decisions are always `needs-input`.
+
+Assign `loe` per finding:
+- **trivial**: One-line fix (add a header, fix a config flag, use safe loader)
+- **moderate**: Replace string-interpolated query with parameterized version; move secret to env var
+- **significant**: Add auth middleware layer; redesign auth flow; change dependency version with breaking changes
 
 ### Risk Guide
 - **low**: Clear vulnerability with straightforward fix (add parameterized query, remove hardcoded secret)
@@ -737,11 +755,17 @@ Use the shared output schema with:
 - `category`: `"architecture"`
 - `subcategory`: one of `"circular-dependency"`, `"divergent-pattern"`, `"god-object"`, `"layer-violation"`, `"naming-inconsistency"`, `"api-inconsistency"`
 
-### Severity Guide
-- **critical**: Not typically used for architecture (unless a circular dependency causes runtime errors)
-- **high**: Circular dependencies crossing layers, god modules imported by >20 files, layer violations in core paths
-- **medium**: Divergent patterns creating maintenance burden, naming inconsistencies, minor circular deps
-- **low**: Style inconsistencies, minor organizational issues, suggestions for improvement
+### Classification Guide
+
+See `code-quality/references/finding-classification.md` for the full taxonomy and LoE scale.
+
+- **needs-fix**: Clear structural problem with a deterministic fix (break circular dep by extracting shared types, rename files to match convention, fix obvious layer violation).
+- **needs-input**: Consolidating a divergent pattern requires choosing which approach is canonical — user should decide. Splitting a god module where the right boundaries are unclear.
+
+Assign `loe` per finding:
+- **trivial**: Rename a file; fix an obvious layer violation with a single import change
+- **moderate**: Break circular dependency by extracting a shared types module; unify naming in one area
+- **significant**: Split a god module; break cycles across architectural layers; pattern used in 20+ files
 
 ### Risk Guide
 - **low**: Pattern can be unified with find-and-replace or simple refactor
@@ -989,11 +1013,17 @@ Use the shared output schema with:
 - `category`: `"ai-slop"`
 - `subcategory`: one of `"structural"`, `"error-handling"`, `"naming"`, `"comment"`, `"testing"`, `"import"`, `"type-annotation"`
 
-### Severity Guide
-- **critical**: Not used for slop (reserve for security/correctness)
-- **high**: Entire unnecessary abstraction layers, factory/strategy patterns with one variant, god-class wrappers
-- **medium**: Unnecessary wrappers, catch-rethrow chains, excessive comments, testing mocks not behavior
-- **low**: Minor naming issues, redundant type annotations, style-level slop
+### Classification Guide
+
+See `code-quality/references/finding-classification.md` for the full taxonomy and LoE scale.
+
+- **needs-fix**: All slop findings are `needs-fix` — the agent can determine the correct simplification. If the agent cannot determine the correct simplification, it should not flag the pattern at all.
+- **needs-input**: Only if simplifying would change the public API in a way the user must approve (e.g., removing an exported interface that external code might depend on).
+
+Assign `loe` per finding:
+- **trivial**: Delete a restating comment; remove a type-in-name suffix; inline a single-use one-liner
+- **moderate**: Remove an unnecessary wrapper with multiple call sites to update; remove a catch-rethrow chain
+- **significant**: Remove an entire abstraction layer (interface + implementation → concrete class direct usage); split a god class
 
 ### Risk Guide
 - **low**: Can be simplified by removing/inlining without affecting callers
@@ -1186,11 +1216,17 @@ Use the shared output schema with:
 - `category`: `"complexity"`
 - `subcategory`: one of `"long-function"`, `"deep-nesting"`, `"many-parameters"`, `"magic-values"`, `"long-file"`, `"high-cyclomatic"`, `"callback-hell"`, `"multiple-responsibilities"`
 
-### Severity Guide
-- **critical**: Not used for complexity
-- **high**: Functions >150 lines, nesting >5 levels, cyclomatic complexity >20, files >1000 lines, 9+ parameters
-- **medium**: Functions 50-150 lines, nesting 4-5 levels, cyclomatic complexity 11-20, files 500-1000 lines, 6-8 parameters
-- **low**: Borderline cases, magic values, minor parameter count issues, promise chains
+### Classification Guide
+
+See `code-quality/references/finding-classification.md` for the full taxonomy and LoE scale.
+
+- **needs-fix**: The refactoring path is clear (extract helpers, add guard clauses, replace magic value with constant, group parameters). Default for all complexity findings.
+- **needs-input**: The function has unclear responsibilities and the correct split requires domain knowledge the agent doesn't have; or the refactoring is in performance-critical code where extraction may harm performance.
+
+Assign `loe` per finding:
+- **trivial**: Extract one magic constant; add a guard clause to eliminate one nesting level
+- **moderate**: Extract 2-4 helper functions from a long function; group parameters into a struct/dataclass
+- **significant**: Split a 1000+ line file into focused modules; refactor a function with deep cyclomatic complexity and many callers
 
 ### Risk Guide
 - **low**: Can be refactored by extracting helper functions, adding early returns, introducing constants
@@ -1454,11 +1490,17 @@ Use the shared output schema with:
 - `category`: `"documentation"`
 - `subcategory`: one of `"readme-drift"`, `"broken-link"`, `"missing-docs"`, `"stale-todo"`, `"config-drift"`, `"api-doc-drift"`, `"changelog-drift"`, `"undocumented-component"`, `"registry-mismatch"`
 
-### Severity Guide
-- **critical**: Not used for documentation
-- **high**: README installation commands that don't work, documented API endpoints that don't exist, broken links in user-facing docs, components on disk with zero documentation across all surfaces (undocumented-component), registry mismatches where plugin.json and marketplace.json disagree
-- **medium**: Stale TODOs, missing documentation on public API, configuration drift, outdated examples, component count mismatches in README tables
-- **low**: Minor wording inaccuracies, orphaned doc files, missing docstrings on internal functions
+### Classification Guide
+
+See `code-quality/references/finding-classification.md` for the full taxonomy and LoE scale.
+
+- **needs-fix**: The correct update is clear (fix a broken link, remove a stale TODO referencing deleted code, update a command that no longer works). Default for documentation findings.
+- **needs-input**: Docs and code disagree and it's unclear which is correct (the feature may be half-implemented, or the doc may intentionally describe future intent).
+
+Assign `loe` per finding:
+- **trivial**: Fix a broken link; remove a stale TODO; correct a config key name
+- **moderate**: Update a README section to match current code; fix multiple broken API doc signatures
+- **significant**: Docs claim a feature exists that doesn't — may require code investigation before updating
 
 ### Risk Guide
 - **low**: Documentation-only fix, no code changes needed
@@ -1479,11 +1521,9 @@ All seven agents write JSON files conforming to this schema. The orchestrator me
   "timestamp": "<ISO-8601 timestamp>",
   "summary": {
     "total_findings": 0,
-    "by_severity": {
-      "critical": 0,
-      "high": 0,
-      "medium": 0,
-      "low": 0
+    "by_classification": {
+      "needs_fix": 0,
+      "needs_input": 0
     },
     "external_tools_used": ["<tool-name>"],
     "agent_analysis_used": true
@@ -1491,7 +1531,8 @@ All seven agents write JSON files conforming to this schema. The orchestrator me
   "findings": [
     {
       "id": "<AGENT_PREFIX>-001",
-      "severity": "critical|high|medium|low",
+      "classification": "needs-fix|needs-input",
+      "loe": "trivial|moderate|significant",
       "category": "<agent-category>",
       "subcategory": "<specific-subcategory>",
       "title": "Short human-readable description",
@@ -1503,6 +1544,7 @@ All seven agents write JSON files conforming to this schema. The orchestrator me
       "source": "agent-analysis|<tool-name>|agent-analysis+<tool-name>",
       "suggested_fix": "Actionable fix description, optionally with before/after code blocks",
       "risk": "low|medium|high",
+      "input_needed": "What decision the user must make — required when classification is needs-input, null otherwise",
       "dependencies": ["symbols or files affected by fixing this"],
       "related_findings": ["IDs of related findings from this agent"]
     }

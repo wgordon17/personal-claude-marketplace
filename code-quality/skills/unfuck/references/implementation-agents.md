@@ -20,10 +20,10 @@ All implementation agents MUST follow these rules:
 
 4. **Don't fight other agents.** Other implementation agents run concurrently and may modify the same files. Always re-read current state before editing. If a file has unexpected changes, skip the finding and note the conflict.
 
-5. **Needs-review escape hatch.** If a finding is ambiguous, risky, or requires human judgment:
+5. **Needs-input escape hatch.** If a finding is ambiguous, risky, or requires human judgment:
    - Do NOT attempt the fix
-   - Log it as `needs-review` in your output with a clear explanation
-   - The orchestrator includes these in the cleanup report for the user
+   - Log it as `needs-input` in your FixSummary `needs_input_items` with `loe` and `input_needed` description
+   - Follow the Fixer Protocol in `code-quality/references/finding-classification.md` — emit FixSummary to Lead, Lead triages with user via AskUserQuestion
 
 6. **Conventional commit messages.** Use present indicative tense ("removes" not "remove", "fixes" not "fix", "consolidates" not "consolidate").
 
@@ -129,18 +129,15 @@ Run the full test suite one final time before committing.
 After completing all removals, produce this summary:
 
 ```
-Dead Code Removal Summary
+Dead Code Removal Summary (FixSummary format — see code-quality/references/finding-classification.md)
 =========================
-Removed: N items (X functions, Y classes, Z imports, W files, V variables)
-Skipped: M items
-  - <symbol> in <file>: <reason for skipping>
-  - ...
+Fixed: N items removed (X functions, Y classes, Z imports, W files, V variables)
 Cascade removals: K items (discovered and removed during cascade checks)
+Needs-input: R items (collected in FixSummary needs_input_items, sent to Lead for user triage)
+  - <finding ID>: LoE=<loe>. <description>. Input needed: <what decision>
+  - ...
 Test failures encountered: F
   - <file>:<line> <change attempted>: <error message>
-  - ...
-Needs-review: R items
-  - <symbol> in <file>: <why human judgment needed>
   - ...
 ```
 
@@ -245,28 +242,24 @@ After all consolidations, run the project's formatter.
 - NEVER change function signatures in ways that break existing callers — add optional parameters instead
 - NEVER consolidate across architectural boundaries (e.g., do not merge a frontend validator with a backend validator even if they look identical)
 - Use LSP `findReferences` for EVERY function before removing any copy
-- If duplicates have subtle behavioral differences you cannot reconcile safely, flag as `needs-review`
+- If duplicates have subtle behavioral differences you cannot reconcile safely, flag as `needs-input`
 - Test after EACH consolidation group, not just at the end
 
 ## Output
 
 ```
-Duplicate Consolidation Summary
+Duplicate Consolidation Summary (FixSummary format — see code-quality/references/finding-classification.md)
 ================================
-Consolidated: N duplicate groups (X exact, Y near-exact, Z structural)
+Fixed: N duplicate groups consolidated (X exact, Y near-exact, Z structural)
 Total lines removed: L
 New shared functions created: C
   - <shared_module>:<function_name> (replaces N copies)
-  - ...
 Call sites updated: S
-Skipped: M groups
-  - <group description>: <reason for skipping>
+Needs-input: R groups (collected in FixSummary needs_input_items, sent to Lead for user triage)
+  - <finding ID>: LoE=<loe>. <description>. Input needed: <e.g., subtle behavioral differences — which copy is canonical?>
   - ...
 Test failures encountered: F
   - <group>: <error message>
-  - ...
-Needs-review: R groups
-  - <group>: <why human judgment needed — e.g., subtle behavioral differences>
   - ...
 ```
 
@@ -303,13 +296,9 @@ You follow `code-quality:security` patterns: fix with precision, test after ever
 
 ## Strategy
 
-### Step 1: Triage by Severity
+### Step 1: Process in File Order per Fixer Protocol
 
-Process findings in strict severity order:
-1. **CRITICAL** — Active vulnerabilities, exposed secrets, authentication bypasses. Fix immediately.
-2. **HIGH** — Injection vectors, authorization gaps, session management flaws. Fix next.
-3. **MEDIUM** — Missing security headers, overly broad permissions, weak configurations. Fix after high.
-4. **LOW** — Informational leakage, minor hardening opportunities. Fix last.
+Process all `needs-fix` findings in file order (per `code-quality/references/finding-classification.md` Fixer Protocol). Within a file, order by LoE descending (significant > moderate > trivial), then by risk of fix ascending (low > medium > high). Collect all `needs-input` findings into `needs_input_items` in the FixSummary — do NOT attempt to fix them unilaterally.
 
 ### Step 2: Fix by Vulnerability Type
 
@@ -359,7 +348,7 @@ For each finding, apply the appropriate fix pattern:
 1. Check the CVE details to understand the vulnerability
 2. Update to the latest patched version
 3. Check for breaking changes in the changelog between current and target version
-4. If breaking changes exist, flag as `needs-review`
+4. If breaking changes exist, flag as `needs-input`
 
 **Missing security headers:**
 1. Add middleware or configuration for security headers:
@@ -390,35 +379,31 @@ After all fixes, run the formatter, then run the full test suite.
 
 ## Safety Rules
 
-- NEVER auto-fix if the fix could change business logic — create a `needs-review` entry instead
+- NEVER auto-fix if the fix could change business logic — create a `needs-input` entry instead
 - NEVER remove existing security middleware, checks, or guards even if they seem redundant (defense in depth)
 - NEVER log or print secret values, even in error messages or debug output
 - NEVER weaken existing security controls (e.g., do not relax a strict CSP to fix a convenience issue)
 - NEVER commit actual secret values — only references to environment variables
 - Test after EVERY security fix, not in batches
-- If a security fix requires architectural changes (e.g., redesigning the auth flow), flag as `needs-review`
-- If you are unsure whether a fix is correct, do not apply it — flag as `needs-review`
+- If a security fix requires architectural changes (e.g., redesigning the auth flow), flag as `needs-input`
+- If you are unsure whether a fix is correct, do not apply it — flag as `needs-input`
 
 ## Output
 
 ```
-Security Fix Summary
+Security Fix Summary (FixSummary format — see code-quality/references/finding-classification.md)
 ====================
-Fixed: N vulnerabilities (X critical, Y high, Z medium, W low)
-  - [CRITICAL] <description> in <file>:<line> — <fix applied>
-  - [HIGH] <description> in <file>:<line> — <fix applied>
+Fixed: N vulnerabilities
+  - <finding ID> in <file>:<line> — <fix applied>
   - ...
-Skipped: M findings
-  - <finding>: <reason>
-  - ...
-Test failures encountered: F
-  - <file>:<line> <fix attempted>: <error message>
-  - ...
-Needs-review: R findings
-  - <finding>: <why human judgment needed>
+Needs-input: R findings (collected in FixSummary needs_input_items, sent to Lead for user triage)
+  - <finding ID>: LoE=<loe>. <description>. Input needed: <what decision>
   - ...
 Secrets found and rotated: S
   - <secret type> in <file> — replaced with env var <VAR_NAME>
+  - ...
+Test failures encountered: F
+  - <file>:<line> <fix attempted>: <error message>
   - ...
 ```
 
@@ -460,12 +445,9 @@ This is nuanced work requiring strong pattern recognition. You must understand W
 
 ## Strategy
 
-### Step 1: Prioritize by Severity
+### Step 1: Process in File Order per Fixer Protocol
 
-Process findings from highest to lowest severity:
-1. **High severity** — Unnecessary abstractions that actively harm readability (factory patterns with 1 variant, interfaces with 1 implementor)
-2. **Medium severity** — Verbose patterns that add noise (restating comments, type-in-name, catch-and-rethrow)
-3. **Low severity** — Minor verbosity (overly long variable names, unnecessary intermediate variables)
+Process all `needs-fix` findings in file order (per `code-quality/references/finding-classification.md` Fixer Protocol). Within a file, order by LoE descending (significant > moderate > trivial), then by risk of fix ascending (low > medium > high). Collect all `needs-input` findings into `needs_input_items` in the FixSummary.
 
 ### Step 2: Understand Before Simplifying
 
@@ -561,7 +543,7 @@ counter += 1
 
 **Testing mocks that mock the thing being tested:**
 - Rewrite the test to test real behavior
-- Flag as `needs-review` if the test is complex and you are unsure of the intended behavior
+- Flag as `needs-input` if the test is complex and you are unsure of the intended behavior
 
 **Unnecessary intermediate variables:**
 - If a variable is assigned once and used once on the very next line, inline it
@@ -590,27 +572,24 @@ After all simplifications, run the project's formatter, then the full test suite
 - NEVER simplify code that handles concurrent access (locks, semaphores, atomic operations)
 - NEVER simplify code in hot paths without understanding performance implications
 - NEVER change the public API of a module (exported function names, parameter types, return types)
-- If a simplification would change how errors propagate to callers, flag as `needs-review`
-- If you are unsure whether a pattern is slop or intentional design, flag as `needs-review`
+- If a simplification would change how errors propagate to callers, flag as `needs-input`
+- If you are unsure whether a pattern is slop or intentional design, flag as `needs-input`
 - Test after every 5 simplifications
 
 ## Output
 
 ```
-AI Slop Simplification Summary
+AI Slop Simplification Summary (FixSummary format — see code-quality/references/finding-classification.md)
 ================================
-Simplified: N findings
-  - <file>:<line> — <pattern type>: <brief description of change>
+Simplified: N needs-fix findings
+  - <finding ID> in <file>:<line> — <pattern type>: <brief description of change>
   - ...
 Total lines removed: L (net reduction)
-Skipped: M findings
-  - <finding>: <reason>
+Needs-input: R findings (collected in FixSummary needs_input_items, sent to Lead for user triage)
+  - <finding ID>: LoE=<loe>. <description>. Input needed: <what decision>
   - ...
 Test failures encountered: F
   - <file>:<line> <simplification attempted>: <error message>
-  - ...
-Needs-review: R findings
-  - <finding>: <why human judgment needed>
   - ...
 ```
 
@@ -721,36 +700,30 @@ After all unification changes, run the formatter, then the full test suite.
 - If fixing a circular dependency requires adding a new module, ensure it is properly integrated (added to `__init__.py`, build configs, etc.)
 - NEVER change the external behavior of any function while unifying its implementation pattern
 - NEVER unify patterns across intentional boundaries (e.g., different microservices may intentionally use different patterns)
-- If unifying a pattern would require changing >20 files, flag as `needs-review` first
+- If unifying a pattern would require changing >20 files, flag as `needs-input` first
 - If a naming convention is language-idiomatic in its context (e.g., `camelCase` in JavaScript, `snake_case` in Python), do not cross-language standardize
-- When in doubt about which pattern should be dominant, flag as `needs-review`
+- When in doubt about which pattern should be dominant, flag as `needs-input`
 
 ## Output
 
 ```
-Architecture Unification Summary
+Architecture Unification Summary (FixSummary format — see code-quality/references/finding-classification.md)
 ==================================
-Circular dependencies broken: N
-  - <cycle description> — <strategy used>
-  - ...
-Patterns standardized: P
-  - <pattern type>: migrated M instances to match dominant pattern
-  - ...
-Layer violations fixed: L
-  - <code> moved from <source> to <destination>
-  - ...
-God objects split: G
-  - <object> split into N focused modules
-  - ...
-Naming conventions unified: C renames
-Skipped: S findings
-  - <finding>: <reason>
+Fixed: N findings resolved
+  Circular dependencies broken: N
+    - <cycle description> — <strategy used>
+  Patterns standardized: P
+    - <pattern type>: migrated M instances to match dominant pattern
+  Layer violations fixed: L
+    - <code> moved from <source> to <destination>
+  God objects split: G
+    - <object> split into N focused modules
+  Naming conventions unified: C renames
+Needs-input: R findings (collected in FixSummary needs_input_items, sent to Lead for user triage)
+  - <finding ID>: LoE=<loe>. <description>. Input needed: <what decision>
   - ...
 Test failures encountered: F
   - <change>: <error message>
-  - ...
-Needs-review: R findings
-  - <finding>: <why human judgment needed>
   - ...
 ```
 
@@ -855,7 +828,7 @@ For each TODO/FIXME:
 2. **References a fixed issue:** Remove the FIXME (verify the issue is actually fixed)
 3. **References legitimate future work:** Keep it
 4. **References an external issue tracker:** Check if the issue is still open. If closed, remove the TODO
-5. **Is vague or context-free** (e.g., `# TODO: fix this`): Flag as `needs-review`
+5. **Is vague or context-free** (e.g., `# TODO: fix this`): Flag as `needs-input`
 
 ### Step 6: Update CHANGELOG (if it exists)
 
@@ -879,31 +852,26 @@ After all documentation updates, verify markdown formatting is correct:
 - Do NOT add documentation for internal helper functions
 - Do NOT change the tone or voice of existing documentation
 - Do NOT add badges, shields, or decorative elements unless the project already uses them
-- Do NOT create new documentation files — only update existing ones (unless the project has zero docs, in which case flag as `needs-review`)
+- Do NOT create new documentation files — only update existing ones (unless the project has zero docs, in which case flag as `needs-input`)
 - Verify every command you document by checking the actual build/config files
 - When in doubt about whether to document something, do not document it
 
 ## Output
 
 ```
-Documentation Update Summary
+Documentation Update Summary (FixSummary format — see code-quality/references/finding-classification.md)
 ==============================
-Files updated: N
-  - <file>: <changes made>
-  - ...
-Broken links fixed: L
-Stale TODOs removed: T
-  - <file>:<line> — <reason for removal>
-  - ...
-Public APIs documented: A
-  - <module>:<function> — added <style> docstring
-  - ...
-CHANGELOG updated: yes/no
-Skipped: S findings
-  - <finding>: <reason>
-  - ...
-Needs-review: R findings
-  - <finding>: <why human judgment needed>
+Fixed: N documentation findings resolved
+  Files updated: N
+    - <file>: <changes made>
+  Broken links fixed: L
+  Stale TODOs removed: T
+    - <file>:<line> — <reason for removal>
+  Public APIs documented: A
+    - <module>:<function> — added <style> docstring
+  CHANGELOG updated: yes/no
+Needs-input: R findings (collected in FixSummary needs_input_items, sent to Lead for user triage)
+  - <finding ID>: LoE=<loe>. <description>. Input needed: <what decision>
   - ...
 ```
 
@@ -940,15 +908,9 @@ You follow `code-quality:code-simplifier` patterns: extract clearly, name descri
 
 ## Strategy
 
-### Step 1: Prioritize by Impact
+### Step 1: Process in File Order per Fixer Protocol
 
-Process findings that provide the most readability improvement first:
-1. **Long functions (>50 lines)** — highest impact, often contain multiple extractable sections
-2. **Deep nesting (>4 levels)** — second highest, significantly reduces cognitive load
-3. **Magic numbers/strings** — medium impact, improves maintainability
-4. **Long parameter lists (>5 params)** — medium impact, improves call-site readability
-5. **Nested ternaries** — medium impact, improves debuggability
-6. **Long files (>500 lines)** — lowest priority, most risk (many cross-file changes)
+Process all `needs-fix` findings in file order (per `code-quality/references/finding-classification.md` Fixer Protocol). Within a file, order by LoE descending (significant > moderate > trivial), then by risk of fix ascending (low > medium > high). Collect all `needs-input` findings into `needs_input_items` in the FixSummary.
 
 ### Step 2: Refactor Long Functions
 
@@ -1120,7 +1082,7 @@ For each file >500 lines:
    - Which groups become separate files?
    - What should each new file be named?
    - Will the split create circular imports?
-3. If the split would create circular dependencies, flag as `needs-review`
+3. If the split would create circular dependencies, flag as `needs-input`
 4. Extract each group into its own file
 5. Update the original file to re-export from the new files (maintain backward compatibility)
 6. Update ALL imports across the codebase (use LSP `findReferences` + Grep)
@@ -1144,41 +1106,34 @@ After all refactorings, run the formatter, then the full test suite.
 - NEVER change the observable behavior of any function while reducing its complexity
 - NEVER change the public API (function names, parameters, return types) without updating all callers
 - NEVER extract a function if the extracted code relies on local variables that would require passing >5 parameters (that trades one complexity for another)
-- NEVER split a file if the result would create circular dependencies — flag as `needs-review`
+- NEVER split a file if the result would create circular dependencies — flag as `needs-input`
 - When extracting guard clauses, ensure the error types and messages are preserved exactly
 - When replacing magic values, verify the constant is not already defined elsewhere in the codebase (avoid duplicating constants)
-- If a complexity finding is in performance-critical code (tight loops, hot paths), flag as `needs-review` — extraction can impact performance
+- If a complexity finding is in performance-critical code (tight loops, hot paths), flag as `needs-input` — extraction can impact performance
 
 ## Output
 
 ```
-Complexity Reduction Summary
+Complexity Reduction Summary (FixSummary format — see code-quality/references/finding-classification.md)
 ==============================
-Long functions refactored: N (extracted M helper functions)
-  - <file>:<function> — split into N functions: <names>
-  - ...
-Deep nesting flattened: D
-  - <file>:<function> — reduced from N levels to M levels
-  - ...
-Magic values extracted: V (created C named constants)
-  - <file>:<line> — <value> becomes <CONSTANT_NAME>
-  - ...
-Long parameter lists simplified: P
-  - <file>:<function> — N params grouped into <TypeName>
-  - ...
-Nested ternaries converted: T
-Long files split: S
-  - <file> — split into N files: <names>
-  - ...
+Fixed: N needs-fix findings
+  Long functions refactored: N (extracted M helper functions)
+    - <file>:<function> — split into N functions: <names>
+  Deep nesting flattened: D
+    - <file>:<function> — reduced from N levels to M levels
+  Magic values extracted: V (created C named constants)
+    - <file>:<line> — <value> becomes <CONSTANT_NAME>
+  Long parameter lists simplified: P
+    - <file>:<function> — N params grouped into <TypeName>
+  Nested ternaries converted: T
+  Long files split: S
+    - <file> — split into N files: <names>
 Total lines added/removed: +A/-R (net change: +/-N)
-Skipped: K findings
-  - <finding>: <reason>
+Needs-input: Q findings (collected in FixSummary needs_input_items, sent to Lead for user triage)
+  - <finding ID>: LoE=<loe>. <description>. Input needed: <what decision>
   - ...
 Test failures encountered: F
   - <refactoring>: <error message>
-  - ...
-Needs-review: Q findings
-  - <finding>: <why human judgment needed>
   - ...
 ```
 

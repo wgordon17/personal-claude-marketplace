@@ -11,16 +11,18 @@ during `/unfuck` Phase 1 discovery.
 4. Generate before/after code for the top 20 worst findings
 5. Rate each finding against the false-positive guidance before including it
 
-## Severity Ratings
+## Finding Classification
 
-- **critical**: Pattern that actively harms readability AND maintainability (e.g., abstraction layer that makes debugging impossible)
-- **high**: Pattern that significantly increases code complexity without benefit
-- **medium**: Pattern that adds unnecessary code but doesn't actively harm
-- **low**: Style preference that experienced developers would typically simplify
+All slop findings use `classification: needs-fix` — slop patterns are always fixable by the agent without user input. Only use `needs-input` if removing the pattern would change the public API in a way the user must approve. See `code-quality/references/finding-classification.md` for the full classification taxonomy and LoE scale.
+
+Assign `loe` per finding:
+- **trivial**: Delete a comment; remove a type suffix from a variable name; inline a one-liner
+- **moderate**: Remove a wrapper function with multiple call sites; eliminate a catch-rethrow chain
+- **significant**: Remove an entire abstraction layer (interface + implementation class); split a god class
 
 ---
 
-## Category 1: Structural Slop (default severity: high)
+## Category 1: Structural Slop (classification: needs-fix)
 
 ### SS-01: Unnecessary Wrapper Function
 
@@ -384,7 +386,7 @@ function validate(input: string, rules: Rule[]): boolean {
 
 ---
 
-## Category 2: Error Handling Slop (default severity: high)
+## Category 2: Error Handling Slop (classification: needs-fix)
 
 ### EH-01: Catch and Rethrow Without Modification
 
@@ -699,7 +701,7 @@ class UserService:
 
 ---
 
-## Category 3: Naming Slop (default severity: medium)
+## Category 3: Naming Slop (classification: needs-fix)
 
 ### NS-01: Overly Verbose Names
 
@@ -882,7 +884,7 @@ class FileManager {
 
 ---
 
-## Category 4: Comment Slop (default severity: medium)
+## Category 4: Comment Slop (classification: needs-fix)
 
 ### CS-01: Comments Restating the Code
 
@@ -1115,7 +1117,7 @@ function handleLogin(credentials: Credentials) {
 
 ---
 
-## Category 5: Testing Slop (default severity: medium)
+## Category 5: Testing Slop (classification: needs-fix)
 
 ### TS-01: Tests That Test the Mock
 
@@ -1401,7 +1403,7 @@ test("createUser returns user with generated ID", async () => {
 
 ---
 
-## Category 6: Import/Dependency Slop (default severity: low)
+## Category 6: Import/Dependency Slop (classification: needs-fix)
 
 ### ID-01: Unused Imports
 
@@ -1587,7 +1589,7 @@ from utils.validation import validate_email
 
 ---
 
-## Category 7: Type/Annotation Slop (default severity: low)
+## Category 7: Type/Annotation Slop (classification: needs-fix)
 
 ### TA-01: `any` Type Everywhere
 
@@ -1840,63 +1842,51 @@ def get_user_from_cache(key: str) -> User:
 
 ### Priority for Fixing
 
-1. **Critical + high severity** findings in core modules (most-imported, most-modified files)
-2. **High severity** findings anywhere
-3. **Medium severity** in frequently-modified files (check `git log --format='' --name-only | sort | uniq -c | sort -rn | head -20`)
-4. **Everything else** -- batch into a cleanup PR
+Process all `needs-fix` findings. Order by file (core modules first — most-imported, most-modified files), then by source order within each file. Do not skip findings based on perceived importance.
 
-### Weighted Severity Scores
-
-When calculating a file's slop score, weight each finding:
-
-| Severity | Weight |
-|----------|--------|
-| Critical | 4 |
-| High | 2 |
-| Medium | 1 |
-| Low | 0.5 |
-
-A file with 1 critical + 2 medium findings has a weighted score of 4 + 1 + 1 = 6 (Heavy).
+Core modules first: `git log --format='' --name-only | sort | uniq -c | sort -rn | head -20`
 
 ---
 
 ## Quick Reference: Pattern ID Index
 
-| ID | Name | Default Severity |
-|----|------|-----------------|
-| SS-01 | Unnecessary Wrapper Function | high |
-| SS-02 | Over-Abstraction (Single Implementation Interface) | high |
-| SS-03 | Premature Generalization (Single-Variant Pattern) | high |
-| SS-04 | Single-Use Helper Function | high |
-| SS-05 | Configuration Over Hardcoding | high |
-| SS-06 | Unnecessary Indirection Layer | high |
-| SS-07 | God Object | critical |
-| SS-08 | Premature Class | high |
-| EH-01 | Catch and Rethrow Without Modification | high |
-| EH-02 | Logging at Every Level | high |
-| EH-03 | Defensive Coding Against Impossible States | high |
-| EH-04 | Fallback Values Masking Bugs | high |
-| EH-05 | Error Handling Deeper Than Boundaries | high |
-| EH-06 | Excessive Validation of Trusted Data | high |
-| NS-01 | Overly Verbose Names | medium |
-| NS-02 | Redundant Type-in-Name | medium |
-| NS-03 | Generic Meaningless Names | medium |
-| NS-04 | Redundant Namespace in Name | medium |
-| CS-01 | Comments Restating the Code | medium |
-| CS-02 | Excessive Docstrings on Internal Functions | medium |
-| CS-03 | AI-Generated TODO Comments | medium |
-| CS-04 | Section Divider Comments | medium |
-| CS-05 | Commented-Out Code | medium |
-| TS-01 | Tests That Test the Mock | medium |
-| TS-02 | Excessive Mocking | medium |
-| TS-03 | Tests Mirroring Implementation | medium |
-| TS-04 | Snapshot Tests for Everything | medium |
-| TS-05 | Tests Without Meaningful Assertions | medium |
-| ID-01 | Unused Imports | low |
-| ID-02 | Whole-Library Imports for One Function | low |
-| ID-03 | Circular Import Workarounds | low |
-| ID-04 | Re-Export-Everything Index Files | low |
-| TA-01 | `any` Type Everywhere | low |
-| TA-02 | Overly Complex Generic Types | low |
-| TA-03 | Redundant Type Annotations | low |
-| TA-04 | Type Assertion Abuse | low |
+All patterns: `classification: needs-fix`. See Finding Classification section for LoE assignment guidance.
+
+| ID | Name | Typical LoE |
+|----|------|------------|
+| SS-01 | Unnecessary Wrapper Function | trivial–moderate |
+| SS-02 | Over-Abstraction (Single Implementation Interface) | significant |
+| SS-03 | Premature Generalization (Single-Variant Pattern) | significant |
+| SS-04 | Single-Use Helper Function | trivial |
+| SS-05 | Configuration Over Hardcoding | trivial–moderate |
+| SS-06 | Unnecessary Indirection Layer | moderate–significant |
+| SS-07 | God Object | significant |
+| SS-08 | Premature Class | moderate |
+| EH-01 | Catch and Rethrow Without Modification | trivial |
+| EH-02 | Logging at Every Level | trivial–moderate |
+| EH-03 | Defensive Coding Against Impossible States | trivial |
+| EH-04 | Fallback Values Masking Bugs | trivial–moderate |
+| EH-05 | Error Handling Deeper Than Boundaries | moderate |
+| EH-06 | Excessive Validation of Trusted Data | trivial–moderate |
+| NS-01 | Overly Verbose Names | trivial |
+| NS-02 | Redundant Type-in-Name | trivial |
+| NS-03 | Generic Meaningless Names | moderate |
+| NS-04 | Redundant Namespace in Name | trivial |
+| CS-01 | Comments Restating the Code | trivial |
+| CS-02 | Excessive Docstrings on Internal Functions | trivial |
+| CS-03 | AI-Generated TODO Comments | trivial |
+| CS-04 | Section Divider Comments | trivial |
+| CS-05 | Commented-Out Code | trivial |
+| TS-01 | Tests That Test the Mock | moderate |
+| TS-02 | Excessive Mocking | moderate |
+| TS-03 | Tests Mirroring Implementation | moderate |
+| TS-04 | Snapshot Tests for Everything | moderate |
+| TS-05 | Tests Without Meaningful Assertions | trivial–moderate |
+| ID-01 | Unused Imports | trivial |
+| ID-02 | Whole-Library Imports for One Function | trivial |
+| ID-03 | Circular Import Workarounds | significant |
+| ID-04 | Re-Export-Everything Index Files | moderate |
+| TA-01 | `any` Type Everywhere | moderate |
+| TA-02 | Overly Complex Generic Types | moderate–significant |
+| TA-03 | Redundant Type Annotations | trivial |
+| TA-04 | Type Assertion Abuse | moderate |

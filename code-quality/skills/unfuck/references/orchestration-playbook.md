@@ -227,7 +227,7 @@ Each teammate, after writing its JSON output file, sends a summary to the team l
 ```
 SendMessage(type="message", recipient="team-lead",
   content="[Agent name] complete. Results: {run_dir}/discovery/[file].json\n\n
-    Summary: N findings (X critical, Y high, Z medium, W low)\n
+    Summary: N findings (X needs-fix, Y needs-input)\n
     Key findings: [1-3 sentence highlights]\n
     External tools used: [list]\n
     Gaps: [any analysis areas that couldn't be covered]",
@@ -276,7 +276,7 @@ Agent(name="synthesis-planner", subagent_type="general-purpose", model="opus",
      prompt="[context bundle]\n\n[Full synthesis instructions below]\n\nRun directory: {run_dir}")
 ```
 
-The synthesis teammate performs Steps 2.1-2.6 independently and writes the cleanup plan to disk. When done, it sends a brief summary to the team lead via SendMessage (total findings, by-severity breakdown, categories with findings, any items needing user review).
+The synthesis teammate performs Steps 2.1-2.6 independently and writes the cleanup plan to disk. When done, it sends a brief summary to the team lead via SendMessage (total findings, by-classification breakdown, categories with findings, any items needing user review).
 
 The orchestrator then handles Step 2.7 (user checkpoint) based on the summary.
 
@@ -335,7 +335,7 @@ Assign findings to implementation categories in this priority order:
 | 6 | **Architecture** | Structural changes last, most risk, benefits from prior cleanup |
 | 7 | **Documentation** | Always last -- reflects all prior changes accurately |
 
-Within each category, order findings by severity (critical > high > medium > low), then by risk of fix (low > medium > high).
+Within each category, order findings by LoE descending (significant > moderate > trivial), then by risk of fix ascending (low > medium > high). See `code-quality/references/finding-classification.md` for the LoE scale and Fixer Protocol.
 
 ### Step 2.5: Generate cleanup plan
 
@@ -351,21 +351,23 @@ Tools used: <list of available tools that were actually used by agents>
 
 ## Summary
 - Total findings: N
-- By severity: N critical, N high, N medium, N low
+- By classification: N needs-fix, N needs-input
 - By category: N dead-code, N duplicates, N security, N ai-slop, N complexity, N architecture, N documentation
 - Estimated risk: low/medium/high per category
 
 ## Category 1: Security (N findings)
 
 ### Finding S-001: <title>
-- **Severity:** critical|high|medium|low
+- **Classification:** needs-fix | needs-input
+- **LoE:** trivial | moderate | significant
 - **File:** path/to/file.py:42-58
 - **Description:** <what's wrong>
 - **Evidence:** <how it was detected>
 - **Source:** <agent name> + <tool name if applicable>
 - **Suggested fix:** <from implementation-agents.md strategy>
-- **Risk:** low|medium|high (risk of the fix breaking something)
+- **Risk:** low|medium|high (risk of the fix breaking something — probability of regression, not finding severity)
 - **Tags:** systemic-security (if cross-referenced)
+- **Input needed:** <what decision the user must make — only when classification is needs-input>
 
 ### Finding S-002: ...
 
@@ -387,9 +389,9 @@ Tools used: <list of available tools that were actually used by agents>
 ## Category 7: Documentation (N findings)
 ...
 
-## Deferred Items
-Items intentionally excluded (too risky for automated cleanup):
-- <item>: <reason>
+## Needs-Input Items
+Findings that require a user decision before the Fixer can act. See `code-quality/references/finding-classification.md` Fixer Protocol for triage procedure.
+- <finding ID>: <description> (LoE: <trivial|moderate|significant>) — <what decision is needed>
 ```
 
 ### Step 2.6: Create task list
@@ -430,7 +432,7 @@ AskUserQuestion(
     "header": "Cleanup Scope",
     "options": [
       {"label": "Full cleanup", "description": "Apply all N findings across M categories"},
-      {"label": "Skip [risky category]", "description": "Apply all except [category] (N findings deferred)"},
+      {"label": "Skip [risky category]", "description": "Apply all except [category] (N findings recorded as user_deferred in final FixSummary)"},
       {"label": "Security + dead code only", "description": "Conservative cleanup — only the safest categories"},
       {"label": "Review plan first", "description": "I'll review {run_dir}/cleanup-plan.md before proceeding"}
     ],
@@ -607,8 +609,9 @@ Branch: cleanup/comprehensive-{run-id}
 - **Lines removed:** N
 - **Lines added:** N
 - **Net delta:** -N lines (or +N if documentation additions outweigh removals)
-- **Issues fixed:** N (across M categories)
-- **Issues blocked:** N (need manual review)
+- **Issues fixed:** N needs-fix findings (across M categories)
+- **Issues user_deferred:** N needs-input findings the user declined
+- **Issues blocked:** N (test failures — need manual review)
 
 ## Changes by Category
 
@@ -671,10 +674,9 @@ Commit: `stu5678` -- `docs: syncs documentation with code changes`
 | def5678 | refactor: removes dead code -- 15 unused items |
 | ... | ... |
 
-## Remaining Tech Debt
-Items intentionally deferred (low severity, high risk, or requires human decision):
-- [ ] <item>: <reason for deferral>
-- [ ] <item>: <reason for deferral>
+## Needs-Input Items (user_deferred)
+Items the user explicitly declined via triage:
+- [ ] <finding ID>: <description> — <user's reason for deferral>
 ```
 
 Get the line stats with:
@@ -703,7 +705,7 @@ Skill(skill="code-quality:reflect")
 ```
 
 This performs a final cross-check against the original cleanup plan, verifying:
-- All planned categories were addressed (or documented as blocked/deferred)
+- All planned categories were addressed (or documented as blocked or user_deferred)
 - No regression was introduced
 - The cleanup report accurately reflects what was done
 - Version bumps were applied where needed
@@ -742,11 +744,9 @@ All 7 discovery agents MUST write their output using this schema. The orchestrat
   "timestamp": "2026-02-18T12:00:00Z",
   "summary": {
     "total_findings": 15,
-    "by_severity": {
-      "critical": 0,
-      "high": 3,
-      "medium": 8,
-      "low": 4
+    "by_classification": {
+      "needs_fix": 13,
+      "needs_input": 2
     },
     "external_tools_used": ["knip"],
     "agent_analysis_used": true
@@ -754,7 +754,8 @@ All 7 discovery agents MUST write their output using this schema. The orchestrat
   "findings": [
     {
       "id": "DC-001",
-      "severity": "high",
+      "classification": "needs-fix",
+      "loe": "trivial",
       "category": "dead-code",
       "title": "Unused exported function",
       "file": "src/utils/helpers.ts",
@@ -773,17 +774,20 @@ All 7 discovery agents MUST write their output using this schema. The orchestrat
 
 ### Field Definitions
 
+See `code-quality/references/finding-classification.md` for the canonical classification taxonomy and LoE scale.
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `$schema` | string | Always `"discovery-output"` |
 | `agent` | string | Agent name matching the roster (e.g., `"dead-code-hunter"`) |
 | `timestamp` | string | ISO 8601 timestamp of when the agent completed |
 | `summary.total_findings` | number | Total number of findings in this output |
-| `summary.by_severity` | object | Breakdown by severity level |
+| `summary.by_classification` | object | Breakdown by `needs_fix` and `needs_input` counts |
 | `summary.external_tools_used` | array | List of external tools that produced findings |
 | `summary.agent_analysis_used` | boolean | Whether the agent performed manual code analysis |
 | `findings[].id` | string | Unique within this agent's output. Format: category prefix + sequential number |
-| `findings[].severity` | string | `critical` = security vulnerability or data loss risk; `high` = definite issue, safe fix available; `medium` = probable issue, review recommended; `low` = style/preference, optional fix |
+| `findings[].classification` | string | `needs-fix` = agent can resolve independently; `needs-input` = requires user decision before acting |
+| `findings[].loe` | string | `trivial` = one-liner or mechanical; `moderate` = multi-file or some judgment; `significant` = architectural impact |
 | `findings[].category` | string | Primary category: `dead-code`, `duplicates`, `security`, `architecture`, `ai-slop`, `complexity`, `documentation` |
 | `findings[].title` | string | Short descriptive title |
 | `findings[].file` | string | Relative path from project root |
@@ -793,7 +797,7 @@ All 7 discovery agents MUST write their output using this schema. The orchestrat
 | `findings[].evidence` | string | How it was detected -- tool output, analysis reasoning, etc. |
 | `findings[].source` | string | `"agent-analysis"`, `"<tool-name>"`, or `"agent-analysis+<tool-name>"` for confirmed by both |
 | `findings[].suggested_fix` | string | Recommended fix strategy |
-| `findings[].risk` | string | Risk of the suggested fix breaking something: `low` (safe), `medium` (needs testing), `high` (needs review) |
+| `findings[].risk` | string | Risk of the fix breaking something (probability of regression): `low` (safe), `medium` (needs testing), `high` (needs review). Distinct from finding classification. |
 | `findings[].related_findings` | array | IDs of related findings in OTHER agents' output (populated during Phase 2 synthesis) |
 
 ### ID Prefix Conventions
