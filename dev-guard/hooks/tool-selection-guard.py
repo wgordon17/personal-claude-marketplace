@@ -313,6 +313,7 @@ _MAX_MANIFEST_BYTES = 1_048_576
 _HOOK_EVENT_NAME = "PreToolUse"
 _SESSION_ID_KEY = "last_session_id"
 _DB_TIMEOUT_SEC = 5
+_SUBPROCESS_TIMEOUT_SEC: int = 5
 _DB_BUSY_TIMEOUT_MS = 1000
 _LOG_ACTION_FOR: dict[str, str] = {"ask": "asked", "block": "blocked", "allow": "allowed"}
 
@@ -1535,13 +1536,13 @@ def _get_worktree_name() -> str | None:
             ["git", "rev-parse", "--git-dir"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=_SUBPROCESS_TIMEOUT_SEC,
         ).stdout.strip()
         git_common = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=_SUBPROCESS_TIMEOUT_SEC,
         ).stdout.strip()
         git_dir_abs = str(Path(git_dir).resolve())
         git_common_abs = str(Path(git_common).resolve())
@@ -1627,7 +1628,7 @@ def _check_worktree_stash(cmd: str) -> None:
                         ["git", "stash", "list", "--format=%gs"],
                         capture_output=True,
                         text=True,
-                        timeout=5,
+                        timeout=_SUBPROCESS_TIMEOUT_SEC,
                     )
                     stash_output = r.stdout if r.returncode == 0 else ""
                 lines = stash_output.strip().splitlines()
@@ -1692,7 +1693,7 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
                     ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=_SUBPROCESS_TIMEOUT_SEC,
                 ).stdout.strip()
             )
             if branch in _PROTECTED_BRANCHES:
@@ -2282,7 +2283,9 @@ def _pgrep(pattern: str, *, full: bool = False) -> list[int]:
         cmd.append("-f")
     cmd.append(pattern)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=_SUBPROCESS_TIMEOUT_SEC
+        )
         if result.returncode != 0 or not result.stdout.strip():
             return []
         return [int(line) for line in result.stdout.strip().split("\n") if line.strip()]
