@@ -313,7 +313,7 @@ def _call_vertex(prompt: str) -> dict:
     text = ""
     for block in message.content:
         if hasattr(block, "text"):
-            text = block.text.strip()
+            text = block.text.strip()  # type: ignore[union-attr]
             break
 
     if not text:

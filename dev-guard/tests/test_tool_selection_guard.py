@@ -3537,7 +3537,7 @@ class TestTrustIntegration:
                 match_pattern,
                 scope,
                 sid,
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                datetime.datetime.now(datetime.UTC).isoformat(),
             ),
         )
         conn.commit()
@@ -5246,10 +5246,8 @@ class TestSessionEnd:
         env, db_path = session_db
         _run_session_start(env, session_id="s-prune")
         # Insert a stale session-scoped trust entry (created 72h ago)
-        stale_ts = (
-            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=72)
-        ).isoformat()
-        recent_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        stale_ts = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=72)).isoformat()
+        recent_ts = datetime.datetime.now(datetime.UTC).isoformat()
         conn = sqlite3.connect(str(db_path))
         # Stale session-scoped entry (different rule_name avoids UNIQUE conflict)
         conn.execute(

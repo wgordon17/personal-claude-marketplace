@@ -39,9 +39,7 @@ def _connect() -> sqlite3.Connection | None:
 
 
 def _cutoff() -> str:
-    return (
-        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=_DAYS)
-    ).isoformat()
+    return (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=_DAYS)).isoformat()
 
 
 def _section(title: str) -> None:

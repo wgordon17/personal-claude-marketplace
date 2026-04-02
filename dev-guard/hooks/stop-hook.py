@@ -643,7 +643,7 @@ def _log_stop_event(
     if conn is None:
         return
     try:
-        ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        ts = datetime.datetime.now(datetime.UTC).isoformat()
         conn.execute(
             "INSERT INTO stop_hook_events "
             "(ts, session_id, outcome, trigger_reasons, work_type, llm_duration_ms, detail) "
@@ -664,8 +664,7 @@ def _log_stop_event(
 
         if random.randint(1, 20) == 1:
             cutoff = (
-                datetime.datetime.now(datetime.timezone.utc)
-                - datetime.timedelta(days=_LOG_RETENTION_DAYS)
+                datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=_LOG_RETENTION_DAYS)
             ).isoformat()
             conn.execute("DELETE FROM stop_hook_events WHERE ts < ?", (cutoff,))
             conn.commit()

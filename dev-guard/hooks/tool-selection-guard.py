@@ -462,7 +462,7 @@ def _log_event(
             "(ts, session_id, tool_use_id, category, rule, action, command, detail) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                datetime.datetime.now(datetime.UTC).isoformat(),
                 _session_id,
                 _tool_use_id,
                 category,
@@ -498,7 +498,7 @@ def _log_rtk_event(
             "(ts, session_id, tool_use_id, command, rtk_command, event_type, tee_path, detail) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                datetime.datetime.now(datetime.UTC).isoformat(),
                 _session_id,
                 _tool_use_id,
                 _redact_secrets(command),
@@ -1964,7 +1964,7 @@ def _add_trust(
                 match_pattern,
                 scope,
                 session_id if scope == "session" else None,
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                datetime.datetime.now(datetime.UTC).isoformat(),
             ),
         )
         conn.commit()
@@ -3202,7 +3202,7 @@ def _handle_session_start() -> None:
     if not conn:
         return
 
-    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    ts = datetime.datetime.now(datetime.UTC).isoformat()
     try:
         # Store session → CWD mapping
         if cwd:
@@ -3223,7 +3223,7 @@ def _handle_session_start() -> None:
     if cwd:
         try:
             cutoff = (
-                datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+                datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=24)
             ).isoformat()
             # Join through session_state to find sessions with matching CWD
             row = conn.execute(
@@ -3326,7 +3326,7 @@ def _handle_session_end() -> int:
     if not conn:
         return 0
 
-    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    ts = datetime.datetime.now(datetime.UTC).isoformat()
     try:
         # Get tool call count
         row = conn.execute(
@@ -3363,9 +3363,7 @@ def _handle_session_end() -> int:
         conn.commit()
 
         # Prune old session keys (older than 30 days)
-        cutoff = (
-            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
-        ).isoformat()
+        cutoff = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)).isoformat()
         conn.execute("DELETE FROM session_state WHERE updated_ts < ?", (cutoff,))
         conn.commit()
     except (sqlite3.Error, OSError, ValueError, TypeError):
@@ -3375,7 +3373,7 @@ def _handle_session_end() -> int:
     # Separate try/except so failures are visible via stderr rather than silently swallowed.
     try:
         trust_cutoff = (
-            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=48)
+            datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=48)
         ).isoformat()
         conn.execute(
             "DELETE FROM trusted_rules WHERE scope = 'session' AND created_ts < ?",
@@ -3599,7 +3597,7 @@ def _increment_tool_counter(session_id: str) -> None:
                 "value = CAST(value AS INTEGER) + 1, updated_ts = excluded.updated_ts",
                 (
                     f"tools:{session_id}",
-                    datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    datetime.datetime.now(datetime.UTC).isoformat(),
                 ),
             )
             conn.commit()

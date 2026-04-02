@@ -1,7 +1,7 @@
 [project]
 name = "personal-claude-marketplace"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 
 [dependency-groups]
 dev = ["ruff>=0.9", "pytest>=8", "pytest-xdist>=3", "pyright>=1.1.408"]
@@ -15,7 +15,7 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py313"
 line-length = 100
 
 [tool.ruff.lint]
@@ -26,5 +26,5 @@ quote-style = "double"
 
 [tool.pyright]
 include = ["dev-guard/hooks"]
-pythonVersion = "3.10"
+pythonVersion = "3.13"
 typeCheckingMode = "basic"
