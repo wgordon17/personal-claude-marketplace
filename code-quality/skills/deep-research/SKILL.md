@@ -58,7 +58,7 @@ Present your recommended mode along with the reason, and ask the user to confirm
 
 **Routing:**
 - **External selected**: skip Phase 2.5, proceed directly to Phase 2.
-- **Bridged selected**: run Phase 2.5 before Phase 2.
+- **Bridged selected**: run Phase 2.5 as the first step within Phase 2 (before source gathering).
 
 ### Phase 2: Source Gathering (40+ Sources Target)
 

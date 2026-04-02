@@ -66,8 +66,7 @@ Read the selected plan file. Store as `{plan_content}` and `{plan_file_path}`.
 
 Extract from the plan content:
 - `{plan_goal}` — value of `**Goal:**` header or first H2 that describes the objective
-- `{plan_domain}` — inferred from file paths, tech stack mentions, or explicit domain statement
-- `{plan_architecture}` — content of any `## Architecture` or `## Design` section
+- `{plan_domain}` — inferred from file paths, tech stack mentions, or explicit `**Cynefin Domain:**` statement
 - `{plan_decisions}` — content of any `## Decisions`, `## Trade-offs`, or `## Key Decisions` section
 - `{plan_tasks}` — count of `## Task N:` headings (or `- [ ]` top-level task items)
 - `{plan_files}` — file paths from `## File Structure` sections and task `Files:` blocks
@@ -161,8 +160,8 @@ Agent(
 )
 ```
 
-Each plan-specific reviewer receives: `{plan_content}`, `{plan_goal}`, `{plan_files}`,
-`{claude_md_rules}`, `{contributing_md_rules}`, `{project_context}`.
+Each plan-specific reviewer receives: `{plan_file_path}`, `{plan_content}`, `{plan_goal}`,
+`{plan_files}`, `{claude_md_rules}`, `{contributing_md_rules}`, `{project_context}`.
 
 The Unknown Unknowns Reviewer additionally receives: `{plan_open_questions}`, `{plan_trade_offs}`,
 `{plan_decisions}`.
@@ -388,7 +387,7 @@ documentation that Claude reads and fills in.
 | `{plan_content}` | Full plan file content | All reviewers + Verifier |
 | `{plan_file_path}` | Absolute path to plan file | All reviewers + Verifier |
 | `{plan_goal}` | Extracted goal string | All reviewers |
-| `{plan_tasks}` | Integer task count | Phase 1 skip logic (not injected into prompts) |
+| `{plan_tasks}` | Integer task count | Phase 1 skip logic + Phase 4 terminal output |
 | `{plan_files}` | Newline-separated file paths from the plan | All reviewers |
 | `{plan_files_count}` | Count of unique paths in `{plan_files}` | Phase 4 terminal output |
 | `{plan_domain}` | Extracted domain or inferred from context | Phase 4 terminal output |
