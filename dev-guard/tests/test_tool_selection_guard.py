@@ -2113,7 +2113,7 @@ class TestURLGuardAuditLog:
         )
         assert url_events[0]["category"] == "url"
 
-    def test_detail_dict_redacts_secret_strings(self, tmp_path):
+    def test_detail_dict_redacts_secret_strings(self):
         """String values in detail dicts are redacted via _redact_secrets before DB insert.
 
         Tests the dict comprehension in _log_event (lines 455-458) that applies

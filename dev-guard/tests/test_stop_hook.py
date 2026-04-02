@@ -1823,6 +1823,30 @@ class TestSubagentWaitPatterns:
         assert mod._SUBAGENT_WAIT_PATTERNS.search("agents in parallel")
         assert mod._SUBAGENT_WAIT_PATTERNS.search("tasks in parallel")
 
+    def test_waiting_for_long_gap_within_100_chars(self):
+        """Waiting-for arm matches when noun appears within 100 chars of 'for'."""
+        mod = self._load_module()
+        # 58-char gap: realistic 5-agent swarm message
+        assert mod._SUBAGENT_WAIT_PATTERNS.search(
+            "Waiting for the architect, security, performance, QA, and test-runner agents"
+        )
+        # Noun at exactly the boundary (~95 chars of filler)
+        filler = "x" * 90
+        assert mod._SUBAGENT_WAIT_PATTERNS.search(f"Waiting for {filler} agents")
+
+    def test_waiting_for_noun_beyond_100_chars_no_match(self):
+        """Waiting-for arm does NOT match when noun is beyond 100 chars."""
+        mod = self._load_module()
+        filler = "x" * 101
+        assert not mod._SUBAGENT_WAIT_PATTERNS.search(f"Waiting for {filler} agents")
+
+    def test_launch_long_gap_within_100_chars(self):
+        """Launch arm matches when noun appears within 100 chars."""
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search(
+            "Launching the architect, security, performance, QA, and test-runner agents"
+        )
+
     def test_no_match_unrelated_text(self):
         mod = self._load_module()
         assert not mod._SUBAGENT_WAIT_PATTERNS.search("I've completed all the work.")
