@@ -85,11 +85,11 @@ unnecessary additions — not to critique style, feasibility, or architecture.
 
 PLAN FILE: {plan_file_path}
 
-PLAN CONTENT:
-{plan_content}
-
 PLAN GOAL:
 {plan_goal}
+
+PLAN CONTENT:
+{plan_content}
 
 PLANNED FILES:
 {plan_files}
@@ -143,11 +143,11 @@ parallelization opportunities are identified — not to review scope, style, or 
 
 PLAN FILE: {plan_file_path}
 
-PLAN CONTENT:
-{plan_content}
-
 PLAN GOAL:
 {plan_goal}
+
+PLAN CONTENT:
+{plan_content}
 
 PLANNED FILES:
 {plan_files}
@@ -203,11 +203,11 @@ will surprise the implementer three tasks into execution.
 
 PLAN FILE: {plan_file_path}
 
-PLAN CONTENT:
-{plan_content}
-
 PLAN GOAL:
 {plan_goal}
+
+PLAN CONTENT:
+{plan_content}
 
 PLANNED FILES:
 {plan_files}
@@ -282,11 +282,11 @@ or security concerns.
 
 PLAN FILE: {plan_file_path}
 
-PLAN CONTENT:
-{plan_content}
-
 PLAN GOAL:
 {plan_goal}
+
+PLAN CONTENT:
+{plan_content}
 
 PLANNED FILES:
 {plan_files}
@@ -342,11 +342,11 @@ feasibility, scope, or architecture.
 
 PLAN FILE: {plan_file_path}
 
-PLAN CONTENT:
-{plan_content}
-
 PLAN GOAL:
 {plan_goal}
+
+PLAN CONTENT:
+{plan_content}
 
 PLANNED FILES:
 {plan_files}
