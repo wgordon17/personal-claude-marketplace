@@ -3,8 +3,10 @@ name: deep-research
 description: |
   Use when user requests deep research, comprehensive analysis, or thorough investigation.
   Triggers on: "research X thoroughly", "deep dive into", "comprehensive analysis of",
-  "investigate X exhaustively", "compare X options", "evaluate alternatives for"
-allowed-tools: [WebSearch, WebFetch, Read, Write, Glob, Grep, Agent]
+  "investigate X exhaustively", "compare X options", "evaluate alternatives for".
+  Supports two modes: External (web research, current behavior) and Bridged (internal
+  project investigation followed by external best-practices research).
+allowed-tools: [WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion]
 ---
 
 # deep-research — 5-Hop Deep Research Mode
@@ -38,17 +40,64 @@ Before starting research:
    - What does "good enough" research look like?
    - How will we know when to stop?
 
+### Phase 1.5: Research Mode Classification
+
+After completing Phase 1 scope definition, classify the research mode via `AskUserQuestion` before proceeding.
+
+**Present two options to the user:**
+
+- **External (Recommended)** — Pure external research (web sources, documentation, community). Use when the question is about technologies, patterns, or decisions unrelated to this codebase.
+- **Bridged** — Internal investigation first, then external research informed by the internal findings. Use when the question references this project's code, patterns, or architecture.
+
+**Default recommendation based on context signals:**
+
+- Signals suggesting **Bridged**: user's question references "our", "this project", "the codebase", "we", specific file paths, or internal component names.
+- Signals suggesting **External**: generic technology questions, no reference to internal code or project specifics.
+
+Present your recommended mode along with the reason, and ask the user to confirm or switch.
+
+**Routing:**
+- **External selected**: skip Phase 2.5, proceed directly to Phase 2.
+- **Bridged selected**: run Phase 2.5 before Phase 2.
+
 ### Phase 2: Source Gathering (40+ Sources Target)
+
+**Bridged mode only** — skip entirely if External mode was selected.
+
+#### Phase 2.5: Internal Investigation
+
+1. **Structural discovery** — Launch an Explore `Agent` to map relevant codebase areas. Use Serena `get_symbols_overview` if the Serena MCP is configured.
+
+2. **Pattern analysis** — Read key files identified in structural discovery. Look for:
+   - Current patterns and idioms used throughout the codebase
+   - Consistency (or inconsistency) across modules
+   - Anti-patterns or tech debt
+   - Past decisions documented in `{memory_dir}/PROJECT.md` and `{memory_dir}/LESSONS.md`
+
+3. **Cross-reference with memory** — Optional enhancements if available:
+   - If **claude-mem MCP** is configured: search past work for related research or decisions.
+   - If **Serena MCP** is configured: check Serena memories for project-specific insights.
+
+4. **Synthesize internal findings** — Produce a concise summary covering:
+   - What the project does in the relevant area
+   - What currently works well
+   - What has problems or is incomplete
+   - Open questions that external research should answer
+
+Store this summary as `{internal_findings}`. It becomes the feed-forward context for Phase 2 source gathering and informs all subsequent phases.
 
 Organize sources into categories:
 
 | Source Type | What to Look For | Priority |
 |-------------|------------------|----------|
+| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest |
 | **Primary sources** | Official documentation, specifications, papers | Highest |
 | **Secondary sources** | Tutorials, blog posts, case studies | High |
 | **Community sources** | GitHub issues, Stack Overflow, forums | Medium |
 | **Comparative sources** | Benchmarks, comparisons, reviews | High |
 | **Recent sources** | News, release notes, changelogs (2025-2026) | Critical |
+
+In **Bridged mode**, research queries for all external source types should be informed by `{internal_findings}`. For example, if internal investigation revealed a pain point with a specific pattern, target external sources that address that specific pattern rather than the topic generically.
 
 ### Phase 3: 5-Hop Exploration
 
@@ -68,6 +117,8 @@ Topic
 - Expert-level insights often appear at hop 3-4
 - Foundational context emerges at hop 4-5
 
+In **Bridged mode**, internal code patterns are treated as **hop 0**. External exploration begins from those established patterns and diverges outward, extending them with external insights rather than starting from scratch.
+
 ### Phase 4: Multi-Perspective Analysis
 
 Include viewpoints from:
@@ -80,6 +131,7 @@ Include viewpoints from:
 | **Enterprise users** | Scale, support, compliance |
 | **Indie developers** | Simplicity, cost, DX |
 | **Different tech stacks** | Integration, compatibility |
+| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost |
 
 ### Phase 5: Synthesis
 
@@ -102,6 +154,12 @@ Include viewpoints from:
 5. **Provide actionable recommendations**
    - Clear, prioritized suggestions
    - Context-dependent guidance
+
+6. **Internal-external bridge analysis** *(Bridged mode only)*
+   - Alignment: where do external best practices match what the project already does?
+   - Divergence: where do external recommendations conflict with current patterns?
+   - Applicability: which external findings are directly usable vs. require adaptation?
+   - Adaptation needed: what changes would be required to adopt external recommendations in this codebase?
 
 ## Output Format
 
@@ -133,6 +191,31 @@ If no memory directory exists, deliver the report in the conversation only.
 - Date range: [most recent to oldest]
 - Key search queries used
 - Hop depth achieved
+- *(Bridged mode)* Internal files investigated: [count]
+- *(Bridged mode)* Patterns identified: [count]
+- *(Bridged mode)* MCP tools used: [list, e.g., Serena get_symbols_overview, claude-mem search]
+
+## Internal Investigation
+*(Bridged mode only — omit this section entirely for External mode)*
+
+### Current State
+[Description of what the project currently does in the researched area, with specific file/symbol references.]
+
+### Strengths
+[What works well in the current implementation. Cite files and patterns.]
+
+### Gaps
+[What is missing, problematic, or inconsistent. Cite files and patterns.]
+
+### Internal-External Bridge
+
+| Internal Pattern | External Best Practice | Alignment | Adaptation Needed |
+|-----------------|----------------------|-----------|------------------|
+| [pattern from code] | [external recommendation] | Aligned / Diverges | [what would change] |
+| ... | ... | ... | ... |
+
+### Actionable Changes
+[Specific, project-aware changes that external research suggests, grounded in the internal investigation.]
 
 ## Detailed Findings
 
@@ -208,6 +291,9 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Flag areas of uncertainty** (don't pretend to know what you don't)
 - **Include recent (2025-2026) sources** where available
 - **Cross-reference claims** (verify important claims with multiple sources)
+- *(Bridged mode)* **Internal investigation must cover relevant source files** — not just PROJECT.md and LESSONS.md; read actual code files
+- *(Bridged mode)* **Internal-external bridge must be specific** — cite actual file paths, function names, and patterns, not vague descriptions
+- *(Bridged mode)* **Recommendations must be project-aware** — verify that recommendations do not contradict documented project decisions before including them
 
 ## Research Anti-Patterns to Avoid
 
@@ -226,3 +312,5 @@ Research is complete when:
 - [ ] Risks are identified and documented
 - [ ] Actionable recommendations can be made
 - [ ] Source count target (40+) is met
+- [ ] *(Bridged mode)* Internal investigation has covered relevant source files (not just memory files)
+- [ ] *(Bridged mode)* Internal-external bridge table is populated with specific file references
