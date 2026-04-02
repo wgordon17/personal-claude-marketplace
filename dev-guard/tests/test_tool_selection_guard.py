@@ -4,6 +4,7 @@ Black-box tests: each test invokes the guard script via subprocess,
 feeding it JSON on stdin and asserting exit code + stderr content.
 """
 
+import datetime
 import importlib.util
 import json
 import os
@@ -3632,21 +3633,21 @@ class TestTrustCommand:
         assert "Usage" in result.stderr
 
     def test_session_scope_without_session(self, tmp_path):
-        """--trust add --session without prior session ID fails."""
+        """--trust add --session without --session-id fails with clear message."""
         result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
         assert result.returncode == 2
-        assert "No session ID" in result.stderr
+        assert "Session-scoped trust requires --session-id" in result.stderr
 
-    def test_session_scope_with_prior_session(self, tmp_path):
-        """--trust add --session works after a guard check sets the session."""
-        # First, run a guard check to set the session ID
+    def test_session_scope_requires_explicit_session_id(self, tmp_path):
+        """--trust add --session without --session-id always fails (DB fallback removed)."""
+        # Even after a guard check runs (which no longer writes last_session_id to DB),
+        # --session without --session-id must fail with a clear error.
         _run_guard_with_db(
             "Bash", {"command": "git status"}, tmp_path, session_id="test-session-xyz"
         )
-        # Now add a session trust
         result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
-        assert result.returncode == 0
-        assert "Trusted" in result.stdout
+        assert result.returncode == 2
+        assert "Session-scoped trust requires --session-id" in result.stderr
 
     def test_unknown_flag_rejected_bug003(self, tmp_path):
         """BUG-003: Unknown flags are rejected (not silently ignored)."""
@@ -3661,13 +3662,10 @@ class TestTrustCommand:
         assert "unrecognized" in result.stderr.lower()
 
     def test_session_shorthand_bug003(self, tmp_path):
-        """BUG-003: --session shorthand works as alias for --scope session."""
-        # First set session ID via guard run
-        _run_guard_with_db(
-            "Bash", {"command": "git status"}, tmp_path, session_id="test-session-xyz"
+        """BUG-003: --session shorthand requires explicit --session-id (DB fallback removed)."""
+        result = self._run_trust(
+            ["add", "stash-drop", "--session", "--session-id", "test-session-xyz"], tmp_path
         )
-        # Now use --session shorthand (no --scope)
-        result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
         assert result.returncode == 0
         assert "Trusted" in result.stdout
         # Verify it was added with session scope
@@ -5072,7 +5070,8 @@ class TestSessionStart:
         assert row is not None
         assert row[0] == "0"
 
-    def test_updates_last_session_id(self, session_db):
+    def test_does_not_write_last_session_id(self, session_db):
+        """Session start no longer writes last_session_id to DB (BUG-004 fix)."""
         env, db_path = session_db
         _run_session_start(env, session_id="s1")
         conn = sqlite3.connect(str(db_path))
@@ -5080,8 +5079,7 @@ class TestSessionStart:
             "SELECT value FROM session_state WHERE key = 'last_session_id'"
         ).fetchone()
         conn.close()
-        assert row is not None
-        assert row[0] == "s1"
+        assert row is None
 
     def test_tool_counter_not_reset_on_second_start(self, session_db):
         """INSERT OR IGNORE: counter survives plugin reload."""
@@ -5187,6 +5185,50 @@ class TestSessionEnd:
             env=env,
         )
         assert result.returncode == 0
+
+    def test_session_end_prunes_stale_session_trust(self, session_db):
+        """Session end deletes session-scoped trust entries older than 48h."""
+        env, db_path = session_db
+        _run_session_start(env, session_id="s-prune")
+        # Insert a stale session-scoped trust entry (created 72h ago)
+        stale_ts = (
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=72)
+        ).isoformat()
+        recent_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        conn = sqlite3.connect(str(db_path))
+        # Stale session-scoped entry (different rule_name avoids UNIQUE conflict)
+        conn.execute(
+            "INSERT INTO trusted_rules (rule_name, match_pattern, scope, session_id, created_ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("stash-drop", None, "session", "old-session", stale_ts),
+        )
+        # Recent session-scoped entry
+        conn.execute(
+            "INSERT INTO trusted_rules (rule_name, match_pattern, scope, session_id, created_ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("git-reset-hard", None, "session", "s-prune", recent_ts),
+        )
+        # Always-scoped entry (different scope, unique constraint allows same rule_name)
+        conn.execute(
+            "INSERT INTO trusted_rules (rule_name, match_pattern, scope, session_id, created_ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("stash-drop", None, "always", None, stale_ts),
+        )
+        conn.commit()
+        conn.close()
+
+        _run_session_end(env, session_id="s-prune")
+
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute("SELECT rule_name, scope, session_id FROM trusted_rules").fetchall()
+        conn.close()
+        entries = [(r[0], r[1], r[2]) for r in rows]
+        # Stale session entry deleted
+        assert ("stash-drop", "session", "old-session") not in entries
+        # Recent session entry survives
+        assert ("git-reset-hard", "session", "s-prune") in entries
+        # always-scoped entry survives (different scope, TTL only targets 'session')
+        assert ("stash-drop", "always", None) in entries
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

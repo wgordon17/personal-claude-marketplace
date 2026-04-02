@@ -311,7 +311,6 @@ _MAX_INPUT_BYTES = 10 * 1024 * 1024
 _MAX_COMMAND_LEN = 100_000  # 100KB — generous for any real command
 _MAX_MANIFEST_BYTES = 1_048_576
 _HOOK_EVENT_NAME = "PreToolUse"
-_SESSION_ID_KEY = "last_session_id"
 _DB_TIMEOUT_SEC = 5
 _SUBPROCESS_TIMEOUT_SEC: int = 5
 _DB_BUSY_TIMEOUT_MS = 1000
@@ -2944,23 +2943,9 @@ def _handle_trust_command(argv: list[str]) -> int:
         if ns.scope == "session":
             sid = ns.session_id_override
             if not sid:
-                # Fallback: read from DB (works in single-session case)
-                try:
-                    conn = _init_db()
-                    if conn:
-                        cursor = conn.execute(
-                            "SELECT value FROM session_state WHERE key = ?",
-                            (_SESSION_ID_KEY,),
-                        )
-                        row = cursor.fetchone()
-                        if row:
-                            sid = row[0]
-                except (sqlite3.Error, OSError):
-                    pass
-            if not sid:
                 print(
-                    "No session ID found. Run a guard check first, "
-                    "provide --session-id, or use --scope always.",
+                    "Session-scoped trust requires --session-id. "
+                    "The session ID is shown in the trust hint when a rule fires.",
                     file=sys.stderr,
                 )
                 return 2
@@ -3221,11 +3206,7 @@ def _handle_session_start() -> None:
 
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
     try:
-        # Store session → CWD mapping and update last_session_id
-        conn.execute(
-            "INSERT OR REPLACE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
-            (_SESSION_ID_KEY, session_id, ts),
-        )
+        # Store session → CWD mapping
         if cwd:
             conn.execute(
                 "INSERT OR REPLACE INTO session_state (key, value, updated_ts) VALUES (?, ?, ?)",
@@ -3387,12 +3368,26 @@ def _handle_session_end() -> int:
         cutoff = (
             datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
         ).isoformat()
-        conn.execute(
-            "DELETE FROM session_state WHERE updated_ts < ? AND key != ?", (cutoff, _SESSION_ID_KEY)
-        )
+        conn.execute("DELETE FROM session_state WHERE updated_ts < ?", (cutoff,))
         conn.commit()
     except (sqlite3.Error, OSError, ValueError, TypeError):
         pass
+
+    # Prune stale session-scoped trust entries (older than 48h)
+    # Separate try/except so failures are visible via stderr rather than silently swallowed.
+    try:
+        conn2 = _init_db()
+        if conn2:
+            trust_cutoff = (
+                datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=48)
+            ).isoformat()
+            conn2.execute(
+                "DELETE FROM trusted_rules WHERE scope = 'session' AND created_ts < ?",
+                (trust_cutoff,),
+            )
+            conn2.commit()
+    except (sqlite3.Error, OSError) as e:
+        print(f"Warning: session trust TTL cleanup failed: {e}", file=sys.stderr)
 
     return 0
 
@@ -3678,22 +3673,6 @@ def main() -> None:
     # Extract session/tool context for logging
     _session_id = data.get("session_id")
     _tool_use_id = data.get("tool_use_id")
-    if _session_id:
-        try:
-            conn = _init_db()
-            if conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO session_state (key, value, updated_ts) "
-                    "VALUES (?, ?, ?)",
-                    (
-                        _SESSION_ID_KEY,
-                        _session_id,
-                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    ),
-                )
-                conn.commit()
-        except (sqlite3.Error, OSError):
-            pass
 
     # PostToolUse: observational logging only (no blocking)
     hook_event = data.get("hook_event_name", _HOOK_EVENT_NAME)
