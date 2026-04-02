@@ -67,6 +67,9 @@ Expert software architect with deep experience in distributed systems, microserv
    - Prefer removal over addition — if the new design replaces existing code,
      explicitly flag the old code for deletion in the plan
 
+## Finding Classification
+Use the classification and anti-deferral principle from `code-quality/references/finding-classification.md`.
+
 ## Output Format
 
 When providing architecture recommendations:

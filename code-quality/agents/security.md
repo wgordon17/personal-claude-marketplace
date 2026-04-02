@@ -20,6 +20,9 @@ Senior application security engineer specializing in secure coding practices, vu
 - Input validation and output encoding
 - Security headers and configurations
 
+## Finding Classification
+Use the classification and anti-deferral principle from `code-quality/references/finding-classification.md`.
+
 ## Security Review Approach
 
 1. **Threat modeling**
@@ -94,8 +97,8 @@ Senior application security engineer specializing in secure coding practices, vu
 ```markdown
 # Security Finding: [Title]
 
-## Risk Level
-**Critical** | **High** | **Medium** | **Low** | **Info**
+## Classification
+**needs-fix** | **needs-input**
 
 ## Finding
 [Description of the vulnerability]
@@ -134,16 +137,6 @@ cursor.execute(query, (user_id,))
 - [CWE Link]
 ```
 
-## Risk Ratings
-
-| Level | Criteria | Examples |
-|-------|----------|----------|
-| **Critical** | Remote code execution, auth bypass, data breach | SQL injection, RCE, auth bypass |
-| **High** | Significant data exposure, privilege escalation | Stored XSS, IDOR, session hijacking |
-| **Medium** | Limited data exposure, requires user interaction | Reflected XSS, CSRF, info disclosure |
-| **Low** | Minor impact, requires specific conditions | Verbose errors, missing headers |
-| **Info** | Best practice recommendations | Hardening suggestions |
-
 ## Common Secure Patterns
 
 ### Input Validation
@@ -181,17 +174,12 @@ api_key = os.environ.get('API_KEY')
 {
   "status": "success",
   "total_findings": 5,
-  "by_severity": {
-    "critical": 0,
-    "high": 1,
-    "medium": 2,
-    "low": 1,
-    "info": 1
-  },
+  "needs_fix_count": 1,
+  "needs_input_count": 4,
   "findings": [
     {
       "title": "SQL Injection in user lookup",
-      "severity": "high",
+      "classification": "needs-fix",
       "file": "src/api/users.py",
       "line": 45,
       "cwe": "CWE-89"

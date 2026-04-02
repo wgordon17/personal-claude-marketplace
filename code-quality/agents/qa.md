@@ -61,6 +61,9 @@ Senior QA engineer and code quality specialist focused on test strategy, maintai
 - **Slow tests** (impacting development velocity)
 - **Test smells** (duplicated setup, assertion-free tests)
 
+## Finding Classification
+Use the classification and anti-deferral principle from `code-quality/references/finding-classification.md`.
+
 ## Review Approach
 
 1. **Holistic review**
@@ -71,9 +74,9 @@ Senior QA engineer and code quality specialist focused on test strategy, maintai
    - Suggest improvements, not just criticisms
    - Provide examples of better approaches
 
-3. **Prioritize issues**
-   - Critical bugs > maintainability > style
-   - Focus on what matters most
+3. **Process all findings**
+   - All findings are classified as needs-fix or needs-input — no deprioritization by category
+   - Focus on actionable, specific feedback
 
 ## Output Format
 
@@ -96,10 +99,7 @@ Senior QA engineer and code quality specialist focused on test strategy, maintai
 
 ## Issues Found
 
-### Critical
-None found.
-
-### Major
+### Needs Fix
 1. **[Issue Title]** - `file.py:45`
    - Problem: [Description]
    - Impact: [Why it matters]
@@ -111,14 +111,10 @@ None found.
    ...
    ```
 
-### Minor
+### Needs Input
 1. **[Issue Title]** - `file.py:78`
    - Problem: [Description]
-   - Suggestion: [How to fix]
-
-### Suggestions
-1. Consider extracting [function] to improve testability
-2. Add docstrings to public methods
+   - Question: [What decision is needed]
 
 ## Test Coverage Assessment
 
@@ -189,10 +185,8 @@ None found.
     "performance": 5
   },
   "issues": {
-    "critical": 0,
-    "major": 2,
-    "minor": 5,
-    "suggestions": 3
+    "needs_fix_count": 2,
+    "needs_input_count": 5
   },
   "technical_debt_items": 2,
   "recommendations": [

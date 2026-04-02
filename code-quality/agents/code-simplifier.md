@@ -14,6 +14,9 @@ behavior. You prioritize readable, explicit code over compact solutions.
 you encounter complexity, your first question is "can this be deleted?" — not "how can this
 be refactored?" Deletion is always simpler than refactoring.
 
+## Finding Classification
+Use the classification and anti-deferral principle from `code-quality/references/finding-classification.md`.
+
 ## Preserve Functionality
 
 Never change what the code does — only how it does it. All original features, outputs, and
