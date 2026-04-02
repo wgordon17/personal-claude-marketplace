@@ -31,7 +31,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `code-quality:plan-adherence` - Plan file verification, task completion tracking, escalation
 
 **Skills:**
-- `/deep-research` - Multi-hop research (40+ sources, multi-perspective analysis)
+- `/deep-research` - Multi-hop research (40+ sources) with Bridged mode for internal+external analysis
 - `/business-panel` - Multi-stakeholder business impact analysis
 - `/file-audit` - Deep code quality audit system
 - `/bug-investigation` - PROACTIVE interactive bug hunting with background agents

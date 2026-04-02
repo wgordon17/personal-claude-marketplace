@@ -361,7 +361,7 @@ Domain: {plan_domain}
 Tasks: {plan_tasks} | Files: {plan_files_count}
 
 No verified issues found.
-Checked for: feasibility, scope, dependencies, unknown unknowns, architecture, security.
+Checked for: {checked_areas}
 
 {skipped_note}
 Reviewed by: {reviewer_list}
@@ -412,6 +412,12 @@ documentation that Claude reads and fills in.
 | `{findings_json}` | JSON array of all findings | Finding Verifier only |
 | `{verification_note}` | Warning when verification JSON parse fails, or empty string | Phase 4 terminal output |
 | `{skipped_note}` | List of skipped reviewers with reasons, or empty string | Phase 4 terminal output |
+| `{reviewer_list}` | Comma-separated names of reviewers that ran | Phase 4 terminal output |
+| `{total_raw}` | Total findings reported by all reviewers before verification | Phase 4 terminal output |
+| `{verified_count}` | Count of findings with verdict `verified` | Phase 4 terminal output |
+| `{false_positive_count}` | Count of findings with verdict `false_positive` (removed) | Phase 4 terminal output |
+| `{needs_context_count}` | Count of findings with verdict `needs_context` or `unverified` | Phase 4 terminal output |
+| `{checked_areas}` | Comma-separated list of reviewer areas that ran (excludes skipped) | Phase 4 "No Findings" output |
 
 ---
 
