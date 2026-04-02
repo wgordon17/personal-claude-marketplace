@@ -402,14 +402,16 @@ documentation that Claude reads and fills in.
 | `{plan_tasks}` | Integer task count | Phase 1 skip logic + Phase 4 terminal output |
 | `{plan_files}` | Newline-separated file paths from the plan | All reviewers |
 | `{plan_files_count}` | Count of unique paths in `{plan_files}` | Phase 4 terminal output |
-| `{plan_domain}` | Extracted domain or inferred from context | Phase 4 terminal output |
+| `{plan_domain}` | Extracted domain or `"Unknown"` | Phase 4 terminal output |
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers |
 | `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers |
 | `{project_context}` | PROJECT.md content or "No PROJECT.md found." | All reviewers |
 | `{plan_open_questions}` | Extracted open questions or empty string | Unknown Unknowns only |
 | `{plan_trade_offs}` | Extracted trade-offs or empty string | Unknown Unknowns only |
-| `{plan_decisions}` | Extracted decisions or empty string | Unknown Unknowns only |
+| `{plan_decisions}` | Extracted decisions (not trade-offs) or empty string | Unknown Unknowns only |
 | `{findings_json}` | JSON array of all findings | Finding Verifier only |
+| `{verification_note}` | Warning when verification JSON parse fails, or empty string | Phase 4 terminal output |
+| `{skipped_note}` | List of skipped reviewers with reasons, or empty string | Phase 4 terminal output |
 
 ---
 
