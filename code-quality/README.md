@@ -1,6 +1,6 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research, business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, map-reduce, speculative, reflect, and index-repo.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, and index-repo.
 
 ## Agents (8)
 
@@ -15,11 +15,11 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:code-simplifier` | Dead code removal, unnecessary abstraction cleanup, clarity improvement | Sonnet |
 | `code-quality:plan-adherence` | Plan file verification, task completion tracking, file structure reconciliation | Opus |
 
-## Skills (17)
+## Skills (18)
 
 | Skill | Description | Type |
 |-------|-------------|------|
-| `/deep-research` | Multi-hop research (40+ sources) | Manual |
+| `/deep-research` | Multi-hop research (40+ sources) with Bridged mode for internal+external analysis | Manual |
 | `/business-panel` | Multi-stakeholder business analysis | Manual |
 | `/file-audit` | Deep code quality audit system | Manual |
 | `/bug-investigation` | Interactive bug hunting with background agents | PROACTIVE |
@@ -27,6 +27,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/swarm` | Full agent team implementation via TeamCreate | Manual |
 | `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
 | `/pr-review` | Multi-agent PR review with finding verification | Manual |
+| `/plan-review` | Multi-agent plan review with independent fresh-context reviewers | Manual |
 | `/map-reduce` | Parallelized workload processing with chunking, mapper agents, and reducer synthesis | Manual |
 | `/speculative` | Competing implementations in isolated worktrees with judge selection | Manual |
 | `/incremental-planning` | Planning workflow with per-task review and assumption surfacing | Manual |
@@ -50,9 +51,9 @@ Code quality agents, development utilities, and orchestration skills: architectu
 
 - **At least one LSP plugin** — Required for `/lsp-navigation` (pyright-uvx, vtsls-npx, gopls-go, etc.).
 - **Context7 MCP** — Required for `/file-audit` library validation (deprecated APIs, wrong signatures).
-- **Serena MCP** — Optional. Enhances `/incremental-planning` Phase 1 with `get_symbols_overview`.
+- **Serena MCP** — Optional. Enhances `/incremental-planning` Phase 1 and `/deep-research` Bridged mode with `get_symbols_overview`.
 - **Sequential-Thinking MCP** — Optional. Used in `/incremental-planning` and `/roadmap` for scope boundary reasoning.
-- **claude-mem MCP** — Optional. Searches past work and decisions in `/incremental-planning` Phase 1.
+- **claude-mem MCP** — Optional. Searches past work and decisions in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode.
 - **Serena reflection tools** — Optional. Enables `/reflect` skill's metacognitive checkpoints (`think_about_task_adherence`, etc.). Enable via `included_optional_tools` in `~/.serena/serena_config.yml`.
 
 ## Installation
