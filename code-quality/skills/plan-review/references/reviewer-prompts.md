@@ -3,8 +3,8 @@
 Use these templates when spawning reviewer agents for plan review. Replace `{placeholders}`
 with actual values before passing to each Agent call.
 
-All plan reviewers receive `{plan_content}`, `{plan_goal}`, `{plan_files}`, `{claude_md_rules}`,
-`{contributing_md_rules}`, and `{project_context}`. The Unknown Unknowns Reviewer additionally
+All plan reviewers receive `{plan_file_path}`, `{plan_content}`, `{plan_goal}`, `{plan_files}`,
+`{claude_md_rules}`, `{contributing_md_rules}`, and `{project_context}`. The Unknown Unknowns Reviewer additionally
 receives `{plan_open_questions}`, `{plan_trade_offs}`, and `{plan_decisions}`. The Finding
 Verifier receives `{findings_json}`, `{plan_content}`, and `{plan_file_path}`.
 
@@ -27,6 +27,9 @@ Your job is to assess whether each task can actually be implemented as described
 critique style, scope, or architecture.
 
 PLAN FILE: {plan_file_path}
+
+PLAN GOAL:
+{plan_goal}
 
 PLAN CONTENT:
 {plan_content}

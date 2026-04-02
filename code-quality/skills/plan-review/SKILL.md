@@ -94,6 +94,7 @@ Assemble these values — passed to reviewers in Phase 2:
 - `{plan_goal}` = extracted goal or empty string
 - `{plan_tasks}` = task count integer
 - `{plan_files}` = newline-separated list of file paths from the plan
+- `{plan_files_count}` = count of unique file paths in `{plan_files}` (derived, not extracted)
 - `{claude_md_rules}` = CLAUDE.md content or placeholder
 - `{contributing_md_rules}` = CONTRIBUTING.md content or placeholder
 - `{project_context}` = PROJECT.md content or placeholder
@@ -387,8 +388,10 @@ documentation that Claude reads and fills in.
 | `{plan_content}` | Full plan file content | All reviewers + Verifier |
 | `{plan_file_path}` | Absolute path to plan file | All reviewers + Verifier |
 | `{plan_goal}` | Extracted goal string | All reviewers |
-| `{plan_tasks}` | Integer task count | All reviewers |
+| `{plan_tasks}` | Integer task count | Phase 1 skip logic (not injected into prompts) |
 | `{plan_files}` | Newline-separated file paths from the plan | All reviewers |
+| `{plan_files_count}` | Count of unique paths in `{plan_files}` | Phase 4 terminal output |
+| `{plan_domain}` | Extracted domain or inferred from context | Phase 4 terminal output |
 | `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers |
 | `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers |
 | `{project_context}` | PROJECT.md content or "No PROJECT.md found." | All reviewers |
@@ -405,6 +408,6 @@ documentation that Claude reads and fills in.
 |-------|-------------|
 | `incremental-planning` | Creates plans that plan-review reviews. Run plan-review after incremental-planning produces a plan file. |
 | `quality-gate` | Complementary: plan-review is pre-implementation (plan quality), quality-gate is post-implementation (code quality). |
-| `plan-adherence` | Complementary: plan-review checks plan quality before coding; plan-adherence checks implementation fidelity after coding. |
+| `plan-adherence` (agent) | Complementary: plan-review checks plan quality before coding; plan-adherence agent checks implementation fidelity after coding. |
 | `swarm` | plan-review should run before `/swarm` — catch gaps in the plan before spawning parallel implementers. |
 | `roadmap` | plan-review can review individual milestone plans that roadmap generates. |

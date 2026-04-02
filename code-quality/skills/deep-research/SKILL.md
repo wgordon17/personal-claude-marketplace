@@ -62,9 +62,7 @@ Present your recommended mode along with the reason, and ask the user to confirm
 
 ### Phase 2: Source Gathering (40+ Sources Target)
 
-**Bridged mode only** — skip entirely if External mode was selected.
-
-#### Phase 2.5: Internal Investigation
+#### Phase 2.5: Internal Investigation *(Bridged mode only)*
 
 1. **Structural discovery** — Launch an Explore `Agent` to map relevant codebase areas. Use Serena `get_symbols_overview` if the Serena MCP is configured.
 
