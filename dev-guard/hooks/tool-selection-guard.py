@@ -894,6 +894,23 @@ def _check_response_for_auth_failure(text: str, url: str, tool_name: str) -> Non
     )
 
 
+def _extract_response_text(tool_response: "dict | str", tool_name: str) -> str:
+    """Extract plain text from a tool response for auth-failure detection.
+
+    Three branches:
+    - Bash dict: concatenate stdout + stderr (both may contain HTTP headers).
+    - Any non-Bash dict: stringify the whole dict (covers WebFetch and future tools).
+    - Plain string: return as-is.
+    """
+    if isinstance(tool_response, dict):
+        if tool_name == "Bash":
+            return str(tool_response.get("stdout", "")) + str(tool_response.get("stderr", ""))
+        return str(tool_response)
+    if isinstance(tool_response, str):
+        return tool_response
+    return ""
+
+
 def _handle_post_tool_use(data: dict) -> None:
     """Handle PostToolUse events: log response codes for fetch commands."""
     tool_name = data.get("tool_name", "")
@@ -914,24 +931,14 @@ def _handle_post_tool_use(data: dict) -> None:
         if not re.match(r"^\s*(curl|wget)\b", normalized):
             return
         urls = _extract_urls(command)
-        response_text = ""
-        if isinstance(tool_response, dict):
-            response_text = str(tool_response.get("stdout", "")) + str(
-                tool_response.get("stderr", "")
-            )
-        elif isinstance(tool_response, str):
-            response_text = tool_response
+        response_text = _extract_response_text(tool_response, "Bash")
         for url in urls:
             _check_response_for_auth_failure(response_text, url, "Bash")
     elif tool_name == "WebFetch":
         url = tool_input.get("url", "")
         if not url:
             return
-        response_text = ""
-        if isinstance(tool_response, dict):
-            response_text = str(tool_response)
-        elif isinstance(tool_response, str):
-            response_text = tool_response
+        response_text = _extract_response_text(tool_response, "WebFetch")
         _check_response_for_auth_failure(response_text, url, "WebFetch")
     elif tool_name == "Read":
         file_path = tool_input.get("file_path", "")

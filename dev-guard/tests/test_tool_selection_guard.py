@@ -2106,6 +2106,42 @@ class TestURLGuardAuditLog:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# _extract_response_text unit tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestExtractResponseText:
+    """Unit tests for the _extract_response_text helper."""
+
+    def test_bash_dict_concatenates_stdout_and_stderr(self):
+        response = {"stdout": "HTTP/1.1 200 OK\n", "stderr": "curl: connected"}
+        result = _mod._extract_response_text(response, "Bash")
+        assert result == "HTTP/1.1 200 OK\ncurl: connected"
+
+    def test_bash_dict_missing_keys_returns_empty(self):
+        result = _mod._extract_response_text({}, "Bash")
+        assert result == ""
+
+    def test_non_bash_dict_stringifies_whole_dict(self):
+        response = {"content": "page content", "status": 200}
+        result = _mod._extract_response_text(response, "WebFetch")
+        assert "content" in result
+        assert "page content" in result
+
+    def test_plain_string_returned_as_is(self):
+        result = _mod._extract_response_text("HTTP/2 200 OK", "Bash")
+        assert result == "HTTP/2 200 OK"
+
+    def test_plain_string_webfetch(self):
+        result = _mod._extract_response_text("some page html", "WebFetch")
+        assert result == "some page html"
+
+    def test_non_string_non_dict_returns_empty(self):
+        result = _mod._extract_response_text(None, "Bash")  # type: ignore[arg-type]
+        assert result == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PostToolUse: response code logging
 # ═══════════════════════════════════════════════════════════════════════════════
 
