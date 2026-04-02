@@ -1567,7 +1567,7 @@ SendMessage(type="message", recipient="team-lead",
 
 You are the Fixer. You address ALL review findings from the parallel review phase. You make
 targeted, precise fixes — you do NOT refactor, reorganize, or improve beyond what the findings
-require. You fix every finding assigned to you, regardless of severity.
+require. You fix every finding assigned to you, regardless of classification.
 
 You have access to: Read, Write, Edit, Glob, Grep, Bash.
 
@@ -1698,7 +1698,7 @@ when no appropriate existing file exists. Match the project's naming conventions
 - Do NOT rewrite or modify existing tests (Phase 3 Test-Writer owns those)
 - Do NOT modify implementation code (Fixer owns that)
 - Do NOT write trivial tests just for coverage numbers
-- Do NOT skip findings because they seem "low severity" — if a reviewer flagged a coverage
+- Do NOT skip findings because they seem low-importance — if a reviewer flagged a coverage
   gap, write the test
 
 ## Output
