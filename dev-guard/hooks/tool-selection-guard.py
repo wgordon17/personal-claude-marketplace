@@ -314,8 +314,6 @@ _HOOK_EVENT_NAME = "PreToolUse"
 _DB_TIMEOUT_SEC = 5
 _SUBPROCESS_TIMEOUT_SEC: int = 5
 _DB_BUSY_TIMEOUT_MS = 1000
-_LOG_ACTION_FOR: dict[str, str] = {"ask": "asked", "block": "blocked", "allow": "allowed"}
-
 _DB_PATH = Path(
     os.environ.get("GUARD_DB_PATH", str(Path.home() / ".claude" / "logs" / "dev-guard.db"))
 )
@@ -560,7 +558,7 @@ def _exit_with_decision(
     rule_name: str | None = None,
     matched_segment: str | None = None,
     category: str = "guard",
-    detail: object | None = None,
+    detail: dict[str, object] | None = None,
 ) -> None:
     """Exit with guidance, using the correct mechanism for the action type.
 
@@ -3376,16 +3374,14 @@ def _handle_session_end() -> int:
     # Prune stale session-scoped trust entries (older than 48h)
     # Separate try/except so failures are visible via stderr rather than silently swallowed.
     try:
-        conn2 = _init_db()
-        if conn2:
-            trust_cutoff = (
-                datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=48)
-            ).isoformat()
-            conn2.execute(
-                "DELETE FROM trusted_rules WHERE scope = 'session' AND created_ts < ?",
-                (trust_cutoff,),
-            )
-            conn2.commit()
+        trust_cutoff = (
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=48)
+        ).isoformat()
+        conn.execute(
+            "DELETE FROM trusted_rules WHERE scope = 'session' AND created_ts < ?",
+            (trust_cutoff,),
+        )
+        conn.commit()
     except (sqlite3.Error, OSError) as e:
         print(f"Warning: session trust TTL cleanup failed: {e}", file=sys.stderr)
 
@@ -3611,17 +3607,15 @@ def _increment_tool_counter(session_id: str) -> None:
         pass
 
 
-def _handle_mcp_tool(tool_name: str) -> bool:
+def _handle_mcp_tool(tool_name: str) -> None:
     """Handle MCP tool auto-approval or passthrough.
 
     Uses server-qualified keys to prevent cross-server name spoofing.
     Known read-only tools (and sequential-thinking tools via _MCP_THINK_PREFIX)
     are auto-approved; unknown MCP tools pass through to settings.json.
 
-    Returns True if the tool was handled (caller should return), False if not an MCP tool.
+    Only called when tool_name starts with "mcp__". Always exits via sys.exit(0).
     """
-    if not tool_name.startswith("mcp__"):
-        return False
     key = _mcp_key(tool_name)
     if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
         _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
@@ -3693,8 +3687,8 @@ def main() -> None:
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
 
-    if _handle_mcp_tool(tool_name):
-        return
+    if tool_name.startswith("mcp__"):
+        _handle_mcp_tool(tool_name)
 
     if tool_name != "Bash":
         sys.exit(0)

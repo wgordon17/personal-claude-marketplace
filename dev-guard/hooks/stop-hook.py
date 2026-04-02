@@ -123,13 +123,17 @@ _COMPLETION_CLAIM_PATTERNS = [
 # Criterion 1 (Agent tool in all_tool_calls) is the primary security gate; this regex is a
 # usability broadener — content injection could match text but criterion 1 still requires a
 # real tool invocation.
+#
+# ReDoS note: the launch arm uses [^\n]{0,50} (bounded character class) instead of
+# \d*\s*\w*\s* (adjacent optional quantifiers) to prevent catastrophic backtracking.
 _SUBAGENT_WAIT_PATTERNS = re.compile(
     r"waiting\s+for|"
-    r"launch(?:ing|ed)?\s+\d*\s*\w*\s*(?:agents?|reviewers?)|"
+    r"launch(?:ing|ed)?\s+[^\n]{0,50}(?:agents?|reviewers?)|"
     r"launched?\s+\d+|"
     r"spawned?\s+\d+|"
     r"running\s+[^\n]*\b(?:agents?|reviewers?|background)|"
-    r"let\s+me\s+wait|still\s+(?:running|working)|in\s+parallel",
+    r"let\s+me\s+wait|still\s+(?:running|working)|"
+    r"(?:agents?|tasks?)\s+in\s+parallel",
     re.IGNORECASE,
 )
 
@@ -865,8 +869,13 @@ def main() -> None:
     # All 6 criteria are conjunctive (ALL must be true for fast-exit):
     #   1. Agent tool was used at any point in the session (all_tool_calls, not new_tool_calls,
     #      so the signal persists across subsequent stop hook firings in a scolding loop).
+    #      SECURITY: This is the critical gate — it requires a real Agent tool invocation in
+    #      the transcript, not just text. Content injection can satisfy criterion 2 (text arm)
+    #      but cannot forge a tool invocation in criterion 1.
     #   2. Structural or textual evidence of active waiting: last tool in new_tool_calls is
     #      an Agent tool OR the last assistant message matches _SUBAGENT_WAIT_PATTERNS.
+    #      NOTE: The text arm (_SUBAGENT_WAIT_PATTERNS) is best-effort / usability broadener.
+    #      It can be triggered by crafted content, but criterion 1 must also be satisfied.
     #   3. No completion claim — agent isn't claiming work is done.
     #   4. No git diff changes.
     #   5. No file writes.
