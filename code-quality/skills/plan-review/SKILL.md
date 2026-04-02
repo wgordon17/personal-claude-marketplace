@@ -69,8 +69,8 @@ Read the selected plan file. Store as `{plan_content}` and `{plan_file_path}`.
 
 Extract from the plan content:
 - `{plan_goal}` — value of `**Goal:**` header or first H2 that describes the objective
-- `{plan_domain}` — inferred from file paths, tech stack mentions, or explicit `**Cynefin Domain:**` statement
-- `{plan_decisions}` — content of any `## Decisions`, `## Trade-offs`, or `## Key Decisions` section
+- `{plan_domain}` — inferred from file paths, tech stack mentions, or explicit `**Cynefin Domain:**` statement. If domain cannot be determined, use `"Unknown"`.
+- `{plan_decisions}` — content of any `## Decisions` or `## Key Decisions` section (not `## Trade-offs` — that is captured separately by `{plan_trade_offs}`)
 - `{plan_tasks}` — count of `## Task N:` headings (or `- [ ]` top-level task items)
 - `{plan_files}` — file paths from `## File Structure` sections and task `Files:` blocks
 - `{plan_open_questions}` — content of any `## Open Questions` section
@@ -94,6 +94,7 @@ Assemble these values — passed to reviewers in Phase 2:
 - `{plan_content}` = full plan file content
 - `{plan_file_path}` = absolute path to the plan file
 - `{plan_goal}` = extracted goal or empty string
+- `{plan_domain}` = extracted domain or `"Unknown"`
 - `{plan_tasks}` = task count integer
 - `{plan_files}` = newline-separated list of file paths from the plan
 - `{plan_files_count}` = count of unique file paths in `{plan_files}` (derived, not extracted)
@@ -252,7 +253,8 @@ judgment).
 
 Parse the verifier's response as JSON. If parsing fails, extract JSON from between the first
 `[` and last `]` markers. If that also fails, include all findings with verdict `unverified`
-and a note: "Verification failed — showing all findings unverified."
+and set `{verification_note}` to `"⚠ Verification failed — all findings shown unverified"`.
+If verification succeeded, set `{verification_note}` to empty string.
 
 ### Categorize
 
@@ -270,8 +272,9 @@ The verifier assigns each finding to a category based on its nature:
 
 ### Filter
 
-Remove findings with verdict `false_positive`. Keep all `verified`, `needs_context`, and
-`unverified` findings. Treat `unverified` findings as `needs_context` for output purposes.
+Remove findings with verdict `false_positive`. Keep `verified` findings for the category
+sections. Keep `needs_context` and `unverified` findings for the Needs Context section only
+(they do NOT appear in category sections). Treat `unverified` as `needs_context` for display.
 
 ---
 
@@ -321,22 +324,27 @@ SPECIFICATION
      {location}
      Investigation: {investigation_summary}
 
+{verification_note}
+{skipped_note}
 Reviewed by: {reviewer_list}
 Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Group findings by **category** in order: RESEARCH GAPS (first — highest leverage to fix before
-implementation) → FEASIBILITY → SCOPE → DEPENDENCIES → ARCHITECTURE → SECURITY → SPECIFICATION.
-Within each category, sort by severity (CRITICAL → HIGH → MEDIUM → LOW). For the `[Reviewer]`
-tag, use the short reviewer name: Feasibility, Scope, Dependencies, Unknown Unknowns, Architect,
-Security.
+`{verification_note}` — if verification JSON parsing failed, print the warning line. Otherwise omit.
+`{skipped_note}` — if any reviewers were skipped, print a line such as "Skipped: Dependency & Ordering (single-task plan)" or "Skipped: Security (no auth/security paths detected)". Otherwise omit.
 
-Omit category sections with zero findings.
+Category sections contain only `verified` findings. Group by category in order: RESEARCH GAPS
+(first — highest leverage to fix before implementation) → FEASIBILITY → SCOPE → DEPENDENCIES →
+ARCHITECTURE → SECURITY → SPECIFICATION. Within each category, sort by severity (CRITICAL →
+HIGH → MEDIUM → LOW). For the `[Reviewer]` tag, use the short reviewer name: Feasibility,
+Scope, Dependencies, Unknown Unknowns, Architect, Security.
 
-Findings with verdict `needs_context` appear in a dedicated section at the bottom — these are
-items the verifier could not confirm or deny and require human judgment. They are NOT hidden or
-filtered — they are surfaced transparently.
+Omit category sections with zero verified findings.
+
+`needs_context` and `unverified` findings appear ONLY in the dedicated "Needs Context" section
+at the bottom — they do NOT appear in category sections above. These are items the verifier
+could not confirm or deny and require human judgment.
 
 ### No Findings After Verification
 
@@ -355,6 +363,7 @@ Tasks: {plan_tasks} | Files: {plan_files_count}
 No verified issues found.
 Checked for: feasibility, scope, dependencies, unknown unknowns, architecture, security.
 
+{skipped_note}
 Reviewed by: {reviewer_list}
 Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -370,10 +379,10 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 | Plan file exists but is empty | Error: "Plan file is empty: {path}" |
 | Single plan file found | Auto-select with confirmation: "Using plan: {filename}" |
 | Multiple plan files found | Present via AskUserQuestion with filename, goal line, relative age |
-| `{plan_tasks}` < 2 | Skip Dependency & Ordering reviewer; note in footer |
-| Security reviewer skipped | Note in footer: "Security reviewer skipped (no auth/security paths detected)" |
+| `{plan_tasks}` < 2 | Skip Dependency & Ordering reviewer; include in `{skipped_note}` |
+| Security reviewer skipped | Include in `{skipped_note}`: "Security (no auth/security paths detected)" |
 | All findings false positive | Output "no findings" report format (not an error) |
-| Verification JSON parse fails | All findings get `unverified` verdict, treated as `needs_context` in output |
+| Verification JSON parse fails | All findings get `unverified` verdict, routed to Needs Context section; `{verification_note}` warns in output |
 
 ---
 

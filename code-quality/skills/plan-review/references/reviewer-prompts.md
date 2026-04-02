@@ -162,7 +162,7 @@ PROJECT CONTEXT (PROJECT.md):
 {project_context}
 
 FOCUS: Dependency ordering and parallelization — are tasks in the right sequence? Not scope,
-feasibility, or style.
+feasibility, or architecture.
 
 READ REQUIREMENT: You MUST read the full plan and map all tasks before reporting any finding.
 For each finding, cite the specific task numbers involved.
