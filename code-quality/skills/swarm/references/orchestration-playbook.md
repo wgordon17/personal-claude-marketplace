@@ -377,7 +377,7 @@ After Step 1.3 approval, commit to full autonomy. The ONLY allowed interruptions
 
 1. **Architect raises blockers** — unclear/risky design decisions (Phase 2)
 2. **Error escalation after max retries** — a component is permanently blocked (Phase 3/5/7)
-3. **Critical/high Fixer deferrals** — findings the Fixer could NOT resolve (Phase 5)
+3. **Needs-input Fixer items** — findings requiring user decision that the Fixer could not resolve (Phase 5)
 4. **Final completion report** — announcing the swarm is done (Phase 7)
 
 Do NOT interrupt the user for:
@@ -516,17 +516,17 @@ proposed architecture, and writes its findings to `{run_dir}/security-design-rev
 After the security-design agent reports completion, read `{run_dir}/security-design-review.json`.
 Check the `verdict` field:
 
-**`proceed`** (no Critical/High findings):
+**`proceed`** (no `needs-input` findings requiring architectural redesign):
 - Append the `security_constraints` array from the review to `architect-plan.json` as a
   top-level `security_constraints` field
 - Notify the Architect of the constraints so they are available for Phase 3 clarification questions
 - Proceed to Phase 3
 
-**`revise`** (Critical or High findings present):
+**`revise`** (`needs-input` findings requiring plan revision present):
 - Send findings to the Architect:
   ```
   SendMessage(type="message", recipient="architect",
-    content="Security design review found Critical/High issues requiring plan revision.\n\n"
+    content="Security design review found findings requiring plan revision.\n\n"
             "Findings: {run_dir}/security-design-review.json\n\n"
             "Please revise {run_dir}/architect-plan.json to address these findings and "
             "send an updated summary when done.",
@@ -1234,19 +1234,28 @@ If the file exists, read it. If it is missing, note the gap and proceed.
 
 ### Step 4.4: Lead Synthesis
 
-Read all review JSON files. Categorize findings:
+Read all review JSON files. Collect all findings regardless of classification:
 
 | Category | Criteria | Action |
 |----------|----------|--------|
-| critical/high | Critical/high security findings; critical/high QA findings | Send to Fixer (priority) |
-| medium | Medium security; medium QA; high performance | Send to Fixer |
-| low/informational | Low/informational security; low QA; informational | Send to Fixer |
+| needs-fix | All `needs-fix` findings from all reviewers | Send to Fixer |
+| needs-input | All `needs-input` findings from all reviewers | Send to Fixer (Fixer batches them into FixSummary for Lead-mediated user triage) |
 | test coverage | Missing tests, untested paths, coverage gaps | Send to Test Coverage Agent |
 
-Build a consolidated findings list for the Fixer (all severities) and a test coverage
+Build a consolidated findings list for the Fixer (all findings) and a test coverage
 findings list for the Test Coverage Agent. Group by file when possible.
 
-If ALL reviews report zero findings of any severity, set a flag: `skip_phase5 = true`.
+After building the consolidated list, write `total_findings_in` to
+`{run_dir}/synthesis-counts.json` for use in Step 5.2.1 verification:
+
+```json
+{
+  "total_findings_in": <integer — total finding count across all reviewers>,
+  "timestamp": "<ISO 8601>"
+}
+```
+
+If ALL reviews report zero findings, set a flag: `skip_phase5 = true`.
 
 ### Step 4.5: Escalation Routing
 
@@ -1427,7 +1436,7 @@ Add all actionable STRUCT findings to the consolidated findings list that Phase 
 Phase 5 treats STRUCT findings identically to Phase 4 findings — same priority order, same fix
 protocol.
 
-If ALL structural findings are clean (zero findings of any severity), note this in the audit
+If ALL structural findings are clean (zero findings), note this in the audit
 trail and skip_phase5 remains unchanged from Phase 4's determination.
 
 ### Step 4.5.5: Shutdown Structural Analysts
@@ -1443,9 +1452,9 @@ SendMessage(type="shutdown_request", recipient="structural-integration", content
 
 ### Step 5.1: Skip Check
 
-If `skip_phase5 = true` (all Phase 4 AND Phase 4.5 reviews report zero findings of any
-severity): skip Phase 5 entirely. Mark Phase 5 task as completed with note "No findings —
-skipped." Proceed to Phase 6.
+If `skip_phase5 = true` (all Phase 4 AND Phase 4.5 reviews report zero findings):
+skip Phase 5 entirely. Mark Phase 5 task as completed with note "No findings — skipped."
+Proceed to Phase 6.
 
 ### Step 5.2: Spawn Fixer
 
@@ -1456,20 +1465,34 @@ Agent(name="fixer", subagent_type="general-purpose", model="sonnet",
             "CONSOLIDATED FINDINGS:\n<JSON findings from synthesis>")
 ```
 
-Fixer addresses all findings: critical first, then high, then medium, then low. It sends a
-`FixSummary` message to the lead when done.
+Fixer addresses all findings — process in file order per `code-quality/references/finding-classification.md`
+Fixer Protocol. It sends a `FixSummary` message to the lead when done.
 
-### Step 5.2.1: Handle Fixer Deferrals
+### Step 5.2.1: Handle Fixer Output Verification
 
-After the Fixer completes, check its FixSummary for deferred items (`deferred`, `findings_deferred`,
-or `deferred_items` fields — check all three due to naming inconsistency). For each deferred item:
+After the Fixer completes and sends its FixSummary, the Lead handles user triage and
+structural verification:
 
-1. `TaskCreate` with the finding ID, reason, and recommended action (visible in task list)
+**User triage for needs-input items:**
+1. Read `needs_input_items` from the FixSummary
+2. If non-empty, present to the user via multiSelect `AskUserQuestion`:
+   - One option per finding: label = Finding ID, description = "LoE: [X]. [Description]. Suggested: [action]"
+   - User checks items to fix, leaves unchecked items to skip
+3. Checked items: send back to Fixer for resolution (or fix inline if trivial), add to `findings_fixed`
+4. Unchecked items: recorded in `user_deferred` with reason "User declined via triage"
+5. Update the final FixSummary with `user_deferred` entries
+
+**Structural verification:**
+1. Read `total_findings_in` from `{run_dir}/synthesis-counts.json`
+2. Count `findings_fixed + user_deferred` from the final FixSummary
+3. If delta > 0 (findings silently dropped): escalate via `AskUserQuestion`
+4. If delta == 0 (all findings accounted for): proceed
+
+See `code-quality/references/finding-classification.md` Verification Protocol.
+
+For each `user_deferred` item:
+1. `TaskCreate` with the finding ID, reason, and the Fixer's suggested action (visible in task list)
 2. Add to the "Scope Accountability" section of swarm-report.md
-3. If the deferred item is critical or high severity: `AskUserQuestion` to notify the user.
-   Do NOT silently continue past critical unresolved findings.
-
-If no deferred items exist, skip this step.
 
 ### Step 5.2.5: Spawn Test Coverage Agent (conditional)
 
@@ -1672,12 +1695,13 @@ Agent(name="docs-reviewer", subagent_type="general-purpose", model="sonnet",
 ```
 
 The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it reports
-Critical/High findings:
+`needs-fix` findings:
 1. Route findings back to the Docs agent (still alive)
 2. Docs agent fixes, re-commits
 3. Docs Reviewer re-reviews (max 1 iteration)
 
-If clean or only Low/Medium findings, proceed.
+If `needs-input` findings: present to user via AskUserQuestion before proceeding.
+If no `needs-fix` findings, proceed.
 
 ### Step 6.6: Shutdown Docs Agent
 
@@ -1791,7 +1815,7 @@ Run directory: {run_dir}
 - Files modified: N
 - Lines added: +N / Lines removed: -N
 - Tests added: N
-- Review findings fixed: N (M deferred)
+- Review findings fixed: N (M user-deferred)
 - Blocked items: N
 
 ## Pipeline Execution
@@ -1804,12 +1828,12 @@ Run directory: {run_dir}
 
 ## Review Findings
 
-| Reviewer | Findings | Critical | High | Medium | Low |
-|----------|----------|----------|------|--------|-----|
-| security | 3 | 1 | 1 | 1 | 0 |
-| qa | 5 | 0 | 2 | 2 | 1 |
-| code-reviewer | 2 | 0 | 0 | 1 | 1 |
-| performance | 1 | 0 | 0 | 0 | 1 |
+| Reviewer | Findings | Needs-Fix | Needs-Input |
+|----------|----------|-----------|-------------|
+| security | 3 | 2 | 1 |
+| qa | 5 | 5 | 0 |
+| code-reviewer | 2 | 2 | 0 |
+| performance | 1 | 1 | 0 |
 
 ## Blocked Items
 
@@ -1839,7 +1863,7 @@ Original request: <verbatim user request>
 | session-cleanup | BLOCKED | Rejected 3x, stashed |
 
 Items NOT in plan that were requested: [none / list any gaps]
-Fixer deferred items: [none / list with reasons]
+User-deferred items: [none / list with reasons]
 
 ## Remaining Tech Debt
 
