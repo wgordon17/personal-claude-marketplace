@@ -1764,6 +1764,71 @@ class TestBuildPromptCriteria:
         assert "SUBAGENT WAIT" not in prompt
 
 
+# ── Subagent wait pattern unit tests ──────────────────────────────────────────
+
+
+class TestSubagentWaitPatterns:
+    """Unit tests for each arm of _SUBAGENT_WAIT_PATTERNS regex."""
+
+    @staticmethod
+    def _load_module():
+        spec = importlib.util.spec_from_file_location("stop_hook", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return mod
+
+    def test_waiting_for_agents(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("Waiting for reviewers to finish.")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("waiting for agents to complete")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("Waiting for task results now.")
+
+    def test_waiting_for_without_noun_no_match(self):
+        mod = self._load_module()
+        assert not mod._SUBAGENT_WAIT_PATTERNS.search("Waiting for the system to respond.")
+
+    def test_launching_agents(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("Launching 6 domain reviewers now.")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("launched 3 agents in parallel")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("launching reviewers")
+
+    def test_launched_bare_count(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("launched 6")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("I launched 3 and waiting")
+
+    def test_spawned_count(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("spawned 5")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("I spawned 2 agents already")
+
+    def test_running_agents(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("running 3 agents in the background")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("running domain reviewers")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("running background tasks now")
+
+    def test_let_me_wait(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("let me wait for results")
+
+    def test_still_running_working(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("Simplifier still working...")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("Agents are still running.")
+
+    def test_in_parallel(self):
+        mod = self._load_module()
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("agents in parallel")
+        assert mod._SUBAGENT_WAIT_PATTERNS.search("tasks in parallel")
+
+    def test_no_match_unrelated_text(self):
+        mod = self._load_module()
+        assert not mod._SUBAGENT_WAIT_PATTERNS.search("I've completed all the work.")
+        assert not mod._SUBAGENT_WAIT_PATTERNS.search("Here are the results.")
+
+
 # ── Subagent wait fast-exit ───────────────────────────────────────────────────
 
 
@@ -1811,6 +1876,11 @@ class TestSubagentWaitFastExit:
         assert result.returncode == 0
         # Fast-exit → no decision=block JSON on stdout
         assert result.stdout.strip() == ""
+        # State was persisted (evaluated_tool_count updated from 0)
+        state = json.loads((tmp_path / "state.json").read_text())
+        session_states = [v for v in state.values() if isinstance(v, dict)]
+        assert len(session_states) == 1
+        assert session_states[0]["evaluated_tool_count"] > 0
 
     def test_agent_spawned_last_tool_is_agent_fast_exits(self, tmp_path):
         """Agent spawned + last tool is Agent (empty message) → fast-exit."""

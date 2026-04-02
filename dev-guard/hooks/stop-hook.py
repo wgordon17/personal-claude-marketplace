@@ -118,20 +118,19 @@ _COMPLETION_CLAIM_PATTERNS = [
     ),
 ]
 
-# Subagent wait patterns — textual evidence of mid-workflow pause (criterion 2 secondary arm)
-# Uses [^\n]* instead of .* in the running arm for ReDoS mitigation.
+# Subagent wait patterns — textual evidence of mid-workflow pause (criterion 2 secondary arm).
 # Criterion 1 (Agent tool in all_tool_calls) is the primary security gate; this regex is a
 # usability broadener — content injection could match text but criterion 1 still requires a
 # real tool invocation.
 #
-# ReDoS note: the launch arm uses [^\n]{0,50} (bounded character class) instead of
-# \d*\s*\w*\s* (adjacent optional quantifiers) to prevent catastrophic backtracking.
+# ReDoS note: all arms use bounded character classes [^\n]{0,N} instead of unbounded
+# quantifiers or adjacent optional quantifiers to prevent catastrophic backtracking.
 _SUBAGENT_WAIT_PATTERNS = re.compile(
-    r"waiting\s+for|"
+    r"waiting\s+for\s+[^\n]{0,50}(?:agents?|reviewers?|tasks?|results?|completion)|"
     r"launch(?:ing|ed)?\s+[^\n]{0,50}(?:agents?|reviewers?)|"
     r"launched?\s+\d+|"
     r"spawned?\s+\d+|"
-    r"running\s+[^\n]*\b(?:agents?|reviewers?|background)|"
+    r"running\s+[^\n]{0,100}\b(?:agents?|reviewers?|background)|"
     r"let\s+me\s+wait|still\s+(?:running|working)|"
     r"(?:agents?|tasks?)\s+in\s+parallel",
     re.IGNORECASE,
@@ -863,36 +862,21 @@ def main() -> None:
 
     # ── Fast-exit: Subagent wait (mid-workflow pause) ────────────────────────
     # Fires AFTER signal detection, BEFORE question classification.
-    # AskUserQuestion fast-exit (above) handles user-input pauses;
-    # this handles agent-is-waiting-for-background-subagents pauses.
-    #
-    # All 6 criteria are conjunctive (ALL must be true for fast-exit):
-    #   1. Agent tool was used at any point in the session (all_tool_calls, not new_tool_calls,
-    #      so the signal persists across subsequent stop hook firings in a scolding loop).
-    #      SECURITY: This is the critical gate — it requires a real Agent tool invocation in
-    #      the transcript, not just text. Content injection can satisfy criterion 2 (text arm)
-    #      but cannot forge a tool invocation in criterion 1.
-    #   2. Structural or textual evidence of active waiting: last tool in new_tool_calls is
-    #      an Agent tool OR the last assistant message matches _SUBAGENT_WAIT_PATTERNS.
-    #      NOTE: The text arm (_SUBAGENT_WAIT_PATTERNS) is best-effort / usability broadener.
-    #      It can be triggered by crafted content, but criterion 1 must also be satisfied.
-    #   3. No completion claim — agent isn't claiming work is done.
-    #   4. No git diff changes.
-    #   5. No file writes.
-    #   6. No MCP writes.
-    _last_new_tool = new_tool_calls[-1] if new_tool_calls else None
-    _subagent_active = any(tc in _AGENT_TOOLS for tc in all_tool_calls)
-    _wait_evidence = (_last_new_tool in _AGENT_TOOLS) or bool(
+    # All 6 criteria conjunctive — see _SUBAGENT_WAIT_PATTERNS comment for security model.
+    last_new_tool = new_tool_calls[-1] if new_tool_calls else None
+    subagent_active = any(tc in _AGENT_TOOLS for tc in all_tool_calls)
+    wait_evidence = (last_new_tool in _AGENT_TOOLS) or bool(
         _SUBAGENT_WAIT_PATTERNS.search(last_assistant_message)
     )
     if (
-        _subagent_active
-        and _wait_evidence
+        subagent_active
+        and wait_evidence
         and not completion_claim
         and not diff_changed
         and "write_tool" not in write_signals
         and "mcp_write" not in write_signals
     ):
+        _log_stop_event(session_id, "subagent_wait")
         print("Subagent wait — fast-exit (mid-workflow pause).", file=sys.stderr)
         state = _update_session_state(
             state, session_id, current_diff_hash, len(all_tool_calls), file_size

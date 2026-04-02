@@ -2113,6 +2113,26 @@ class TestURLGuardAuditLog:
         )
         assert url_events[0]["category"] == "url"
 
+    def test_detail_dict_redacts_secret_strings(self, tmp_path):
+        """String values in detail dicts are redacted via _redact_secrets before DB insert."""
+        # URL rules produce detail dicts with tool/phase keys.
+        # Trigger a blocked URL event that passes detail={"tool": "Bash", "phase": "pre"}
+        # through _exit_with_decision → _log_event. The url itself (matched_segment) goes
+        # through command redaction, and detail string values go through _redact_secrets.
+        _run_guard_with_db(
+            "Bash",
+            {"command": "curl https://api.github.com/repos/org/repo?token=sk-secret123"},
+            tmp_path,
+        )
+        all_events = _read_all_events(tmp_path)
+        url_events = [e for e in all_events if e.get("category") == "url"]
+        assert len(url_events) >= 1
+        for event in url_events:
+            detail_str = event.get("detail", "")
+            if detail_str:
+                # detail string values must not contain the raw secret
+                assert "sk-secret123" not in detail_str
+
     def test_non_fetch_command_not_logged(self, tmp_path):
         """Non-curl/wget bash commands should not produce URL log entries."""
         _run_guard_with_db("Bash", {"command": "git status"}, tmp_path)

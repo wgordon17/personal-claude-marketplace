@@ -892,7 +892,7 @@ def _check_response_for_auth_failure(text: str, url: str, tool_name: str) -> Non
     )
 
 
-def _extract_response_text(tool_response: "dict | str", tool_name: str) -> str:
+def _extract_response_text(tool_response: dict | str, tool_name: str) -> str:
     """Extract plain text from a tool response for auth-failure detection.
 
     Three branches:
@@ -3607,14 +3607,14 @@ def _increment_tool_counter(session_id: str) -> None:
         pass
 
 
-def _handle_mcp_tool(tool_name: str) -> None:
+def _handle_mcp_tool(tool_name: str) -> bool:
     """Handle MCP tool auto-approval or passthrough.
 
     Uses server-qualified keys to prevent cross-server name spoofing.
     Known read-only tools (and sequential-thinking tools via _MCP_THINK_PREFIX)
     are auto-approved; unknown MCP tools pass through to settings.json.
 
-    Only called when tool_name starts with "mcp__". Always exits via sys.exit(0).
+    Returns True if the tool was handled (always True for mcp__ tools).
     """
     key = _mcp_key(tool_name)
     if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
