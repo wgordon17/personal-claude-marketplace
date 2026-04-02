@@ -22,7 +22,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, NoReturn
 
 sys.path.insert(0, str(Path(__file__).parent))
 from mcp_constants import MCP_READ_ONLY as _MCP_READ_ONLY  # noqa: E402
@@ -3607,7 +3607,7 @@ def _increment_tool_counter(session_id: str) -> None:
         pass
 
 
-def _handle_mcp_tool(tool_name: str) -> bool:
+def _handle_mcp_tool(tool_name: str) -> NoReturn:
     """Handle MCP tool auto-approval or passthrough.
 
     Uses server-qualified keys to prevent cross-server name spoofing.

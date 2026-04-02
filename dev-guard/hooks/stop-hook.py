@@ -126,7 +126,7 @@ _COMPLETION_CLAIM_PATTERNS = [
 # ReDoS note: all arms use bounded character classes [^\n]{0,N} instead of unbounded
 # quantifiers or adjacent optional quantifiers to prevent catastrophic backtracking.
 _SUBAGENT_WAIT_PATTERNS = re.compile(
-    r"waiting\s+for\s+[^\n]{0,50}(?:agents?|reviewers?|tasks?|results?|completion)|"
+    r"waiting\s+for\s+[^\n]{0,100}(?:agents?|reviewers?|tasks?|results?|completion)|"
     r"launch(?:ing|ed)?\s+[^\n]{0,50}(?:agents?|reviewers?)|"
     r"launched?\s+\d+|"
     r"spawned?\s+\d+|"

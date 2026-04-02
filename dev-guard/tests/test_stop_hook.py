@@ -1880,7 +1880,7 @@ class TestSubagentWaitFastExit:
         state = json.loads((tmp_path / "state.json").read_text())
         session_states = [v for v in state.values() if isinstance(v, dict)]
         assert len(session_states) == 1
-        assert session_states[0]["evaluated_tool_count"] > 0
+        assert session_states[0]["evaluated_tool_count"] == 2  # Read + Agent
 
     def test_agent_spawned_last_tool_is_agent_fast_exits(self, tmp_path):
         """Agent spawned + last tool is Agent (empty message) → fast-exit."""
