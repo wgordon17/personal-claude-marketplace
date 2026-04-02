@@ -3614,7 +3614,7 @@ def _handle_mcp_tool(tool_name: str) -> bool:
     Known read-only tools (and sequential-thinking tools via _MCP_THINK_PREFIX)
     are auto-approved; unknown MCP tools pass through to settings.json.
 
-    Returns True if the tool was handled (always True for mcp__ tools).
+    Always exits via sys.exit(0) — never returns to the caller.
     """
     key = _mcp_key(tool_name)
     if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
