@@ -2001,7 +2001,7 @@ You have access to: Read, Glob, Grep.
 Read `documentation_impact` above. For each entry:
 1. Check if the documentation surface was actually modified (Grep for recent changes or
    read the file and verify the expected update exists)
-2. If an entry was NOT addressed, report as HIGH finding with the specific surface and
+2. If an entry was NOT addressed, report as `needs-fix` finding with the specific surface and
    expected action
 
 ### Step 2: Accuracy Verification
@@ -2026,7 +2026,7 @@ Perform your own component discovery using ecosystem-specific patterns from
 taxonomy § Component Discovery (don't trust the Docs agent's counts):
 - Detect project type from files present, apply matching discovery patterns
 - Compare YOUR counts against what's documented
-- If you find components the Docs agent missed, report as HIGH finding
+- If you find components the Docs agent missed, report as `needs-fix` finding
 
 ## Output
 

@@ -367,7 +367,7 @@ Run each tool and parse its output. If a tool is unavailable, skip silently.
 ```bash
 unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --config auto --json --quiet . 2>/dev/null
 ```
-Parse the JSON output. Semgrep rules are high-quality — trust its findings but verify severity.
+Parse the JSON output. Semgrep rules are high-quality — trust its findings. The `"severity"` field in Semgrep output is Semgrep's own severity label (WARNING/ERROR) — use it as a signal for LoE estimation when classifying findings per `code-quality/references/finding-classification.md`.
 **Note:** The `unset` prefix clears ALL proxy variables (including `ALL_PROXY`/`all_proxy`) that cause semgrep to crash when set to empty strings — common in Claude Code environments.
 
 **Gitleaks (secrets detection):**
@@ -1342,7 +1342,7 @@ rules from the taxonomy. Key checks:
 - Component counts on disk must match counts in documentation
 - Package manifest descriptions must mention all major component types
 - Registry entries must match manifest entries
-- If a significant component exists on disk but isn't in ANY documentation surface → HIGH finding
+- If a significant component exists on disk but isn't in ANY documentation surface → `needs-fix` finding
 
 **What counts as "significant"** is defined by the trigger categories in the taxonomy — anything
 that would fire a documentation trigger if added in a PR must be documented.
