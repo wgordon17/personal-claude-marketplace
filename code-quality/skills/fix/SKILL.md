@@ -13,11 +13,6 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Web
 
 # Fix Skill
 
-Comprehensive finding fixer for review outputs. Reads findings from the current session's review
-skills (pr-review, plan-review, bug-investigation), investigates each finding via background agents,
-and implements all fixes. For plan-review Research Gaps and Unknown Unknowns findings, runs actual
-spikes — executes the research, not just documents it.
-
 **Never auto-commits.** All fixes are left in the working tree for user review.
 
 ## Usage
@@ -27,6 +22,9 @@ spikes — executes the research, not just documents it.
 ```
 
 No arguments required. Auto-detects the review source and fix target from session context.
+
+Must run in the same session as the upstream review skill — /fix reads findings from session
+output. Exception: bug-investigation findings persist in BUGS.md and work across sessions.
 
 ---
 
@@ -42,11 +40,9 @@ Scan the current session output for sentinel strings in this order:
 |---|---|---|
 | `PLAN REVIEW —` | Plan file | Extract path from the header line: `PLAN REVIEW — {plan_file_path}` |
 | `CODE REVIEW — PR #` | Code (PR diff) | Extract PR number from the header line: `CODE REVIEW — PR #{number}` |
+| `{memory_dir}/BUGS.md` (file check) | Bug resolutions | Read BUGS.md; extract entries with `**Status:** Root Cause Found` or `**Status:** Fix Ready` |
 
-Additionally, check for bug entries: detect the memory directory per
-`code-quality/references/project-memory-reference.md` (Directory Detection and Worktree Resolution
-sections). If `{memory_dir}/BUGS.md` exists, scan for entries with `**Status:** Root Cause Found`
-or `**Status:** Fix Ready` — if any are found, this is an additional fix source.
+Detect `memory_dir` per `code-quality/references/project-memory-reference.md` (Directory Detection and Worktree Resolution sections).
 
 ### Resolution
 
@@ -91,12 +87,12 @@ Each normalized finding tracks:
 - `evidence` — the reviewer's evidence line from the review output
 - `suggested_fix` — `null` for pr-review and plan-review (not present in terminal output);
   the Resolution Plan checklist items for bug-investigation entries
-- `is_research_gap` — `true` if:
-  - (a) The finding appears under the `RESEARCH GAPS` category section, OR
-  - (b) The finding's `[Reviewer]` tag is `Unknown Unknowns`
-
-  Do NOT use keyword matching on the description text. Classification is structural (category +
-  reviewer tag), not semantic.
+- `is_research_gap` — `true` if the finding appears under the `RESEARCH GAPS` category section OR
+  has a `[Reviewer]` tag of `Unknown Unknowns`. Classification is structural (category + reviewer
+  tag) — do NOT use keyword matching on description text.
+- `verifier_verdict` — `"needs_context"` if from the upstream Needs Context section, otherwise `null`
+- `spike_question` — the specific assumption to verify (extracted from Research Gap / Unknown Unknowns finding text). Populated only when `is_research_gap == true`.
+- `plan_context` — surrounding plan text (5-10 lines around the affected section). Populated only when `is_research_gap == true`.
 
 ### Source-Specific Normalization
 
@@ -105,6 +101,7 @@ Each normalized finding tracks:
 Categories (in display order): Testing Gaps, Correctness, Security, Architecture, Decisions Needed,
 Performance, Style & Conventions. Extract all findings from each category section. Also extract
 findings from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`.
+Skip findings in the User Decisions section — these were already resolved by the user during the upstream review and should not be re-processed.
 
 Category abbreviations for IDs: `test`, `corr`, `sec`, `arch`, `dec`, `perf`, `style`.
 
@@ -115,6 +112,7 @@ Security, Specification. Extract all findings from each category section. Also e
 from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`. Set
 `is_research_gap: true` per the structural rules above (category = RESEARCH GAPS, OR reviewer tag =
 Unknown Unknowns) — not by scanning description text.
+Skip findings in the User Decisions section — these were already resolved by the user during the upstream review and should not be re-processed.
 
 Category abbreviations for IDs: `rsch`, `feas`, `scope`, `dep`, `arch`, `sec`, `spec`.
 
@@ -138,7 +136,7 @@ on description text.
 
 ### Step 1a: CWD Boundary Validation
 
-Resolve all finding locations to absolute paths. Any path that falls outside the current project
+Resolve all finding locations to absolute paths. Normalize paths first: collapse `../` and `./` sequences without resolving symlinks. Then verify the normalized path falls within the project root. Any path that falls outside the current project
 root is `out_of_scope` — mark it and exclude it from all subsequent phases. Never pass out-of-scope
 paths to investigators or fixers.
 
@@ -151,7 +149,7 @@ Assess each finding and assign a triage label:
 | Direct fix | Clear description, unambiguous location, no architectural decisions required | Queue for Phase 2 investigation |
 | Spike execution | `is_research_gap == true` AND source is `plan-review` | Queue for Phase 2 spike investigation |
 | Needs refinement | Multiple valid approaches, UX implications, or architectural tradeoffs that cannot be resolved without user input | Queue for Phase 2 (marked for user confirmation before implementation) |
-| Needs plan | Bug touching 5+ files OR requiring architectural redesign beyond localized changes | Recommend `/incremental-planning`; skip this finding |
+| Needs plan | Any finding touching 5+ files OR requiring architectural redesign beyond localized changes | Recommend `/incremental-planning`; skip this finding |
 | Out of scope | Path outside CWD (identified in Step 1a) | Skip with note |
 | Unverified | `verifier_verdict == "needs_context"` | Queue for Phase 2 — investigator will attempt to verify before fixing |
 
@@ -191,6 +189,7 @@ Unverified ({count}):
 Proceeding with {actionable_count} findings ({direct_fix_count} direct +
 {spike_count} spikes + {needs_refinement_count} needing refinement +
 {unverified_count} unverified).
+Skipping {skip_count} ({needs_plan_count} needs-plan + {oos_count} out-of-scope).
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -245,9 +244,12 @@ Agent(
 ```
 
 > `mode="bypassPermissions"` is required — investigators run in background and cannot prompt for
-> permissions interactively.
+> permissions interactively. Sonnet is used for both types — investigators collect evidence only;
+> the lead reviews all results before acting.
 
 Dispatch all agents in parallel. Wait for all to complete before proceeding.
+
+> In practice, upstream reviewers produce 5-15 findings. With file-based grouping, this typically results in 3-10 investigator agents — well within Claude Code's concurrency limits.
 
 ### Collecting and Routing Results
 
@@ -261,11 +263,14 @@ After all investigators complete, route each result by verdict:
 | `spike_confirmed` | Queue plan update for Phase 3 |
 | `spike_partial` | Queue plan update with partial evidence for Phase 3; note evidence gaps in report |
 | `spike_invalidated` | Present to user via `AskUserQuestion` with three options: (1) Update plan with corrected information, (2) Skip — address during implementation, (3) Defer to `/incremental-planning` for replanning |
+| Agent failure (timeout, crash, empty output) | Record all findings assigned to that agent as `blocked` with reason "investigator agent failed"; note in report |
 
 **LoE escalation:** If an investigator upgraded a finding's LoE estimate to `significant` (from
 `trivial` or `moderate`), move that finding to "needs refinement" and present to the user via
 `AskUserQuestion` before queuing for implementation. Significant LoE means the finding may have
 architectural impact — user should confirm before the lead proceeds.
+
+**needs_context verdict path:** If an investigator receives a `needs_context` finding and cannot verify it (insufficient evidence to confirm or deny), it returns verdict `invalid` with reason "could not verify — insufficient evidence". The lead routes this to the `unverified_unresolved` bucket (not `findings_invalid`).
 
 ### Conflict Detection
 
@@ -295,7 +300,7 @@ For each queued finding, in order:
    - `spike_invalidated` → update the plan per the user's choice from Phase 2 (update / skip / replan)
    - `spike_partial` → update with verified parts; mark remaining open questions explicitly in the plan
 5. **Code fixes:** Edit source files. Run tests after completing all edits to a single file (not after each finding — batch per file).
-6. **Bug fixes:** Implement the resolution plan steps from BUGS.md. After implementation, update the entry's `**Status:**` field to `Fix Ready`.
+6. **Bug fixes:** Implement the resolution plan steps from BUGS.md. After implementation, update the entry's `**Status:**` field: if prior status was "Root Cause Found", set to "Fix Ready"; if prior status was already "Fix Ready", set to "Fixed".
 
 ### Test Execution
 
@@ -307,7 +312,7 @@ Detection order for the test command:
 3. Language-specific default — `pytest` (Python), `jest` (JS/TS), `go test ./...` (Go)
 4. Skip with note if none detected
 
-**Test failure** → revert the last change, record the finding as `blocked` in the report. Do not retry with alternative fixes — blocked findings surface in the Phase 5 report for user attention.
+**Test failure** → revert all changes to that file (`git checkout -- <file>`), record ALL co-located findings as `blocked` in the report. Do not retry with alternative fixes — blocked findings surface in the Phase 5 report for user attention.
 
 ### Cross-Cutting Fixes
 
@@ -322,9 +327,7 @@ Do NOT commit. Leave all changes in the working tree for user review.
 ## Phase 4 — Verification
 
 Apply the Verification Protocol from `code-quality/references/finding-classification.md`, extended
-with 8 buckets to cover outcomes the swarm Fixer never encounters (the Fixer operates only within
-a swarm that pre-screens findings; standalone /fix encounters findings that may be invalid,
-out-of-scope, or blocked by test failures).
+with 8 buckets to cover all standalone /fix outcomes.
 
 ### Outcome Buckets
 
@@ -355,7 +358,7 @@ out-of-scope, or blocked by test failures).
 | Out of scope | `out_of_scope` |
 | Investigator returned invalid | `findings_invalid` |
 | Test failure prevented fix | `blocked` |
-| Unverified, investigator confirmed → routed to fix/defer | per original route |
+| Unverified, investigator confirmed valid | route through normal triage (direct fix / needs refinement / etc.) |
 | Unverified, investigator could not resolve | `unverified_unresolved` |
 
 ### Verification Check
@@ -382,13 +385,13 @@ Source: {source}
 Fix target: {target_description}
 Findings: {total_in} total → {fixed} fixed, {invalid} invalid,
   {deferred} deferred, {plan} needs-plan, {oos} out-of-scope,
-  {blocked} blocked, {unresolved} unverified
+  {blocked} blocked, {unresolved} unresolved
 
 FIXED ({count})
   1. [{id}] {description}
      {file}:{line_range} — {what was changed}
 
-SPIKES EXECUTED ({count} — plan-review only, subset of FIXED)
+SPIKES EXECUTED ({count} — plan-review only; these are ALSO counted in FIXED above)
   1. [{id}] {description}
      Result: {verdict} — {evidence summary}
      Plan updated: {section}
@@ -413,9 +416,9 @@ OUT OF SCOPE ({count})
   1. [{id}] {description}
      {file} — outside working directory
 
-UNVERIFIED ({count})
+UNRESOLVED ({count})
   1. [{id}] {description}
-     Requires human judgment
+     Neither upstream verifier nor investigator could confirm — requires human judgment
 
 UNACCOUNTED ({count} — if any)
   1. [{id}] {description}
@@ -444,12 +447,12 @@ After the report, print context-appropriate suggestions (show all that apply, on
 
 | Skill | Relationship |
 |---|---|
-| `pr-review` | Produces findings that /fix acts on. Run /pr-review first, then /fix. |
-| `plan-review` | Produces plan findings that /fix acts on. /fix edits the plan file only. For Research Gaps and Unknown Unknowns, /fix executes actual spikes to verify assumptions. |
-| `quality-gate` | Not a source — quality-gate fixes findings inline. /fix suggests /quality-gate after code fixes for verification. |
-| `bug-investigation` | Documents bugs with root causes and resolution plans. /fix implements resolution plans or recommends /incremental-planning for complex bugs. |
-| `incremental-planning` | Recommended by /fix when a bug resolution requires significant scope, or when a spike invalidates a plan assumption requiring replanning. |
-| `swarm` | Swarm has its own internal Fixer (Phase 5). /fix is the standalone equivalent for non-swarm workflows. |
+| `code-quality:pr-review` | Produces findings that /fix acts on. Run /pr-review first, then /fix. |
+| `code-quality:plan-review` | Produces plan findings that /fix acts on. /fix edits the plan file only. For Research Gaps and Unknown Unknowns, /fix executes actual spikes to verify assumptions. |
+| `code-quality:quality-gate` | Not a source — quality-gate fixes findings inline. /fix suggests /quality-gate after code fixes for verification. |
+| `code-quality:bug-investigation` | Documents bugs with root causes and resolution plans. /fix implements resolution plans or recommends /incremental-planning for complex bugs. |
+| `code-quality:incremental-planning` | Recommended by /fix when a bug resolution requires significant scope, or when a spike invalidates a plan assumption requiring replanning. |
+| `code-quality:swarm` | Swarm has its own internal Fixer (Phase 5). /fix is the standalone equivalent for non-swarm workflows. |
 
 ---
 
