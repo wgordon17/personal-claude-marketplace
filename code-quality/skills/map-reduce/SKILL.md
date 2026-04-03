@@ -152,10 +152,10 @@ LEAD (you)
 2. **For analysis workloads:** present the synthesized summary and `needs-fix` findings to the
    user. For `needs-input` findings: present via multiSelect AskUserQuestion before finalizing
    the report. Each option: label = finding ID, description = "[category] description
-   (file:line)". User selects items to acknowledge; unselected items are recorded as
-   `user-deferred` in the final report. Do NOT exit with unresolved `needs-input` findings.
-   If AskUserQuestion is unavailable, record all `needs-input` findings as `user-deferred` with
-   reason "AskUserQuestion unavailable - surfaced in report" in the final report.
+   (file:line)". Selected items are recorded as `user-acknowledged`; unselected items are
+   recorded as `user-deferred` in the final report. Do NOT exit with unresolved `needs-input`
+   findings. If AskUserQuestion is unavailable, treat all `needs-input` findings as
+   `needs_context` in the final report (surface them, don't hide them).
    Offer to write a detailed report or create actionable TODO items.
 
 3. **For implementation workloads:**
@@ -165,8 +165,8 @@ LEAD (you)
      Each option: label = finding ID, description = "[category] description (file:line)".
      User selects which to apply. Selected items are applied, then tests re-run. Unselected
      items are recorded as `user-deferred` in the final report. Do NOT apply `needs-input`
-     changes without user approval. If AskUserQuestion is unavailable, record all `needs-input`
-     findings as `user-deferred` with reason "AskUserQuestion unavailable - surfaced in report".
+     changes without user approval. If AskUserQuestion is unavailable, treat all `needs-input`
+     findings as `needs_context` in the final report (surface them, don't hide them).
 
 4. **Write final report** to `{run_dir}/map-reduce-report.md` with:
    - Summary statistics (files analyzed, total findings, deduplicated, invalidated)

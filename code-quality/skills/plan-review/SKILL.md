@@ -290,7 +290,7 @@ sections. Keep `needs_context` and `unverified` findings for the Needs Context s
 ## Phase 3.5 — Needs-Input Resolution
 
 If any surviving findings (after filtering false positives) have classification `needs-input`,
-present them to the user before producing the report. Do NOT skip this step — the skill must
+present them to the user before producing the report. Do NOT skip this step - the skill must
 not exit with unresolved `needs-input` items.
 
 If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
@@ -395,7 +395,7 @@ at the bottom — they do NOT appear in category sections above. These are items
 could not confirm or deny and require human judgment.
 
 User decisions from Phase 3.5 appear in their own section. Both `user-acknowledged` and
-`user-deferred` items are shown — this is the audit trail proving every `needs-input` finding
+`user-deferred` items are shown - this is the audit trail proving every `needs-input` finding
 received an explicit user decision.
 
 ### No Findings After Verification

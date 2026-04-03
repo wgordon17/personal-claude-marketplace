@@ -134,8 +134,7 @@ How the Fixer processes findings:
 
 Structural enforcement after Fixer completes and user triage is done:
 
-- Count findings-in vs (findings_fixed + user_deferred + user_acknowledged). Note: user-approved
-  needs-input items appear in `findings_fixed` after the Fixer processes them, so this formula
-  covers all outcomes.
+- Count findings-in vs (findings_fixed + user_deferred). Note: user-approved needs-input items
+  appear in `findings_fixed` after the Fixer processes them, so this formula covers all outcomes.
 - Delta > 0 → findings were silently dropped → escalate via AskUserQuestion
 - Delta == 0 → all findings accounted for → proceed

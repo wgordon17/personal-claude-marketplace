@@ -343,8 +343,8 @@ For each `needs-input` TODO:
 - **Selected:** Update classification to `user-acknowledged` in inventory.json.
 - **Not selected:** Update classification to `user-deferred` in inventory.json.
 
-If zero `needs-input` TODOs exist, skip this step. If AskUserQuestion is unavailable, leave
-`needs-input` items as-is in the inventory (they are already surfaced in the output).
+If zero `needs-input` TODOs exist, skip this step. If AskUserQuestion is unavailable, treat
+`needs-input` items as `needs_context` in the inventory (surface them, don't hide them).
 
 ---
 
