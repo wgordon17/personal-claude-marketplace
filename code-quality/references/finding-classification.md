@@ -140,7 +140,7 @@ How the Fixer processes findings:
    - Present each needs-input item individually via AskUserQuestion (one question per finding,
      batch up to 4 per call). Each question includes full context:
      ```
-     question: "[{id}] {description}\n\nLoE: {loe}\nEvidence: {evidence}\nDecision needed: {input_needed}"
+     question: "[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}"
      header: "{id}"
      options: [
        {"label": "Fix", "description": "{suggested_action}"},

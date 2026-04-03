@@ -1477,7 +1477,7 @@ structural verification:
 1. Read `needs_input_items` from the FixSummary
 2. If non-empty, present each item individually via AskUserQuestion (one question per finding,
    batch up to 4 per call). Each question includes full context:
-   `"[{id}] {description}\n\nLoE: {loe}\nEvidence: {evidence}\nDecision needed: {input_needed}"`
+   `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}"`
    with options: "Fix" (`{suggested_action}`) and "Defer" ("Skip for now"). `multiSelect: false`.
 3. Fix selected: send back to Fixer for resolution (or fix inline if trivial), add to `findings_fixed`
 4. Defer selected: recorded in `user_deferred` with reason "User declined via triage"

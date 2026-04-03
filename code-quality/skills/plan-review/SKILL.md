@@ -304,7 +304,7 @@ per AskUserQuestion call (the tool's question limit):
 ```
 AskUserQuestion(questions=[
   {
-    "question": "[{id}] [{Reviewer}] {description}\n\nLocation: {location}\nEvidence: {evidence}\nDecision needed: {input_needed}",
+    "question": "[{id}] [{Reviewer}] {description}\n\nLocation: {location}\nDecision needed: {input_needed}",
     "header": "{id}",
     "options": [
       {"label": "Fix", "description": "Confirm this finding needs work — promoted to needs-fix"},
