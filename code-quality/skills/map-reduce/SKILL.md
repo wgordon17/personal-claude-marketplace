@@ -152,7 +152,7 @@ LEAD (you)
 2. **For analysis workloads:** present the synthesized summary and `needs-fix` findings to the
    user. For `needs-input` findings: present via multiSelect AskUserQuestion before finalizing
    the report. Each option: label = finding ID, description = "[category] description
-   (file:line)". Selected items are recorded as `user-acknowledged`; unselected items are
+   (file:line)". Selected items are promoted to `needs-fix` (user confirmed); unselected items are
    recorded as `user-deferred` in the final report. Do NOT exit with unresolved `needs-input`
    findings. If AskUserQuestion is unavailable, treat all `needs-input` findings as
    `needs_context` in the final report (surface them, don't hide them).

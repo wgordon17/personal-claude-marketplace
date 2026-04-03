@@ -348,7 +348,7 @@ AskUserQuestion(questions=[{
 ```
 
 For each `needs-input` TODO:
-- **Selected:** Update classification to `user-acknowledged` in inventory.json.
+- **Selected:** Promote to `needs-fix` in inventory.json — the user confirmed this TODO needs work.
 - **Not selected:** Update classification to `user-deferred` in inventory.json.
 
 If zero `needs-input` TODOs exist, skip this step. If AskUserQuestion is unavailable, treat

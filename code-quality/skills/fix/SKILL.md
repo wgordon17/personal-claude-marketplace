@@ -34,13 +34,13 @@ Examine the current session to determine which review skill ran and what the fix
 
 ### Detection Rules
 
-Scan the current session output for sentinel strings in this order:
+Detect the review source using these rules in order:
 
-| Sentinel | Fix Target | Extraction |
+| Detection Method | Fix Target | Extraction |
 |---|---|---|
-| `PLAN REVIEW —` | Plan file | Extract path from the header line: `PLAN REVIEW — {plan_file_path}` |
-| `CODE REVIEW — PR #` | Code (PR diff) | Extract PR number from the header line: `CODE REVIEW — PR #{number}` |
-| `{memory_dir}/BUGS.md` (file check) | Bug resolutions | Read BUGS.md; extract entries with `**Status:** Root Cause Found` or `**Status:** Fix Ready` |
+| Session output contains `PLAN REVIEW —` | Plan file | Extract path from the header line: `PLAN REVIEW — {plan_file_path}` |
+| Session output contains `CODE REVIEW — PR #` | Code (PR diff) | Extract PR number from the header line: `CODE REVIEW — PR #{number}` |
+| File `{memory_dir}/BUGS.md` exists on disk | Bug resolutions | Read BUGS.md; extract entries with `**Status:** Root Cause Found` or `**Status:** Fix Ready` |
 
 Detect `memory_dir` per `code-quality/references/project-memory-reference.md` (Directory Detection and Worktree Resolution sections).
 
@@ -49,7 +49,7 @@ Detect `memory_dir` per `code-quality/references/project-memory-reference.md` (D
 | Scenario | Action |
 |---|---|
 | Exactly one source detected | Proceed with that source as fix target |
-| Multiple sources detected | Prefer session-output sentinels (pr-review, plan-review) over BUGS.md file check. If only BUGS.md entries are found (no sentinel), use BUGS.md directly. If a sentinel AND BUGS.md are both detected, present via `AskUserQuestion`. |
+| Multiple sources detected | Prefer session-output matches (pr-review, plan-review) over BUGS.md file check. If only BUGS.md entries are found (no session-output match), use BUGS.md directly. If a session-output match AND BUGS.md are both detected, present via `AskUserQuestion`. |
 | No sources detected | Stop: "No review output found in this session. Run `/pr-review`, `/plan-review`, or `/bug-investigation` first." |
 | Source detected but zero actionable findings | Stop: "Nothing to fix — no actionable findings in the {source} output." |
 
@@ -62,7 +62,7 @@ If the detected source is pr-review, the PR's head branch may differ from the cu
 3. If mismatch:
    a. Check for uncommitted changes: `git status --porcelain`
    b. If dirty: stash with `git stash push -m 'fix-skill: pre-branch-align'` and record the
-      stash for restoration after Phase 3. If stash fails, stop with: "Working tree has
+      stash for later restoration (step d). If stash fails, stop with: "Working tree has
       uncommitted changes that cannot be stashed. Commit or stash them before running /fix."
    c. Checkout the head branch: `git switch {head_branch}`
    d. After Phase 5 completes (or on any error exit), return to the original branch and run

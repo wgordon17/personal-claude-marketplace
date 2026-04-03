@@ -32,8 +32,10 @@ Two-tier taxonomy:
 
 **Post-triage states** (assigned after user interaction via AskUserQuestion, not by reviewers):
 
-- `user-acknowledged`: User has seen the finding and accepts responsibility. Counted as resolved.
-- `user-deferred`: User explicitly chose not to act on the finding now. Counted as resolved.
+- `user-confirmed`: User selected the finding as needing work. Promoted to `needs-fix` and placed
+  in its normal category section alongside other verified findings.
+- `user-deferred`: User explicitly chose not to act on the finding now. Placed in the Deferred
+  section of the output.
 
 ## Level of Effort (LoE) Scale
 
