@@ -115,7 +115,7 @@ you could not confirm or deny the finding after investigation.
 | `{FINDING_DESCRIPTION}` | `finding.description` |
 | `{FINDING_EVIDENCE}` | `finding.evidence` |
 | `{FINDING_LOCATION}` | `finding.location` |
-| `{SUGGESTED_FIX}` | `finding.suggested_fix` |
+| `{SUGGESTED_FIX}` | `finding.suggested_fix` — renders as `"None provided"` when `null` |
 | `{FIX_TARGET_TYPE}` | Derived from finding.source: `pr-review` → `"code"`, `plan-review` → `"plan"`, `bug-investigation` → `"bug"` |
 | `{VERIFIER_VERDICT}` | `finding.verifier_verdict` — `"needs_context"` if the upstream verifier could not confirm, otherwise `"none"` |
 

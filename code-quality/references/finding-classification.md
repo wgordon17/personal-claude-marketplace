@@ -140,3 +140,7 @@ Structural enforcement after Fixer completes and user triage is done:
   appear in `findings_fixed` after the Fixer processes them, so this formula covers all outcomes.
 - Delta > 0 → findings were silently dropped → escalate via AskUserQuestion
 - Delta == 0 → all findings accounted for → proceed
+
+> **Note:** Pipeline-specific skills may extend this protocol with additional outcome buckets
+> (e.g., /fix uses 8 buckets to account for out-of-scope, blocked, and planning-escalation
+> outcomes). The 2-bucket formula above is the canonical minimum; extensions must be supersets.
