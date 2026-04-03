@@ -327,7 +327,9 @@ Detection order for the test command:
 3. Language-specific default — `pytest` (Python), `jest` (JS/TS), `go test ./...` (Go)
 4. Skip with note if none detected
 
-**Test failure** → revert all changes to that file (`git checkout -- <file>`), record ALL co-located findings as `blocked` in the report. Do not retry with alternative fixes — blocked findings surface in the Phase 5 report for user attention. Note: file-level revert is a conservative safety measure. If a file had pre-existing unstaged changes before /fix ran, those are also reverted. Run `git stash` before invoking /fix if uncommitted work exists.
+**Test failure** → revert all changes to that file (`git checkout -- <file>`), record ALL co-located findings as `blocked` in the report. Do not retry with alternative fixes — blocked findings surface in the Phase 5 report for user attention.
+
+**Blast radius:** File-level revert is intentionally conservative. If 3 findings target the same file and the 3rd breaks tests, reverting the file also undoes valid fixes #1 and #2 — all 3 are recorded as `blocked`. This is by design: when tests fail after batched edits, the failing change cannot be isolated without per-finding rollback (significantly more complex). The investigator's resolution quality is the primary defense. Additionally, if the file had pre-existing unstaged changes before /fix ran, those are also reverted. Run `git stash` before invoking /fix if uncommitted work exists.
 
 ### Cross-Cutting Fixes
 
@@ -410,6 +412,7 @@ SPIKES EXECUTED ({count} — plan-review only; these are ALSO counted in FIXED a
   1. [{id}] {description}
      Result: {verdict} — {evidence summary}
      Plan updated: {section}
+     Evidence gaps: {what could not be verified} (spike_partial only)
 
 INVALID ({count})
   1. [{id}] {description}
