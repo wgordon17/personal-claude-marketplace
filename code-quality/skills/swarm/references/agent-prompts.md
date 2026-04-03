@@ -362,7 +362,7 @@ schema from `references/communication-schema.md`. Include all required fields.
 
 ## Finding Classification
 
-Use the classification taxonomy and LoE scale from `references/finding-classification.md` (Finding Classification and Level of Effort sections).
+Use the classification taxonomy and LoE scale from `code-quality/references/finding-classification.md` (Finding Classification and Level of Effort sections).
 
 **Verdict guidance:**
 - `proceed` — No critical or high findings. Append any constraints and let implementation begin.
@@ -1065,7 +1065,7 @@ You do NOT modify any code.
 
 ## Finding Classification
 
-Use the classification taxonomy and LoE scale from `references/finding-classification.md` (Finding Classification and Level of Effort sections).
+Use the classification taxonomy and LoE scale from `code-quality/references/finding-classification.md` (Finding Classification and Level of Effort sections).
 
 ## Output Format
 
@@ -1337,7 +1337,7 @@ Category values: `missing-task`, `partial-implementation`, `plan-spec-divergence
 
 ## Finding Classification
 
-Use the classification taxonomy and LoE scale from `references/finding-classification.md` (Finding Classification and Level of Effort sections).
+Use the classification taxonomy and LoE scale from `code-quality/references/finding-classification.md` (Finding Classification and Level of Effort sections).
 
 **Plan adherence classification guidance:**
 - `needs-fix` — A task the user explicitly requested is absent or substantially incomplete

@@ -1002,7 +1002,7 @@ Do NOT flag these as slop — they are legitimate patterns:
 
 ## Before/After Snippets
 
-For the **top 20 worst offenders** (highest severity, most egregious), generate before/after code snippets showing the simplified version. Include these in the finding's `suggested_fix` field as fenced code blocks.
+For the **top 20 worst offenders** (highest LoE, most impactful), generate before/after code snippets showing the simplified version. Include these in the finding's `suggested_fix` field as fenced code blocks.
 
 ## Output
 
@@ -1083,8 +1083,8 @@ If tools are unavailable, proceed to manual analysis.
 3. **Calculate function length** from symbol start/end lines.
 
 4. **Flag thresholds:**
-   | Length | Severity | Notes |
-   |--------|----------|-------|
+   | Length | Level | Notes |
+   |--------|-------|-------|
    | 50-80 lines | medium | Worth reviewing |
    | 80-150 lines | high | Should definitely be split |
    | 150+ lines | high | Urgent — almost certainly doing too many things |
@@ -1102,8 +1102,8 @@ If tools are unavailable, proceed to manual analysis.
 2. **Read the surrounding function** to confirm nesting depth.
 
 3. **Flag thresholds:**
-   | Depth | Severity | Notes |
-   |-------|----------|-------|
+   | Depth | Level | Notes |
+   |-------|-------|-------|
    | 4 levels | low | Mildly complex |
    | 5 levels | medium | Should use early returns or extract |
    | 6+ levels | high | Requires refactoring |
@@ -1119,8 +1119,8 @@ If tools are unavailable, proceed to manual analysis.
 1. For functions found in Step 2, use LSP `hover` to get the full signature.
 
 2. **Flag thresholds:**
-   | Count | Severity | Notes |
-   |-------|----------|-------|
+   | Count | Level | Notes |
+   |-------|-------|-------|
    | 5-6 params | low | Consider options object |
    | 7-8 params | medium | Should use options object/dataclass |
    | 9+ params | high | Definitely needs restructuring |
@@ -1158,8 +1158,8 @@ wc -l $(find {project_path} -name '*.py' -o -name '*.ts' -o -name '*.tsx' -o -na
 ```
 
 **Flag thresholds:**
-| Length | Severity | Notes |
-|--------|----------|-------|
+| Length | Level | Notes |
+|--------|-------|-------|
 | 300-500 lines | low | Getting long, review organization |
 | 500-1000 lines | medium | Should likely be split |
 | 1000+ lines | high | Definitely needs splitting |
@@ -1175,8 +1175,8 @@ For languages without radon/eslint, manually assess complexity:
 3. **Cyclomatic complexity = 1 + branch_count**
 
 **Flag thresholds:**
-| Complexity | Grade | Severity |
-|------------|-------|----------|
+| Complexity | Grade | Level |
+|------------|-------|-------|
 | 11-15 | C | medium |
 | 16-20 | D | high |
 | 21+ | E/F | high |

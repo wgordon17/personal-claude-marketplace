@@ -7,7 +7,7 @@ during `/unfuck` Phase 1 discovery.
 
 1. Read source files in batches of 10-20 files
 2. For each file, scan against ALL categories below
-3. For each match, record: file, line range, pattern ID, severity, suggested fix
+3. For each match, record: file, line range, pattern ID, classification, loe, suggested fix
 4. Generate before/after code for the top 20 worst findings
 5. Rate each finding against the false-positive guidance before including it
 
@@ -298,7 +298,7 @@ class UserController {
 
 ### SS-07: God Object Created by "Organizing" Code
 
-**Severity: critical**
+**Classification: needs-fix**
 
 **Detection:** A class or module that accumulates unrelated methods because AI tried to "organize" functions into a class. Look for classes with >10 public methods that touch different domains, or a `utils` class with methods spanning formatting, validation, networking, and file I/O.
 
