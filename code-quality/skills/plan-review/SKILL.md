@@ -484,3 +484,4 @@ documentation that Claude reads and fills in.
 | `plan-adherence` (agent) | Complementary: plan-review checks plan quality before coding; plan-adherence agent checks implementation fidelity after coding. |
 | `swarm` | plan-review should run before `/swarm` — catch gaps in the plan before spawning parallel implementers. |
 | `roadmap` | plan-review can review individual milestone plans that roadmap generates. |
+| `code-quality:fix` | Acts on plan findings. /fix edits the plan file only — never implements code from plan-review findings. For Research Gaps / Unknown Unknowns, /fix executes actual spikes to verify assumptions. |

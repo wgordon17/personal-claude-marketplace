@@ -492,3 +492,11 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer, Plan Adherence Reviewer |
 | `{plan_file_path}` | Path to discovered plan file or empty string | Plan Adherence Reviewer only |
 | `{findings_json}` | JSON array of all findings with diff_context | Finding Verifier only |
+
+---
+
+## Relationship to Other Skills
+
+| Skill | Relationship |
+|-------|-------------|
+| `code-quality:fix` | Acts on findings from pr-review. Run /fix after /pr-review to implement fixes. |

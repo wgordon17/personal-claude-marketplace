@@ -659,6 +659,7 @@ Overall: [PASS / NEEDS WORK]
 | `code-quality:code-reviewer` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
 | `session-end` | Complementary — quality-gate reviews accuracy; session-end does final save. |
 | `swarm` Phase 7 | Invokes quality-gate as the final validation step. |
+| `code-quality:fix` | Standalone finding fixer for non-swarm workflows. Not a source — quality-gate fixes findings inline. Suggest /quality-gate after /fix for verification. |
 
 ---
 

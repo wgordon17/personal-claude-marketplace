@@ -15,7 +15,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:code-simplifier` | Dead code removal, unnecessary abstraction cleanup, clarity improvement | Sonnet |
 | `code-quality:plan-adherence` | Plan file verification, task completion tracking, file structure reconciliation | Opus |
 
-## Skills (18)
+## Skills (19)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -35,6 +35,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/lsp-navigation` | Semantic code navigation via LSP | PROACTIVE |
 | `/uv-python` | Python tooling enforcement (uv over pip) | PROACTIVE |
 | `/test-runner` | Efficient test execution patterns | Manual |
+| `/fix` | Comprehensive finding fixer with spike execution for plan-review Research Gaps | Manual |
 | `/reflect` | Mid-task self-reflection checkpoint via Serena metacognitive tools | Manual |
 | `/index-repo` | Repository indexing for token-efficient codebase orientation | Manual |
 

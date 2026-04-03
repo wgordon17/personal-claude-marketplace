@@ -291,3 +291,7 @@ Mitigation strategies:
 2. Verify Fix Ready entries
 3. Keep Investigating/Root Cause Found entries
 ```
+
+After bugs are documented with "Root Cause Found" status, run `/fix` to implement resolution
+plans. For complex bugs (5+ files, architectural changes), `/fix` will recommend
+`/incremental-planning` instead.
