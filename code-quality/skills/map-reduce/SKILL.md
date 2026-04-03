@@ -152,8 +152,14 @@ LEAD (you)
 2. **For analysis workloads:** present the synthesized summary and findings to the user.
    Offer to write a detailed report or create actionable TODO items.
 
-3. **For implementation workloads:** apply changes in priority order (needs-fix first, then
-   needs-input), run tests after each batch, verify nothing regressed. Roll back on test failure.
+3. **For implementation workloads:**
+   - Apply all `needs-fix` changes first, run tests, verify nothing regressed. Roll back on
+     test failure.
+   - For `needs-input` findings: present via multiSelect AskUserQuestion before applying.
+     Each option: label = finding ID, description = "[category] description (file:line)".
+     User selects which to apply. Selected items are applied, then tests re-run. Unselected
+     items are recorded as `user-deferred` in the final report. Do NOT apply `needs-input`
+     changes without user approval.
 
 4. **Write final report** to `{run_dir}/map-reduce-report.md` with:
    - Summary statistics (files analyzed, total findings, deduplicated, invalidated)

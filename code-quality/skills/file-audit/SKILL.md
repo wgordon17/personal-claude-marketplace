@@ -8,7 +8,7 @@ description: |
   - "Validate library usage"
   - "Review the entire project"
   Analyzes files in parallel with LSP and Context7, detecting issues, duplicates, and documentation drift.
-allowed-tools: [LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, mcp__context7__resolve-library-id, mcp__context7__query-docs]
+allowed-tools: [LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs]
 ---
 
 # file-audit
@@ -320,6 +320,31 @@ IMPORTANT:
 | **error** | Broken code, security vulnerability | Requires immediate action (needs-fix) |
 | **warning** | Deprecated API, unused code, duplicates | Requires action (needs-fix) |
 | **info** | Style issue, minor optimization | Review and decide (needs-input if architectural, needs-fix if stylistic) |
+
+### Step 4.5: Needs-Input Resolution
+
+After writing inventory.json, check the generated TODO list for items classified as `needs-input`.
+If any exist, present them to the user before exiting. Do NOT exit with unresolved `needs-input`
+items.
+
+```
+AskUserQuestion(questions=[{
+  "question": "These audit findings need your decision. Select items to address — unselected items will be marked as deferred.",
+  "header": "File Audit",
+  "options": [
+    {"label": "{file}:{issue_type}", "description": "{action} (diagnostic: {diagnostic_level})"},
+    ...
+  ],
+  "multiSelect": true
+}])
+```
+
+For each `needs-input` TODO:
+- **Selected:** Update classification to `user-acknowledged` in inventory.json.
+- **Not selected:** Update classification to `user-deferred` in inventory.json.
+
+If zero `needs-input` TODOs exist, skip this step. If AskUserQuestion is unavailable, leave
+`needs-input` items as-is in the inventory (they are already surfaced in the output).
 
 ---
 
