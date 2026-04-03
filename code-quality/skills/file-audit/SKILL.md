@@ -321,6 +321,14 @@ IMPORTANT:
 | **warning** | Deprecated API, unused code, duplicates | Requires action (needs-fix) |
 | **info** | Style issue, minor optimization | Review and decide (needs-input if architectural, needs-fix if stylistic) |
 
+### Step 4.25: Finding Fidelity Check
+
+After writing inventory.json, verify no findings were lost during consolidation. Count the total
+issues discovered across all analyzed files (from per-file analysis results) and compare against
+the total todos in the inventory's `todos` array. If the todo count is less than the discovered
+issue count, findings were dropped during consolidation - investigate and restore them before
+proceeding. This is the same principle as the Reconcile step in pr-review and plan-review.
+
 ### Step 4.5: Needs-Input Resolution
 
 After writing inventory.json, check the generated TODO list for items classified as `needs-input`.
