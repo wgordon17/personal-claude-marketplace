@@ -539,7 +539,7 @@ Check the `verdict` field:
 - Present to user via AskUserQuestion before proceeding:
   ```
   AskUserQuestion(questions=[{
-    "question": "Security design review found needs-fix issues that could not be resolved "
+    "question": "Security design review found issues requiring fixes that could not be resolved "
                 "after 2 architect revisions. Details: {run_dir}/security-design-review.json\n\n"
                 "How should we proceed?",
     "header": "Security Design: Unresolved Findings",

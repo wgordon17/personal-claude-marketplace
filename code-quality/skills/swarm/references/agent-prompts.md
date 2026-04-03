@@ -365,9 +365,9 @@ schema from `references/communication-schema.md`. Include all required fields.
 Use the classification taxonomy and LoE scale from `code-quality/references/finding-classification.md` (Finding Classification and Level of Effort sections).
 
 **Verdict guidance:**
-- `proceed` — No needs-fix findings blocking implementation. Append any constraints and let implementation begin.
-- `revise` — needs-fix findings present. Architect must revise the plan before implementation.
-- `escalate` — This is the second review iteration and needs-fix findings remain unresolved.
+- `proceed` — No `needs-fix` findings blocking implementation. Append any constraints and let implementation begin.
+- `revise` — `needs-fix` findings require architect plan revision before implementation.
+- `escalate` — This is the second review iteration and `needs-fix` findings remain unresolved.
 
 ## Communication
 
