@@ -111,7 +111,7 @@ Performance, Style & Conventions. Extract all findings from each category sectio
 findings from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`.
 For Needs Context findings, map the `Investigation: {investigation_summary}` field to `evidence`
 (these use `Investigation:` instead of `Evidence:` in the upstream output).
-Skip findings in the User Decisions section — these were already resolved by the user during the upstream review and should not be re-processed.
+Skip findings in the Deferred section — these were explicitly deferred by the user during the upstream review and should not be re-processed.
 
 Category abbreviations for IDs: `test`, `corr`, `sec`, `arch`, `dec`, `perf`, `style`.
 
@@ -123,7 +123,7 @@ from the `─── Needs Context ───` section with `verifier_verdict: "ne
 For Needs Context findings, map `Investigation: {investigation_summary}` to `evidence`.
 Set `is_research_gap: true` per the structural rules above (category = RESEARCH GAPS, OR reviewer tag =
 Unknown Unknowns) — not by scanning description text.
-Skip findings in the User Decisions section — these were already resolved by the user during the upstream review and should not be re-processed.
+Skip findings in the Deferred section — these were explicitly deferred by the user during the upstream review and should not be re-processed.
 
 Category abbreviations for IDs: `rsch`, `feas`, `scope`, `dep`, `arch`, `sec`, `spec`.
 

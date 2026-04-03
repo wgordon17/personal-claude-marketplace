@@ -301,7 +301,7 @@ Build a multiSelect AskUserQuestion with one option per `needs-input` finding:
 
 ```
 AskUserQuestion(questions=[{
-  "question": "These plan findings need your decision. Select items to acknowledge - unselected items will be marked as deferred.",
+  "question": "These plan findings need your decision. Select items that need fixing - unselected items will be deferred.",
   "header": "Plan Review",
   "options": [
     {"label": "{id}", "description": "[{Reviewer}] {description} ({location})"},
@@ -314,8 +314,11 @@ AskUserQuestion(questions=[{
 ### Record Decisions
 
 For each `needs-input` finding:
-- **Selected:** Update the finding's classification to `user-acknowledged` in the output.
+- **Selected:** Promote to `needs-fix` with verdict `verified`. Place the finding in its
+  normal category section alongside other verified findings. The user has confirmed this
+  finding needs work — it is no longer ambiguous.
 - **Not selected:** Update the finding's classification to `user-deferred` in the output.
+  The user explicitly chose not to act on it now.
 
 Both outcomes are valid - the point is that every `needs-input` item gets a recorded user
 decision, not silent deferral.
@@ -368,14 +371,14 @@ SPECIFICATION
      {location}
      Investigation: {investigation_summary}
 
-─── User Decisions ({user_decision_count}) ───
-  1. [{Reviewer}] {description} [{user-acknowledged | user-deferred}]
+─── Deferred ({deferred_count}) ───
+  1. [{Reviewer}] {description} [user-deferred]
      {location}
 
 {verification_note}
 {skipped_note}
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count} | User decisions: {user_decision_count}
+Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count} | Deferred: {deferred_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -394,14 +397,14 @@ Omit category sections with zero verified findings.
 at the bottom — they do NOT appear in category sections above. These are items the verifier
 could not confirm or deny and require human judgment.
 
-User decisions from Phase 3.5 appear in their own section. Both `user-acknowledged` and
-`user-deferred` items are shown - this is the audit trail proving every `needs-input` finding
-received an explicit user decision.
+Findings confirmed by the user in Phase 3.5 are promoted to `needs-fix` and placed in their
+normal category sections — they appear alongside other verified findings with no special
+treatment. User-deferred findings appear in the "Deferred" section at the bottom.
 
 ### No Findings After Verification
 
 Use this path only when `verified_count == 0` AND `needs_context_count == 0` AND
-`user_decision_count == 0`. If any count is > 0, use the "Findings Exist" path.
+`deferred_count == 0`. If any count is > 0, use the "Findings Exist" path.
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -417,7 +420,7 @@ Checked for: {checked_areas}
 
 {skipped_note}
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0 | User decisions: 0
+Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0 | Deferred: 0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
