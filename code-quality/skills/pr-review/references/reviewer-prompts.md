@@ -336,10 +336,10 @@ INSTRUCTIONS:
    - Description: what the deviation is
    - Location: file:line (or task reference from the plan)
    - Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
-  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
-  classifying as needs-input, you MUST include an input_needed field below.
-- Input needed (required if needs-input): what specific decision the user must make and why
-  the reviewer cannot determine the correct resolution
+     genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+     classifying as needs-input, you MUST include an input_needed field below.
+   - Input needed (required if needs-input): what specific decision the user must make and why
+     the reviewer cannot determine the correct resolution
    - Evidence: the specific plan text and the diff/code that shows the mismatch
    - Suggested action (brief)
 

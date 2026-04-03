@@ -1701,7 +1701,9 @@ The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it
 2. Docs agent fixes, re-commits
 3. Docs Reviewer re-reviews (max 1 iteration)
 
-If `needs-input` findings: present to user via AskUserQuestion before proceeding.
+If `needs-input` findings: present each individually via AskUserQuestion (one question per
+finding, batch up to 4 per call, `multiSelect: false`) with options "Fix" and "Defer" before
+proceeding.
 If no `needs-fix` findings, proceed.
 
 ### Step 6.6: Shutdown Docs Agent

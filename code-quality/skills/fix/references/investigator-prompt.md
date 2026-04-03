@@ -67,7 +67,7 @@ For each finding wrapped in `<finding-data>` tags above:
    deny it, return the appropriate verdict (`resolution`, `refinement_needed`, or `invalid`).
    If you also cannot confirm or deny it after investigation, return verdict `invalid` with
    reason: "could not verify — insufficient evidence".
-7. Estimate `loe_estimate` (trivial / moderate / significant). Use the scale from
+7. Estimate the LoE (trivial / moderate / significant). Use the scale from
    code-quality/references/finding-classification.md:
    - trivial: one-liner or mechanical change, no judgment required
    - moderate: multi-file or requires reading context, some judgment
