@@ -256,6 +256,15 @@ Parse the verifier's response as JSON. If parsing fails, extract JSON from betwe
 and set `{verification_note}` to `"⚠ Verification failed — all findings shown unverified"`.
 If verification succeeded, set `{verification_note}` to empty string.
 
+### Reconcile
+
+**Finding fidelity check:** Before categorizing, verify the verifier returned a verdict for
+every submitted finding. For each finding ID in the original `{findings_json}`, check if a
+matching `finding_id` exists in the verifier's response. Any finding without a returned verdict
+is assigned verdict `unverified` with `investigation_summary`: "Verifier did not return a
+verdict for this finding." This prevents silent finding loss during verification — the same
+principle as the Fixer verification protocol in `code-quality/references/finding-classification.md`.
+
 ### Categorize
 
 The verifier assigns each finding to a category based on its nature:

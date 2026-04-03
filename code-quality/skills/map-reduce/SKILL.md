@@ -149,7 +149,11 @@ LEAD (you)
    > invalidated by cross-chunk validation. Consider re-running with different splits or a
    > single-agent analysis."
 
-2. **For analysis workloads:** present the synthesized summary and findings to the user.
+2. **For analysis workloads:** present the synthesized summary and `needs-fix` findings to the
+   user. For `needs-input` findings: present via multiSelect AskUserQuestion before finalizing
+   the report. Each option: label = finding ID, description = "[category] description
+   (file:line)". User selects items to acknowledge; unselected items are recorded as
+   `user-deferred` in the final report. Do NOT exit with unresolved `needs-input` findings.
    Offer to write a detailed report or create actionable TODO items.
 
 3. **For implementation workloads:**
