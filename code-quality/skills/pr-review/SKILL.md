@@ -6,7 +6,7 @@ description: |
   reviewers (security, QA, performance, code quality, correctness, plan adherence),
   verifies findings by investigating source code, categorizes by type, and prints a
   structured report to the terminal. Never comments on GitHub PRs.
-allowed-tools: [Read, Glob, Grep, Bash, Agent]
+allowed-tools: [Read, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # PR Review Skill

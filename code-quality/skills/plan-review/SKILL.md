@@ -245,7 +245,7 @@ The verifier receives: `{findings_json}` (the array above), `{plan_content}`,
 
 The verifier **re-reads the plan** to check each finding against plan content. It returns a
 JSON array with a verdict for each finding:
-`[{finding_id, verdict, investigation_summary, category}, ...]`
+`[{finding_id, verdict, investigation_summary, category, classification}, ...]`
 
 Verdicts: `verified` (finding accurately references plan content), `false_positive` (finding
 misread or misrepresents the plan), `needs_context` (cannot confirm or deny — requires human

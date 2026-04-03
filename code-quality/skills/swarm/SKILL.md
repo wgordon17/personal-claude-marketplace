@@ -143,9 +143,9 @@ Output: SecurityDesignReview JSON written to `{run_dir}/security-design-review.j
 (see schema in `references/communication-schema.md`).
 
 **Routing:**
-- needs-input requiring architectural redesign → Route back to Architect (Phase 2) with security feedback for
+- needs-fix findings requiring architect plan revision → Route back to Architect (Phase 2) with security feedback for
   redesign. Architect revises plan, re-run Phase 2.5. Maximum 2 Architect↔Security iterations.
-- no needs-input requiring redesign → Append security constraints to architect-plan.json as
+- no needs-fix findings blocking implementation → Append security constraints to architect-plan.json as
   `security_constraints` array and proceed to Phase 3.
 - If 2 iterations exhausted with unresolved findings → Escalate to human via AskUserQuestion.
 
@@ -532,8 +532,8 @@ Phase 2: Architect (opus)
 Phase 2.5: Security Design Review (conditional, opus)
   +-- Reviews architect-plan.json for threat surface
   +-- STRIDE analysis of proposed architecture
-  +-- needs-input requiring redesign --> back to Architect (max 2 iterations)
-  +-- no needs-input requiring redesign --> append security_constraints, proceed
+  +-- needs-fix findings requiring revision --> back to Architect (max 2 iterations)
+  +-- no needs-fix findings blocking implementation --> append security_constraints, proceed
   +-- Unresolved findings after 2 iterations --> AskUserQuestion
      |
      v

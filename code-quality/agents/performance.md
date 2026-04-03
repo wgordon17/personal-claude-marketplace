@@ -162,7 +162,7 @@ Use the classification and anti-deferral principle from `code-quality/references
    - Expected improvement: [Metrics]
 
 ### Other Optimizations
-1. [Optimization] — LoE: [estimate]
+1. [Optimization] - LoE: [estimate]
 
 ## Trade-offs
 
