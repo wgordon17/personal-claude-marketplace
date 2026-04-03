@@ -150,23 +150,24 @@ LEAD (you)
    > single-agent analysis."
 
 2. **For analysis workloads:** present the synthesized summary and `needs-fix` findings to the
-   user. For `needs-input` findings: present via multiSelect AskUserQuestion before finalizing
-   the report. Each option: label = finding ID, description = "[category] description
-   (file:line)". Selected items are recorded as `user-acknowledged`; unselected items are
-   recorded as `user-deferred` in the final report. Do NOT exit with unresolved `needs-input`
-   findings. If AskUserQuestion is unavailable, treat all `needs-input` findings as
-   `needs_context` in the final report (surface them, don't hide them).
-   Offer to write a detailed report or create actionable TODO items.
+   user. For `needs-input` findings: present each individually via AskUserQuestion (one question
+   per finding, batch up to 4 per call). Each question includes full context:
+   `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}"` with
+   options "Fix" (promoted to `needs-fix`) and "Defer" (`user-deferred`). `multiSelect: false`.
+   Do NOT exit with unresolved `needs-input` findings. If AskUserQuestion is unavailable, treat
+   all `needs-input` findings as `needs_context` in the final report (surface them, don't hide
+   them). Offer to write a detailed report or create actionable TODO items.
 
 3. **For implementation workloads:**
    - Apply all `needs-fix` changes first, run tests, verify nothing regressed. Roll back on
      test failure.
-   - For `needs-input` findings: present via multiSelect AskUserQuestion before applying.
-     Each option: label = finding ID, description = "[category] description (file:line)".
-     User selects which to apply. Selected items are applied, then tests re-run. Unselected
-     items are recorded as `user-deferred` in the final report. Do NOT apply `needs-input`
-     changes without user approval. If AskUserQuestion is unavailable, treat all `needs-input`
-     findings as `needs_context` in the final report (surface them, don't hide them).
+   - For `needs-input` findings: present each individually via AskUserQuestion (one question
+     per finding, batch up to 4 per call). Each question includes full context:
+     `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}"`
+     with options "Fix" (apply change) and "Defer" (`user-deferred`). `multiSelect: false`.
+     Selected items are applied, then tests re-run. Do NOT apply `needs-input` changes without
+     user approval. If AskUserQuestion is unavailable, treat all `needs-input` findings as
+     `needs_context` in the final report (surface them, don't hide them).
 
 4. **Write final report** to `{run_dir}/map-reduce-report.md` with:
    - Summary statistics (files analyzed, total findings, deduplicated, invalidated)

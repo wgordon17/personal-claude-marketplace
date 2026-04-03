@@ -329,30 +329,37 @@ If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
 
 ### Present to User
 
-Build a multiSelect AskUserQuestion with one option per `needs-input` finding:
+Present each `needs-input` finding individually via AskUserQuestion. Each finding gets its own
+question with full context so the user can make an informed decision. Batch up to 4 findings
+per AskUserQuestion call (the tool's question limit):
 
 ```
-AskUserQuestion(questions=[{
-  "question": "These findings need your decision. Select items to acknowledge - unselected items will be marked as deferred.",
-  "header": "PR Review",
-  "options": [
-    {"label": "{id}", "description": "[{Reviewer}] {description} ({file}:{line})"},
-    ...
-  ],
-  "multiSelect": true
-}])
+AskUserQuestion(questions=[
+  {
+    "question": "[{id}] [{Reviewer}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}",
+    "header": "{id}",
+    "options": [
+      {"label": "Fix", "description": "Confirm this finding needs work — promoted to needs-fix"},
+      {"label": "Defer", "description": "Skip for now — user-deferred"}
+    ],
+    "multiSelect": false
+  },
+  ... (one question per finding, up to 4 per call)
+])
 ```
+
+If more than 4 `needs-input` findings exist, make multiple AskUserQuestion calls.
 
 ### Record Decisions
 
 For each `needs-input` finding:
-- **Selected:** Update the finding's classification to `user-acknowledged` in the output.
-  The user has seen it and accepts responsibility.
-- **Not selected:** Update the finding's classification to `user-deferred` in the output.
+- **Fix selected:** Promote to `needs-fix` with verdict `verified`. Place the finding in its
+  normal category section alongside other verified findings. The user has confirmed this
+  finding needs work — it is no longer ambiguous.
+- **Defer selected:** Update the finding's classification to `user-deferred` in the output.
   The user explicitly chose not to act on it now.
 
-Both outcomes are valid - the point is that every `needs-input` item gets a recorded user
-decision, not silent deferral.
+Every `needs-input` item gets a recorded user decision, not silent deferral.
 
 ---
 
@@ -402,19 +409,21 @@ STYLE & CONVENTIONS
      {file}:{line}
      Investigation: {investigation_summary}
 
-─── User Decisions ({user_decision_count}) ───
-  1. [{Reviewer}] {description} [{user-acknowledged | user-deferred}]
+─── Deferred ({deferred_count}) ───
+  1. [{Reviewer}] {description} [user-deferred]
      {file}:{line}
 
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count} | User decisions: {user_decision_count}
+Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count} | Deferred: {deferred_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 Group findings by **category** (Testing Gaps → Correctness → Security → Architecture →
 Decisions Needed → Performance → Style & Conventions). Within each category,
-sort by classification (needs-fix first, then needs-input). For the `[Reviewer]` tag, use the short
-reviewer name: Security, QA, Performance, Code Quality, Correctness, Plan Adherence.
+sort by location (file path). All findings in category sections are `needs-fix` at this point —
+either originally or promoted from `needs-input` via Phase 3.5 user confirmation.
+For the `[Reviewer]` tag, use the short reviewer name: Security, QA, Performance, Code Quality,
+Correctness, Plan Adherence.
 
 Omit category sections with zero findings.
 
@@ -422,14 +431,14 @@ Findings with verdict `needs_context` appear in a dedicated section at the botto
 are items the verifier could not confirm or deny and require human judgment. They are NOT
 hidden or filtered — they are surfaced transparently.
 
-User decisions from Phase 3.5 appear in their own section. Both `user-acknowledged` and
-`user-deferred` items are shown - this is the audit trail proving every `needs-input` finding
-received an explicit user decision.
+Findings confirmed by the user in Phase 3.5 are promoted to `needs-fix` and placed in their
+normal category sections — they appear alongside other verified findings with no special
+treatment. User-deferred findings appear in the "Deferred" section at the bottom.
 
 ### No Findings After Verification
 
 Use this path only when `verified_count == 0` AND `needs_context_count == 0` AND
-`user_decision_count == 0` (all findings were false positives, or no findings were reported).
+`deferred_count == 0` (all findings were false positives, or no findings were reported).
 If any count is > 0, use the "Findings Exist" path.
 
 ```
@@ -445,7 +454,7 @@ No verified issues found.
 Checked for: security, test coverage, performance, code quality, correctness, plan adherence.
 
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0 | User decisions: 0
+Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0 | Deferred: 0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -492,3 +501,11 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer, Plan Adherence Reviewer |
 | `{plan_file_path}` | Path to discovered plan file or empty string | Plan Adherence Reviewer only |
 | `{findings_json}` | JSON array of all findings with diff_context | Finding Verifier only |
+
+---
+
+## Relationship to Other Skills
+
+| Skill | Relationship |
+|-------|-------------|
+| `code-quality:fix` | Acts on findings from pr-review. Run /fix after /pr-review to implement fixes. |

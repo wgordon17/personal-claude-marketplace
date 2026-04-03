@@ -1475,11 +1475,12 @@ structural verification:
 
 **User triage for needs-input items:**
 1. Read `needs_input_items` from the FixSummary
-2. If non-empty, present to the user via multiSelect `AskUserQuestion`:
-   - One option per finding: label = Finding ID, description = "LoE: [X]. [Description]. Suggested: [action]"
-   - User checks items to fix, leaves unchecked items to skip
-3. Checked items: send back to Fixer for resolution (or fix inline if trivial), add to `findings_fixed`
-4. Unchecked items: recorded in `user_deferred` with reason "User declined via triage"
+2. If non-empty, present each item individually via AskUserQuestion (one question per finding,
+   batch up to 4 per call). Each question includes full context:
+   `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}"`
+   with options: "Fix" (`{suggested_action}`) and "Defer" ("Skip for now"). `multiSelect: false`.
+3. Fix selected: send back to Fixer for resolution (or fix inline if trivial), add to `findings_fixed`
+4. Defer selected: recorded in `user_deferred` with reason "User declined via triage"
 5. Update the final FixSummary with `user_deferred` entries
 
 **Structural verification:**
@@ -1700,7 +1701,9 @@ The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it
 2. Docs agent fixes, re-commits
 3. Docs Reviewer re-reviews (max 1 iteration)
 
-If `needs-input` findings: present to user via AskUserQuestion before proceeding.
+If `needs-input` findings: present each individually via AskUserQuestion (one question per
+finding, batch up to 4 per call, `multiSelect: false`) with options "Fix" and "Defer" before
+proceeding.
 If no `needs-fix` findings, proceed.
 
 ### Step 6.6: Shutdown Docs Agent
