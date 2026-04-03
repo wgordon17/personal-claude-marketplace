@@ -42,7 +42,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 Personal Claude Code plugin marketplace with 9 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
-- **dev-guard/** — Tool selection guard, commit validation, pre-push review (only plugin with tests)
+- **dev-guard/** — Tool selection guard, commit validation, pre-push review, subagent completion verification (only plugin with tests)
 - **code-quality/** — Agents (architect, security, QA, performance, test-runner, code-reviewer, code-simplifier), skills (20), commands (4), and orchestration
 - **git-tools/** — Git history, hooks, commit review, contributing guide; SessionStart git instructions
 - **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
