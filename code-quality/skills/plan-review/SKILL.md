@@ -297,31 +297,37 @@ If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
 
 ### Present to User
 
-Build a multiSelect AskUserQuestion with one option per `needs-input` finding:
+Present each `needs-input` finding individually via AskUserQuestion. Each finding gets its own
+question with full context so the user can make an informed decision. Batch up to 4 findings
+per AskUserQuestion call (the tool's question limit):
 
 ```
-AskUserQuestion(questions=[{
-  "question": "These plan findings need your decision. Select items that need fixing - unselected items will be deferred.",
-  "header": "Plan Review",
-  "options": [
-    {"label": "{id}", "description": "[{Reviewer}] {description} ({location})"},
-    ...
-  ],
-  "multiSelect": true
-}])
+AskUserQuestion(questions=[
+  {
+    "question": "[{id}] [{Reviewer}] {description}\n\nLocation: {location}\nEvidence: {evidence}",
+    "header": "{id}",
+    "options": [
+      {"label": "Fix", "description": "Confirm this finding needs work — promoted to needs-fix"},
+      {"label": "Defer", "description": "Skip for now — user-deferred"}
+    ],
+    "multiSelect": false
+  },
+  ... (one question per finding, up to 4 per call)
+])
 ```
+
+If more than 4 `needs-input` findings exist, make multiple AskUserQuestion calls.
 
 ### Record Decisions
 
 For each `needs-input` finding:
-- **Selected:** Promote to `needs-fix` with verdict `verified`. Place the finding in its
+- **Fix selected:** Promote to `needs-fix` with verdict `verified`. Place the finding in its
   normal category section alongside other verified findings. The user has confirmed this
   finding needs work — it is no longer ambiguous.
-- **Not selected:** Update the finding's classification to `user-deferred` in the output.
+- **Defer selected:** Update the finding's classification to `user-deferred` in the output.
   The user explicitly chose not to act on it now.
 
-Both outcomes are valid - the point is that every `needs-input` item gets a recorded user
-decision, not silent deferral.
+Every `needs-input` item gets a recorded user decision, not silent deferral.
 
 ---
 

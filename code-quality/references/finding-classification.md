@@ -24,11 +24,23 @@ Two-tier taxonomy:
 **Classification guidance for reviewers:**
 
 - Default to `needs-fix`. Only use `needs-input` when you genuinely cannot determine the correct
-  resolution.
-- "I'm not sure if this is worth fixing" is NOT `needs-input` — it's `needs-fix`. Your opinion of
-  worth is irrelevant.
-- "This requires an architectural decision" IS `needs-input`.
-- "This is stylistic" is `needs-fix` — apply the project's conventions.
+  resolution without human judgment on a specific decision point.
+- When classifying as `needs-input`, you MUST include an `input_needed` field explaining what
+  specific decision the user must make and why the agent cannot make it.
+- `needs-input` is NOT a way to defer work. Using `needs-input` to avoid implementing a fix you
+  could make yourself is deferral-by-classification — a violation of the Anti-Deferral Principle.
+
+**What IS `needs-input`:**
+- "Two valid architectures exist (X vs Y) with different tradeoffs" — genuine design decision
+- "This changes user-facing behavior — should the API return 404 or 200 with empty body?" — UX decision
+- "This requires choosing between backward compatibility and correctness" — scope decision
+
+**What is NOT `needs-input`:**
+- "I'm not sure if this is worth fixing" → `needs-fix`. Your opinion of worth is irrelevant.
+- "This is a documented accepted risk" → `needs-fix` if it has a clear resolution, or don't report it.
+- "This could go either way" → `needs-fix`. Pick the better option and explain why.
+- "This is stylistic" → `needs-fix`. Apply the project's conventions.
+- "The risk is low" → `needs-fix` if there's a fix, or don't report it. Risk assessment is not input.
 
 **Post-triage states** (assigned after user interaction via AskUserQuestion, not by reviewers):
 
@@ -125,11 +137,19 @@ How the Fixer processes findings:
 3. Emit FixSummary via SendMessage to the Lead (the Fixer does NOT have AskUserQuestion — only
    Read, Write, Edit, Glob, Grep, Bash)
 4. The **Lead** (not the Fixer) handles user triage:
-   - Present needs-input items via multiSelect AskUserQuestion with one option per finding
-   - Each option: label = Finding ID, description = "LoE: [X]. [Description]. Suggested: [action]"
-   - User checks items to fix, leaves unchecked items to skip
-   - Checked items: Lead sends back to Fixer (or fixes inline if trivial), adds to `findings_fixed`
-   - Unchecked items: recorded in `user_deferred` with reason "User declined via triage"
+   - Present each needs-input item individually via AskUserQuestion (one question per finding,
+     batch up to 4 per call). Each question includes full context:
+     ```
+     question: "[{id}] {description}\n\nLoE: {loe}\nEvidence: {evidence}\nDecision needed: {input_needed}"
+     header: "{id}"
+     options: [
+       {"label": "Fix", "description": "{suggested_action}"},
+       {"label": "Defer", "description": "Skip for now"}
+     ]
+     multiSelect: false
+     ```
+   - Fix: Lead sends back to Fixer (or fixes inline if trivial), adds to `findings_fixed`
+   - Defer: recorded in `user_deferred` with reason "User declined via triage"
 5. After user triage complete: Lead updates the final FixSummary with `user_deferred` entries
 
 ## Verification Protocol

@@ -49,7 +49,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what the vulnerability is
 - Location: file:line
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific code or configuration that demonstrates the issue
 - Suggested fix (brief)
 
@@ -97,7 +101,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what scenario or path lacks coverage
 - Location: file:line (or "no test file" if coverage is missing entirely)
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific code path or condition that is not covered
 - Suggested test approach (brief)
 
@@ -145,7 +153,11 @@ CHECKLIST:
 For each finding, report:
 - Description: the performance problem
 - Location: file:line
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific code that demonstrates the issue, with expected impact (scale at which it matters, latency/throughput effect)
 - Suggested fix (brief)
 
@@ -199,7 +211,11 @@ CHECKLIST:
 For each finding, report:
 - Description: the quality concern
 - Location: file:line
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific code or doc text that demonstrates the issue
 - Suggested improvement (brief)
 
@@ -261,7 +277,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what the correctness issue is
 - Location: file:line
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific code that demonstrates the issue, with the expected vs actual behavior
 - Suggested fix (brief)
 
@@ -315,7 +335,11 @@ INSTRUCTIONS:
 5. For each finding, report:
    - Description: what the deviation is
    - Location: file:line (or task reference from the plan)
-   - Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+   - Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
    - Evidence: the specific plan text and the diff/code that shows the mismatch
    - Suggested action (brief)
 

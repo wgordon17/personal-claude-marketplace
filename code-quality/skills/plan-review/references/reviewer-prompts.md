@@ -67,7 +67,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what the feasibility concern is
 - Location: task number or plan section (e.g., "Task 3, step 2" or "## Architecture section")
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested clarification or fix (brief)
 
@@ -125,7 +129,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what the scope or completeness concern is
 - Location: task number or plan section
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific goal text and the gap in the plan
 - Suggested addition or removal (brief)
 
@@ -182,7 +190,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what the dependency or ordering concern is
 - Location: specific task numbers involved (e.g., "Tasks 2 and 4")
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific task descriptions that show the ordering issue
 - Suggested reordering or restructure (brief)
 
@@ -257,7 +269,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what is assumed but not verified, or what is missing from the plan
 - Location: the task or section where the assumption appears (or "implicit throughout" if pervasive)
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific plan text (or its absence) that demonstrates the gap
 - Suggested spike or verification step (brief — what question needs answering?)
 
@@ -318,7 +334,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what the architectural concern is
 - Location: plan section, task number, or specific file/module reference
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested architectural adjustment (brief)
 
@@ -375,7 +395,11 @@ CHECKLIST:
 For each finding, report:
 - Description: what the security concern is
 - Location: task number or file path reference in the plan
-- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff). If
+  classifying as needs-input, you MUST include an input_needed field below.
+- Input needed (required if needs-input): what specific decision the user must make and why
+  the reviewer cannot determine the correct resolution
 - Evidence: the specific plan text that demonstrates the concern or its absence
 - Suggested security requirement or design change (brief)
 

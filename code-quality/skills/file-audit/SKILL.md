@@ -335,21 +335,29 @@ After writing inventory.json, check the generated TODO list for items classified
 If any exist, present them to the user before exiting. Do NOT exit with unresolved `needs-input`
 items.
 
+Present each `needs-input` item individually via AskUserQuestion. Each item gets its own
+question with full context. Batch up to 4 per call:
+
 ```
-AskUserQuestion(questions=[{
-  "question": "These audit findings need your decision. Select items to address - unselected items will be marked as deferred.",
-  "header": "File Audit",
-  "options": [
-    {"label": "{file}:{issue_type}", "description": "{action} (diagnostic: {diagnostic_level})"},
-    ...
-  ],
-  "multiSelect": true
-}])
+AskUserQuestion(questions=[
+  {
+    "question": "[{file}:{issue_type}] {action}\n\nDiagnostic: {diagnostic_level}\nEvidence: {evidence}",
+    "header": "{file}",
+    "options": [
+      {"label": "Fix", "description": "Confirm this needs work — promoted to needs-fix"},
+      {"label": "Defer", "description": "Skip for now — user-deferred"}
+    ],
+    "multiSelect": false
+  },
+  ... (one question per item, up to 4 per call)
+])
 ```
 
+If more than 4 `needs-input` items exist, make multiple AskUserQuestion calls.
+
 For each `needs-input` TODO:
-- **Selected:** Promote to `needs-fix` in inventory.json — the user confirmed this TODO needs work.
-- **Not selected:** Update classification to `user-deferred` in inventory.json.
+- **Fix selected:** Promote to `needs-fix` in inventory.json — the user confirmed this TODO needs work.
+- **Defer selected:** Update classification to `user-deferred` in inventory.json.
 
 If zero `needs-input` TODOs exist, skip this step. If AskUserQuestion is unavailable, treat
 `needs-input` items as `needs_context` in the inventory (surface them, don't hide them).
