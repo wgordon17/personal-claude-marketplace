@@ -294,7 +294,7 @@ and a note: "Verification failed — showing all findings unverified."
 every submitted finding. For each finding ID in the original `{findings_json}`, check if a
 matching `finding_id` exists in the verifier's response. Any finding without a returned verdict
 is assigned verdict `unverified` with `investigation_summary`: "Verifier did not return a
-verdict for this finding." This prevents silent finding loss during verification — the same
+verdict for this finding." This prevents silent finding loss during verification - the same
 principle as the Fixer verification protocol in `code-quality/references/finding-classification.md`.
 
 ### Categorize
@@ -333,7 +333,7 @@ Build a multiSelect AskUserQuestion with one option per `needs-input` finding:
 
 ```
 AskUserQuestion(questions=[{
-  "question": "These findings need your decision. Select items to acknowledge — unselected items will be marked as deferred.",
+  "question": "These findings need your decision. Select items to acknowledge - unselected items will be marked as deferred.",
   "header": "PR Review",
   "options": [
     {"label": "{id}", "description": "[{Reviewer}] {description} ({file}:{line})"},
@@ -346,12 +346,12 @@ AskUserQuestion(questions=[{
 ### Record Decisions
 
 For each `needs-input` finding:
-- **Selected:** Update the finding's classification to `[user-acknowledged]` in the output.
+- **Selected:** Update the finding's classification to `user-acknowledged` in the output.
   The user has seen it and accepts responsibility.
-- **Not selected:** Update the finding's classification to `[user-deferred]` in the output.
+- **Not selected:** Update the finding's classification to `user-deferred` in the output.
   The user explicitly chose not to act on it now.
 
-Both outcomes are valid — the point is that every `needs-input` item gets a recorded user
+Both outcomes are valid - the point is that every `needs-input` item gets a recorded user
 decision, not silent deferral.
 
 ---

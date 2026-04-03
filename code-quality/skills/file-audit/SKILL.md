@@ -329,7 +329,7 @@ items.
 
 ```
 AskUserQuestion(questions=[{
-  "question": "These audit findings need your decision. Select items to address — unselected items will be marked as deferred.",
+  "question": "These audit findings need your decision. Select items to address - unselected items will be marked as deferred.",
   "header": "File Audit",
   "options": [
     {"label": "{file}:{issue_type}", "description": "{action} (diagnostic: {diagnostic_level})"},

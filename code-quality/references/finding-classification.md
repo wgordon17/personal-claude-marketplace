@@ -30,6 +30,11 @@ Two-tier taxonomy:
 - "This requires an architectural decision" IS `needs-input`.
 - "This is stylistic" is `needs-fix` — apply the project's conventions.
 
+**Post-triage states** (assigned after user interaction via AskUserQuestion, not by reviewers):
+
+- `user-acknowledged`: User has seen the finding and accepts responsibility. Counted as resolved.
+- `user-deferred`: User explicitly chose not to act on the finding now. Counted as resolved.
+
 ## Level of Effort (LoE) Scale
 
 Required for Fixer-pipeline skills (swarm, quality-gate, unfuck). Optional for advisory skills.
@@ -129,7 +134,8 @@ How the Fixer processes findings:
 
 Structural enforcement after Fixer completes and user triage is done:
 
-- Count findings-in vs (findings_fixed + user_deferred). Note: user-approved needs-input items
-  appear in `findings_fixed` after the Fixer processes them, so this formula covers all outcomes.
+- Count findings-in vs (findings_fixed + user_deferred + user_acknowledged). Note: user-approved
+  needs-input items appear in `findings_fixed` after the Fixer processes them, so this formula
+  covers all outcomes.
 - Delta > 0 → findings were silently dropped → escalate via AskUserQuestion
 - Delta == 0 → all findings accounted for → proceed

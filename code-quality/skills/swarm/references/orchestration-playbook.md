@@ -1868,7 +1868,7 @@ User-deferred items: [none / list with reasons]
 ## Remaining Tech Debt
 
 - [ ] session-cleanup blocked — needs manual implementation
-- [ ] ui-reviewer flagged 2 a11y improvements (user-deferred — requires design input)
+- [ ] ui-reviewer flagged 2 a11y improvements (user-deferred - requires design input)
 ```
 
 Get line stats:
