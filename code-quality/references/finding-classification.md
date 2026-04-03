@@ -30,6 +30,11 @@ Two-tier taxonomy:
 - "This requires an architectural decision" IS `needs-input`.
 - "This is stylistic" is `needs-fix` — apply the project's conventions.
 
+**Post-triage states** (assigned after user interaction via AskUserQuestion, not by reviewers):
+
+- `user-acknowledged`: User has seen the finding and accepts responsibility. Counted as resolved.
+- `user-deferred`: User explicitly chose not to act on the finding now. Counted as resolved.
+
 ## Level of Effort (LoE) Scale
 
 Required for Fixer-pipeline skills (swarm, quality-gate, unfuck). Optional for advisory skills.

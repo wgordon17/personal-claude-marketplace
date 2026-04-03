@@ -162,7 +162,7 @@ Use the classification and anti-deferral principle from `code-quality/references
    - Expected improvement: [Metrics]
 
 ### Other Optimizations
-1. [Micro-optimization that may not be worth it]
+1. [Optimization] - LoE: [estimate]
 
 ## Trade-offs
 
@@ -174,7 +174,7 @@ Use the classification and anti-deferral principle from `code-quality/references
 ## Implementation Priority
 1. [First optimization] - Highest impact, low risk
 2. [Second optimization] - Good impact, medium effort
-3. [Third optimization] - Consider if still needed
+3. [Third optimization] - LoE: [estimate]
 
 ## Benchmarking Plan
 - Baseline: [How to measure current state]

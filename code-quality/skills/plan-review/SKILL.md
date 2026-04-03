@@ -245,7 +245,7 @@ The verifier receives: `{findings_json}` (the array above), `{plan_content}`,
 
 The verifier **re-reads the plan** to check each finding against plan content. It returns a
 JSON array with a verdict for each finding:
-`[{finding_id, verdict, investigation_summary, category}, ...]`
+`[{finding_id, verdict, investigation_summary, category, classification}, ...]`
 
 Verdicts: `verified` (finding accurately references plan content), `false_positive` (finding
 misread or misrepresents the plan), `needs_context` (cannot confirm or deny — requires human
@@ -255,6 +255,15 @@ Parse the verifier's response as JSON. If parsing fails, extract JSON from betwe
 `[` and last `]` markers. If that also fails, include all findings with verdict `unverified`
 and set `{verification_note}` to `"⚠ Verification failed — all findings shown unverified"`.
 If verification succeeded, set `{verification_note}` to empty string.
+
+### Reconcile
+
+**Finding fidelity check:** Before categorizing, verify the verifier returned a verdict for
+every submitted finding. For each finding ID in the original `{findings_json}`, check if a
+matching `finding_id` exists in the verifier's response. Any finding without a returned verdict
+is assigned verdict `unverified` with `investigation_summary`: "Verifier did not return a
+verdict for this finding." This prevents silent finding loss during verification - the same
+principle as the Fixer verification protocol in `code-quality/references/finding-classification.md`.
 
 ### Categorize
 
@@ -275,6 +284,41 @@ The verifier assigns each finding to a category based on its nature:
 Remove findings with verdict `false_positive`. Keep `verified` findings for the category
 sections. Keep `needs_context` and `unverified` findings for the Needs Context section only
 (they do NOT appear in category sections). Treat `unverified` as `needs_context` for display.
+
+---
+
+## Phase 3.5 — Needs-Input Resolution
+
+If any surviving findings (after filtering false positives) have classification `needs-input`,
+present them to the user before producing the report. Do NOT skip this step - the skill must
+not exit with unresolved `needs-input` items.
+
+If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
+
+### Present to User
+
+Build a multiSelect AskUserQuestion with one option per `needs-input` finding:
+
+```
+AskUserQuestion(questions=[{
+  "question": "These plan findings need your decision. Select items to acknowledge - unselected items will be marked as deferred.",
+  "header": "Plan Review",
+  "options": [
+    {"label": "{id}", "description": "[{Reviewer}] {description} ({location})"},
+    ...
+  ],
+  "multiSelect": true
+}])
+```
+
+### Record Decisions
+
+For each `needs-input` finding:
+- **Selected:** Update the finding's classification to `user-acknowledged` in the output.
+- **Not selected:** Update the finding's classification to `user-deferred` in the output.
+
+Both outcomes are valid - the point is that every `needs-input` item gets a recorded user
+decision, not silent deferral.
 
 ---
 
@@ -324,10 +368,14 @@ SPECIFICATION
      {location}
      Investigation: {investigation_summary}
 
+─── User Decisions ({user_decision_count}) ───
+  1. [{Reviewer}] {description} [{user-acknowledged | user-deferred}]
+     {location}
+
 {verification_note}
 {skipped_note}
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count}
+Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count} | User decisions: {user_decision_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -346,10 +394,14 @@ Omit category sections with zero verified findings.
 at the bottom — they do NOT appear in category sections above. These are items the verifier
 could not confirm or deny and require human judgment.
 
+User decisions from Phase 3.5 appear in their own section. Both `user-acknowledged` and
+`user-deferred` items are shown - this is the audit trail proving every `needs-input` finding
+received an explicit user decision.
+
 ### No Findings After Verification
 
-Use this path only when `verified_count == 0` AND `needs_context_count == 0`. If
-`needs_context_count > 0`, use the "Findings Exist" path.
+Use this path only when `verified_count == 0` AND `needs_context_count == 0` AND
+`user_decision_count == 0`. If any count is > 0, use the "Findings Exist" path.
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -365,7 +417,7 @@ Checked for: {checked_areas}
 
 {skipped_note}
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0
+Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0 | User decisions: 0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -383,6 +435,8 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 | Security reviewer skipped | Include in `{skipped_note}`: "Security (no auth/security paths detected)" |
 | All findings false positive | Output "no findings" report format (not an error) |
 | Verification JSON parse fails | All findings get `unverified` verdict, routed to Needs Context section; `{verification_note}` warns in output |
+| Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
+| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
 
 ---
 

@@ -4,7 +4,7 @@ description: |
   Use when about to claim ANY work is complete — code, research, planning,
   config, or general answers. Also after /swarm, /spawn, subagent-driven
   development, or any significant deliverable.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, SendMessage, Skill]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill]
 ---
 
 # Quality Gate
@@ -300,6 +300,10 @@ After all 4 reviewers complete, synthesize findings by classification
 `needs-input` items, verify completeness per `code-quality/references/finding-classification.md`
 Verification Protocol: count total findings from all 4 reviewers vs (findings fixed +
 user-deferred items). Delta > 0 → findings were silently dropped → fix them before Layer 2.
+
+If AskUserQuestion is unavailable during synthesis, treat all `needs-input` findings as
+`needs_context` - surface them in the quality gate output report (don't hide them, don't
+block on them). Do NOT silently drop needs-input findings because the tool is unavailable.
 
 **The synthesis step is not optional.** If you find yourself writing "domain review skipped"
 or "findings noted for later," stop. Fix the needs-fix findings now.
