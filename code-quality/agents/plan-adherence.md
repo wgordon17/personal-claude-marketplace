@@ -129,4 +129,4 @@ Tasks completed but checkbox not checked: [list] — orchestrator should update 
 - **Completed but checkbox not checked**: If you find strong evidence an item is implemented but the plan still shows `- [ ]`, report it in the "Agent Note" section for the orchestrator to update. Do NOT write to the plan file yourself.
 - **Partial completion**: Report exactly which sub-steps are done and which are missing.
 - **Unparseable plan**: No task sections or no checkboxes found → needs-fix finding, not a silent pass.
-- **Missing plan file**: If the plan file path does not exist or is unreadable, report as CRITICAL: "Plan file not found at [path]" and halt verification.
+- **Missing plan file**: If the plan file path does not exist or is unreadable, report as a needs-fix finding: "Plan file not found at [path]" and halt verification.

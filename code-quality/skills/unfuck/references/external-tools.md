@@ -269,7 +269,6 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
 ```
 - **Extraction:** The `"severity"` field in Semgrep output is Semgrep's own severity label (WARNING/ERROR) — use it as a signal for LoE estimation when classifying findings per `code-quality/references/finding-classification.md`. All security findings default to `classification: needs-fix`.
 - **Auto-fix support:** `unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy ALL_PROXY all_proxy; uvx semgrep --config auto --autofix` (used in Phase 3, not Phase 1)
-- **Extraction:** Each result -> one security finding.
 - **Fallback:** Agent OWASP walkthrough with pattern matching via Grep.
 
 #### gitleaks — Secret Detection

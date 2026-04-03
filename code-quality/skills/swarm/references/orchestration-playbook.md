@@ -535,14 +535,14 @@ Check the `verdict` field:
 - After Architect revises the plan, increment iteration counter and re-run Phase 2.5.1
 - **Maximum 2 Architect↔Security iterations total**
 
-**`escalate`** (unresolvable Critical findings after 2 iterations):
+**`escalate`** (unresolvable needs-fix findings after 2 iterations):
 - Present to user via AskUserQuestion before proceeding:
   ```
   AskUserQuestion(questions=[{
-    "question": "Security design review found Critical issues that could not be resolved "
+    "question": "Security design review found needs-fix issues that could not be resolved "
                 "after 2 architect revisions. Details: {run_dir}/security-design-review.json\n\n"
                 "How should we proceed?",
-    "header": "Security Design: Unresolved Critical Findings",
+    "header": "Security Design: Unresolved Findings",
     "options": [
       {"label": "Proceed anyway", "description": "Accept the risk and continue to implementation"},
       {"label": "Abort", "description": "Stop — I will redesign the approach"}
@@ -1868,7 +1868,7 @@ User-deferred items: [none / list with reasons]
 ## Remaining Tech Debt
 
 - [ ] session-cleanup blocked — needs manual implementation
-- [ ] ui-reviewer flagged 2 low a11y improvements (deferred — requires design input)
+- [ ] ui-reviewer flagged 2 a11y improvements (user-deferred — requires design input)
 ```
 
 Get line stats:
