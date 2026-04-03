@@ -25,6 +25,8 @@ import time
 from pathlib import Path
 from typing import NoReturn
 
+_JSON_DECODER = json.JSONDecoder()
+
 # ── Constants ────────────────────────────────────────────────────────────────
 
 _MAX_INPUT = 10 * 1024 * 1024  # 10 MB
@@ -105,17 +107,21 @@ def _extract_text_from_content(content: object) -> str:
     return ""
 
 
+_MAX_BRACE_SCANS = 200  # iteration limit for raw_decode loop
+
+
 def _try_parse_fix_summary(text: str) -> dict | None:
     """Attempt to extract a FixSummary dict from a text fragment using raw_decode."""
-    decoder = json.JSONDecoder()
     pos = 0
-    while pos < len(text):
+    scans = 0
+    while pos < len(text) and scans < _MAX_BRACE_SCANS:
         # Scan for opening brace
         brace = text.find("{", pos)
         if brace == -1:
             break
+        scans += 1
         try:
-            obj, end = decoder.raw_decode(text, brace)
+            obj, end = _JSON_DECODER.raw_decode(text, brace)
             if isinstance(obj, dict) and (
                 obj.get("schema") == "FixSummary" or "findings_fixed" in obj
             ):
@@ -214,6 +220,20 @@ def _find_fix_summary(transcript_path: str) -> dict | None:
 # ── Validation ───────────────────────────────────────────────────────────────
 
 
+def _validate_items(items: list, field: str) -> tuple[bool, str]:
+    """Validate that each item in a FixSummary array is a non-empty string or dict."""
+    for item in items:
+        if isinstance(item, str):
+            if not item.strip():
+                return False, f"{field} contains whitespace-only string"
+        elif isinstance(item, dict):
+            if not item:
+                return False, f"{field} contains empty dict"
+        else:
+            return False, f"{field} contains unexpected type: {type(item).__name__}"
+    return True, "valid"
+
+
 def _validate_fix_summary(fix_summary: dict) -> tuple[bool, str]:
     """Validate FixSummary structural completeness.
 
@@ -230,43 +250,17 @@ def _validate_fix_summary(fix_summary: dict) -> tuple[bool, str]:
     if not isinstance(user_deferred, list):
         user_deferred = []
 
-    total_accounted = len(findings_fixed) + len(needs_input_items) + len(user_deferred)
-
-    if total_accounted == 0:
+    if len(findings_fixed) + len(needs_input_items) + len(user_deferred) == 0:
         return False, "all arrays empty — no findings accounted for"
 
-    # Validate findings_fixed items: must be non-empty strings
-    for item in findings_fixed:
-        if isinstance(item, str):
-            if not item.strip():
-                return False, "findings_fixed contains whitespace-only string"
-        elif isinstance(item, dict):
-            if not item:
-                return False, "findings_fixed contains empty dict"
-        else:
-            return False, f"findings_fixed contains unexpected type: {type(item).__name__}"
-
-    # Validate needs_input_items: must be non-empty dicts
-    for item in needs_input_items:
-        if isinstance(item, dict):
-            if not item:
-                return False, "needs_input_items contains empty dict"
-        elif isinstance(item, str):
-            if not item.strip():
-                return False, "needs_input_items contains whitespace-only string"
-        else:
-            return False, f"needs_input_items contains unexpected type: {type(item).__name__}"
-
-    # Validate user_deferred: must be non-empty dicts
-    for item in user_deferred:
-        if isinstance(item, dict):
-            if not item:
-                return False, "user_deferred contains empty dict"
-        elif isinstance(item, str):
-            if not item.strip():
-                return False, "user_deferred contains whitespace-only string"
-        else:
-            return False, f"user_deferred contains unexpected type: {type(item).__name__}"
+    for field, items in (
+        ("findings_fixed", findings_fixed),
+        ("needs_input_items", needs_input_items),
+        ("user_deferred", user_deferred),
+    ):
+        ok, msg = _validate_items(items, field)
+        if not ok:
+            return False, msg
 
     return True, "valid"
 
@@ -300,12 +294,14 @@ def _load_state() -> dict:
 
 
 def _save_state(state: dict) -> None:
-    """Save state file atomically. Silently ignores errors."""
+    """Save state file atomically with 0o600 permissions. Silently ignores errors."""
     try:
         _STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = _STATE_PATH.with_suffix(f".{os.getpid()}.tmp")
-        tmp.write_text(json.dumps(state))
-        os.replace(tmp, _STATE_PATH)
+        tmp_path = str(_STATE_PATH.with_suffix(f".{os.getpid()}.tmp"))
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with open(fd, "w") as f:
+            json.dump(state, f)
+        os.replace(tmp_path, _STATE_PATH)
     except OSError:
         pass
 
@@ -339,11 +335,6 @@ def _record_block(state: dict, state_key: str) -> None:
         }
 
 
-def _record_pass(state: dict, state_key: str) -> None:
-    """Delete state_key entry if present (counter reset)."""
-    state.pop(state_key, None)
-
-
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
@@ -369,7 +360,7 @@ def main() -> None:
     state = _load_state()
 
     if is_valid:
-        _record_pass(state, state_key)
+        state.pop(state_key, None)
         _save_state(state)
         _exit_approve()
 

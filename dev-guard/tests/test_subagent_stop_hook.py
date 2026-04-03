@@ -71,7 +71,16 @@ def make_fix_summary_entry(fix_summary: dict) -> dict:
     }
 
 
-# Reusable valid FixSummary dict with all required fields.
+# Reusable FixSummary dicts for tests.
+EMPTY_FIX_SUMMARY: dict = {
+    "schema": "FixSummary",
+    "findings_fixed": [],
+    "needs_input_items": [],
+    "user_deferred": [],
+    "fixes": [],
+    "files_modified": [],
+}
+
 VALID_FIX_SUMMARY: dict = {
     "schema": "FixSummary",
     "findings_fixed": ["finding-001", "finding-002"],
@@ -177,7 +186,14 @@ class TestFixSummaryDetection:
         assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
 
     def test_fix_summary_in_tool_use_content_block_approves(self, tmp_path):
-        """FixSummary in SendMessage tool_use input block -> detected -> approve."""
+        """FixSummary as JSON-encoded string inside SendMessage tool_use input -> approve.
+
+        The hook cannot detect a FixSummary that is itself JSON-encoded as a string value
+        within a tool_use input field (e.g. message=json.dumps(VALID_FIX_SUMMARY)).
+        The raw_decode scan sees the outer input dict's JSON but the inner FixSummary
+        is escape-encoded as a string, not as a nested object. The hook finds no FixSummary
+        and approves via the "not a Fixer subagent" path, not via validation success.
+        """
         transcript = tmp_path / "transcript.jsonl"
         entries = [
             {"role": "user", "content": "Fix findings."},
@@ -206,17 +222,9 @@ class TestValidationFailures:
     def test_empty_fix_summary_blocks(self, tmp_path):
         """FixSummary with all empty arrays (total_accounted=0) -> block with reason."""
         transcript = tmp_path / "transcript.jsonl"
-        fix_summary = {
-            "schema": "FixSummary",
-            "findings_fixed": [],
-            "needs_input_items": [],
-            "user_deferred": [],
-            "fixes": [],
-            "files_modified": [],
-        }
         entries = [
             {"role": "user", "content": "Fix findings."},
-            make_fix_summary_entry(fix_summary),
+            make_fix_summary_entry(EMPTY_FIX_SUMMARY),
         ]
         write_transcript(transcript, entries)
         session_id = str(uuid.uuid4())
@@ -269,17 +277,9 @@ class TestValidationFailures:
 class TestLoopGuard:
     def _make_empty_fix_summary_transcript(self, tmp_path: Path) -> Path:
         transcript = tmp_path / "transcript.jsonl"
-        fix_summary = {
-            "schema": "FixSummary",
-            "findings_fixed": [],
-            "needs_input_items": [],
-            "user_deferred": [],
-            "fixes": [],
-            "files_modified": [],
-        }
         entries = [
             {"role": "user", "content": "Fix findings."},
-            make_fix_summary_entry(fix_summary),
+            make_fix_summary_entry(EMPTY_FIX_SUMMARY),
         ]
         write_transcript(transcript, entries)
         return transcript
@@ -322,52 +322,51 @@ class TestLoopGuard:
         )
 
     def test_pass_through_resets_counter(self, tmp_path):
-        """Block twice, pass (valid FixSummary), block again -> normal block."""
+        """Block twice, pass (valid FixSummary), block again -> normal block.
+
+        Uses the SAME transcript path throughout. The state key is
+        session_id:transcript_path, so overwriting the file content changes what
+        the hook sees without changing the key.
+        """
         state_path = tmp_path / "state.json"
         session_id = str(uuid.uuid4())
+        transcript = tmp_path / "transcript.jsonl"
 
-        # Empty FixSummary transcript -> produces blocks
-        bad_transcript = tmp_path / "bad.jsonl"
-        bad_fix_summary = {
-            "schema": "FixSummary",
-            "findings_fixed": [],
-            "needs_input_items": [],
-            "user_deferred": [],
-            "fixes": [],
-            "files_modified": [],
-        }
+        # Phase 1: Block twice (counter = 2) with empty FixSummary
         write_transcript(
-            bad_transcript,
+            transcript,
             [
                 {"role": "user", "content": "Fix findings."},
-                make_fix_summary_entry(bad_fix_summary),
+                make_fix_summary_entry(EMPTY_FIX_SUMMARY),
             ],
         )
+        for _ in range(2):
+            payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+            result = run_hook(payload, state_path=state_path)
+            output = json.loads(result.stdout)
+            assert output["decision"] == "block"
 
-        # Valid FixSummary transcript -> produces approve
-        good_transcript = tmp_path / "good.jsonl"
+        # Phase 2: Overwrite with valid FixSummary -> approve -> counter reset for this key
         write_transcript(
-            good_transcript,
+            transcript,
             [
                 {"role": "user", "content": "Fix findings."},
                 make_fix_summary_entry(VALID_FIX_SUMMARY),
             ],
         )
-
-        # Block twice (counter = 2)
-        for _ in range(2):
-            payload = make_payload(session_id=session_id, transcript_path=str(bad_transcript))
-            result = run_hook(payload, state_path=state_path)
-            output = json.loads(result.stdout)
-            assert output["decision"] == "block"
-
-        # Pass (valid FixSummary) -> counter reset for bad_transcript state key
-        payload = make_payload(session_id=session_id, transcript_path=str(good_transcript))
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
         result = run_hook(payload, state_path=state_path)
         assert result.stdout.strip() == "", "expected approve after valid FixSummary"
 
-        # Block again with bad_transcript -> normal block (counter at 1)
-        payload = make_payload(session_id=session_id, transcript_path=str(bad_transcript))
+        # Phase 3: Overwrite back to empty FixSummary -> normal block (counter at 1)
+        write_transcript(
+            transcript,
+            [
+                {"role": "user", "content": "Fix findings."},
+                make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+            ],
+        )
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
         result = run_hook(payload, state_path=state_path)
         assert result.returncode == 0
         assert result.stdout.strip() != "", "expected block after counter reset"
@@ -389,19 +388,11 @@ class TestEdgeCases:
 
         def make_bad_transcript(name: str) -> Path:
             path = tmp_path / name
-            fix_summary = {
-                "schema": "FixSummary",
-                "findings_fixed": [],
-                "needs_input_items": [],
-                "user_deferred": [],
-                "fixes": [],
-                "files_modified": [],
-            }
             write_transcript(
                 path,
                 [
                     {"role": "user", "content": "Fix findings."},
-                    make_fix_summary_entry(fix_summary),
+                    make_fix_summary_entry(EMPTY_FIX_SUMMARY),
                 ],
             )
             return path
