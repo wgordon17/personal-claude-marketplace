@@ -584,6 +584,16 @@ Agent(name="quality-review", subagent_type="general-purpose",
      prompt="Review these files for code quality issues introduced during cleanup:\n<file list>\n\nCheck for:\n- Broken imports after dead code removal\n- Inconsistent naming after duplicate consolidation\n- Missing error handling after simplification\n- Incomplete refactoring (half-done changes)")
 ```
 
+### Step 4.2b: Finding completion verification
+
+Verify all discovery findings were addressed. See `code-quality/references/finding-classification.md`
+Verification Protocol.
+
+Count `total_findings` from `{run_dir}/cleanup-plan.md` (the discovery synthesis output).
+Count `findings_fixed + user_deferred` from implementation agent FixSummary outputs.
+Delta > 0 → findings were silently dropped → escalate via AskUserQuestion before proceeding.
+Delta == 0 → all findings accounted for → proceed.
+
 ### Step 4.3: Verification patterns
 
 Apply `code-quality:quality-gate` verification patterns:

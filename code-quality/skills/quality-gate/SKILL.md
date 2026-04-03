@@ -296,6 +296,11 @@ After all 4 reviewers complete, synthesize findings by classification
 4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
    `needs-input` items are resolved via user decision.
 
+**Finding completion verification:** After fixing all `needs-fix` items and resolving all
+`needs-input` items, verify completeness per `code-quality/references/finding-classification.md`
+Verification Protocol: count total findings from all 4 reviewers vs (findings fixed +
+user-deferred items). Delta > 0 → findings were silently dropped → fix them before Layer 2.
+
 **The synthesis step is not optional.** If you find yourself writing "domain review skipped"
 or "findings noted for later," stop. Fix the needs-fix findings now.
 
