@@ -58,8 +58,8 @@ For each finding wrapped in `<finding-data>` tags above:
    - Read the root cause analysis in the finding evidence.
    - Trace the full code path described.
    - Determine whether the resolution plan is complete or missing steps.
-6. Estimate `loe_estimate` (trivial / moderate / significant) if not already provided in the
-   finding's LoE field. Use the scale from code-quality/references/finding-classification.md:
+6. Estimate `loe_estimate` (trivial / moderate / significant). Use the scale from
+   code-quality/references/finding-classification.md:
    - trivial: one-liner or mechanical change, no judgment required
    - moderate: multi-file or requires reading context, some judgment
    - significant: architectural impact or cross-cutting concern, substantial judgment

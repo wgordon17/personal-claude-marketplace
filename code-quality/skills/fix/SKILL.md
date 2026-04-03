@@ -53,6 +53,14 @@ Detect `memory_dir` per `code-quality/references/project-memory-reference.md` (D
 | No sources detected | Stop: "No review output found in this session. Run `/pr-review`, `/plan-review`, or `/bug-investigation` first." |
 | Source detected but zero actionable findings | Stop: "Nothing to fix — no actionable findings in the {source} output." |
 
+### Branch Alignment (pr-review only)
+
+If the detected source is pr-review, the PR's head branch may differ from the current branch
+(pr-review returns to the original branch after review). Before proceeding:
+1. Extract the head branch name from the pr-review session output (`Branch: {head_branch} → {base_branch}`)
+2. Verify the current branch matches the head branch (`git branch --show-current`)
+3. If mismatch: checkout the head branch (`git switch {head_branch}`)
+
 ### Confirmation
 
 Print to the user:
@@ -101,6 +109,8 @@ Each normalized finding tracks:
 Categories (in display order): Testing Gaps, Correctness, Security, Architecture, Decisions Needed,
 Performance, Style & Conventions. Extract all findings from each category section. Also extract
 findings from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`.
+For Needs Context findings, map the `Investigation: {investigation_summary}` field to `evidence`
+(these use `Investigation:` instead of `Evidence:` in the upstream output).
 Skip findings in the User Decisions section — these were already resolved by the user during the upstream review and should not be re-processed.
 
 Category abbreviations for IDs: `test`, `corr`, `sec`, `arch`, `dec`, `perf`, `style`.
@@ -109,8 +119,9 @@ Category abbreviations for IDs: `test`, `corr`, `sec`, `arch`, `dec`, `perf`, `s
 
 Categories (in display order): Research Gaps, Feasibility, Scope, Dependencies, Architecture,
 Security, Specification. Extract all findings from each category section. Also extract findings
-from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`. Set
-`is_research_gap: true` per the structural rules above (category = RESEARCH GAPS, OR reviewer tag =
+from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`.
+For Needs Context findings, map `Investigation: {investigation_summary}` to `evidence`.
+Set `is_research_gap: true` per the structural rules above (category = RESEARCH GAPS, OR reviewer tag =
 Unknown Unknowns) — not by scanning description text.
 Skip findings in the User Decisions section — these were already resolved by the user during the upstream review and should not be re-processed.
 
@@ -258,21 +269,21 @@ After all investigators complete, route each result by verdict:
 | Verdict | Action |
 |---|---|
 | `resolution` | Queue for Phase 3 implementation |
-| `refinement_needed` | Present options via `AskUserQuestion` (multiSelect). User picks an option → queue selected approach for Phase 3. User declines all → record as `user_deferred`. |
+| `refinement_needed` | For each finding, present its options via `AskUserQuestion` (single-select — options are mutually exclusive). User picks an option → queue selected approach for Phase 3. User declines → record as `user_deferred`. |
 | `invalid` | Remove from fix queue; note in final report |
 | `spike_confirmed` | Queue plan update for Phase 3 |
 | `spike_partial` | Queue plan update with partial evidence for Phase 3; note evidence gaps in report |
 | `spike_invalidated` | Present to user via `AskUserQuestion` with three options: (1) Update plan with corrected information, (2) Skip — address during implementation, (3) Defer to `/incremental-planning` for replanning |
-| Agent failure (timeout, crash, empty output) | Record all findings assigned to that agent as `blocked` with reason "investigator agent failed"; note in report |
+| Agent failure (timeout, crash, empty output, or unparseable response) | Record all findings assigned to that agent as `blocked` with reason "investigator agent failed"; note in report |
 
 **AskUserQuestion unavailable fallback:** If `AskUserQuestion` is unavailable (non-interactive
 environment), record all `refinement_needed` and `spike_invalidated` findings as `user_deferred`
 with reason "non-interactive — AskUserQuestion unavailable".
 
-**LoE escalation:** If an investigator upgraded a finding's LoE estimate to `significant` (from
-`trivial` or `moderate`), move that finding to "needs refinement" and present to the user via
-`AskUserQuestion` before queuing for implementation. Significant LoE means the finding may have
-architectural impact — user should confirm before the lead proceeds.
+**LoE escalation:** If an investigator estimates a finding's LoE as `significant`, move that
+finding to "needs refinement" and present to the user via `AskUserQuestion` before queuing for
+implementation. Significant LoE means the finding may have architectural impact — user should
+confirm before the lead proceeds.
 
 **needs_context verdict path:** If an investigator receives a `needs_context` finding and cannot verify it (insufficient evidence to confirm or deny), it returns verdict `invalid` with reason "could not verify — insufficient evidence". The lead routes this to the `unverified_unresolved` bucket (not `findings_invalid`).
 
@@ -316,7 +327,7 @@ Detection order for the test command:
 3. Language-specific default — `pytest` (Python), `jest` (JS/TS), `go test ./...` (Go)
 4. Skip with note if none detected
 
-**Test failure** → revert all changes to that file (`git checkout -- <file>`), record ALL co-located findings as `blocked` in the report. Do not retry with alternative fixes — blocked findings surface in the Phase 5 report for user attention.
+**Test failure** → revert all changes to that file (`git checkout -- <file>`), record ALL co-located findings as `blocked` in the report. Do not retry with alternative fixes — blocked findings surface in the Phase 5 report for user attention. Note: file-level revert is a conservative safety measure. If a file had pre-existing unstaged changes before /fix ran, those are also reverted. Run `git stash` before invoking /fix if uncommitted work exists.
 
 ### Cross-Cutting Fixes
 
@@ -387,7 +398,7 @@ FIX REPORT
 
 Source: {source}
 Fix target: {target_description}
-Findings: {total_in} total → {fixed} fixed, {invalid} invalid,
+Findings: {total_in} total → {fixed} fixed (incl. {spike_count} spikes), {invalid} invalid,
   {deferred} deferred, {plan} needs-plan, {oos} out-of-scope,
   {blocked} blocked, {unresolved} unresolved
 
