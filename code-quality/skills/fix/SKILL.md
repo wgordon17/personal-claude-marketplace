@@ -49,7 +49,7 @@ Detect `memory_dir` per `code-quality/references/project-memory-reference.md` (D
 | Scenario | Action |
 |---|---|
 | Exactly one source detected | Proceed with that source as fix target |
-| Multiple sources detected | `AskUserQuestion` — present the sources and ask which to fix |
+| Multiple sources detected | Prefer session-output sentinels (pr-review, plan-review) over BUGS.md file check. If only BUGS.md entries are found (no sentinel), use BUGS.md directly. If a sentinel AND BUGS.md are both detected, present via `AskUserQuestion`. |
 | No sources detected | Stop: "No review output found in this session. Run `/pr-review`, `/plan-review`, or `/bug-investigation` first." |
 | Source detected but zero actionable findings | Stop: "Nothing to fix — no actionable findings in the {source} output." |
 
@@ -264,6 +264,10 @@ After all investigators complete, route each result by verdict:
 | `spike_partial` | Queue plan update with partial evidence for Phase 3; note evidence gaps in report |
 | `spike_invalidated` | Present to user via `AskUserQuestion` with three options: (1) Update plan with corrected information, (2) Skip — address during implementation, (3) Defer to `/incremental-planning` for replanning |
 | Agent failure (timeout, crash, empty output) | Record all findings assigned to that agent as `blocked` with reason "investigator agent failed"; note in report |
+
+**AskUserQuestion unavailable fallback:** If `AskUserQuestion` is unavailable (non-interactive
+environment), record all `refinement_needed` and `spike_invalidated` findings as `user_deferred`
+with reason "non-interactive — AskUserQuestion unavailable".
 
 **LoE escalation:** If an investigator upgraded a finding's LoE estimate to `significant` (from
 `trivial` or `moderate`), move that finding to "needs refinement" and present to the user via
