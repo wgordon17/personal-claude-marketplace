@@ -1,5 +1,5 @@
 {
-  "description": "Global hooks: git safety, commit validation, pre-push review, tool selection, quality stop gate",
+  "description": "Global hooks: git safety, commit validation, pre-push review, tool selection, quality stop gate, subagent completion verification",
   "hooks": {
     "SessionStart": [
       {
@@ -93,6 +93,17 @@
             "type": "command",
             "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.py",
             "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop-hook.py",
+            "timeout": 30
           }
         ]
       }

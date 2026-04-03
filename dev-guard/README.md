@@ -1,6 +1,6 @@
 # Dev Guard Plugin
 
-Development environment policy enforcement: tool selection guard, commit validation, and pre-push review.
+Development environment policy enforcement: tool selection guard, commit validation, pre-push review, and subagent completion verification.
 
 ## Hooks
 
@@ -31,6 +31,21 @@ Development environment policy enforcement: tool selection guard, commit validat
 - Checks subject line length (<72 chars, warn >50)
 - Blocks emoji and meta-commentary
 - **Exit 2** shows errors but commit already completed (PostToolUse limitation)
+
+### Stop: Quality Stop Gate
+
+**stop-hook.py** — Fires on every Stop event, performing deterministic triage (loop guard, transcript parsing, git diff, signal detection, question classification) and delegating to an LLM evaluator when quality checks are warranted.
+- **Zero-dependency fast triage** — Per-session state, transcript tail-read, git diff hash comparison
+- **LLM delegation** — Only invokes LLM when write signals, completion claims, or research activity detected
+- **Fail-open** — All errors exit 0 (allow stop) to avoid blocking legitimate exits
+
+### SubagentStop: FixSummary Validation
+
+**subagent-stop-hook.py** — Fires on every SubagentStop event. Validates FixSummary structural completeness when Fixer subagents stop.
+- **Transcript-based detection** — Tail-reads 512KB of the subagent transcript to find FixSummary JSON
+- **Structural validation** — Ensures `findings_fixed`, `needs_input_items`, and `user_deferred` arrays account for at least one finding
+- **Loop guard** — After 3 consecutive blocks for the same subagent, fails open (approves) to prevent infinite retries
+- **Fail-open** — All errors exit 0 (approve stop); best-effort enforcement only
 
 ## How Hooks Work
 
