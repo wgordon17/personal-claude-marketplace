@@ -161,8 +161,8 @@ Use the classification and anti-deferral principle from `code-quality/references
    - Solution: [Approach]
    - Expected improvement: [Metrics]
 
-### Needs-Input
-1. [Optimization requiring architectural decision] — LoE: [estimate]. Decision needed: [what decision]
+### Other Optimizations
+1. [Optimization] — LoE: [estimate]
 
 ## Trade-offs
 
