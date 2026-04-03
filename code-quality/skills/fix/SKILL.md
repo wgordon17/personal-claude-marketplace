@@ -412,6 +412,7 @@ with 8 buckets to cover all standalone /fix outcomes.
 | Investigator returned invalid (finding no longer applies) | `findings_invalid` |
 | Investigator returned invalid (could not verify — unverified finding) | `unverified_unresolved` |
 | Test failure prevented fix | `blocked` |
+| Agent failure (investigator crashed, timed out, or returned unparseable output) | `blocked` |
 | Unverified, investigator confirmed valid | route through normal triage (direct fix / needs refinement / etc.) |
 | Unverified, investigator could not resolve | `unverified_unresolved` |
 

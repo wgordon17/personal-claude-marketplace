@@ -290,9 +290,11 @@ After all 4 reviewers complete, synthesize findings by classification
 
 1. Collect all findings across the 4 reviewers
 2. Fix all `needs-fix` findings immediately. Do not carry them forward.
-3. For `needs-input` findings: present via AskUserQuestion with LoE table
-   (ID | Description | LoE | Suggested Action). User decides per-finding:
-   fix or defer. Fix approved items. Record deferred items with user's reason.
+3. For `needs-input` findings: present each individually via AskUserQuestion (one question
+   per finding, batch up to 4 per call). Each question includes full context:
+   `"[{id}] {description}\n\nLoE: {loe}\nEvidence: {evidence}\nDecision needed: {input_needed}"`
+   with options "Fix" and "Defer". `multiSelect: false`. User decides per-finding.
+   Fix approved items. Record deferred items with user's reason.
 4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
    `needs-input` items are resolved via user decision.
 

@@ -393,8 +393,10 @@ Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {
 
 Category sections contain only `verified` findings. Group by category in order: RESEARCH GAPS
 (first — highest leverage to fix before implementation) → FEASIBILITY → SCOPE → DEPENDENCIES →
-ARCHITECTURE → SECURITY → SPECIFICATION. Within each category, sort by classification (needs-fix
-first, then needs-input). For the `[Reviewer]` tag, use the short reviewer name: Feasibility,
+ARCHITECTURE → SECURITY → SPECIFICATION. Within each category, sort by location. All findings
+in category sections are `needs-fix` at this point — either originally or promoted from
+`needs-input` via Phase 3.5 user confirmation. For the `[Reviewer]` tag, use the short
+reviewer name: Feasibility,
 Scope, Dependencies, Unknown Unknowns, Architect, Security.
 
 Omit category sections with zero verified findings.

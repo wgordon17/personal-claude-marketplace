@@ -420,8 +420,10 @@ Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {
 
 Group findings by **category** (Testing Gaps → Correctness → Security → Architecture →
 Decisions Needed → Performance → Style & Conventions). Within each category,
-sort by classification (needs-fix first, then needs-input). For the `[Reviewer]` tag, use the short
-reviewer name: Security, QA, Performance, Code Quality, Correctness, Plan Adherence.
+sort by location (file path). All findings in category sections are `needs-fix` at this point —
+either originally or promoted from `needs-input` via Phase 3.5 user confirmation.
+For the `[Reviewer]` tag, use the short reviewer name: Security, QA, Performance, Code Quality,
+Correctness, Plan Adherence.
 
 Omit category sections with zero findings.
 
