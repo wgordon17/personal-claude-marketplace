@@ -81,7 +81,7 @@ comprehensive coverage from different angles.
 | 1 | **Correctness** | What inputs produce wrong results? What assumptions are untested? |
 | 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. Includes documentation completeness (see below). |
 | 3 | **Robustness** | How does this fail? Bad input, missing deps, concurrent access, edge cases? |
-| 4 | **Simplicity (BLOCKING)** | What's over-engineered? What could be deleted? What's AI slop? Dead code, unnecessary abstractions, and unused imports are CRITICAL. |
+| 4 | **Simplicity (BLOCKING)** | What's over-engineered? What could be deleted? What's AI slop? Dead code, unnecessary abstractions, and unused imports are `needs-fix` — blocking. |
 | 5 | **Adversarial** | You are a hostile reviewer. The author claims this is done. Prove them wrong. |
 | 6 | **Structural** | What design flaws, race conditions, or failure modes exist in this system's architecture — not just in the current change, but in how it integrates? (Code/Mixed only) |
 
@@ -97,8 +97,8 @@ work-type-specific lens prompts.
 - **Round 4 (BLOCKING):** Calculate net lines delta (`git diff --stat`). Spawn
   `code-quality:code-simplifier` with the delta as context. Apply the full checklist from
   `code-quality/references/simplification-checklist.md`. Dead code, unnecessary abstractions,
-  and unused imports are CRITICAL findings — they BLOCK proceeding to Round 5. Fix all
-  CRITICAL simplification findings before continuing. These are objectively wasteful, not
+  and unused imports are `needs-fix` findings — they BLOCK proceeding to Round 5. Fix all
+  such simplification findings before continuing. These are objectively wasteful, not
   judgment calls.
 - **Round 5:** First-principles: "State the fundamental purpose in one sentence. Review against
   that purpose, not the structure you created."
@@ -285,17 +285,19 @@ Each reviewer receives:
 
 ### Synthesis Protocol
 
-After all 4 reviewers complete, synthesize findings by severity:
+After all 4 reviewers complete, synthesize findings by classification
+(see `code-quality/references/finding-classification.md`):
 
-1. **Collect** all findings across the 4 reviewers
-2. **Classify** each finding: CRITICAL / HIGH / MEDIUM / LOW
-3. **Fix all CRITICAL and HIGH findings** before proceeding to Layer 2.
-   These are blocking. Do not carry them forward.
-4. **Record MEDIUM and LOW findings** — include them in the output report, fix if
-   straightforward, document as follow-up if genuinely deferred.
+1. Collect all findings across the 4 reviewers
+2. Fix all `needs-fix` findings immediately. Do not carry them forward.
+3. For `needs-input` findings: present via AskUserQuestion with LoE table
+   (ID | Description | LoE | Suggested Action). User decides per-finding:
+   fix or defer. Fix approved items. Record deferred items with user's reason.
+4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
+   `needs-input` items are resolved via user decision.
 
 **The synthesis step is not optional.** If you find yourself writing "domain review skipped"
-or "findings noted for later," stop. Fix the critical/high findings now.
+or "findings noted for later," stop. Fix the needs-fix findings now.
 
 ---
 
@@ -334,7 +336,7 @@ tasks, the quality gate waits for user responses. User can:
 
 **Failure handling:** If the agent crashes or times out, retry once. If the second attempt
 fails, mark as `[UNREVIEWED]` and proceed with note. If AskUserQuestion is unavailable, report
-unchecked tasks as CRITICAL findings.
+unchecked tasks as `needs-fix` findings.
 
 ---
 
@@ -587,16 +589,16 @@ Layer 1 — Self-Review:
   Issues fixed: [count]
   Identified-but-unactioned caught: [count]
   Project rules violations caught: [count]
-  Round 4 (Simplicity gate): [PASS — 0 CRITICAL | BLOCKED — N CRITICAL fixed]
+  Round 4 (Simplicity gate): [PASS — 0 needs-fix | BLOCKED — N needs-fix fixed]
   Net lines delta: +[added] / -[removed] (net: [+/-X])
 
 Layer 1.5 — Domain Expert Review: [N/A for non-code | COMPLETE]
-  Security reviewer: [count] findings ([critical/high/medium/low breakdown])
-  QA reviewer: [count] findings ([critical/high/medium/low breakdown])
-  Performance reviewer: [count] findings ([critical/high/medium/low breakdown])
-  Code-reviewer: [count] findings ([critical/high/medium/low breakdown])
-  Critical/High fixed before Layer 2: [count]
-  Medium/Low recorded: [count]
+  Security reviewer: [count] findings ([needs-fix/needs-input breakdown])
+  QA reviewer: [count] findings ([needs-fix/needs-input breakdown])
+  Performance reviewer: [count] findings ([needs-fix/needs-input breakdown])
+  Code-reviewer: [count] findings ([needs-fix/needs-input breakdown])
+  needs-fix fixed before Layer 2: [count]
+  needs-input resolved via user decision: [count]
 
 Layer 1.75 — Plan Adherence: [N/A (no plan) | COMPLETE]
   Plan file: [path or "not found"]

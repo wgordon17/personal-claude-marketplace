@@ -20,6 +20,9 @@ Performance engineering specialist focused on profiling, optimization, and bottl
 - Network optimization
 - Algorithm optimization
 
+## Finding Classification
+Use the classification and anti-deferral principle from `code-quality/references/finding-classification.md`.
+
 ## Core Principles
 
 1. **Measure first**: Never optimize without profiling data
@@ -158,7 +161,7 @@ Performance engineering specialist focused on profiling, optimization, and bottl
    - Solution: [Approach]
    - Expected improvement: [Metrics]
 
-### Low Priority
+### Other Optimizations
 1. [Micro-optimization that may not be worth it]
 
 ## Trade-offs

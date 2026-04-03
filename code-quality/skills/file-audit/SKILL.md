@@ -123,7 +123,7 @@ IF total_files <= 20 (or /map-reduce unavailable):
 2. Generate summary statistics:
    - Total files analyzed
    - Issues by category (unused_code, incorrect_usage, duplication, documentation_drift)
-   - Issues by severity (error, warning, info)
+   - Issues by diagnostic level (error, warning, info)
 3. Generate consolidated TODO list
 4. Write {memory_dir}/file-audit/inventory.json
 ```
@@ -205,7 +205,7 @@ Project Memory:
     {
       "type": "unused_code|incorrect_usage|documentation_drift",
       "subtype": "unreferenced_function|deprecated_api|code_doc_mismatch|...",
-      "severity": "error|warning|info",
+      "diagnostic_level": "error|warning|info",
       "location": {"line": 45, "end_line": 67},
       "description": "Human-readable description",
       "evidence": "What evidence supports this (LSP output, Context7 docs, etc)",
@@ -260,7 +260,7 @@ IMPORTANT:
   "summary": {
     "total_files": 150,
     "total_symbols": 1234,
-    "issues_by_severity": {"error": 5, "warning": 23, "info": 45},
+    "issues_by_diagnostic_level": {"error": 5, "warning": 23, "info": 45},
     "issues_by_type": {
       "unused_code": 12,
       "incorrect_usage": 8,
@@ -282,7 +282,7 @@ IMPORTANT:
       "file": "src/auth/login.py",
       "issue_type": "unused_code",
       "action": "Remove `legacy_auth` function",
-      "priority": "medium"
+      "classification": "needs-fix"
     }
   ]
 }
@@ -313,13 +313,13 @@ IMPORTANT:
 
 ---
 
-## Severity Levels
+## Diagnostic Levels
 
-| Severity | Criteria | Action |
-|----------|----------|--------|
-| **error** | Broken code, security vulnerability | Fix immediately |
-| **warning** | Deprecated API, unused code, duplicates | Fix soon |
-| **info** | Style issue, minor optimization | Nice to fix |
+| Diagnostic Level | Criteria | Classification |
+|-----------------|----------|---------------|
+| **error** | Broken code, security vulnerability | Requires immediate action (needs-fix) |
+| **warning** | Deprecated API, unused code, duplicates | Requires action (needs-fix) |
+| **info** | Style issue, minor optimization | Review and decide (needs-input if architectural, needs-fix if stylistic) |
 
 ---
 
@@ -350,7 +350,7 @@ When LSP is unavailable for a file type:
 
 1. **Run incrementally**: For large codebases, audit in directory chunks
 2. **Check queue status**: Use `/file-audit --status` to monitor progress
-3. **Review todos first**: Generated TODOs are prioritized by severity
+3. **Review todos first**: Generated TODOs are ordered by classification (needs-fix before needs-input)
 4. **Trust but verify**: Issues are evidence-based but review before bulk fixes
 5. **Update project memory**: If drift detected, decide whether to update code or docs
 6. **Large projects**: For 20+ files, /map-reduce provides structured chunk tracking, retry-on-failure

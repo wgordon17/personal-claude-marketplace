@@ -8,14 +8,14 @@ All plan reviewers receive `{plan_file_path}`, `{plan_content}`, `{plan_goal}`, 
 receives `{plan_open_questions}`, `{plan_trade_offs}`, and `{plan_decisions}`. The Finding
 Verifier receives `{findings_json}`, `{plan_content}`, and `{plan_file_path}`.
 
-## Severity Guidance (shared across all reviewers)
+## Classification Guidance (shared across all reviewers)
 
-| Severity | Meaning |
-|----------|---------|
-| CRITICAL | Would invalidate the plan's approach or block implementation entirely |
-| HIGH | Significant gap that likely requires plan revision before starting work |
-| MEDIUM | Issue that should be addressed but does not block implementation |
-| LOW | Minor improvement or style concern |
+See `code-quality/references/finding-classification.md` for the full classification taxonomy.
+
+- `needs-fix`: The reviewer has sufficient context to describe the problem AND the fix is within
+  the plan author's capability to resolve independently.
+- `needs-input`: The fix requires a decision the reviewer cannot make alone — architectural choice,
+  scope decision, or requires external validation before the plan can proceed.
 
 ---
 
@@ -67,7 +67,7 @@ CHECKLIST:
 For each finding, report:
 - Description: what the feasibility concern is
 - Location: task number or plan section (e.g., "Task 3, step 2" or "## Architecture section")
-- Severity: CRITICAL (step cannot be done as written) / HIGH (requires significant rework) / MEDIUM (risky, needs investigation) / LOW (minor overstatement)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested clarification or fix (brief)
 
@@ -125,7 +125,7 @@ CHECKLIST:
 For each finding, report:
 - Description: what the scope or completeness concern is
 - Location: task number or plan section
-- Severity: CRITICAL (core requirement not addressed) / HIGH (significant gap in coverage) / MEDIUM (unclear or partial coverage) / LOW (nice-to-have missing)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific goal text and the gap in the plan
 - Suggested addition or removal (brief)
 
@@ -182,7 +182,7 @@ CHECKLIST:
 For each finding, report:
 - Description: what the dependency or ordering concern is
 - Location: specific task numbers involved (e.g., "Tasks 2 and 4")
-- Severity: CRITICAL (circular dependency or hard blocker) / HIGH (wrong order causes implementation failure) / MEDIUM (suboptimal ordering) / LOW (missed parallelization opportunity)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific task descriptions that show the ordering issue
 - Suggested reordering or restructure (brief)
 
@@ -254,16 +254,10 @@ CHECKLIST:
 6. External references: does the plan reference external APIs, services, or documentation?
    Are those references specific enough to act on, or are they vague hand-waves?
 
-SEVERITY GUIDANCE FOR RESEARCH GAPS:
-- CRITICAL: assumption is almost certainly wrong, or if wrong, invalidates the entire approach
-- HIGH: assumption is plausible but unverified; failure would require significant rework
-- MEDIUM: assumption is likely correct but should be spot-checked before implementation
-- LOW: assumption is probably fine; note for awareness
-
 For each finding, report:
 - Description: what is assumed but not verified, or what is missing from the plan
 - Location: the task or section where the assumption appears (or "implicit throughout" if pervasive)
-- Severity: see severity guidance above
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific plan text (or its absence) that demonstrates the gap
 - Suggested spike or verification step (brief — what question needs answering?)
 
@@ -324,7 +318,7 @@ CHECKLIST:
 For each finding, report:
 - Description: what the architectural concern is
 - Location: plan section, task number, or specific file/module reference
-- Severity: CRITICAL (design flaw that would require significant rework) / HIGH (significant architectural mismatch) / MEDIUM (suboptimal design that will cause maintenance burden) / LOW (minor inconsistency)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested architectural adjustment (brief)
 
@@ -381,7 +375,7 @@ CHECKLIST:
 For each finding, report:
 - Description: what the security concern is
 - Location: task number or file path reference in the plan
-- Severity: CRITICAL (exploitable design flaw, data breach risk) / HIGH (significant security gap requiring plan revision) / MEDIUM (security consideration not addressed) / LOW (defense-in-depth improvement)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific plan text that demonstrates the concern or its absence
 - Suggested security requirement or design change (brief)
 
@@ -405,7 +399,7 @@ FINDINGS TO VERIFY:
 {findings_json}
 
 The findings are a JSON array. Each finding has an "id", "reviewer", "description",
-"location", "severity", and "evidence" field.
+"location", "classification", and "evidence" field.
 
 ## Verification Protocol
 
@@ -440,18 +434,21 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "finding_id": "feas-1",
     "verdict": "verified",
     "category": "Feasibility",
+    "classification": "needs-fix",
     "investigation_summary": "Confirmed: Task 3 step 2 says 'implement the streaming parser' with no further detail. The plan provides no specification of the format, error handling, or backpressure strategy."
   },
   {
     "finding_id": "scope-2",
     "verdict": "false_positive",
     "category": "Scope",
+    "classification": "needs-fix",
     "investigation_summary": "The plan addresses this in the 'Error Handling' section under Task 4, which the reviewer did not reference."
   },
   {
     "finding_id": "unk-1",
     "verdict": "needs_context",
     "category": "Research Gaps",
+    "classification": "needs-input",
     "investigation_summary": "The plan states it 'assumes API supports webhooks' but does not cite documentation. Whether this is a real gap depends on whether the team has already validated this externally."
   }
 ]

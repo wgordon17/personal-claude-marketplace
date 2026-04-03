@@ -49,7 +49,7 @@ CHECKLIST:
 For each finding, report:
 - Description: what the vulnerability is
 - Location: file:line
-- Severity: CRITICAL (exploitable remotely, data loss) / HIGH (exploitable with effort) / MEDIUM (limited impact) / LOW (defense in depth)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific code or configuration that demonstrates the issue
 - Suggested fix (brief)
 
@@ -97,7 +97,7 @@ CHECKLIST:
 For each finding, report:
 - Description: what scenario or path lacks coverage
 - Location: file:line (or "no test file" if coverage is missing entirely)
-- Severity: CRITICAL (core path untested) / HIGH (likely regression path) / MEDIUM (edge case) / LOW (nice to have)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific code path or condition that is not covered
 - Suggested test approach (brief)
 
@@ -145,7 +145,7 @@ CHECKLIST:
 For each finding, report:
 - Description: the performance problem
 - Location: file:line
-- Severity: CRITICAL (blocks scale, causes OOM/timeout) / HIGH (degrades at moderate load) / MEDIUM (noticeable at scale) / LOW (micro-optimization)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific code that demonstrates the issue, with expected impact (scale at which it matters, latency/throughput effect)
 - Suggested fix (brief)
 
@@ -199,7 +199,7 @@ CHECKLIST:
 For each finding, report:
 - Description: the quality concern
 - Location: file:line
-- Severity: CRITICAL (violates explicit CLAUDE.md rule with blocking impact) / HIGH (actively misleading, unmaintainable, or rule violation) / MEDIUM (degrades over time) / LOW (minor polish)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific code or doc text that demonstrates the issue
 - Suggested improvement (brief)
 
@@ -256,12 +256,12 @@ CHECKLIST:
    `Glob("skills/*/SKILL.md")` and count. If docs say "supports X" — search the codebase
    for X. If the PR adds a feature and updates docs, confirm the docs describe what was
    actually implemented, not an idealized version.
-   Documentation that matches the plan but not the implementation is a HIGH severity finding.
+   Documentation that matches the plan but not the implementation is a needs-fix finding.
 
 For each finding, report:
 - Description: what the correctness issue is
 - Location: file:line
-- Severity: CRITICAL (produces wrong results in normal use) / HIGH (wrong under specific conditions) / MEDIUM (subtle incorrectness, edge case) / LOW (technically wrong, low impact)
+- Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
 - Evidence: the specific code that demonstrates the issue, with the expected vs actual behavior
 - Suggested fix (brief)
 
@@ -315,11 +315,7 @@ INSTRUCTIONS:
 5. For each finding, report:
    - Description: what the deviation is
    - Location: file:line (or task reference from the plan)
-   - Severity:
-     CRITICAL = entire task is missing from the implementation
-     HIGH = task is only partially implemented
-     MEDIUM = task implemented differently from the specification
-     LOW = minor deviation with negligible impact
+   - Classification: needs-fix | needs-input (per code-quality/references/finding-classification.md)
    - Evidence: the specific plan text and the diff/code that shows the mismatch
    - Suggested action (brief)
 
@@ -348,7 +344,7 @@ FINDINGS TO VERIFY:
 {findings_json}
 
 The findings are a JSON array. Each finding has an "id" field and includes the finding
-description, location, severity, evidence, and a `diff_context` field with ±10 lines of
+description, location, classification, evidence, and a `diff_context` field with ±10 lines of
 surrounding diff.
 
 ## Investigation Protocol
@@ -384,18 +380,21 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "finding_id": "sec-1",
     "verdict": "verified",
     "category": "Security",
+    "classification": "needs-fix",
     "investigation_summary": "Confirmed: user input at line 42 reaches SQL query at line 58 without parameterization. Traced through handle_request -> process_query."
   },
   {
     "finding_id": "qa-2",
     "verdict": "false_positive",
     "category": "Testing Gaps",
+    "classification": "needs-fix",
     "investigation_summary": "Tests exist in tests/unit/test_auth.py:test_login_edge_cases covering this exact path."
   },
   {
     "finding_id": "perf-1",
     "verdict": "needs_context",
     "category": "Decisions Needed",
+    "classification": "needs-input",
     "investigation_summary": "N+1 query exists but dataset size is unclear. Could be 10 rows or 10,000 — performance impact depends on production data volume."
   }
 ]

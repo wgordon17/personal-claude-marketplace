@@ -59,7 +59,7 @@ summary to the Lead via SendMessage when complete.
   "findings": [
     {
       "id": "string — MAP-{chunk_id}-NNN (e.g. MAP-chunk-1-001)",
-      "severity": "critical | high | medium | low | informational",
+      "classification": "needs-fix | needs-input",
       "confidence": "verified | chunk-local",
       "file": "string — file path",
       "line": "integer | null — line number if applicable",
@@ -75,14 +75,17 @@ summary to the Lead via SendMessage when complete.
 }
 ```
 
-**Confidence field semantics:**
-- `verified`: the finding is self-contained within this chunk. No cross-chunk context needed
-  to confirm it. Examples: syntax errors, style violations, security vulnerabilities in internal
-  logic, unused local variables.
-- `chunk-local`: the finding's validity depends on context outside this chunk. The reducer
-  MUST cross-validate before treating it as confirmed. Examples: exported symbol with no
-  references (might be used in another chunk), import from a path not in this chunk (might
-  exist in another chunk).
+**Field semantics:**
+- `classification`: finding actionability per `code-quality/references/finding-classification.md`.
+  `needs-fix` = fix is clear and within agent capability. `needs-input` = requires user decision.
+- `confidence` = mapper certainty given chunk-local view. Distinct from `classification`.
+  - `verified`: the finding is self-contained within this chunk. No cross-chunk context needed
+    to confirm it. Examples: syntax errors, style violations, security vulnerabilities in internal
+    logic, unused local variables.
+  - `chunk-local`: the finding's validity depends on context outside this chunk. The reducer
+    MUST cross-validate before treating it as confirmed. Examples: exported symbol with no
+    references (might be used in another chunk), import from a path not in this chunk (might
+    exist in another chunk).
 
 **Status semantics:**
 - `complete`: mapper processed all assigned files/items successfully
@@ -104,7 +107,7 @@ size limits).
   "completed_chunks": "integer — number of chunks with status 'complete' or 'partial'",
   "failed_chunks": ["string — chunk_ids that returned status 'failed'"],
   "chunk_results_dir": "string — path to {run_dir}/chunks/ directory",
-  "reduction_instructions": "string — how to synthesize: deduplicate, cross-validate, rank by severity, merge evidence",
+  "reduction_instructions": "string — how to synthesize: deduplicate, cross-validate, rank by classification (needs-fix first), merge evidence",
   "output_path": "string — where to write ReductionResult (e.g. 'hack/map-reduce/{run-id}/reduction-result.json')",
   "context": {
     "project": "string — project name",
@@ -134,17 +137,12 @@ summary to the Lead via SendMessage when complete.
   "total_findings": "integer — raw finding count across all chunks before deduplication",
   "deduplicated_findings": "integer — finding count after deduplication",
   "invalidated_findings": "integer — chunk-local findings disproven by cross-chunk validation",
-  "by_severity": {
-    "critical": 0,
-    "high": 0,
-    "medium": 0,
-    "low": 0,
-    "informational": 0
-  },
+  "needs_fix_count": 0,
+  "needs_input_count": 0,
   "findings": [
     {
       "id": "string — original MAP-{chunk_id}-NNN id or MERGED-NNN for merged findings",
-      "severity": "critical | high | medium | low | informational",
+      "classification": "needs-fix | needs-input",
       "confidence": "verified",
       "file": "string — file path",
       "line": "integer | null",

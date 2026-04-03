@@ -339,7 +339,7 @@ the Lead synthesizes them and shuts down all reviewers before proceeding to Phas
 
 ### Phase 5: Fix Team Spawn (conditional)
 
-If any reviewer reported findings of any severity, spawn Phase 5 agents:
+If any reviewer reported findings, spawn Phase 5 agents:
 
 ```
 Lead spawns sequentially:
@@ -361,7 +361,7 @@ Lead spawns sequentially:
 ```
 
 Three agents, run sequentially. Docs agent completes first, then Docs Reviewer verifies the
-documentation changes (critical/high findings route back to Docs for fixes, max 1 iteration).
+documentation changes (needs-fix findings route back to Docs for fixes, max 1 iteration).
 After Docs Reviewer confirms clean, Lessons Extractor reads the audit trail and writes to
 `{memory_dir}/LESSONS.md`. Shut down each after it reports completion.
 

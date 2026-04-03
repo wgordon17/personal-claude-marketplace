@@ -117,7 +117,7 @@ After receiving the plan, the Lead MUST:
 2. If `questions` is non-empty, present EVERY question to the user via `AskUserQuestion`
 3. Verify scope: compare the plan's components against the original task — if any requested
    work is missing from the plan, add it back or ask the user via `AskUserQuestion`
-4. Raise any high-severity risks to the user before proceeding
+4. Raise any high-impact risks to the user before proceeding
 5. Note the `cynefin_domain` — use it to inform Phase 2.5 skip decision and pipeline mode
 
 Do NOT proceed to Phase 3 until all architect questions are resolved and scope is verified.
@@ -143,12 +143,11 @@ Output: SecurityDesignReview JSON written to `{run_dir}/security-design-review.j
 (see schema in `references/communication-schema.md`).
 
 **Routing:**
-- Critical/High findings → Route back to Architect (Phase 2) with security feedback for
+- needs-input requiring architectural redesign → Route back to Architect (Phase 2) with security feedback for
   redesign. Architect revises plan, re-run Phase 2.5. Maximum 2 Architect↔Security iterations.
-- Medium/Low/None → Append security constraints to architect-plan.json as
+- no needs-input requiring redesign → Append security constraints to architect-plan.json as
   `security_constraints` array and proceed to Phase 3.
-- If 2 iterations exhausted with unresolved Critical findings → Escalate to human via
-  AskUserQuestion.
+- If 2 iterations exhausted with unresolved findings → Escalate to human via AskUserQuestion.
 
 ### Phase 2.7: Speculative Fork (conditional)
 
@@ -286,7 +285,7 @@ auto-detected optional reviewers (UI, API, DB). Also spawn the Plan Adherence re
 incremental plan file is found (see below). All reviewers operate in read-only mode on the
 completed implementation. Each writes structured JSON findings to `{run_dir}/reviews/`
 (see schema in `references/communication-schema.md`). The Lead collects ALL findings and
-synthesizes into a consolidated view. Every finding — regardless of severity — is routed to
+synthesizes into a consolidated view. Every finding — regardless of classification — is routed to
 Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
 
 **Plan Adherence reviewer:** Before spawning Phase 4 agents, search `{memory_dir}/plans/` for an
@@ -342,7 +341,7 @@ and are written to `{run_dir}/reviews/structural-concurrency.json` and
 `{run_dir}/reviews/structural-integration.json`.
 
 **Routing:**
-- Critical/High STRUCT findings follow the Phase 4 escalation routing rules
+- STRUCT findings requiring architectural redesign follow the Phase 4 escalation routing rules
 - STRUCT escalations count toward the cumulative `design_escalation_count` cap (max 2 total
   re-implementations before human escalation)
 - STRUCT escalation events are logged to `{run_dir}/escalations.json`
@@ -353,17 +352,16 @@ Phase 5 receives findings from both Phase 4 AND Phase 4.5 in its consolidated fi
 
 ### Phase 5: Fix, Test Coverage & Simplify
 
-Skip this phase only if ALL reviews (Phases 4 and 4.5) report zero findings of any severity.
+Skip this phase only if ALL reviews (Phases 4 and 4.5) report zero findings.
 Otherwise, spawn agents in this order:
 
-**Step 5.1 — Fixer:** Spawn the Fixer with ALL consolidated findings (every severity level)
-and full context of the implementation. The Fixer addresses each finding with targeted, minimal
-changes — critical/high first, then medium, then low. After the Fixer completes, check its
-output for `deferred` items — findings it couldn't resolve. For each deferred item:
+**Step 5.1 — Fixer:** Spawn the Fixer with ALL consolidated findings (all classifications)
+and full context of the implementation. The Fixer processes all findings — process in file order
+per `code-quality/references/finding-classification.md` Fixer Protocol. After the Fixer
+completes, the Lead handles user triage for `needs_input_items` and structural verification
+per Step 5.2.1. For each `user_deferred` item:
 1. Create a `TaskCreate` entry marked as blocked with the reason (visible in task list throughout)
 2. Add to the "Scope Accountability" section of `swarm-report.md` (permanent record)
-3. If any deferred item is critical or high severity, use `AskUserQuestion` to notify the user
-   before proceeding — do NOT silently continue past critical unresolved findings
 
 **Step 5.2 — Test Coverage Agent:** If ANY Phase 4 or 4.5 reviewer identified test coverage
 gaps, missing tests, or untested code paths, spawn the Test Coverage Agent (sonnet,
@@ -472,9 +470,9 @@ The Docs Reviewer checks:
    Docs must always describe what the code does, never what the plan said it would do.
 
 Findings are written to `{run_dir}/reviews/docs-review.json` using the standard ReviewFindings
-schema with `DOC-R` prefix. Critical/High findings are routed back to the Docs agent for fixes
-(max 1 iteration — the Docs Reviewer re-reviews after fixes). Low/Medium findings are recorded
-in the audit trail.
+schema with `DOC-R` prefix. `needs-fix` findings are routed back to the Docs agent for fixes
+(max 1 iteration — the Docs Reviewer re-reviews after fixes). `needs-input` findings are
+presented to the user via AskUserQuestion. All findings are recorded in the audit trail.
 
 After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
 agent scans the swarm run's audit trail and extracts principle-level lessons to
@@ -534,9 +532,9 @@ Phase 2: Architect (opus)
 Phase 2.5: Security Design Review (conditional, opus)
   +-- Reviews architect-plan.json for threat surface
   +-- STRIDE analysis of proposed architecture
-  +-- Critical/High findings --> back to Architect (max 2 iterations)
-  +-- Medium/Low/None --> append security_constraints, proceed
-  +-- Unresolved Critical after 2 iterations --> AskUserQuestion
+  +-- needs-input requiring redesign --> back to Architect (max 2 iterations)
+  +-- no needs-input requiring redesign --> append security_constraints, proceed
+  +-- Unresolved findings after 2 iterations --> AskUserQuestion
      |
      v
 Phase 2.7: Speculative Fork (conditional)
@@ -579,7 +577,7 @@ Phase 4.5: Structural Design Review (always runs)
      |
      v
 Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
-  +-- Fixer: ALL findings (critical → high → medium → low)
+  +-- Fixer: ALL findings (process in file order — needs-fix first, then needs-input to Lead)
   +-- Test Coverage Agent: coverage gaps from Phase 4/4.5
   +-- Code-Simplifier: post-fix pass
      |
@@ -698,7 +696,7 @@ After escalation, wait for user input before proceeding.
 | Phase 2.8: Reduction Review | Config-only, docs-only, or test-only changes. Tasks where architect plan modifies fewer than 3 files total. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
 | Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
-| Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings of any severity |
+| Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings |
 | Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
 | Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |
 | Phase 5.5: Plan Reconciliation | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. |

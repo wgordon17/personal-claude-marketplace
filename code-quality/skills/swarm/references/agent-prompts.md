@@ -360,11 +360,9 @@ Flag any component that crosses a trust boundary without appropriate validation.
 Write your findings to `{run_dir}/security-design-review.json` using the SecurityDesignReview
 schema from `references/communication-schema.md`. Include all required fields.
 
-**Severity guidance:**
-- `critical` — Design flaw that would create an exploitable vulnerability if implemented as-is
-- `high` — Design decision that significantly increases attack surface or violates security principles
-- `medium` — Design choice that creates unnecessary security risk but has mitigations
-- `low` — Security improvement that would be good practice but is not urgent
+## Finding Classification
+
+Use the classification taxonomy and LoE scale from `code-quality/references/finding-classification.md` (Finding Classification and Level of Effort sections).
 
 **Verdict guidance:**
 - `proceed` — No critical or high findings. Append any constraints and let implementation begin.
@@ -380,7 +378,7 @@ SendMessage(type="message", recipient="team-lead",
   content="Security design review complete (iteration {N}).\n\n"
           "Results: {run_dir}/security-design-review.json\n\n"
           "Verdict: {proceed | revise | escalate}\n\n"
-          "STRIDE findings: {N total — N critical, N high, N medium, N low}\n"
+          "STRIDE findings: {N total — N needs-fix, N needs-input}\n"
           "Security constraints for implementer: {N}\n\n"
           "[Brief summary of most significant findings, if any]",
   summary="Security design: {verdict} — N findings")
@@ -639,7 +637,8 @@ SendMessage(type="message", recipient="team-lead",
     "verdict": "rejected",
     "issues": [
       {
-        "severity": "critical",
+        "classification": "needs-fix",
+        "loe": "trivial",
         "file": "src/auth/oauth.py",
         "line": 42,
         "description": "Token expiry not handled — if the access token is expired, refresh() silently returns None",
@@ -648,7 +647,7 @@ SendMessage(type="message", recipient="team-lead",
     ],
     "turn_count": 10
   }',
-  summary="Reviewer: component-1 rejected — 1 critical")
+  summary="Reviewer: component-1 rejected — 1 needs-fix")
 ```
 
 ## Approach
@@ -960,24 +959,28 @@ Write to `{run_dir}/reviews/security.json`:
 
 ```json
 {
+  "schema": "ReviewFindings",
   "reviewer": "security-reviewer",
   "timestamp": "2026-02-27T12:00:00Z",
   "summary": {
     "total_findings": 3,
-    "by_severity": {"critical": 0, "high": 1, "medium": 1, "low": 1}
+    "needs_fix_count": 2,
+    "needs_input_count": 1,
+    "verdict": "findings"
   },
   "findings": [
     {
       "id": "SEC-001",
-      "severity": "high",
+      "classification": "needs-fix",
+      "loe": "trivial",
       "category": "injection",
-      "title": "SQL injection via unsanitized user input",
       "file": "src/auth/oauth.py",
-      "line_start": 42,
-      "line_end": 44,
+      "line": 42,
       "description": "User-supplied `client_id` is interpolated directly into a raw SQL query.",
       "evidence": "Line 43: query = f'SELECT * FROM clients WHERE id = {client_id}'",
-      "fix": "Use parameterized queries: cursor.execute('SELECT * FROM clients WHERE id = ?', (client_id,))"
+      "suggested_fix": "Use parameterized queries: cursor.execute('SELECT * FROM clients WHERE id = ?', (client_id,))",
+      "risk": "SQL injection — attacker can read or modify any row in the database",
+      "input_needed": null
     }
   ]
 }
@@ -988,10 +991,10 @@ Then send a summary:
 ```
 SendMessage(type="message", recipient="team-lead",
   content="Security review complete. Results: {run_dir}/reviews/security.json\n\n"
-          "Findings: 3 (0 critical, 1 high, 1 medium, 1 low)\n"
-          "High: SQL injection in src/auth/oauth.py:43\n"
+          "Findings: 3 (2 needs-fix, 1 needs-input)\n"
+          "needs-fix: SQL injection in src/auth/oauth.py:43\n"
           "No hardcoded secrets. Auth flow looks correct.",
-  summary="Security: 3 findings (1 high)")
+  summary="Security: 3 findings (2 needs-fix, 1 needs-input)")
 ```
 ```
 
@@ -1060,13 +1063,9 @@ You do NOT modify any code.
 - Wrapper functions that add no value
 - Defensive error handling for things that cannot fail
 
-## Severity Scale
+## Finding Classification
 
-Use the shared severity scale from `references/communication-schema.md` (ReviewFindings):
-- **critical:** Bug or correctness issue that will cause incorrect behavior in production
-- **high:** Serious convention violation or error handling gap
-- **medium:** Clear improvement that should be addressed
-- **low:** Stylistic or minor — still report these, the Fixer addresses all severity levels
+Use the classification taxonomy and LoE scale from `code-quality/references/finding-classification.md` (Finding Classification and Level of Effort sections).
 
 ## Output Format
 
@@ -1078,19 +1077,22 @@ Write to `{run_dir}/reviews/qa.json`:
   "timestamp": "2026-02-27T12:00:00Z",
   "summary": {
     "total_findings": 5,
-    "by_severity": {"critical": 0, "high": 0, "medium": 3, "low": 2, "informational": 0}
+    "needs_fix_count": 5,
+    "needs_input_count": 0,
+    "verdict": "findings"
   },
   "findings": [
     {
       "id": "QA-001",
-      "severity": "medium",
+      "classification": "needs-fix",
+      "loe": "moderate",
       "category": "complexity",
-      "title": "Function exceeds single responsibility",
       "file": "src/auth/oauth.py",
-      "line_start": 80,
-      "line_end": 130,
+      "line": 80,
       "description": "handle_callback() does token exchange AND session creation AND audit logging.",
-      "fix": "Extract session creation and audit logging into separate functions."
+      "evidence": "Lines 80-130: single function handles three distinct responsibilities",
+      "suggested_fix": "Extract session creation and audit logging into separate functions.",
+      "risk": "Function will grow further and become impossible to test in isolation"
     }
   ]
 }
@@ -1333,12 +1335,13 @@ from `references/communication-schema.md`. Use `PLAN` prefix for all finding IDs
 Category values: `missing-task`, `partial-implementation`, `plan-spec-divergence`,
 `architect-acknowledged-descope`.
 
-**Severity guidance:**
-- `critical` — A task the user explicitly requested is entirely absent from the implementation
-- `high` — A task is substantially incomplete (core functionality missing)
-- `medium` — A task is partially addressed but missing edge cases or secondary requirements
-- `low` — Minor deviation from plan spec that does not affect functionality
-- `informational` — Architect-acknowledged descopes; record for audit trail, do not escalate
+## Finding Classification
+
+Use the classification taxonomy and LoE scale from `code-quality/references/finding-classification.md` (Finding Classification and Level of Effort sections).
+
+**Plan adherence classification guidance:**
+- `needs-fix` — A task the user explicitly requested is absent or substantially incomplete
+- `needs-input` — Architect-acknowledged descopes where user must decide whether to include the task
 
 ## Communication
 
@@ -1353,7 +1356,7 @@ SendMessage(type="message", recipient="team-lead",
           "Partially addressed: N\n"
           "Not addressed: N\n"
           "Architect-acknowledged descopes: N\n\n"
-          "Findings: N (N critical, N high, N medium, N low, N informational)\n"
+          "Findings: N (N needs-fix, N needs-input)\n"
           "[Brief summary of most significant gaps, if any]",
   summary="Plan Adherence: N findings — N tasks unaddressed")
 ```
@@ -1444,7 +1447,7 @@ Then send a summary to the lead:
 SendMessage(type="message", recipient="team-lead",
   content="Structural review (Concurrency & State) complete. "
           "Results: {run_dir}/reviews/structural-concurrency.json\n\n"
-          "Findings: N (N critical, N high, N medium, N low)\n"
+          "Findings: N (N needs-fix, N needs-input)\n"
           "[Brief summary of most significant structural issue found, if any]",
   summary="Structural-Concurrency: N STRUCT findings")
 ```
@@ -1536,7 +1539,7 @@ Then send a summary to the lead:
 SendMessage(type="message", recipient="team-lead",
   content="Structural review (Integration & Contract) complete. "
           "Results: {run_dir}/reviews/structural-integration.json\n\n"
-          "Findings: N (N critical, N high, N medium, N low)\n"
+          "Findings: N (N needs-fix, N needs-input)\n"
           "[Brief summary of most significant structural issue found, if any]",
   summary="Structural-Integration: N STRUCT findings")
 ```
@@ -1564,7 +1567,7 @@ SendMessage(type="message", recipient="team-lead",
 
 You are the Fixer. You address ALL review findings from the parallel review phase. You make
 targeted, precise fixes — you do NOT refactor, reorganize, or improve beyond what the findings
-require. You fix every finding assigned to you, regardless of severity.
+require. You fix every finding assigned to you, regardless of classification.
 
 You have access to: Read, Write, Edit, Glob, Grep, Bash.
 
@@ -1574,18 +1577,15 @@ You have access to: Read, Write, Edit, Glob, Grep, Bash.
 
 ## Fix Protocol
 
-### Priority Order
-1. Critical security findings
-2. High security findings
-3. Critical/high QA and correctness findings
-4. Medium findings (all categories)
-5. Performance findings
-6. Low findings
-7. Informational items — document as concrete follow-up with file:line references
+You have access to: Read, Write, Edit, Glob, Grep, Bash.
+You do NOT have AskUserQuestion — needs-input findings go to the Lead for user triage.
 
-Fix ALL findings in this list. Every severity level is your responsibility.
+### Processing Order
 
-### For Each Finding
+1. Process all `needs-fix` findings in file order (minimizes context switching)
+2. Collect all `needs-input` findings into `needs_input_items` — do NOT attempt to resolve them
+
+### For Each `needs-fix` Finding
 
 1. Read the affected file to understand current state
 2. Apply the minimal fix that resolves the issue
@@ -1596,7 +1596,7 @@ Do NOT:
 - Refactor code beyond what the finding requires
 - Change variable names, formatting, or style unless the finding specifically requires it
 - Add abstraction layers to "improve" the design
-- Skip or defer findings because of their severity level — every finding gets addressed
+- Classify any finding as `needs-input` to avoid doing work — `needs-input` means you genuinely cannot determine the fix, not that the fix is hard
 
 ### Test After Fixes
 
@@ -1610,25 +1610,37 @@ If tests fail after your fix, diagnose carefully:
 - Did your fix introduce a regression?
 - Was the test already fragile?
 
-Do not ship a fix that breaks tests. Revert and note it as a deferred item if you can't resolve.
+Do not ship a fix that breaks tests. Revert and note it as a technical blocker in `needs_input_items` if you genuinely cannot resolve.
 
 ## Output
 
-Send a FixSummary to the lead when done:
+Send a FixSummary to the lead when done (use the FixSummary schema from
+`references/communication-schema.md`):
 
 ```
 SendMessage(type="message", recipient="team-lead",
   content='{
-    "type": "FixSummary",
-    "fixed": [
-      {"id": "SEC-001", "description": "Parameterized the SQL query in oauth.py:43"},
-      {"id": "QA-001", "description": "Extracted session creation into create_session()"}
+    "schema": "FixSummary",
+    "findings_fixed": ["SEC-001", "QA-001"],
+    "needs_input_items": [
+      {
+        "id": "SEC-003",
+        "loe": "significant",
+        "description": "Auth bypass in admin endpoint requires redesigning the permission model",
+        "input_needed": "Should the permission model be redesigned now or deferred to a separate task?",
+        "suggested_action": "Redesign now — the current model creates a privilege escalation path"
+      }
     ],
-    "deferred": [
-      {"id": "SEC-003", "reason": "Fix would require API change — needs architect review"}
-    ]
+    "user_deferred": [],
+    "fixes": [
+      {"finding_id": "SEC-001", "description": "Parameterized the SQL query in oauth.py:43",
+       "file": "src/auth/oauth.py", "line_range": "43"},
+      {"finding_id": "QA-001", "description": "Extracted session creation into create_session()",
+       "file": "src/auth/oauth.py", "line_range": "80-130"}
+    ],
+    "files_modified": ["src/auth/oauth.py"]
   }',
-  summary="Fixer: 5 fixed, 1 deferred")
+  summary="Fixer: 2 fixed, 1 needs-input")
 ```
 ```
 
@@ -1686,7 +1698,7 @@ when no appropriate existing file exists. Match the project's naming conventions
 - Do NOT rewrite or modify existing tests (Phase 3 Test-Writer owns those)
 - Do NOT modify implementation code (Fixer owns that)
 - Do NOT write trivial tests just for coverage numbers
-- Do NOT skip findings because they seem "low severity" — if a reviewer flagged a coverage
+- Do NOT skip findings because they seem low-importance — if a reviewer flagged a coverage
   gap, write the test
 
 ## Output
@@ -2021,8 +2033,9 @@ taxonomy § Component Discovery (don't trust the Docs agent's counts):
 Write findings to `{run_dir}/reviews/docs-review.json` using the ReviewFindings schema:
 - Prefix: `DOC-R`
 - Categories: `impact-coverage`, `accuracy`, `consistency`, `completeness`
-- Severity: CRITICAL (never used), HIGH (missed surface, wrong count, factual error),
-  MEDIUM (description inaccuracy, style mismatch), LOW (minor wording)
+- Classification: `needs-fix` (missed surface, wrong count, factual error, description inaccuracy,
+  style mismatch, minor wording — all are fixable by the Docs agent without user input);
+  `needs-input` only if user must decide scope (e.g., whether to document an internal API)
 
 Send summary to lead when done.
 ````
@@ -2115,7 +2128,7 @@ For each source, ask: **"What principle-level pattern does this reveal?"**
 | `architect-plan.json` → `questions` | Were there open questions that caused friction? What question type keeps appearing? |
 | `reviews/*.json` → finding categories | What categories of issues did the reviewers keep finding? (auth gaps, complexity, naming — pattern across sessions) |
 | `escalations.json` → `type` | Did design-level escalations occur? What class of design decision needed rework? |
-| `fix-summary.json` → `findings_deferred` | What types of issues were deferred? Why? |
+| `fix-summary.json` → `needs_input_items` + `user_deferred` | What types of issues needed input or were declined? Why? |
 | `.swarm-run` → Phase 2.5 decision | Was the security design review skipped? Was that correct in retrospect? |
 
 ### Principle-Level Filter

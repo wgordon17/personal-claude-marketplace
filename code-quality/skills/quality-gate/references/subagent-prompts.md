@@ -37,7 +37,7 @@ CHECKLIST:
 For each finding, report:
 - Vulnerability type and location (file:line)
 - Attack vector (how an adversary exploits it)
-- Severity: CRITICAL (exploitable remotely, data loss) / HIGH (exploitable with effort) / MEDIUM (limited impact) / LOW (defense in depth)
+- Classification and LoE per `code-quality/references/finding-classification.md`
 - Suggested fix (brief)
 
 If no issues found, say "No security findings." Do not fabricate issues.
@@ -71,7 +71,7 @@ CHECKLIST:
 For each finding, report:
 - What scenario or path lacks coverage
 - Risk if it goes untested
-- Severity: CRITICAL (core path untested) / HIGH (likely regression path) / MEDIUM (edge case) / LOW (nice to have)
+- Classification and LoE per `code-quality/references/finding-classification.md`
 - Suggested test approach (brief)
 
 If coverage is adequate, say "No QA findings." Do not fabricate issues.
@@ -105,7 +105,7 @@ CHECKLIST:
 For each finding, report:
 - The performance problem and location (file:line)
 - Expected impact (scale at which it matters, latency/throughput effect)
-- Severity: CRITICAL (blocks scale, causes OOM/timeout) / HIGH (degrades at moderate load) / MEDIUM (noticeable at scale) / LOW (micro-optimization)
+- Classification and LoE per `code-quality/references/finding-classification.md`
 - Suggested fix (brief)
 
 If no performance issues found, say "No performance findings." Do not fabricate issues.
@@ -140,7 +140,7 @@ CHECKLIST:
 For each finding, report:
 - The quality concern and location (file:line)
 - Why it matters for long-term maintainability
-- Severity: HIGH (actively misleading or unmaintainable) / MEDIUM (degrades over time) / LOW (minor polish)
+- Classification and LoE per `code-quality/references/finding-classification.md`
 - Suggested improvement (brief)
 
 If code quality is good, say "No code quality findings." Do not fabricate issues.
@@ -229,12 +229,12 @@ PLAN FILE (if available):
    in the plan was implemented. For each plan task, check: are all steps completed?
    Were all files in the task's Files section modified? Does the implementation match
    the task's specification?
-   A plan task that is unchecked is a CRITICAL completeness gap — the plan is a contract.
+   A plan task that is unchecked is a `needs-fix` completeness gap — the plan is a contract.
 
 For each issue found, report:
 - What requirement or item is affected
 - What's missing or incomplete
-- Severity: CRITICAL (blocks the request) / HIGH (partial delivery) / MEDIUM (polish)
+- Classification and LoE per `code-quality/references/finding-classification.md`
 
 Be thorough. Assume at least 2 completeness gaps exist. Find them.
 ```
@@ -252,7 +252,7 @@ Review the fixes:
 3. What did YOU miss on your first pass? You had fresh eyes but still have blind spots.
 4. Look at the work holistically now — any remaining gaps?
 
-Report any remaining issues with the same severity format.
+Report any remaining issues with the same classification format.
 ```
 
 ---
@@ -303,7 +303,7 @@ FOCUS AREA FOR ALL WORK TYPES:
 For each issue found, report:
 - The specific problem
 - Why it matters (impact)
-- Severity: CRITICAL / HIGH / MEDIUM
+- Classification and LoE per `code-quality/references/finding-classification.md`
 - Suggested fix (brief)
 
 This work has at least 3 real issues. Find them.

@@ -215,7 +215,7 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
   ]
 }
 ```
-- **Extraction:** Each result -> one security finding. Map Bandit severity to our severity scale.
+- **Extraction:** Each result -> one security finding. The `"severity"` field in Bandit output is Bandit's own severity label (LOW/MEDIUM/HIGH) — use it as a signal for LoE estimation when classifying findings per `code-quality/references/finding-classification.md`. All security findings default to `classification: needs-fix` unless they require an architectural decision.
 - **Fallback:** Agent OWASP walkthrough.
 
 #### ruff — Code Quality & Imports

@@ -203,7 +203,7 @@ unique ID using the prefix for its reviewer:
 | Architect | `arch-` |
 | Security | `sec-` |
 
-Preserve: description, location reference (plan section or task number), severity, evidence,
+Preserve: description, location reference (plan section or task number), classification, evidence,
 source reviewer.
 
 ---
@@ -225,7 +225,7 @@ Build the findings JSON array:
     "reviewer": "Feasibility",
     "description": "...",
     "location": "Task 3, step 2",
-    "severity": "HIGH",
+    "classification": "needs-fix | needs-input",
     "evidence": "..."
   },
   ...
@@ -297,7 +297,7 @@ Findings: {verified_count} verified, {needs_context_count} needs context
   (from {total_raw} raw findings — {false_positive_count} false positives removed)
 
 RESEARCH GAPS
-  1. [{Reviewer}] {description} [{severity}]
+  1. [{Reviewer}] {description} [{classification}]
      {location}
      Evidence: {evidence}
 
@@ -320,7 +320,7 @@ SPECIFICATION
   ...
 
 ─── Needs Context ({needs_context_count}) ───
-  1. [{Reviewer}] {description} [{severity}]
+  1. [{Reviewer}] {description} [{classification}]
      {location}
      Investigation: {investigation_summary}
 
@@ -336,8 +336,8 @@ Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {
 
 Category sections contain only `verified` findings. Group by category in order: RESEARCH GAPS
 (first — highest leverage to fix before implementation) → FEASIBILITY → SCOPE → DEPENDENCIES →
-ARCHITECTURE → SECURITY → SPECIFICATION. Within each category, sort by severity (CRITICAL →
-HIGH → MEDIUM → LOW). For the `[Reviewer]` tag, use the short reviewer name: Feasibility,
+ARCHITECTURE → SECURITY → SPECIFICATION. Within each category, sort by classification (needs-fix
+first, then needs-input). For the `[Reviewer]` tag, use the short reviewer name: Feasibility,
 Scope, Dependencies, Unknown Unknowns, Architect, Security.
 
 Omit category sections with zero verified findings.

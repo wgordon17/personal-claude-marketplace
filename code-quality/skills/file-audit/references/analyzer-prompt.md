@@ -236,7 +236,7 @@ Return a single JSON object with this exact structure:
       "id": "issue-001",
       "type": "unused_code",
       "subtype": "unreferenced_function",
-      "severity": "warning",
+      "diagnostic_level": "warning",
       "location": {"line": 120, "end_line": 145},
       "symbol": "legacy_authenticate",
       "description": "Function `legacy_authenticate` has zero references in the codebase",

@@ -10,7 +10,7 @@ Issues related to code that is never used or referenced.
 
 ### unreferenced_function
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** LSP `findReferences` returns zero external references.
 
@@ -30,7 +30,7 @@ Issues related to code that is never used or referenced.
 {
   "type": "unused_code",
   "subtype": "unreferenced_function",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 45, "end_line": 67},
   "symbol": "legacy_authenticate",
   "description": "Function `legacy_authenticate` has zero references in the codebase",
@@ -43,7 +43,7 @@ Issues related to code that is never used or referenced.
 
 ### unreferenced_variable
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** LSP `findReferences` returns only the definition, no reads.
 
@@ -62,7 +62,7 @@ Issues related to code that is never used or referenced.
 {
   "type": "unused_code",
   "subtype": "unreferenced_variable",
-  "severity": "info",
+  "diagnostic_level": "info",
   "location": {"line": 23},
   "symbol": "DEBUG_MODE",
   "description": "Variable `DEBUG_MODE` is assigned but never read",
@@ -75,7 +75,7 @@ Issues related to code that is never used or referenced.
 
 ### unreferenced_class
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** LSP `findReferences` returns zero instantiations or subclasses.
 
@@ -89,7 +89,7 @@ Issues related to code that is never used or referenced.
 {
   "type": "unused_code",
   "subtype": "unreferenced_class",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 100, "end_line": 150},
   "symbol": "LegacyUserModel",
   "description": "Class `LegacyUserModel` is never instantiated or extended",
@@ -101,7 +101,7 @@ Issues related to code that is never used or referenced.
 
 ### dead_import
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Import statement exists but imported symbol is never used in file.
 
@@ -119,7 +119,7 @@ Issues related to code that is never used or referenced.
 {
   "type": "unused_code",
   "subtype": "dead_import",
-  "severity": "info",
+  "diagnostic_level": "info",
   "location": {"line": 5},
   "symbol": "unused_helper",
   "description": "Import `unused_helper` is not used in this file",
@@ -131,7 +131,7 @@ Issues related to code that is never used or referenced.
 
 ### unreachable_code
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** Code appears after unconditional return, raise, break, or continue.
 
@@ -145,7 +145,7 @@ Issues related to code that is never used or referenced.
 {
   "type": "unused_code",
   "subtype": "unreachable_code",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 78, "end_line": 82},
   "description": "Code after return statement is unreachable",
   "suggested_fix": "Remove unreachable code or fix control flow"
@@ -160,7 +160,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 
 ### deprecated_api
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** Context7 docs indicate the API is deprecated.
 
@@ -174,7 +174,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 {
   "type": "incorrect_usage",
   "subtype": "deprecated_api",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 67},
   "description": "Using deprecated @validator decorator from Pydantic",
   "evidence": "Context7 docs: '@validator is deprecated since Pydantic v2, use @field_validator'",
@@ -188,7 +188,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 
 ### wrong_signature
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** Context7 docs show different expected parameters.
 
@@ -203,7 +203,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 {
   "type": "incorrect_usage",
   "subtype": "wrong_signature",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 34},
   "description": "bcrypt.hashpw() called with wrong argument order",
   "evidence": "Context7 docs: 'hashpw(password, salt)' but code has 'hashpw(salt, password)'",
@@ -215,7 +215,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 
 ### missing_error_handling
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** Context7 docs show function raises exceptions not caught.
 
@@ -229,7 +229,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 {
   "type": "incorrect_usage",
   "subtype": "missing_error_handling",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 89},
   "description": "requests.get() called without handling ConnectionError, Timeout",
   "evidence": "Context7 docs list Timeout, ConnectionError as common exceptions",
@@ -241,7 +241,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 
 ### type_mismatch
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** LSP hover shows type incompatibility.
 
@@ -255,7 +255,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 {
   "type": "incorrect_usage",
   "subtype": "type_mismatch",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 56},
   "description": "Passing str to function expecting int",
   "evidence": "LSP hover: process_count(count: int) but called with string",
@@ -267,7 +267,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 
 ### security_issue
 
-**Severity:** error
+**Diagnostic Level:** error
 
 **Detection:** Known insecure patterns or Context7 security warnings.
 
@@ -283,7 +283,7 @@ Issues related to incorrect or suboptimal use of libraries and APIs.
 {
   "type": "incorrect_usage",
   "subtype": "security_issue",
-  "severity": "error",
+  "diagnostic_level": "error",
   "location": {"line": 123},
   "description": "SQL query uses string formatting instead of parameterized query",
   "evidence": "f\"SELECT * FROM users WHERE id = {user_id}\" is vulnerable to injection",
@@ -299,7 +299,7 @@ Issues related to duplicated code patterns across files.
 
 ### exact_duplicate
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** Content hash of normalized code matches another file exactly.
 
@@ -312,7 +312,7 @@ Issues related to duplicated code patterns across files.
 {
   "type": "duplication",
   "subtype": "exact_duplicate",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 34, "end_line": 34},
   "description": "Email validation regex duplicated from src/utils/validators.py",
   "evidence": "Identical pattern: ^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$",
@@ -324,7 +324,7 @@ Issues related to duplicated code patterns across files.
 
 ### near_duplicate
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Structural hash matches with >80% content similarity.
 
@@ -338,7 +338,7 @@ Issues related to duplicated code patterns across files.
 {
   "type": "duplication",
   "subtype": "near_duplicate",
-  "severity": "info",
+  "diagnostic_level": "info",
   "location": {"line": 50, "end_line": 65},
   "description": "Function structurally similar to validate_email in src/auth/validators.py",
   "evidence": "Same AST structure, 85% content similarity",
@@ -350,7 +350,7 @@ Issues related to duplicated code patterns across files.
 
 ### pattern_duplicate
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Same algorithm/pattern implemented in multiple places.
 
@@ -365,7 +365,7 @@ Issues related to duplicated code patterns across files.
 {
   "type": "duplication",
   "subtype": "pattern_duplicate",
-  "severity": "info",
+  "diagnostic_level": "info",
   "location": {"line": 78, "end_line": 95},
   "description": "Retry-with-backoff pattern duplicated from src/api/client.py",
   "suggested_fix": "Use shared retry decorator from src/utils/retry.py"
@@ -380,7 +380,7 @@ Issues where code behavior differs from documented behavior in project memory fi
 
 ### code_doc_mismatch
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** Comparison of actual code behavior vs PROJECT.md claims.
 
@@ -393,7 +393,7 @@ Issues where code behavior differs from documented behavior in project memory fi
 {
   "type": "documentation_drift",
   "subtype": "code_doc_mismatch",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 1, "end_line": 100},
   "description": "PROJECT.md claims rate limiting on all endpoints, but this file has none",
   "code_behavior": "No rate limiting middleware or decorator detected",
@@ -406,7 +406,7 @@ Issues where code behavior differs from documented behavior in project memory fi
 
 ### missing_feature
 
-**Severity:** warning
+**Diagnostic Level:** warning
 
 **Detection:** Feature marked done in TODO.md but not implemented in code.
 
@@ -420,7 +420,7 @@ Issues where code behavior differs from documented behavior in project memory fi
 {
   "type": "documentation_drift",
   "subtype": "missing_feature",
-  "severity": "warning",
+  "diagnostic_level": "warning",
   "location": {"line": 1},
   "description": "TODO.md claims 'password reset flow complete' but no reset endpoint found",
   "documented_behavior": "Password reset flow ({memory_dir}/TODO.md:23, marked complete)",
@@ -433,7 +433,7 @@ Issues where code behavior differs from documented behavior in project memory fi
 
 ### undocumented_feature
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Significant functionality exists without documentation.
 
@@ -447,7 +447,7 @@ Issues where code behavior differs from documented behavior in project memory fi
 {
   "type": "documentation_drift",
   "subtype": "undocumented_feature",
-  "severity": "info",
+  "diagnostic_level": "info",
   "location": {"line": 200, "end_line": 350},
   "symbol": "AdminDashboard",
   "description": "AdminDashboard class (150 lines) not documented in PROJECT.md",
@@ -460,11 +460,11 @@ Issues where code behavior differs from documented behavior in project memory fi
 
 ## Category: style
 
-Style and quality issues (lower priority).
+Style and quality issues. See `code-quality/references/finding-classification.md` for classification guidance.
 
 ### naming_convention
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Symbol name doesn't match language conventions.
 
@@ -477,7 +477,7 @@ Style and quality issues (lower priority).
 
 ### complexity
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Function exceeds complexity thresholds.
 
@@ -490,7 +490,7 @@ Style and quality issues (lower priority).
 
 ### missing_docstring
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Public API without documentation.
 
@@ -503,7 +503,7 @@ Style and quality issues (lower priority).
 
 ### magic_number
 
-**Severity:** info
+**Diagnostic Level:** info
 
 **Detection:** Unexplained numeric/string literals in code.
 
@@ -514,13 +514,13 @@ Style and quality issues (lower priority).
 
 ---
 
-## Severity Reference
+## Diagnostic Level Reference
 
-| Severity | Priority | When to Use |
-|----------|----------|-------------|
-| **error** | Critical | Security issues, broken code, data loss risk |
-| **warning** | High | Deprecated APIs, unused code, duplicates, drift |
-| **info** | Low | Style issues, minor improvements, suggestions |
+| Diagnostic Level | When to Use | Classification |
+|-----------------|-------------|---------------|
+| **error** | Security issues, broken code, data loss risk | needs-fix |
+| **warning** | Deprecated APIs, unused code, duplicates, drift | needs-fix |
+| **info** | Style issues, minor improvements, suggestions | needs-input if architectural; needs-fix if stylistic |
 
 ---
 
