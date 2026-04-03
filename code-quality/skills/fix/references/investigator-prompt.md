@@ -32,6 +32,7 @@ Evidence: {FINDING_EVIDENCE}
 Location: {FINDING_LOCATION}
 Suggested fix: {SUGGESTED_FIX or "None provided"}
 Fix target type: {FIX_TARGET_TYPE}
+Verifier verdict: {VERIFIER_VERDICT or "none"}
 </finding-data>
 ```
 _Repeat the `<finding-data>` block for each batched finding, incrementing the `id` attribute._
@@ -61,7 +62,12 @@ For each finding wrapped in `<finding-data>` tags above:
    - Read the root cause analysis in the finding evidence.
    - Trace the full code path described.
    - Determine whether the resolution plan is complete or missing steps.
-6. Estimate `loe_estimate` (trivial / moderate / significant). Use the scale from
+6. If `Verifier verdict` is `needs_context`: the upstream verifier could not confirm or deny
+   this finding. Investigate it with the same rigor as other findings. If you can confirm or
+   deny it, return the appropriate verdict (`resolution`, `refinement_needed`, or `invalid`).
+   If you also cannot confirm or deny it after investigation, return verdict `invalid` with
+   reason: "could not verify — insufficient evidence".
+7. Estimate `loe_estimate` (trivial / moderate / significant). Use the scale from
    code-quality/references/finding-classification.md:
    - trivial: one-liner or mechanical change, no judgment required
    - moderate: multi-file or requires reading context, some judgment
@@ -95,7 +101,9 @@ OUTPUT FORMAT — produce one block per finding, using the finding's id from the
 **Recommendation:** Which option the investigator leans toward and why
 
 ### Invalid (if verdict = invalid)
-**Reason:** Why the finding no longer applies (e.g., code was changed, assumption was wrong)
+**Reason:** Why the finding no longer applies (e.g., code was changed, assumption was wrong),
+OR "could not verify — insufficient evidence" if `Verifier verdict` was `needs_context` and
+you could not confirm or deny the finding after investigation.
 ```
 
 **Placeholder sources (from normalized finding structure):**
@@ -109,6 +117,7 @@ OUTPUT FORMAT — produce one block per finding, using the finding's id from the
 | `{FINDING_LOCATION}` | `finding.location` |
 | `{SUGGESTED_FIX}` | `finding.suggested_fix` |
 | `{FIX_TARGET_TYPE}` | Derived from finding.source: `pr-review` → `"code"`, `plan-review` → `"plan"`, `bug-investigation` → `"bug"` |
+| `{VERIFIER_VERDICT}` | `finding.verifier_verdict` — `"needs_context"` if the upstream verifier could not confirm, otherwise `"none"` |
 
 ---
 
