@@ -310,6 +310,43 @@ they appear in the Needs Context section with the verification failure note.
 
 ---
 
+## Phase 3.5 — Needs-Input Resolution
+
+If any surviving findings (after filtering false positives) have classification `needs-input`,
+present them to the user before producing the report. Do NOT skip this step — the skill must
+not exit with unresolved `needs-input` items.
+
+If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
+
+### Present to User
+
+Build a multiSelect AskUserQuestion with one option per `needs-input` finding:
+
+```
+AskUserQuestion(questions=[{
+  "question": "These findings need your decision. Select items to acknowledge — unselected items will be marked as deferred.",
+  "header": "PR Review",
+  "options": [
+    {"label": "{id}", "description": "[{Reviewer}] {description} ({file}:{line})"},
+    ...
+  ],
+  "multiSelect": true
+}])
+```
+
+### Record Decisions
+
+For each `needs-input` finding:
+- **Selected:** Update the finding's classification to `[user-acknowledged]` in the output.
+  The user has seen it and accepts responsibility.
+- **Not selected:** Update the finding's classification to `[user-deferred]` in the output.
+  The user explicitly chose not to act on it now.
+
+Both outcomes are valid — the point is that every `needs-input` item gets a recorded user
+decision, not silent deferral.
+
+---
+
 ## Phase 4 — Terminal Output
 
 Print the structured report. Use `━` (U+2501) for the divider lines.
@@ -356,8 +393,12 @@ STYLE & CONVENTIONS
      {file}:{line}
      Investigation: {investigation_summary}
 
+─── User Decisions ({user_decision_count}) ───
+  1. [{Reviewer}] {description} [{user-acknowledged | user-deferred}]
+     {file}:{line}
+
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count}
+Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count} | User decisions: {user_decision_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -372,11 +413,15 @@ Findings with verdict `needs_context` appear in a dedicated section at the botto
 are items the verifier could not confirm or deny and require human judgment. They are NOT
 hidden or filtered — they are surfaced transparently.
 
+User decisions from Phase 3.5 appear in their own section. Both `user-acknowledged` and
+`user-deferred` items are shown — this is the audit trail proving every `needs-input` finding
+received an explicit user decision.
+
 ### No Findings After Verification
 
-Use this path only when `verified_count == 0` AND `needs_context_count == 0` (all findings
-were false positives, or no findings were reported). If `needs_context_count > 0`, use the
-"Findings Exist" path — it has the Needs Context section for those items.
+Use this path only when `verified_count == 0` AND `needs_context_count == 0` AND
+`user_decision_count == 0` (all findings were false positives, or no findings were reported).
+If any count is > 0, use the "Findings Exist" path.
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -391,7 +436,7 @@ No verified issues found.
 Checked for: security, test coverage, performance, code quality, correctness, plan adherence.
 
 Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0
+Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0 | User decisions: 0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -414,6 +459,8 @@ After output, return to the original branch or worktree recorded in Phase 0.
 | Cannot checkout branch | Auto-stash and retry. If stash fails, stop: "Cannot checkout PR branch and stash failed." |
 | All findings false positive | Output "no findings" report format (not an error) |
 | Verification JSON parse fails | All findings get `unverified` verdict, treated as `needs_context` in output |
+| Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
+| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
 
 ---
 
