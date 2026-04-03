@@ -516,13 +516,13 @@ proposed architecture, and writes its findings to `{run_dir}/security-design-rev
 After the security-design agent reports completion, read `{run_dir}/security-design-review.json`.
 Check the `verdict` field:
 
-**`proceed`** (no `needs-input` findings requiring architectural redesign):
+**`proceed`** (no `needs-fix` findings blocking implementation):
 - Append the `security_constraints` array from the review to `architect-plan.json` as a
   top-level `security_constraints` field
 - Notify the Architect of the constraints so they are available for Phase 3 clarification questions
 - Proceed to Phase 3
 
-**`revise`** (`needs-input` findings requiring plan revision present):
+**`revise`** (`needs-fix` findings require architect plan revision):
 - Send findings to the Architect:
   ```
   SendMessage(type="message", recipient="architect",
