@@ -298,7 +298,7 @@ FOCUS AREA FOR ALL WORK TYPES:
   and verify each documented claim, count, description, and behavior against on-disk
   reality. If docs say "5 agents" — count them. If docs say "supports X" — find the
   code that does it. If docs describe behavior — read the implementation and confirm.
-  Documentation that matches the plan but not the code is a CRITICAL finding.
+  Documentation that matches the plan but not the code is a `needs-fix` finding.
 
 For each issue found, report:
 - The specific problem
