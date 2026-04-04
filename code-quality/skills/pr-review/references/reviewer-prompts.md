@@ -408,7 +408,9 @@ Do NOT reclassify a finding to `needs-input` because:
 - The category is "Decisions Needed" — category describes the finding's nature, not its classification
 
 Only set `needs-input` when your investigation surfaced a specific, articulable decision the
-user must make that was not apparent from the reviewer's original report.
+user must make — e.g., two approaches with meaningfully different user-visible consequences
+(behavior, API contract, data model). A choice between two implementation approaches (regex
+vs schema, loop vs map, etc.) is NOT a decision point — pick the simpler one.
 
 ## Output
 

@@ -463,7 +463,9 @@ Do NOT reclassify a finding to `needs-input` because:
 - The category is "Research Gaps" — unvalidated assumptions are actionable (validate them)
 
 Only set `needs-input` when your investigation surfaced a specific, articulable decision the
-user must make that was not apparent from the reviewer's original report.
+user must make — e.g., two approaches with meaningfully different user-visible consequences
+(behavior, API contract, data model). A choice between two plan approaches (validation step
+vs spike, inline vs separate task, etc.) is NOT a decision point — pick the more thorough one.
 
 ## Output
 
