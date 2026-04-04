@@ -83,13 +83,13 @@ report file:
 | Type | Primary file | Fallback |
 |------|-------------|---------|
 | Swarm | `swarm-report.md` | `architect-plan.json` (incomplete run) |
-| Speculative | `speculative-report.md` | `judgment.json` (incomplete run) |
-| Map-Reduce | `map-reduce-report.md` | `reduction-result.json` (incomplete run) |
+| Speculative | `speculative-report.md` | — |
+| Map-Reduce | `map-reduce-report.md` | — |
 | Unfuck | `cleanup-report.md` | `cleanup-plan.md` (incomplete run) |
 
-**Incomplete speculative/map-reduce runs** (no report file but fallback exists): handle the same
-as incomplete swarm — summarize from available files, skip Phase 2 audit, classify as Active in
-Phase 3, and do not offer archival.
+**Incomplete speculative/map-reduce runs** (no primary report file and no fallback): print
+"[Type] directory [path] contains no recognizable report. The run may be incomplete or in
+progress." and stop. These types have no meaningful fallback file to summarize from.
 
 **Incomplete swarm runs** (has `architect-plan.json` but no `swarm-report.md`): Note in Phase 1
 summary: "⚠ Incomplete swarm run — no swarm-report.md. Summarizing from architect plan only."
@@ -233,6 +233,7 @@ these characters.
 Agent(
   description="Audit [artifact-type] completion",
   subagent_type="general-purpose",
+  model="sonnet",
   mode="bypassPermissions",
   run_in_background=true,
   prompt="You are auditing a [type] artifact for completion.
@@ -330,7 +331,8 @@ archival. Skip the remaining classification checks.
 **2. Obsolete (flag override)**
 If `obsolete_flag` was set in Phase 0 (user included "obsolete" in the invocation): classify
 as Obsolete immediately. Skip the Superseded and Completed checks — the user has declared
-intent.
+intent. **Exception:** If the artifact is BUGS.md, ignore the obsolete flag and continue to
+item 3 — BUGS.md is a persistent tracker that must never be archived (see BUGS.md Exception).
 
 **3. Superseded**
 Check for a newer artifact covering the same scope. Detection by type:
@@ -423,9 +425,9 @@ frontmatter `---` if present):
 
 - **Single-file artifacts** (plans, research, roadmap): Edit the file directly using Edit.
 - **Directory artifacts** (swarm, speculative, map-reduce, unfuck): Add the status header to
-  the **primary report file** identified in Phase 0 Path A (i.e., `swarm-report.md`,
-  `speculative-report.md`, `map-reduce-report.md`, `cleanup-report.md`; fall back to
-  `cleanup-plan.md` for unfuck, `architect-plan.json` for swarm if no report exists).
+  the **primary report file** (`swarm-report.md`, `speculative-report.md`,
+  `map-reduce-report.md`, `cleanup-report.md`). Note: archive is only offered for complete
+  runs — incomplete runs (which use fallback files) are classified Active and never reach here.
 
 **Step 2 — Create done/ subdirectory.**
 ```bash

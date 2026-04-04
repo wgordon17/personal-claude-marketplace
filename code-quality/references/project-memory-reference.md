@@ -2,7 +2,7 @@
 
 > **Cross-reference note:** This file is referenced by multiple skills and commands. When editing, check all consumers.
 > Consumers — Skills: swarm (+ references), speculative, unfuck, map-reduce, incremental-planning, deep-research, index-repo,
-> roadmap, pr-review, plan-review, quality-gate, bug-investigation, file-audit, fix. Commands: session-start, session-end, review-project.
+> roadmap, pr-review, plan-review, quality-gate, bug-investigation, file-audit, fix, summarize. Commands: session-start, session-end, review-project.
 
 Canonical definitions for project memory conventions. All memory-aware skills and commands in this plugin reference
 this file. Do not maintain ad-hoc memory conventions elsewhere — point here.
@@ -156,3 +156,43 @@ Skills running inside a git worktree must resolve where to find (and write) memo
 |-----------|---------|
 | **Write** (audit trails, run outputs) | Write to resolved memory dir; run-ID subdirectory prevents contention across worktrees |
 | **Read** (shared memory files) | Read from resolved main memory dir (PROJECT.md, TODO.md, etc. are shared) |
+
+---
+
+## Archive Convention
+
+Skills that archive completed or superseded artifacts move them to a `done/` subdirectory within the
+artifact type's directory. This convention keeps active artifact scans clean while preserving history.
+
+### Pattern
+
+```
+{memory_dir}/{artifact-type}/done/{filename-or-dirname}
+```
+
+Examples:
+- `hack/plans/done/feat-auth-1711388400-scope.md`
+- `hack/swarm/done/feat-fix-skill-1775231207/`
+- `hack/unfuck/done/root-20260218/`
+
+### Current State
+
+- `plans/done/` — currently exists, created by `/roadmap` cleanup mode
+- All other `done/` subdirectories — created on demand by `/summarize` when archiving
+
+### Rules for Active-Artifact Scanners
+
+Skills scanning for active artifacts **MUST** exclude `done/` subdirectories to avoid matching
+archived content. Specifically:
+
+- `/summarize` Phase 0 Path B: skip files/directories where the path contains a `/done/` component
+- `/swarm` Phase 4 Plan Adherence: when searching `{memory_dir}/plans/` for plan files matching a
+  branch header, exclude `plans/done/`
+- `/swarm` Phase 5.5 Plan Reconciliation: same exclusion as Plan Adherence
+- `/roadmap`: already manages `plans/done/` — no changes needed
+
+### Backup Files
+
+`/roadmap` Update Mode creates `.pre-update` backup files in `plans/done/`
+(e.g., `plans/done/feat-summarize-*.pre-update`). These are pre-edit snapshots, not summarizable
+artifacts. Detection must exclude `.pre-update` files from artifact scanning.

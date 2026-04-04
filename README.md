@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 19 skills, 4 commands | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 20 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -50,6 +50,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/fix` - Comprehensive finding fixer with spike execution for plan-review Research Gaps
 - `/reflect` - Mid-task self-reflection checkpoint via Serena metacognitive tools
 - `/index-repo` - Repository indexing for token-efficient codebase orientation
+- `/summarize` - Artifact summary, completion audit, and archival for all skill outputs
 
 **Commands:**
 - `/code-quality:session-start` - Load project context or initialize
