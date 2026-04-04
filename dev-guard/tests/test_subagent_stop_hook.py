@@ -130,6 +130,26 @@ class TestFixSummaryDetection:
         assert result.returncode == 0, f"stderr: {result.stderr!r}"
         assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
 
+    def test_real_transcript_format_approves(self, tmp_path):
+        """Real Claude Code transcript format with nested message dict -> detected -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": json.dumps(VALID_FIX_SUMMARY)},
+                    ],
+                },
+            },
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
     def test_transcript_without_fix_summary_approves(self, tmp_path):
         """Transcript with only regular messages (no FixSummary) -> not a Fixer -> approve."""
         transcript = tmp_path / "transcript.jsonl"
