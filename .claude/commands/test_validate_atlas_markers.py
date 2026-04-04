@@ -156,6 +156,34 @@ def test_mismatched_names_exits_1(tmp_path):
     assert "Mismatched" in result.stderr
 
 
+def test_duplicate_section_exits_1(tmp_path):
+    content = (
+        "<!-- BEGIN:AUTO foo -->\ncontent\n<!-- END:AUTO foo -->\n"
+        "<!-- BEGIN:AUTO foo -->\nmore\n<!-- END:AUTO foo -->\n"
+    )
+    path = make_atlas(tmp_path, content)
+    result = run(path)
+    assert result.returncode == 1
+    assert "Duplicate" in result.stderr
+
+
+def test_markers_inside_fenced_code_block_are_ignored(tmp_path):
+    # Markers inside ``` fenced blocks should not be treated as real markers
+    lines = []
+    for s in ALL_SECTIONS:
+        lines.append(f"<!-- BEGIN:AUTO {s} -->")
+        if s == ALL_SECTIONS[0]:
+            lines.append("```markdown")
+            lines.append("<!-- BEGIN:AUTO fake -->")
+            lines.append("<!-- END:AUTO fake -->")
+            lines.append("```")
+        lines.append(f"<!-- END:AUTO {s} -->")
+    path = make_atlas(tmp_path, "\n".join(lines) + "\n")
+    result = run(path)
+    assert result.returncode == 0
+    assert "14/14" in result.stdout
+
+
 # ---------------------------------------------------------------------------
 # Check 4: Expected section coverage
 # ---------------------------------------------------------------------------

@@ -49,9 +49,15 @@ def main() -> int:
 
     lines = atlas_path.read_text(encoding="utf-8").splitlines()
 
-    # Check 2: marker syntax
+    # Check 2: marker syntax (skip fenced code blocks)
     errors = []
+    in_fence = False
     for i, line in enumerate(lines, start=1):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if AUTO_KEYWORD_RE.search(line) and _is_marker_line(line) and not MARKER_RE.search(line):
             errors.append(f"  Line {i}: malformed marker: {line.strip()}")
     if errors:
@@ -63,7 +69,13 @@ def main() -> int:
     # Check 3: pairing and ordering
     stack: list[tuple[str, int]] = []
     found: set[str] = set()
+    in_fenced = False
     for i, line in enumerate(lines, start=1):
+        if line.lstrip().startswith("```"):
+            in_fenced = not in_fenced
+            continue
+        if in_fenced:
+            continue
         if not _is_marker_line(line):
             continue
         m = MARKER_RE.search(line)
@@ -71,6 +83,12 @@ def main() -> int:
             continue
         kind, name = m.group(1), m.group(2)
         if kind == "BEGIN":
+            if name in found:
+                print(
+                    f"ERROR: Duplicate section '{name}' at line {i} (already seen)",
+                    file=sys.stderr,
+                )
+                return 1
             if stack:
                 print(
                     f"ERROR: Nested marker at line {i}: BEGIN:{name} inside BEGIN:{stack[-1][0]}",
