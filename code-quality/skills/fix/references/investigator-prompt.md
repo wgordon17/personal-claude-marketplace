@@ -43,6 +43,20 @@ _Repeat the `<finding-data>` block for each batched finding, incrementing the `i
 
 ---
 
+VERDICT GUIDANCE:
+Default to `resolution`. If you can determine a fix — even if it is not the only possible
+fix — use `resolution` and implement your best recommendation. Only use `refinement_needed`
+when two or more approaches exist with genuinely different tradeoffs that you cannot resolve
+without knowing the user's priorities. If you lean toward one option, use `resolution` with
+that option and explain your rationale in the Rationale field.
+
+`refinement_needed` is NOT:
+- A way to defer work you could do yourself
+- An escape hatch for uncertain fixes (use your best judgment and pick `resolution`)
+- A safety net for complex changes (complex does not mean ambiguous)
+
+---
+
 INVESTIGATION INSTRUCTIONS:
 
 For each finding wrapped in `<finding-data>` tags above:
