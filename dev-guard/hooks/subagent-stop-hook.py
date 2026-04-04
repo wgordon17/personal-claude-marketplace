@@ -97,7 +97,11 @@ def _extract_text_from_content(content: object) -> str:
             elif block_type == "tool_use":
                 inp = block.get("input", {})
                 if isinstance(inp, dict):
-                    # Flatten tool_use input fields as JSON for FixSummary detection
+                    # Append raw string values for FixSummary detection in
+                    # JSON-encoded content (e.g. SendMessage message field)
+                    for v in inp.values():
+                        if isinstance(v, str) and v:
+                            parts.append(v)
                     parts.append(json.dumps(inp))
         return "\n".join(parts)
 
@@ -187,29 +191,29 @@ def _find_fix_summary(transcript_path: str) -> dict | None:
                 if isinstance(inp, dict):
                     if inp.get("schema") == "FixSummary" or "findings_fixed" in inp:
                         return inp
-                    # Check if input contains a FixSummary in a nested field (e.g. SendMessage)
-                    text = json.dumps(inp)
-                    if "FixSummary" in text or "findings_fixed" in text:
-                        result = _try_parse_fix_summary(text)
-                        if result is not None:
-                            return result
+                    # Unwrap JSON-encoded string values (e.g. SendMessage message field)
+                    for v in inp.values():
+                        if isinstance(v, str) and ("FixSummary" in v or "findings_fixed" in v):
+                            unwrapped = _try_parse_fix_summary(v)
+                            if unwrapped is not None:
+                                return unwrapped
 
             # Only examine assistant messages for FixSummary
             is_assistant = msg_type == "assistant" or role == "assistant"
             if not is_assistant:
                 continue
 
-            text = _extract_text_from_content(content)
-            if not text:
+            content_text = _extract_text_from_content(content)
+            if not content_text:
                 continue
 
             # Quick check before expensive parse
-            if "FixSummary" not in text and "findings_fixed" not in text:
+            if "FixSummary" not in content_text and "findings_fixed" not in content_text:
                 continue
 
-            result = _try_parse_fix_summary(text)
-            if result is not None:
-                return result
+            candidate = _try_parse_fix_summary(content_text)
+            if candidate is not None:
+                return candidate
 
     except (OSError, UnicodeDecodeError):
         return None
@@ -220,18 +224,29 @@ def _find_fix_summary(transcript_path: str) -> dict | None:
 # ── Validation ───────────────────────────────────────────────────────────────
 
 
-def _validate_items(items: list, field: str) -> tuple[bool, str]:
-    """Validate that each item in a FixSummary array is a non-empty string or dict."""
+def _validate_items(items: list, field: str, require_dict: bool = False) -> tuple[bool, str]:
+    """Validate items in a FixSummary array.
+
+    findings_fixed accepts non-empty strings or dicts.
+    needs_input_items and user_deferred require dicts with a non-empty 'id' field.
+    """
     for item in items:
-        if isinstance(item, str):
-            if not item.strip():
-                return False, f"{field} contains whitespace-only string"
-        elif isinstance(item, dict):
-            if not item:
-                return False, f"{field} contains empty dict"
+        if require_dict:
+            if not isinstance(item, dict):
+                return False, f"{field} item must be a dict, got {type(item).__name__}"
+            item_id = item.get("id", "")
+            if not isinstance(item_id, str) or not item_id.strip():
+                return False, f"{field} item missing non-empty 'id' field"
         else:
-            return False, f"{field} contains unexpected type: {type(item).__name__}"
-    return True, "valid"
+            if isinstance(item, str):
+                if not item.strip():
+                    return False, f"{field} contains whitespace-only string"
+            elif isinstance(item, dict):
+                if not item:
+                    return False, f"{field} contains empty dict"
+            else:
+                return False, f"{field} contains unexpected type: {type(item).__name__}"
+    return True, ""
 
 
 def _validate_fix_summary(fix_summary: dict) -> tuple[bool, str]:
@@ -253,16 +268,16 @@ def _validate_fix_summary(fix_summary: dict) -> tuple[bool, str]:
     if len(findings_fixed) + len(needs_input_items) + len(user_deferred) == 0:
         return False, "all arrays empty — no findings accounted for"
 
-    for field, items in (
-        ("findings_fixed", findings_fixed),
-        ("needs_input_items", needs_input_items),
-        ("user_deferred", user_deferred),
+    for field, items, require_dict in (
+        ("findings_fixed", findings_fixed, False),
+        ("needs_input_items", needs_input_items, True),
+        ("user_deferred", user_deferred, True),
     ):
-        ok, msg = _validate_items(items, field)
+        ok, msg = _validate_items(items, field, require_dict)
         if not ok:
             return False, msg
 
-    return True, "valid"
+    return True, ""
 
 
 # ── State Management ─────────────────────────────────────────────────────────
@@ -322,17 +337,11 @@ def _check_loop_guard(state: dict, state_key: str) -> tuple[bool, int]:
 def _record_block(state: dict, state_key: str) -> None:
     """Increment consecutive_blocks counter for state_key."""
     entry = state.get(state_key)
-    if isinstance(entry, dict):
-        count = entry.get("consecutive_blocks", 0)
-        state[state_key] = {
-            "consecutive_blocks": count + 1,
-            "last_block_timestamp": time.time(),
-        }
-    else:
-        state[state_key] = {
-            "consecutive_blocks": 1,
-            "last_block_timestamp": time.time(),
-        }
+    count = entry.get("consecutive_blocks", 0) if isinstance(entry, dict) else 0
+    state[state_key] = {
+        "consecutive_blocks": count + 1,
+        "last_block_timestamp": time.time(),
+    }
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -360,14 +369,13 @@ def main() -> None:
     state = _load_state()
 
     if is_valid:
-        state.pop(state_key, None)
-        _save_state(state)
+        if state_key in state:
+            state.pop(state_key)
+            _save_state(state)
         _exit_approve()
 
     should_fail_open, _ = _check_loop_guard(state, state_key)
     if should_fail_open:
-        _record_block(state, state_key)
-        _save_state(state)
         _exit_approve()  # Fail open after 3 consecutive blocks
 
     _record_block(state, state_key)
