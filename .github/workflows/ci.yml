@@ -9,6 +9,7 @@ on:
       - 'Makefile'
       - '.pre-commit-config.yaml'
       - '.github/workflows/ci.yml'
+      - 'ATLAS.md'
   workflow_dispatch:
 
 permissions:

@@ -8,6 +8,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-atlas-markers
+        name: validate-atlas-markers
+        language: system
+        entry: uv run .claude/commands/validate-atlas-markers.py
+        pass_filenames: false
+        files: ATLAS\.md$
+
       - id: claudelint
         name: claudelint
         language: system
