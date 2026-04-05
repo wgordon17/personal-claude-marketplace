@@ -36,7 +36,9 @@ Identify the artifact to summarize. Two paths depending on whether an argument w
 Check if the argument string contains `obsolete` as a standalone space-delimited token
 (case-insensitive). If found, strip it from the argument text, record `obsolete_flag = true`
 (consumed in Phase 3), and use the remaining text as the file path. Only match as a separate
-token — do not match substrings within path components.
+token — do not match substrings within path components. For example: in `/summarize
+hack/plans/obsolete-migration.md`, the token `obsolete` is part of the path component, not a
+standalone argument — `obsolete_flag` must NOT be set.
 
 **Step 2 — CWD boundary validation.**
 Validate the path stays within the project using:
@@ -95,6 +97,10 @@ progress." and stop. These types have no meaningful fallback file to summarize f
 summary: "⚠ Incomplete swarm run — no swarm-report.md. Summarizing from architect plan only."
 Skip Phase 2 audit entirely. In Phase 3, classify as Active and do not offer archival.
 
+**Incomplete unfuck runs** (has `cleanup-plan.md` but no `cleanup-report.md`): Note in Phase 1
+summary: "⚠ Incomplete unfuck run — no cleanup-report.md. Summarizing from cleanup plan only."
+Skip Phase 2 audit entirely. In Phase 3, classify as Active and do not offer archival.
+
 If neither `swarm-report.md` nor `architect-plan.json` exist in a swarm directory, print:
 > "Swarm directory [path] contains no recognizable swarm artifacts."
 
@@ -119,12 +125,13 @@ the path signal is ambiguous):
 
 1. Path contains a `/done/` component (primary — skip without reading)
 2. File contains `**Status:** Archived` or `**Status:** Obsolete` in its first 10 lines
-3. File contains `**Status:** Completed` in its first 10 lines (roadmap cleanup convention)
+3. File is a roadmap AND contains `**Status:** Completed` in its first 10 lines (roadmap cleanup convention — only applies to roadmap artifacts)
 
 **Lazy hints:** Compute status from filename and type only (no full file reads at scan time).
 Show artifact name, creation date (from filename timestamp or file mtime), and type label.
 Example: "(plan, 2026-03-21)", "(research, 2026-04-01)". For incomplete swarm directories
-(no `swarm-report.md`), include with label "(incomplete)".
+(no `swarm-report.md`) or incomplete unfuck directories (no `cleanup-report.md`), include with
+label "(incomplete)".
 
 If no artifacts are found, print:
 > "No artifacts found in [dir]. Nothing to summarize."
@@ -197,8 +204,8 @@ but must not reproduce it line-by-line.
 
 Spawn general-purpose subagents to verify the artifact's claims against actual code state.
 
-**Skip Phase 2** for incomplete run artifacts (swarm directory with no `swarm-report.md`,
-identified in Phase 0).
+**Skip Phase 2** for incomplete run artifacts (swarm directory with no `swarm-report.md`; unfuck
+directory with no `cleanup-report.md`; identified in Phase 0).
 
 ### Preparation
 
@@ -218,6 +225,9 @@ content:
 | `<artifact-data` | `&lt;artifact-data` | Prevents tag injection |
 | `<!--` | `&lt;!--` | Prevents boundary marker injection |
 | `-->` | `--&gt;` | Prevents HTML comment close injection |
+
+The boundary comment starting with `<!-- END OF ARTIFACT DATA` is part of the static prompt
+template and is not subject to the artifact-content escaping rules above.
 
 Tag-name matching for the `<artifact-data` and `</artifact-data>` sequences is
 **case-insensitive** — match `<Artifact-Data`, `<ARTIFACT-DATA>`, etc. This follows the
@@ -325,7 +335,8 @@ Evaluate in this priority order — stop at the first match:
 
 **1. Incomplete**
 If this artifact was identified as an incomplete run in Phase 0 (e.g., swarm with no
-`swarm-report.md`, fell back to `architect-plan.json`): classify as Active. Do not offer
+`swarm-report.md`, fell back to `architect-plan.json`; unfuck with no `cleanup-report.md`,
+fell back to `cleanup-plan.md`): classify as Active. Do not offer
 archival. Skip the remaining classification checks.
 
 **2. Obsolete (flag override)**
@@ -441,10 +452,12 @@ no TOCTOU risk between validation and move).
 - Files: `mv -- "${path}" "${parent}/done/${filename}"`
 - Directories (swarm, speculative, map-reduce, unfuck): `mv -- "${dir}" "${parent}/done/${dirname}"`
 - **Root-level unfuck** (no run-id subdirectory — `cleanup-plan.md` at `unfuck/` root):
-  1. Create `mkdir -p "${unfuck_dir}/done/root-$(date +%Y%m%d)/"`
-  2. `mv -- "${unfuck_dir}/cleanup-plan.md" "${unfuck_dir}/done/root-$(date +%Y%m%d)/"`
-  3. If `${unfuck_dir}/discovery/` exists: `mv -- "${unfuck_dir}/discovery" "${unfuck_dir}/done/root-$(date +%Y%m%d)/"`
-  4. Print confirmation with both moves.
+  0. Capture date: `ARCHIVE_DATE=$(date +%Y%m%d)`
+  1. Create `mkdir -p "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
+  2. `mv -- "${unfuck_dir}/cleanup-plan.md" "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
+  3. If `${unfuck_dir}/discovery/` exists: `mv -- "${unfuck_dir}/discovery" "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
+  4. If `${unfuck_dir}/cleanup-report.md` exists: `mv -- "${unfuck_dir}/cleanup-report.md" "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
+  5. Print confirmation with all moves.
 
 **If mv fails** (non-zero exit): revert the status header edit using Edit (remove the status
 header line inserted in step 1 from the primary report file). Print:
@@ -494,7 +507,7 @@ Phase 0: Detect/Select → Phase 1: Summarize → Phase 2: Audit → Phase 3: Cl
 | Bugs | `{memory_dir}/BUGS.md` | (self) |
 | Speculative | `{memory_dir}/speculative/{run-id}/` | `speculative-report.md` |
 | Map-Reduce | `{memory_dir}/map-reduce/{run-id}/` | `map-reduce-report.md` |
-| Unfuck | `{memory_dir}/unfuck/{run-id}/` | `cleanup-report.md` |
+| Unfuck | `{memory_dir}/unfuck/{run-id}/` | `cleanup-report.md` (fallback: `cleanup-plan.md`) |
 
 ### Status Lifecycle
 

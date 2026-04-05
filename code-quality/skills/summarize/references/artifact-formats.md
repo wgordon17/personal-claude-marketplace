@@ -30,7 +30,7 @@ back to the file's mtime when the name does not contain a unix timestamp.
 - **Structural markers (both required):**
   - `**Goal:**` line in the file header
   - At least one `## Task N:` heading (`N` is any integer)
-- **Exclude:** Files matching `*roadmap*.md` — those are Roadmap artifacts (type 4).
+- **Exclude:** Files that match the Roadmap structural markers (see type 4) are Roadmap artifacts, not plans. Filename pattern alone is insufficient — use structural markers first.
 
 ### Location Pattern
 
@@ -443,8 +443,7 @@ timestamp in the run-id) targets the same branch slug.
 
 **Path B — root-level (no run-id subdirectory):**
 - **Glob:** `{memory_dir}/unfuck/cleanup-plan.md` or `{memory_dir}/unfuck/cleanup-report.md`
-- Root-level files without a run-id directory are valid artifacts (confirmed in this project:
-  `hack/unfuck/cleanup-plan.md` exists alongside `hack/unfuck/2026-02-18/` subdirectory)
+- Root-level files without a run-id directory are valid artifacts; they predate the run-id convention and remain valid even when a run-id subdirectory exists in the same parent.
 
 ### Location Pattern
 
