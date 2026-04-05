@@ -1,6 +1,6 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, and index-repo.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, and summarize.
 
 ## Agents (8)
 
@@ -15,7 +15,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:code-simplifier` | Dead code removal, unnecessary abstraction cleanup, clarity improvement | Sonnet |
 | `code-quality:plan-adherence` | Plan file verification, task completion tracking, file structure reconciliation | Opus |
 
-## Skills (19)
+## Skills (20)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -38,6 +38,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/fix` | Comprehensive finding fixer with spike execution for plan-review Research Gaps | Manual |
 | `/reflect` | Mid-task self-reflection checkpoint via Serena metacognitive tools | Manual |
 | `/index-repo` | Repository indexing for token-efficient codebase orientation | Manual |
+| `/summarize` | Artifact summary, completion audit, and archival for all skill outputs | Manual |
 
 ## Commands (4)
 
