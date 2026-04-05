@@ -32,6 +32,8 @@ _JSON_DECODER = json.JSONDecoder()
 _MAX_INPUT = 10 * 1024 * 1024  # 10 MB
 _MAX_PARSE_BYTES = 512 * 1024  # 512 KB tail window for transcript
 _MAX_CONSECUTIVE_BLOCKS = 3
+_MAX_BRACE_SCANS = 200  # iteration limit for raw_decode loop
+_STATE_KEY_SEP = "\x00"  # NUL cannot appear in session IDs or filesystem paths
 _STATE_PATH = Path(
     os.environ.get(
         "SUBAGENT_STOP_HOOK_STATE_PATH",
@@ -49,9 +51,9 @@ def _exit_approve() -> NoReturn:
     sys.exit(0)
 
 
-def _exit_block(message: str) -> NoReturn:
-    """Exit 0 with {decision: block, reason: ...} JSON on stdout."""
-    output = {"decision": "block", "reason": message}
+def _exit_block(reason: str) -> NoReturn:
+    """Exit 0 with {"decision": "block", "reason": "..."} JSON on stdout."""
+    output = {"decision": "block", "reason": reason}
     print(json.dumps(output))
     sys.exit(0)
 
@@ -97,11 +99,14 @@ def _extract_text_from_content(content: object) -> str:
             elif block_type == "tool_use":
                 inp = block.get("input", {})
                 if isinstance(inp, dict):
-                    # Append raw string values for FixSummary detection in
-                    # JSON-encoded content (e.g. SendMessage message field)
+                    # Two detection paths for FixSummary in tool_use inputs:
+                    # 1. Raw string values: catches JSON-encoded FixSummary in
+                    #    string params (e.g. SendMessage message field)
                     for v in inp.values():
                         if isinstance(v, str) and v:
                             parts.append(v)
+                    # 2. Serialized dict: catches FixSummary when inp itself IS
+                    #    the FixSummary dict (keys only visible after serialization)
                     parts.append(json.dumps(inp))
         return "\n".join(parts)
 
@@ -109,9 +114,6 @@ def _extract_text_from_content(content: object) -> str:
         return json.dumps(content)
 
     return ""
-
-
-_MAX_BRACE_SCANS = 200  # iteration limit for raw_decode loop
 
 
 def _try_parse_fix_summary(text: str) -> dict | None:
@@ -365,7 +367,7 @@ def main() -> None:
 
     is_valid, message = _validate_fix_summary(fix_summary)
 
-    state_key = f"{session_id}:{transcript_path}" if session_id else transcript_path
+    state_key = f"{session_id}{_STATE_KEY_SEP}{transcript_path}" if session_id else transcript_path
     state = _load_state()
 
     if is_valid:

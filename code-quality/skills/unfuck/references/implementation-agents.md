@@ -141,6 +141,13 @@ Test failures encountered: F
   - ...
 ```
 
+Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/references/finding-classification.md`
+for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
+
+```
+SendMessage(to="orchestrator", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+```
+
 ## Commit Message Format
 
 ```
@@ -261,6 +268,13 @@ Needs-input: R groups (collected in FixSummary needs_input_items, sent to Lead f
 Test failures encountered: F
   - <group>: <error message>
   - ...
+```
+
+Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/references/finding-classification.md`
+for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
+
+```
+SendMessage(to="orchestrator", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
 ```
 
 ## Commit Message Format
@@ -405,6 +419,13 @@ Secrets found and rotated: S
 Test failures encountered: F
   - <file>:<line> <fix attempted>: <error message>
   - ...
+```
+
+Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/references/finding-classification.md`
+for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
+
+```
+SendMessage(to="orchestrator", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
 ```
 
 ## Commit Message Format
@@ -593,6 +614,13 @@ Test failures encountered: F
   - ...
 ```
 
+Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/references/finding-classification.md`
+for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
+
+```
+SendMessage(to="orchestrator", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+```
+
 ## Commit Message Format
 
 ```
@@ -725,6 +753,13 @@ Needs-input: R findings (collected in FixSummary needs_input_items, sent to Lead
 Test failures encountered: F
   - <change>: <error message>
   - ...
+```
+
+Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/references/finding-classification.md`
+for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
+
+```
+SendMessage(to="orchestrator", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
 ```
 
 ## Commit Message Format
@@ -873,6 +908,13 @@ Fixed: N documentation findings resolved
 Needs-input: R findings (collected in FixSummary needs_input_items, sent to Lead for user triage)
   - <finding ID>: LoE=<loe>. <description>. Input needed: <what decision>
   - ...
+```
+
+Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/references/finding-classification.md`
+for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
+
+```
+SendMessage(to="orchestrator", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
 ```
 
 ## Commit Message Format
@@ -1135,6 +1177,13 @@ Needs-input: Q findings (collected in FixSummary needs_input_items, sent to Lead
 Test failures encountered: F
   - <refactoring>: <error message>
   - ...
+```
+
+Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/references/finding-classification.md`
+for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
+
+```
+SendMessage(to="orchestrator", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
 ```
 
 ## Commit Message Format
