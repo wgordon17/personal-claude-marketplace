@@ -31,12 +31,45 @@ AUTO_KEYWORD_RE = re.compile(r"(BEGIN|END):AUTO")
 
 def _is_marker_line(line: str) -> bool:
     """Return True only if the line contains a real AUTO marker (not inside backtick code)."""
-    backtick_pos = line.find("`")
     comment_pos = line.find("<!--")
     if comment_pos == -1:
         return False
-    # If backtick appears before the <!-- , the marker is inside inline code — skip it
-    return not (backtick_pos != -1 and backtick_pos < comment_pos)
+    open_tick = line.find("`")
+    if open_tick == -1 or open_tick >= comment_pos:
+        return True
+    close_tick = line.find("`", open_tick + 1)
+    if close_tick == -1:
+        return True
+    # Comment inside backtick pair → inline code; comment after → real marker
+    return comment_pos >= close_tick
+
+
+def _non_fenced_lines(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
+    """Return (non_fenced_lines, unclosed_fence_line).
+
+    non_fenced_lines is a list of (line_number, line) for lines not inside fenced code blocks.
+    unclosed_fence_line is the 1-based line number of an unclosed fence, or None.
+    Fence closer must match opener type (``` closes ```, ~~~ closes ~~~).
+    """
+    result: list[tuple[int, str]] = []
+    fence_char: str | None = None
+    fence_start: int | None = None
+    for i, line in enumerate(lines, start=1):
+        stripped = line.lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            opener = stripped[:3]
+            if fence_char is None:
+                fence_char = opener
+                fence_start = i
+            elif opener == fence_char:
+                fence_char = None
+                fence_start = None
+            # else: different fence type inside a fence — just fenced content
+            continue
+        if fence_char is not None:
+            continue
+        result.append((i, line))
+    return result, fence_start
 
 
 def main() -> int:
@@ -50,14 +83,9 @@ def main() -> int:
     lines = atlas_path.read_text(encoding="utf-8").splitlines()
 
     # Check 2: marker syntax (skip fenced code blocks)
+    non_fenced, unclosed_fence = _non_fenced_lines(lines)
     errors = []
-    in_fence = False
-    for i, line in enumerate(lines, start=1):
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
+    for i, line in non_fenced:
         if AUTO_KEYWORD_RE.search(line) and _is_marker_line(line) and not MARKER_RE.search(line):
             errors.append(f"  Line {i}: malformed marker: {line.strip()}")
     if errors:
@@ -67,15 +95,15 @@ def main() -> int:
         return 1
 
     # Check 3: pairing and ordering
+    if unclosed_fence is not None:
+        print(
+            f"ERROR: Unclosed fenced code block starting at line {unclosed_fence}",
+            file=sys.stderr,
+        )
+        return 1
     stack: list[tuple[str, int]] = []
     found: set[str] = set()
-    in_fenced = False
-    for i, line in enumerate(lines, start=1):
-        if line.lstrip().startswith("```"):
-            in_fenced = not in_fenced
-            continue
-        if in_fenced:
-            continue
+    for i, line in non_fenced:
         if not _is_marker_line(line):
             continue
         m = MARKER_RE.search(line)

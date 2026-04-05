@@ -3,7 +3,7 @@
 import subprocess
 from pathlib import Path
 
-SCRIPT = Path(__file__).parent / "validate-atlas-markers.py"
+SCRIPT = Path(__file__).parent.parent.parent / ".claude" / "commands" / "validate-atlas-markers.py"
 ATLAS_MD = Path(__file__).parent.parent.parent / "ATLAS.md"
 
 ALL_SECTIONS = [
@@ -59,21 +59,9 @@ def test_missing_file_exits_1(tmp_path):
     assert "not found" in result.stderr
 
 
-def test_existing_file_proceeds(tmp_path):
-    path = make_atlas(tmp_path, valid_markers(ALL_SECTIONS))
-    result = run(path)
-    assert result.returncode == 0
-
-
 # ---------------------------------------------------------------------------
 # Check 2: Marker syntax
 # ---------------------------------------------------------------------------
-
-
-def test_well_formed_markers_pass(tmp_path):
-    path = make_atlas(tmp_path, valid_markers(ALL_SECTIONS))
-    result = run(path)
-    assert result.returncode == 0
 
 
 def test_malformed_marker_missing_name_exits_1(tmp_path):
@@ -110,12 +98,6 @@ def test_backtick_quoted_marker_in_prose_is_skipped(tmp_path):
 # ---------------------------------------------------------------------------
 # Check 3: Pairing and ordering
 # ---------------------------------------------------------------------------
-
-
-def test_properly_paired_markers_pass(tmp_path):
-    path = make_atlas(tmp_path, valid_markers(ALL_SECTIONS))
-    result = run(path)
-    assert result.returncode == 0
 
 
 def test_nested_markers_exits_1(tmp_path):
@@ -182,6 +164,88 @@ def test_markers_inside_fenced_code_block_are_ignored(tmp_path):
     result = run(path)
     assert result.returncode == 0
     assert "14/14" in result.stdout
+
+
+def test_markers_inside_tilde_fenced_block_are_ignored(tmp_path):
+    # Markers inside ~~~ fenced blocks should not be treated as real markers
+    lines = []
+    for s in ALL_SECTIONS:
+        lines.append(f"<!-- BEGIN:AUTO {s} -->")
+        if s == ALL_SECTIONS[0]:
+            lines.append("~~~markdown")
+            lines.append("<!-- BEGIN:AUTO fake -->")
+            lines.append("<!-- END:AUTO fake -->")
+            lines.append("~~~")
+        lines.append(f"<!-- END:AUTO {s} -->")
+    path = make_atlas(tmp_path, "\n".join(lines) + "\n")
+    result = run(path)
+    assert result.returncode == 0
+    assert "14/14" in result.stdout
+
+
+def test_mismatched_fence_types_do_not_close(tmp_path):
+    # A ~~~ fence should NOT be closed by ``` — markers inside should stay hidden
+    lines = []
+    for s in ALL_SECTIONS:
+        lines.append(f"<!-- BEGIN:AUTO {s} -->")
+        if s == ALL_SECTIONS[0]:
+            lines.append("~~~markdown")
+            lines.append("```")  # backtick inside tilde fence — not a closer
+            lines.append("<!-- BEGIN:AUTO fake -->")
+            lines.append("<!-- END:AUTO fake -->")
+            lines.append("~~~")  # actual closer
+        lines.append(f"<!-- END:AUTO {s} -->")
+    path = make_atlas(tmp_path, "\n".join(lines) + "\n")
+    result = run(path)
+    assert result.returncode == 0
+    assert "14/14" in result.stdout
+
+
+def test_unclosed_fence_exits_1(tmp_path):
+    content = valid_markers(ALL_SECTIONS) + "```\n<!-- BEGIN:AUTO extra -->\n"
+    path = make_atlas(tmp_path, content)
+    result = run(path)
+    assert result.returncode == 1
+    assert "Unclosed" in result.stderr
+
+
+def test_unclosed_fence_reports_line_number(tmp_path):
+    # Fence opens on line 2, never closed
+    content = "preamble\n```\nsome code\n"
+    path = make_atlas(tmp_path, content)
+    result = run(path)
+    assert result.returncode == 1
+    assert "line 2" in result.stderr
+
+
+def test_marker_after_closed_backtick_pair_is_real(tmp_path):
+    # `code` <!-- BEGIN:AUTO foo --> — marker is AFTER the backtick pair, should be real
+    lines = []
+    for s in ALL_SECTIONS:
+        lines.append(f"<!-- BEGIN:AUTO {s} -->")
+        if s == ALL_SECTIONS[0]:
+            lines.append("`code` <!-- BEGIN:AUTO fake -->")
+        lines.append(f"<!-- END:AUTO {s} -->")
+    path = make_atlas(tmp_path, "\n".join(lines) + "\n")
+    result = run(path)
+    # The "fake" marker after closed backticks is detected as a real nested marker
+    assert result.returncode == 1
+    assert "Nested" in result.stderr
+
+
+def test_single_backtick_before_marker_treated_as_real(tmp_path):
+    # Single unclosed backtick before <!-- — marker is not inside inline code
+    lines = []
+    for s in ALL_SECTIONS:
+        lines.append(f"<!-- BEGIN:AUTO {s} -->")
+        if s == ALL_SECTIONS[0]:
+            lines.append("` <!-- BEGIN:AUTO fake -->")
+        lines.append(f"<!-- END:AUTO {s} -->")
+    path = make_atlas(tmp_path, "\n".join(lines) + "\n")
+    result = run(path)
+    # Unclosed backtick means comment is not in inline code — treated as real marker
+    assert result.returncode == 1
+    assert "Nested" in result.stderr
 
 
 # ---------------------------------------------------------------------------

@@ -138,7 +138,9 @@ If discrepancies exceed 1 row per section, abort and report before writing.
 Write the regenerated content to ATLAS.md only. Never modify any scanned source files.
 
 The write must preserve:
-- The timestamp comment at the top (update it in Step 10, not here)
+- The timestamp comment at the top (update it in Step 10, not here — the timestamp
+  is a completion signal: a stale timestamp indicates the last regeneration was
+  incomplete or failed validation, so it must only be updated after all checks pass)
 - All content outside BEGIN/END:AUTO markers
 - Marker lines themselves (BEGIN:AUTO and END:AUTO lines are preserved, not replaced)
 
