@@ -185,7 +185,8 @@ Examples:
 Skills scanning for active artifacts **MUST** exclude `done/` subdirectories to avoid matching
 archived content. Specifically:
 
-- `/summarize` Phase 0 Path B: skip files/directories where the path contains a `/done/` component
+- `/summarize` Phase 0 Path B: include `done/` artifacts but label them "(archived)" — Phase 3
+  is skipped for archived artifacts (summary and audit still run)
 - `/swarm` Phase 4 Plan Adherence: when searching `{memory_dir}/plans/` for plan files matching a
   branch header, exclude `plans/done/`
 - `/swarm` Phase 5.5 Plan Reconciliation: same exclusion as Plan Adherence

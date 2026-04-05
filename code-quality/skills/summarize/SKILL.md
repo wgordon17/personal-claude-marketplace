@@ -118,19 +118,23 @@ Stop.
 
 **Step 2 — Scan for artifacts.**
 Scan for all artifact types using the location patterns from `references/artifact-formats.md`.
-Group by type. Exclude already-archived artifacts using any of these signals (no file reads
-at scan time — check path and filename only where possible, read first 10 lines only when
-the path signal is ambiguous):
+Include `done/` subdirectories in the scan. Group by type.
 
-1. Path contains a `/done/` component (primary — skip without reading)
+Detect archived artifacts using any of these signals (no file reads at scan time — check path
+and filename only where possible, read first 10 lines only when the path signal is ambiguous):
+
+1. Path contains a `/done/` component (primary — no file read needed)
 2. File contains `**Status:** Archived` or `**Status:** Obsolete` in its first 10 lines
 3. File is a roadmap AND contains `**Status:** Completed` in its first 10 lines (roadmap cleanup convention — only applies to roadmap artifacts)
+
+Artifacts matching any of these signals are included in the scan but labeled "(archived)".
+When selected, `already_archived` is set and Phase 3 is skipped (same as Path A Step 3).
 
 **Lazy hints:** Compute status from filename and type only (no full file reads at scan time).
 Show artifact name, creation date (from filename timestamp or file mtime), and type label.
 Example: "(plan, 2026-03-21)", "(research, 2026-04-01)". For incomplete swarm directories
 (no `swarm-report.md`) or incomplete unfuck directories (no `cleanup-report.md`), include with
-label "(incomplete)".
+label "(incomplete)". For archived artifacts, include with label "(archived)".
 
 If no artifacts are found, print:
 > "No artifacts found in [dir]. Nothing to summarize."
