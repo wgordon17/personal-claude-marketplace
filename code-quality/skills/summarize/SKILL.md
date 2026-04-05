@@ -54,11 +54,10 @@ Stop. (Uses `os.path.relpath` instead of `realpath` to avoid resolving symlinks.
 
 **Step 3 — Already-archived check.**
 If the path contains a `/done/` path component OR the file's first 10 lines contain
-`**Status:** Archived` or `**Status:** Obsolete`, print:
-> "This artifact is already archived. Nothing to do."
-
-Stop. Note: `**Status:** Completed` does NOT block Path A — a user providing a direct path
-to a completed artifact may still summarize and audit it.
+`**Status:** Archived` or `**Status:** Obsolete`, record `already_archived = true`.
+Phases 1 (Summarize) and 2 (Audit) still run — there is no reason to skip summarizing an
+archived artifact. Phase 3 (Classify and Archive) is skipped entirely when
+`already_archived = true` — the artifact's lifecycle is already terminal.
 
 **Step 4 — Pre-update backup check.**
 If the path ends with `.pre-update`, print:
@@ -328,6 +327,10 @@ artifact was completed, not lost.
 ## Phase 3 — Classify and Archive
 
 Determine the artifact's lifecycle status, then optionally offer archival.
+
+**Skip Phase 3** if `already_archived` was set in Phase 0 Step 3. The artifact's lifecycle is
+already terminal — print the summary and audit results from Phases 1-2 without a status
+classification or archive offer.
 
 ### Status Classification
 
