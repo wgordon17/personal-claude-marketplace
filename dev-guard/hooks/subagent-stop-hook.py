@@ -323,17 +323,12 @@ def _save_state(state: dict) -> None:
         pass
 
 
-def _check_loop_guard(state: dict, state_key: str) -> tuple[bool, int]:
-    """Check consecutive block count for state_key.
-
-    Returns (should_fail_open, count) where should_fail_open means we've hit
-    the max and should approve instead of blocking.
-    """
+def _check_loop_guard(state: dict, state_key: str) -> bool:
+    """Check if state_key has hit the consecutive block limit (should fail open)."""
     entry = state.get(state_key)
     if not isinstance(entry, dict):
-        return False, 0
-    count = entry.get("consecutive_blocks", 0)
-    return count >= _MAX_CONSECUTIVE_BLOCKS, count
+        return False
+    return entry.get("consecutive_blocks", 0) >= _MAX_CONSECUTIVE_BLOCKS
 
 
 def _record_block(state: dict, state_key: str) -> None:
@@ -376,7 +371,7 @@ def main() -> None:
             _save_state(state)
         _exit_approve()
 
-    should_fail_open, _ = _check_loop_guard(state, state_key)
+    should_fail_open = _check_loop_guard(state, state_key)
     if should_fail_open:
         _exit_approve()  # Fail open after 3 consecutive blocks
 
