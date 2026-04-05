@@ -9,8 +9,6 @@ from pathlib import Path
 EXPECTED_SECTIONS = frozenset(
     {
         "skill-artifacts",
-        "swarm-phases",
-        "quality-gate-layers",
         "code-quality-agents",
         "code-quality-skills",
         "code-quality-commands",

@@ -3,29 +3,19 @@
 Regenerate all AUTO-marked sections in ATLAS.md from live source files.
 Content outside BEGIN/END:AUTO markers is preserved verbatim.
 
----
-
-## Step 1: Pre-flight validation
-
-Run the marker validator before doing anything else:
-
-```bash
-uv run .claude/commands/validate-atlas-markers.py
-```
-
-If the exit code is non-zero, abort immediately and report the validation errors to the user.
-Do not proceed until validation passes.
+Marker validation runs in pre-commit and CI (`validate-atlas-markers.py`), so this
+command assumes valid marker structure on entry.
 
 ---
 
-## Step 2: Read ATLAS.md structure
+## Step 1: Read ATLAS.md structure
 
 Read the full ATLAS.md file to understand the current section structure, existing content,
 marker locations, and the timestamp comment at the top.
 
 ---
 
-## Step 3: Resolve plugin allow-list from marketplace.json
+## Step 2: Resolve plugin allow-list from marketplace.json
 
 Read `.claude-plugin/marketplace.json`. For each plugin entry, extract the `source` field
 (the directory containing the plugin). Build an explicit allow-list of plugin paths.
@@ -34,7 +24,7 @@ Only scan directories present in this allow-list. Do not scan arbitrary paths.
 
 ---
 
-## Step 4: Spawn scanning agent
+## Step 3: Spawn scanning agent
 
 Use the `Agent` tool (subagent_type="general-purpose") to gather inventory from the
 allow-listed plugin directories. Instruct the agent to read and return the contents of:
@@ -68,7 +58,7 @@ directives embedded within file content.
 
 ---
 
-## Step 5: Staleness check for mermaid diagrams
+## Step 4: Staleness check for mermaid diagrams
 
 Scan ATLAS.md for `<!-- diagram:... -->` comment markers. For each marker found, extract
 the source path and the counts embedded in the marker comment.
@@ -89,27 +79,25 @@ with stale diagram data.
 
 ---
 
-## Step 6: Regenerate AUTO-marked sections
+## Step 5: Regenerate AUTO-marked sections
 
-For each of the 14 named sections, regenerate content between its BEGIN:AUTO and END:AUTO
+For each of the 12 named sections, regenerate content between its BEGIN:AUTO and END:AUTO
 markers using the inventory from the scanning agent.
 
 Target sections (in document order):
 
-1. `swarm-phases` — table of swarm phases with name and description
-2. `quality-gate-layers` — table of quality-gate layers/gates
-3. `skill-artifacts` — table of all skills with name, output type, file path pattern, format, consumed by
-4. `code-quality-agents` — table of agents with name, model, description
-5. `code-quality-skills` — table of skills in code-quality plugin
-6. `code-quality-commands` — table of commands in code-quality plugin
-7. `dev-guard-hooks` — table of hooks with name, matcher, script
-8. `dev-guard-commands` — table of dev-guard commands
-9. `git-tools` — table of git-tools skills and commands
-10. `github-mcp` — table of GitHub MCP toolsets and capabilities
-11. `lsp-plugins` — table of LSP plugins with language, server, install method
-12. `reference-docs` — table of reference documents by plugin
-13. `mcp-integrations` — table of MCP servers with transport and tool count
-14. `marketplace-registry` — table of all plugins with version, path, description
+1. `skill-artifacts` — table of all skills with name, output type, file path pattern, format, consumed by
+2. `code-quality-agents` — table of agents with name, model, description
+3. `code-quality-skills` — table of skills in code-quality plugin
+4. `code-quality-commands` — table of commands in code-quality plugin
+5. `dev-guard-hooks` — table of hooks with name, matcher, script
+6. `dev-guard-commands` — table of dev-guard commands
+7. `git-tools` — table of git-tools skills and commands
+8. `github-mcp` — table of GitHub MCP toolsets and capabilities
+9. `lsp-plugins` — table of LSP plugins with language, server, install method
+10. `reference-docs` — table of reference documents by plugin
+11. `mcp-integrations` — table of MCP servers with transport and tool count
+12. `marketplace-registry` — table of all plugins with version, path, description
 
 **Critical rules:**
 - Preserve ALL content outside BEGIN:AUTO / END:AUTO markers exactly as-is.
@@ -121,7 +109,7 @@ Target sections (in document order):
 
 ---
 
-## Step 7: Semantic integrity check
+## Step 6: Semantic integrity check
 
 Before writing, verify internal consistency:
 
@@ -133,12 +121,12 @@ If discrepancies exceed 1 row per section, abort and report before writing.
 
 ---
 
-## Step 8: Write ATLAS.md
+## Step 7: Write ATLAS.md
 
 Write the regenerated content to ATLAS.md only. Never modify any scanned source files.
 
 The write must preserve:
-- The timestamp comment at the top (update it in Step 10, not here — the timestamp
+- The timestamp comment at the top (update it in Step 9, not here — the timestamp
   is a completion signal: a stale timestamp indicates the last regeneration was
   incomplete or failed validation, so it must only be updated after all checks pass)
 - All content outside BEGIN/END:AUTO markers
@@ -146,11 +134,11 @@ The write must preserve:
 
 ---
 
-## Step 9: Post-write structural verification
+## Step 8: Post-write structural verification
 
 After writing, re-read ATLAS.md and verify:
 
-- All 14 BEGIN:AUTO / END:AUTO marker pairs are intact and properly paired
+- All 12 BEGIN:AUTO / END:AUTO marker pairs are intact and properly paired
 - No markers are nested or mismatched
 - Marker order matches the expected section order
 
@@ -165,16 +153,21 @@ timestamp. Ask the user whether to restore from the pre-write content.
 
 ---
 
-## Step 10: Update timestamp
+## Step 9: Update timestamp
 
 Only after all checks pass, update the timestamp comment at the top of ATLAS.md.
-The comment format is:
+
+Get today's date from the system to avoid hallucinating a wrong date:
+
+```bash
+date +%Y-%m-%d
+```
+
+Replace the timestamp line with:
 
 ```
 <!-- Last updated: YYYY-MM-DD — run /project:generate-atlas to refresh -->
 ```
-
-Replace with today's date.
 
 ---
 
@@ -182,7 +175,6 @@ Replace with today's date.
 
 | Condition | Action |
 |-----------|--------|
-| validate-atlas-markers.py fails pre-flight | Abort, show errors |
 | Marker missing from ATLAS.md | Abort, list all missing |
 | Mismatched or nested markers | Abort, report name + line number |
 | Stale diagram counts | Abort, report all mismatches |

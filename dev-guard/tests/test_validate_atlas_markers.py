@@ -8,8 +8,6 @@ ATLAS_MD = Path(__file__).parent.parent.parent / "ATLAS.md"
 
 ALL_SECTIONS = [
     "skill-artifacts",
-    "swarm-phases",
-    "quality-gate-layers",
     "code-quality-agents",
     "code-quality-skills",
     "code-quality-commands",
@@ -163,7 +161,7 @@ def test_markers_inside_fenced_code_block_are_ignored(tmp_path):
     path = make_atlas(tmp_path, "\n".join(lines) + "\n")
     result = run(path)
     assert result.returncode == 0
-    assert "14/14" in result.stdout
+    assert "12/12" in result.stdout
 
 
 def test_markers_inside_tilde_fenced_block_are_ignored(tmp_path):
@@ -180,7 +178,7 @@ def test_markers_inside_tilde_fenced_block_are_ignored(tmp_path):
     path = make_atlas(tmp_path, "\n".join(lines) + "\n")
     result = run(path)
     assert result.returncode == 0
-    assert "14/14" in result.stdout
+    assert "12/12" in result.stdout
 
 
 def test_mismatched_fence_types_do_not_close(tmp_path):
@@ -198,7 +196,7 @@ def test_mismatched_fence_types_do_not_close(tmp_path):
     path = make_atlas(tmp_path, "\n".join(lines) + "\n")
     result = run(path)
     assert result.returncode == 0
-    assert "14/14" in result.stdout
+    assert "12/12" in result.stdout
 
 
 def test_unclosed_fence_exits_1(tmp_path):
@@ -253,11 +251,11 @@ def test_single_backtick_before_marker_treated_as_real(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_all_14_sections_present_exits_0(tmp_path):
+def test_all_12_sections_present_exits_0(tmp_path):
     path = make_atlas(tmp_path, valid_markers(ALL_SECTIONS))
     result = run(path)
     assert result.returncode == 0
-    assert "14/14" in result.stdout
+    assert "12/12" in result.stdout
 
 
 def test_missing_sections_exits_1(tmp_path):
@@ -269,7 +267,7 @@ def test_missing_sections_exits_1(tmp_path):
 
 
 def test_missing_sections_lists_names(tmp_path):
-    omitted = ALL_SECTIONS[:2]  # ["skill-artifacts", "swarm-phases"]
+    omitted = ALL_SECTIONS[:2]  # ["skill-artifacts", "code-quality-agents"]
     path = make_atlas(tmp_path, valid_markers(ALL_SECTIONS[2:]))
     result = run(path)
     for name in omitted:
@@ -314,4 +312,4 @@ def test_real_atlas_md_passes():
     assert ATLAS_MD.exists(), f"ATLAS.md not found at {ATLAS_MD}"
     result = run(ATLAS_MD)
     assert result.returncode == 0
-    assert "14/14" in result.stdout
+    assert "12/12" in result.stdout

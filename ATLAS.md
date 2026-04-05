@@ -199,8 +199,6 @@ flowchart TD
 
 **Conditional:**
 
-<!-- BEGIN:AUTO swarm-phases -->
-
 | Phase | Name | Condition | Skip When |
 |-------|------|-----------|-----------|
 | 0 | Pre-flight & Setup | Always | Never |
@@ -216,8 +214,6 @@ flowchart TD
 | 5.5 | Plan Reconciliation | Conditional | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. |
 | 6 | Docs & Memory | Conditional | Purely internal refactor with no public API, documented behavior, feature, or component changes. Memory updates always run. |
 | 7 | Verification & Completion | Always | Never |
-
-<!-- END:AUTO swarm-phases -->
 
 ---
 
@@ -245,8 +241,6 @@ flowchart TD
 
 ### Layer Details
 
-<!-- BEGIN:AUTO quality-gate-layers -->
-
 | Layer | Name | Type | Description |
 |-------|------|------|-------------|
 | Step 0 | Detect & Classify | Setup | Determines work type (Code, Planning, Research, Config, Question, Mixed) and selects the lens set for Layer 1. |
@@ -259,8 +253,6 @@ flowchart TD
 | Documentation Gate | Documentation Gate | Gate — BLOCKING | Uses `documentation-taxonomy.md` triggers. Checks component inventory on disk vs documented. Verifies cross-surface consistency (README ↔ manifest ↔ registry). |
 | No Data Loss Gate | No Data Loss Gate | Gate — BLOCKING | Confirms all artifacts are in a durable, externally-trackable location. "Working tree only" fails this gate. Code: pushed branch + open PR. Planning: `{memory_dir}/plans/`. Research: `{memory_dir}/research/` or PROJECT.md or claude-mem. |
 | Final Verification | Final Verification | Completion check | Runs test suite + lint (code), re-reads plan end-to-end (planning), re-reads findings vs original question (research). `think_about_whether_you_are_done` metacognitive check. |
-
-<!-- END:AUTO quality-gate-layers -->
 
 **Stop Hook Safety Net:** A global Stop hook in `dev-guard` (`stop-hook.py` + `stop-hook-llm.py`) catches premature completion claims that bypass this skill. It uses deterministic signal detection (<200ms) and delegates to an LLM evaluation when signals warrant it. Fails open on infrastructure errors.
 
