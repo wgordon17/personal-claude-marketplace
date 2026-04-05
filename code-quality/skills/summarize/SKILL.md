@@ -18,8 +18,8 @@ against actual codebase state, classifies lifecycle status, and optionally archi
 completed or superseded artifacts.
 
 **Edit** is included for archival status header insertion only (Phase 3). This skill never
-creates new files — **Write** is intentionally excluded. **Bash** is used only for `mv`
-during archive file moves and `python3` for path validation.
+creates new files — **Write** is intentionally excluded. **Bash** is used only for
+`uv run python` during archive file moves and path validation.
 
 ---
 
@@ -44,7 +44,7 @@ standalone argument — `obsolete_flag` must NOT be set.
 Validate the path stays within the project using:
 
 ```bash
-python3 -c "import os,sys; print(os.path.relpath(sys.argv[1]))" "[path]"
+uv run python -c "import os,sys; print(os.path.relpath(sys.argv[1]))" "[path]"
 ```
 
 If the output starts with `../`, the path escapes the project boundary. Print:
@@ -442,25 +442,36 @@ frontmatter `---` if present):
 
 **Step 2 — Create done/ subdirectory.**
 ```bash
-mkdir -p "${parent}/done/"
+uv run python -c "import os; os.makedirs('${parent}/done/', exist_ok=True)"
 ```
 
 The path for `${parent}` is carried from Phase 0 validation (held in memory — no re-stat,
 no TOCTOU risk between validation and move).
 
 **Step 3 — Move the artifact.**
-- Files: `mv -- "${path}" "${parent}/done/${filename}"`
-- Directories (swarm, speculative, map-reduce, unfuck): `mv -- "${dir}" "${parent}/done/${dirname}"`
+- Files: `uv run python -c "import shutil; shutil.move('${path}', '${parent}/done/${filename}')"`
+- Directories (swarm, speculative, map-reduce, unfuck): `uv run python -c "import shutil; shutil.move('${dir}', '${parent}/done/${dirname}')"`
 - **Root-level unfuck** (no run-id subdirectory — `cleanup-plan.md` at `unfuck/` root):
-  0. Capture date: `ARCHIVE_DATE=$(date +%Y%m%d)`
-  1. Create `mkdir -p "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
-  2. `mv -- "${unfuck_dir}/cleanup-plan.md" "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
-  3. If `${unfuck_dir}/discovery/` exists: `mv -- "${unfuck_dir}/discovery" "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
-  4. If `${unfuck_dir}/cleanup-report.md` exists: `mv -- "${unfuck_dir}/cleanup-report.md" "${unfuck_dir}/done/root-${ARCHIVE_DATE}/"`
-  5. Print confirmation with all moves.
+  Run as a single script to capture the date once and move all files atomically:
+  ```bash
+  uv run python -c "
+  import os, shutil
+  from datetime import date
+  d = '${unfuck_dir}/done/root-' + date.today().strftime('%Y%m%d')
+  os.makedirs(d, exist_ok=True)
+  shutil.move('${unfuck_dir}/cleanup-plan.md', d)
+  if os.path.isdir('${unfuck_dir}/discovery'):
+      shutil.move('${unfuck_dir}/discovery', d)
+  if os.path.isfile('${unfuck_dir}/cleanup-report.md'):
+      shutil.move('${unfuck_dir}/cleanup-report.md', d)
+  "
+  ```
+  `cleanup-report.md` (the file carrying the status header) moves last — if an earlier
+  `shutil.move` raises an exception, the status header file remains at the root where the
+  revert path can reach it. Print confirmation with all moves.
 
-**If mv fails** (non-zero exit): revert the status header edit using Edit (remove the status
-header line inserted in step 1 from the primary report file). Print:
+**If a move fails** (Python raises an exception): revert the status header edit using Edit
+(remove the status header line inserted in step 1 from the primary report file). Print:
 > "Archive failed: could not move [path] to done/. Status header reverted. Error: [error message]."
 
 Stop. Do not leave the artifact in a half-archived state.
