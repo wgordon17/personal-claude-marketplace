@@ -309,9 +309,11 @@ Agent(
 
 - **Third-party research gaps** — When any finding has `is_research_gap == true` and names a
   third-party library, API, or service: dispatch non-research-gap investigators first (they
-  run in background). Then invoke `/deep-research` via the `Skill` tool — using External mode
-  if the finding is about a technology not present in the codebase, or Bridged mode if the
-  finding involves how the current codebase uses a third-party component. After `/deep-research`
+  run in background). Then invoke `/deep-research` via the `Skill` tool. Extract the research
+  question from the finding: for pr-review, parse the `targeting [specific question]` suffix
+  from the `Recommended resolution:` format; for plan-review, use `spike_question`. Use
+  External mode if the finding is about a technology not present in the codebase, or Bridged
+  mode if it involves how the current codebase uses a third-party component. After `/deep-research`
   completes, read the resulting report. Routing depends on source:
   - **plan-review findings:** pass the report as `{RESEARCH_CONTEXT}` in the spike investigator
     prompt (see spike dispatch above)
