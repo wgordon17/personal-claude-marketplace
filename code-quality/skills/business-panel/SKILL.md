@@ -280,6 +280,26 @@ Simulate perspectives from these roles:
 - Understand current state
 - Identify constraints
 
+### Step 2.5: External Research (conditional)
+
+Before simulating panel perspectives, check whether the analysis involves:
+- **Market positioning** — competitor landscape, pricing benchmarks, adoption trends
+- **Industry standards** — compliance requirements, regulatory changes, certification needs
+- **Technology maturity** — production readiness, community health, vendor stability
+
+If any apply, state the recommendation in chat output: "This analysis would benefit from
+current market data. Run `/deep-research` in External mode first. After /deep-research
+completes, re-invoke `/business-panel` — the research report will be saved to
+`{memory_dir}/research/` and business-panel's 'Gather Context' step (Step 2) will read
+relevant documents from the project, including the research report, automatically. If no
+project memory directory exists, `/deep-research` delivers the report in the conversation
+instead — skip the re-invoke advice and use the in-conversation report directly."
+The business-panel skill is a lightweight analysis tool — it does not orchestrate research
+itself. Present the recommendation as chat text (not via AskUserQuestion, which is not in
+this skill's allowed-tools). This is safe because /business-panel is always invoked as the
+Lead (direct user invocation), never as a subagent — it has no Agent/orchestration tools
+and no skill invokes it.
+
 ### Step 3: Simulate Each Perspective
 - Put on each stakeholder's "hat"
 - Consider their incentives and concerns
