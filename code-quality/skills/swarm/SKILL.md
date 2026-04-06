@@ -120,8 +120,8 @@ After receiving the plan, the Lead MUST:
 4. Raise any high-impact risks to the user before proceeding
 5. Note the `cynefin_domain` — use it to inform Phase 2.5 skip decision and pipeline mode
 6. **External research escalation** — If the architect's design names third-party libraries,
-   APIs, or architectural patterns that are not already present in the project's dependency
-   manifest or codebase, invoke `/deep-research` (via the `Skill` tool) in External mode before proceeding to Phase 2.5.
+   APIs, or architectural patterns that the Lead cannot confirm are current and well-understood
+   from existing project context, invoke `/deep-research` (via the `Skill` tool) in External mode before proceeding to Phase 2.5.
    Pass the architect's technology recommendations as the research question. Feed findings back to
    the architect via SendMessage for plan revision if external evidence contradicts the
    recommendation.

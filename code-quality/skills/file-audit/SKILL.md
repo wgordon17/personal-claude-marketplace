@@ -107,14 +107,10 @@ IF total_files <= 20 (or /map-reduce unavailable):
 
 ### Step 2.5: External Research Escalation
 
-Scan Step 2 results for findings with issue subtype `deprecated_api`. These findings were
-detected by analyzer agents using Context7 to verify the API's current status (detection
-phase). If any `deprecated_api` findings exist, batch the affected libraries into a single
-`/deep-research` invocation (via the `Skill` tool) in External mode targeting: "Evaluate migration paths from
-[deprecated library/API] to current alternatives." This research phase is distinct from the
-analyzer's Context7 lookup — it produces migration guidance (replacement APIs, breaking
-change scope, adoption risk), not deprecation detection. Append the research report path to
-the relevant findings before Step 4 inventory assembly.
+1. Scan Step 2 results for findings with issue subtype `deprecated_api`.
+2. If any exist, batch the affected libraries into a single `/deep-research` invocation (via the `Skill` tool) in External mode targeting: "Evaluate migration paths from [deprecated library/API] to current alternatives."
+3. Note: this research phase is distinct from the analyzer's Context7 lookup — it produces migration guidance (replacement APIs, breaking change scope, adoption risk), not deprecation detection. The Context7 lookup in Step 2 handles detection; this step handles remediation guidance.
+4. Append the research report path to the relevant findings before Step 4 inventory assembly.
 
 ### Step 3: Post-Analysis Duplicate Detection
 

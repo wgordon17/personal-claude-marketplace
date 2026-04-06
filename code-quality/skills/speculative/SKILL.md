@@ -31,13 +31,12 @@ Gather the problem and success criteria before spawning anything.
 2. **Research competing approaches** — If the user's answer to step 1 named specific approaches
    that involve third-party libraries, frameworks, SDKs, or external services not already present
    in the codebase, invoke `/deep-research` (via the `Skill` tool) in External mode before proceeding. If the user
-   specified no approaches (approach hint is null) AND the speculative task involves third-party
-   libraries, frameworks, SDKs, or external services, invoke `/deep-research` (via the `Skill` tool) in External mode to
-   identify viable alternatives and their trade-offs. If the task is purely about internal
-   architecture or refactoring patterns with no external dependencies, skip `/deep-research` in
-   the null case and let competitors choose their own approaches. Use research findings to
-   populate the `SpeculativeSpec` with informed approach descriptions rather than relying on
-   training data.
+   specified no approaches (approach hint is null), invoke `/deep-research` (via the `Skill` tool) in External mode to
+   identify viable alternatives and their trade-offs. (For tasks that are purely about internal
+   architecture or refactoring with no external dependencies, `/deep-research` may return quickly,
+   but it should still be invoked so the skill does not rely solely on training data.) Use research
+   findings to populate the `SpeculativeSpec` with informed approach descriptions rather than
+   relying on training data.
 
 3. Define the evaluation criteria as a weighted list (weights must sum to 1.0):
    - Correctness (does it work correctly and handle edge cases?)
@@ -165,7 +164,7 @@ User request
      v
 Phase 0: Specification
   +-- AskUserQuestion (ambiguity, criteria, competitor count)
-  +-- /deep-research (if third-party technology involved)
+  +-- /deep-research (if third-party involved, or approach hint is null)
   +-- Generate run-ID, create {memory_dir}/speculative/{run-id}/
   +-- TaskCreate for all phases
      |
