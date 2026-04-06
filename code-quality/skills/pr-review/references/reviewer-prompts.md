@@ -266,7 +266,13 @@ CHECKLIST:
    what callers expect? Are there mismatches between interfaces and implementations?
 6. Data flow: does data flow correctly through the system? Missing transformations,
    wrong variable used, stale state?
-7. Documentation accuracy: for any doc changes in the diff, assume the docs are wrong.
+7. Third-party technology gaps: if the code uses a third-party library, API, or service
+   incorrectly (wrong API, deprecated pattern, missing configuration), and the correct
+   usage cannot be determined from the codebase alone, flag it with the recommended
+   resolution format: "Research needed: [description]. Recommended resolution: `/deep-research`
+   [External|Bridged] mode targeting [specific question]." Use External mode for pure
+   technology questions, Bridged mode when the gap involves how the codebase uses the technology.
+8. Documentation accuracy: for any doc changes in the diff, assume the docs are wrong.
    Verify every documented claim against the actual codebase — use Read and Glob to check
    on-disk reality, not just what appears in the diff. If docs say "15 skills" — run
    `Glob("skills/*/SKILL.md")` and count. If docs say "supports X" — search the codebase

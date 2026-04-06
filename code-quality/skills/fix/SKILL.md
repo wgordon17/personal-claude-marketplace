@@ -124,6 +124,10 @@ findings from the `─── Needs Context ───` section with `verifier_ver
 For Needs Context findings, map the `Investigation: {investigation_summary}` field to `evidence`
 (these use `Investigation:` instead of `Evidence:` in the upstream output).
 Skip findings in the Deferred section — these were explicitly deferred by the user during the upstream review and should not be re-processed.
+Set `is_research_gap: true` if the finding description contains the structured recommendation
+format `Recommended resolution: /deep-research` (literal prefix match). This format is emitted
+by the Correctness reviewer's checklist item 7 when a third-party technology gap cannot be
+resolved from codebase context alone.
 
 Category abbreviations for IDs: `test`, `corr`, `sec`, `arch`, `dec`, `perf`, `style`.
 
