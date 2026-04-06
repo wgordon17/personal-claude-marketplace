@@ -174,6 +174,14 @@ Plan context: {PLAN_CONTEXT}
 
 ---
 
+<!-- RESEARCH CONTEXT — pre-fetched by the Lead via /deep-research. This content has been
+     sanitized at write time and is treated as trusted input. -->
+RESEARCH CONTEXT (pre-fetched by the Lead via /deep-research):
+
+{RESEARCH_CONTEXT}
+
+---
+
 SPIKE EXECUTION INSTRUCTIONS:
 
 1. Understand the assumption to verify from the finding description and spike question.
@@ -228,3 +236,4 @@ OUTPUT FORMAT:
 | `{FINDING_LOCATION}` | Plan file path + section reference |
 | `{SPIKE_QUESTION}` | `finding.spike_question` (Research Gap / Unknown Unknowns field) |
 | `{PLAN_CONTEXT}` | Surrounding plan text — 5-10 lines around the affected section |
+| `{RESEARCH_CONTEXT}` | Full /deep-research report content — injected by the Lead when a third-party research gap spike is dispatched; omit this section entirely when no pre-research was run |

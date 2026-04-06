@@ -8,7 +8,7 @@ description: |
   Auto-detects fix target (plan file, code, bugs). For plan-review Research Gaps and
   Unknown Unknowns, runs actual spikes and verification — executes the research, not just
   documents it.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, WebSearch, WebFetch]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch]
 ---
 
 # Fix Skill
@@ -290,6 +290,14 @@ Agent(
 >
 > This prevents finding content from escaping the `<finding-data>` XML delimiter boundary
 > used to separate untrusted data from investigator instructions.
+
+- **Third-party research gaps** — When a Research Gap or Unknown Unknown finding names a
+  third-party library, API, or service, the Lead first invokes `/deep-research` via the `Skill`
+  tool — using External mode if the finding is about a technology not present in the codebase,
+  or Bridged mode if the finding involves how the current codebase uses a third-party component —
+  then reads the resulting report and passes the full content as `{RESEARCH_CONTEXT}` when
+  constructing the spike investigator prompt. This replaces ad-hoc WebSearch calls with the
+  structured 5-hop, 40+ source methodology.
 
 Dispatch all agents in parallel. Wait for all to complete before proceeding.
 
