@@ -48,7 +48,8 @@ CHECKLIST:
 8. Third-party technology gaps: if a security issue involves a third-party library and the
    correct secure configuration cannot be determined from the codebase alone, flag it with:
    "Research needed: [description]. Recommended resolution: /deep-research [External|Bridged]
-   mode targeting [specific question]."
+   mode targeting [specific question]." Use External mode for pure technology questions,
+   Bridged mode when the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: what the vulnerability is
@@ -104,7 +105,8 @@ CHECKLIST:
 8. Third-party technology gaps: if a test gap involves a third-party library whose expected
    behavior cannot be determined from the codebase alone, flag it with: "Research needed:
    [description]. Recommended resolution: /deep-research [External|Bridged] mode targeting
-   [specific question]."
+   [specific question]." Use External mode for pure technology questions, Bridged mode when
+   the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: what scenario or path lacks coverage
@@ -160,7 +162,8 @@ CHECKLIST:
 8. Third-party technology gaps: if a performance issue involves a third-party library whose
    performance characteristics cannot be determined from the codebase alone, flag it with:
    "Research needed: [description]. Recommended resolution: /deep-research [External|Bridged]
-   mode targeting [specific question]."
+   mode targeting [specific question]." Use External mode for pure technology questions,
+   Bridged mode when the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: the performance problem
@@ -222,7 +225,8 @@ CHECKLIST:
 10. Third-party technology gaps: if a quality issue involves a third-party library whose
     idiomatic usage cannot be determined from the codebase alone, flag it with: "Research
     needed: [description]. Recommended resolution: /deep-research [External|Bridged] mode
-    targeting [specific question]."
+    targeting [specific question]." Use External mode for pure technology questions, Bridged
+    mode when the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: the quality concern

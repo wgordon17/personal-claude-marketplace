@@ -103,16 +103,19 @@ Each normalized finding tracks:
 - `evidence` — the reviewer's evidence line from the review output
 - `suggested_fix` — `null` for pr-review and plan-review (not present in terminal output);
   the Resolution Plan checklist items for bug-investigation entries
-- `is_research_gap` — `true` if the finding appears under the `RESEARCH GAPS` category section OR
-  has a `[Reviewer]` tag of `Unknown Unknowns`. Classification is structural (category + reviewer
-  tag) — do NOT use keyword matching on description text. Match against the all-caps section
-  headers as they appear in the upstream terminal output (e.g., `RESEARCH GAPS`, not `Research Gaps`).
+- `is_research_gap` — `true` if (a) the finding appears under the `RESEARCH GAPS` category section
+  OR has a `[Reviewer]` tag of `Unknown Unknowns` (plan-review — structural match on category +
+  reviewer tag, not keyword matching), or (b) the finding description contains the literal string
+  `Recommended resolution: /deep-research` (pr-review — see source-specific rule below).
 - `verifier_verdict` — `"needs_context"` if from the upstream Needs Context section, otherwise `null`
 - `spike_question` — the specific assumption to verify, extracted from the finding text.
-  Populated only when `is_research_gap == true`. Extraction rule: if the finding contains a
-  question sentence (ends with `?`), use it verbatim. Otherwise, reformulate the finding's core
-  assumption as a yes/no question (e.g., "Does X support Y?" or "Is Z available in version N?").
-- `plan_context` — surrounding plan text (5-10 lines around the affected section). Populated only when `is_research_gap == true`.
+  Populated only when `is_research_gap == true` AND `source == plan-review`. Null for pr-review
+  research gaps (pr-review findings go to standard investigators, not spike investigators).
+  Extraction rule: if the finding contains a question sentence (ends with `?`), use it verbatim.
+  Otherwise, reformulate the finding's core assumption as a yes/no question.
+- `plan_context` — surrounding plan text (5-10 lines around the affected section). Populated
+  only when `is_research_gap == true` AND `source == plan-review`. Null for pr-review research
+  gaps (no plan exists — the finding references code, not a plan section).
 
 ### Source-Specific Normalization
 
@@ -181,7 +184,8 @@ Assess each finding and assign a triage label:
 | Assessment | Criteria | Action |
 |---|---|---|
 | Direct fix | Clear description, unambiguous location, no architectural decisions required | Queue for Phase 2 investigation |
-| Spike execution | `is_research_gap == true` | Queue for Phase 2 spike investigation |
+| Spike execution | `is_research_gap == true` AND `source == plan-review` | Queue for Phase 2 spike investigation |
+| Research-enriched fix | `is_research_gap == true` AND `source == pr-review` | Queue for Phase 2 — standard investigation after `/deep-research` enrichment |
 | Needs refinement | Multiple valid approaches, UX implications, or architectural tradeoffs that cannot be resolved without user input | Queue for Phase 2 (marked for user confirmation before implementation) |
 | Needs plan | Any finding touching 5+ files OR requiring architectural redesign beyond localized changes | Recommend `/incremental-planning`; skip this finding |
 | Out of scope | Path outside CWD (identified in Step 1a) | Skip with note |
@@ -202,6 +206,10 @@ Direct fix ({count}):
 
 Spike execution ({count}):
   {id}: {description} [{location}]
+  ...
+
+Research-enriched fix ({count}):
+  {id}: {description} [{location}] — /deep-research before investigation
   ...
 
 Needs refinement ({count}):
