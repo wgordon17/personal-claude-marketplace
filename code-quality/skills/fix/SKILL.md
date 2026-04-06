@@ -297,7 +297,10 @@ Agent(
   or Bridged mode if the finding involves how the current codebase uses a third-party component —
   then reads the resulting report and passes the full content as `{RESEARCH_CONTEXT}` when
   constructing the spike investigator prompt. This replaces ad-hoc WebSearch calls with the
-  structured 5-hop, 40+ source methodology.
+  structured 5-hop, 40+ source methodology. If multiple findings name different third-party
+  technologies, batch them into a single `/deep-research` invocation with a combined research
+  question. Dispatch non-research-gap investigators immediately — do not block them waiting
+  for `/deep-research` to complete.
 
 Dispatch all agents in parallel. Wait for all to complete before proceeding.
 

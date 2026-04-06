@@ -74,10 +74,12 @@ manually using LSP, Grep, and file reading. See `references/external-tools.md` f
 
 ### Phase 1.5: External Research Escalation (conditional)
 
-If discovery agents identify anti-patterns or tech debt involving third-party library misuse
-(e.g., deprecated patterns, non-idiomatic usage, missing security configurations), invoke
-`/deep-research` in Bridged mode to research current best practices before planning fixes.
-This prevents replacing one anti-pattern with another based on stale training data.
+Scan discovery agent findings for references to named third-party libraries or packages
+(check finding descriptions and affected file paths for import statements, package names, or
+library-specific API calls). If any findings involve third-party library misuse (e.g., deprecated
+patterns, non-idiomatic usage, missing security configurations), invoke `/deep-research` (via the
+`Skill` tool) in Bridged mode to research current best practices before planning fixes. This
+prevents replacing one anti-pattern with another based on stale training data.
 
 ### Phase 2: Synthesis & Planning
 

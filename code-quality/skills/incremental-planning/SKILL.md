@@ -115,9 +115,9 @@ specific questions — not generic ones.
   feeds Phase 4 and Phase 5.
 - **Evaluate external research need** — If the task description or user request names a
   third-party library, framework, or service not already present in the codebase, invoke
-  `/deep-research` in External mode before proceeding to Phase 2. If the task involves evaluating
-  how the current codebase uses an existing third-party component, invoke `/deep-research` in
-  Bridged mode. Feed the research findings into Phase 2 questions as informed context.
+  `/deep-research` (via the `Skill` tool) in External mode before proceeding to Phase 2. If the
+  task involves evaluating how the current codebase uses an existing third-party component, invoke
+  `/deep-research` (via the `Skill` tool) in Bridged mode. Feed the research findings into Phase 2 questions as informed context.
 
 ### Chat Output
 

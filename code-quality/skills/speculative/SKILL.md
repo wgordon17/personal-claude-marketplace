@@ -30,9 +30,9 @@ Gather the problem and success criteria before spawning anything.
 
 2. **Research competing approaches** — If the user's answer to step 1 named specific approaches
    that involve third-party libraries, frameworks, SDKs, or external services not already present
-   in the codebase, invoke `/deep-research` in External mode before proceeding. If the user
+   in the codebase, invoke `/deep-research` (via the `Skill` tool) in External mode before proceeding. If the user
    specified no approaches (approach hint is null) AND the speculative task involves third-party
-   libraries, frameworks, SDKs, or external services, invoke `/deep-research` in External mode to
+   libraries, frameworks, SDKs, or external services, invoke `/deep-research` (via the `Skill` tool) in External mode to
    identify viable alternatives and their trade-offs. If the task is purely about internal
    architecture or refactoring patterns with no external dependencies, skip `/deep-research` in
    the null case and let competitors choose their own approaches. Use research findings to
@@ -165,6 +165,7 @@ User request
      v
 Phase 0: Specification
   +-- AskUserQuestion (ambiguity, criteria, competitor count)
+  +-- /deep-research (if third-party technology involved)
   +-- Generate run-ID, create {memory_dir}/speculative/{run-id}/
   +-- TaskCreate for all phases
      |

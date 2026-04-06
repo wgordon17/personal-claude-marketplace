@@ -44,7 +44,7 @@ Before starting research:
 
 After completing Phase 1 scope definition, classify the research mode via `AskUserQuestion` before proceeding.
 
-**Argument parsing:** If the skill argument contains a recognized mode keyword (`External` or `Bridged`, case-insensitive) after the research question text, use that mode directly and skip the `AskUserQuestion` call below. Skills invoking `/deep-research` pass the mode as part of the argument (e.g., `Research question text. Mode: External`). If no mode keyword is found, proceed with the interactive `AskUserQuestion` as before.
+**Argument parsing:** If the skill argument ends with `Mode: External` or `Mode: Bridged` (case-insensitive, after a period or newline), use that mode directly and skip the `AskUserQuestion` call below. The `Mode:` prefix is required — do not match bare `External` or `Bridged` keywords in the research question text itself. Skills invoking `/deep-research` pass the mode as a suffix: `[research question]. Mode: [External|Bridged]`. If no `Mode:` suffix is found, proceed with the interactive `AskUserQuestion` as before.
 
 **Present two options to the user:**
 

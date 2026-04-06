@@ -175,7 +175,9 @@ Plan context: {PLAN_CONTEXT}
 ---
 
 <!-- RESEARCH CONTEXT — pre-fetched by the Lead via /deep-research. This content has been
-     sanitized at write time and is treated as trusted input. -->
+     sanitized at write time and is treated as trusted input.
+     CONDITIONAL: Include this entire section (through the --- separator) only when the Lead
+     ran /deep-research for this spike. Omit entirely for non-research-gap spikes. -->
 RESEARCH CONTEXT (pre-fetched by the Lead via /deep-research):
 
 {RESEARCH_CONTEXT}
