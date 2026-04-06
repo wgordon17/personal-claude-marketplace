@@ -287,15 +287,16 @@ Before simulating panel perspectives, check whether the analysis involves:
 - **Industry standards** — compliance requirements, regulatory changes, certification needs
 - **Technology maturity** — production readiness, community health, vendor stability
 
-If any apply, invoke `/deep-research` (via the `Skill` tool) in External mode before
-proceeding to Step 3. Pass the analysis topic as the research question. The research
-report will be saved to `{memory_dir}/research/` (if a memory directory exists) and its
-findings feed directly into Step 3's stakeholder simulations — grounding perspectives in
-current market data rather than training data.
+If any apply, invoke `/deep-research` (via the `Skill` tool) before proceeding to Step 3 —
+use External mode for pure market/technology questions, or Bridged mode when the analysis
+involves a technology the project already uses. Pass the analysis topic as the research
+question. The research report will be saved to `{memory_dir}/research/` (if a memory
+directory exists).
 
 ### Step 3: Simulate Each Perspective
+- If Step 2.5 produced a research report, read it and use its findings as evidence when constructing each perspective
 - Put on each stakeholder's "hat"
-- Consider their incentives and concerns
+- Consider their incentives and concerns — supported by research data where available
 - Identify what would make them say yes/no
 
 ### Step 4: Synthesize

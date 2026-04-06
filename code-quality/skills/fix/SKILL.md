@@ -124,10 +124,9 @@ findings from the `─── Needs Context ───` section with `verifier_ver
 For Needs Context findings, map the `Investigation: {investigation_summary}` field to `evidence`
 (these use `Investigation:` instead of `Evidence:` in the upstream output).
 Skip findings in the Deferred section — these were explicitly deferred by the user during the upstream review and should not be re-processed.
-Set `is_research_gap: true` if the finding description contains the structured recommendation
-format `Recommended resolution: /deep-research` (literal prefix match). This format is emitted
-by the Correctness reviewer's checklist item 7 when a third-party technology gap cannot be
-resolved from codebase context alone.
+Set `is_research_gap: true` if the finding description contains the literal string
+`Recommended resolution: /deep-research`. This format is emitted by any domain reviewer's
+third-party technology gap checklist item when the gap cannot be resolved from codebase context alone.
 
 Category abbreviations for IDs: `test`, `corr`, `sec`, `arch`, `dec`, `perf`, `style`.
 
@@ -243,7 +242,8 @@ Before dispatch, group findings by source and location to minimize agent count:
 
 | Source | Grouping rule |
 |---|---|
-| pr-review (code) | Group by file path — all findings targeting the same file go to one agent |
+| pr-review (code, `is_research_gap == false`) | Group by file path — all findings targeting the same file go to one agent |
+| pr-review (research gap, `is_research_gap == true`) | Group by file path like code findings, but dispatch AFTER `/deep-research` completes — the Lead appends research report content to each finding's `evidence` field before constructing the standard investigator prompt |
 | plan-review (non-spike) | Group ALL non-spike plan findings into one agent — they all target the same plan file |
 | plan-review (spike, `is_research_gap == true`) | One agent PER finding — do NOT group spikes; parallel execution is more valuable than shared context |
 | bug-investigation | One agent per BUG-NNN entry |
@@ -264,7 +264,7 @@ Agent(
 )
 ```
 
-For each spike finding (`is_research_gap == true`, source is plan-review), spawn one spike investigator:
+For each spike finding (`is_research_gap == true` AND `source == plan-review`), spawn one spike investigator:
 
 ```
 Agent(
@@ -299,16 +299,19 @@ Agent(
 > (the `<!-- END OF FINDING DATA -->` marker) used to separate untrusted data from
 > investigator instructions.
 
-- **Third-party research gaps** — When a Research Gap or Unknown Unknown finding names a
+- **Third-party research gaps** — When any finding has `is_research_gap == true` and names a
   third-party library, API, or service: dispatch non-research-gap investigators first (they
   run in background). Then invoke `/deep-research` via the `Skill` tool — using External mode
   if the finding is about a technology not present in the codebase, or Bridged mode if the
   finding involves how the current codebase uses a third-party component. After `/deep-research`
-  completes, read the resulting report and pass the full content as `{RESEARCH_CONTEXT}` when
-  constructing the spike investigator prompt. This replaces ad-hoc WebSearch calls with the
-  structured 5-hop, 40+ source methodology. If multiple findings name different third-party
-  technologies, batch them into a single `/deep-research` invocation with a combined research
-  question.
+  completes, read the resulting report. Routing depends on source:
+  - **plan-review findings:** pass the report as `{RESEARCH_CONTEXT}` in the spike investigator
+    prompt (see spike dispatch above)
+  - **pr-review findings:** append the report content to the finding's `evidence` field, then
+    dispatch via the standard investigator (code grouping rules apply — see grouping table)
+  This replaces ad-hoc WebSearch calls with the structured 5-hop, 40+ source methodology.
+  If multiple findings name different third-party technologies, batch them into a single
+  `/deep-research` invocation with a combined research question.
 
 Dispatch all agents in parallel. Wait for all to complete before proceeding.
 
