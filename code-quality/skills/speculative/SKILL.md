@@ -5,7 +5,7 @@ description: >-
   best approach. Use when multiple viable approaches exist and "try both and compare" beats
   "guess and commit."
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate,
-  TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete]
+  TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill]
 ---
 
 # /speculative — Competing Implementations with Judge Selection
@@ -28,18 +28,29 @@ Gather the problem and success criteria before spawning anything.
    - How many competitors? (default: 2, max: 4 — more is slower, rarely more useful)
    - Are there specific approaches to try, or should competitors choose their own?
 
-2. Define the evaluation criteria as a weighted list (weights must sum to 1.0):
+2. **Research competing approaches** — If the user's answer to step 1 named specific approaches
+   that involve third-party libraries, frameworks, SDKs, or external services not already present
+   in the codebase, invoke `/deep-research` in External mode before proceeding. If the user
+   specified no approaches (approach hint is null) AND the speculative task involves third-party
+   libraries, frameworks, SDKs, or external services, invoke `/deep-research` in External mode to
+   identify viable alternatives and their trade-offs. If the task is purely about internal
+   architecture or refactoring patterns with no external dependencies, skip `/deep-research` in
+   the null case and let competitors choose their own approaches. Use research findings to
+   populate the `SpeculativeSpec` with informed approach descriptions rather than relying on
+   training data.
+
+3. Define the evaluation criteria as a weighted list (weights must sum to 1.0):
    - Correctness (does it work correctly and handle edge cases?)
    - Readability (is the code clear and maintainable?)
    - Performance (is it efficient for the expected load?)
    - Simplicity (is it the minimum necessary complexity?)
    - Add or substitute criteria based on user priorities
 
-3. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+4. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
    (Run-ID Naming Convention section) and create the audit trail directory at
    `{memory_dir}/speculative/{run-id}/`.
 
-4. Create all tasks upfront with `TaskCreate` so the plan is visible from the start.
+5. Create all tasks upfront with `TaskCreate` so the plan is visible from the start.
 
 ### Phase 1: Fork (parallel, isolated)
 
