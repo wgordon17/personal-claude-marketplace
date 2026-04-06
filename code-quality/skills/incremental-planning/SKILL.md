@@ -113,6 +113,11 @@ specific questions — not generic ones.
   `code-quality/references/documentation-taxonomy.md` (Documentation Surfaces section) to
   find all surfaces in the project. Note which exist and what they document. This inventory
   feeds Phase 4 and Phase 5.
+- **Evaluate external research need** — If the task description or user request names a
+  third-party library, framework, or service not already present in the codebase, invoke
+  `/deep-research` in External mode before proceeding to Phase 2. If the task involves evaluating
+  how the current codebase uses an existing third-party component, invoke `/deep-research` in
+  Bridged mode. Feed the research findings into Phase 2 questions as informed context.
 
 ### Chat Output
 
@@ -187,6 +192,9 @@ Launch specialized agents in parallel using the `Agent` tool:
   (only if auth, data, or API work)
 - **`code-quality:qa`** — "What testing approach covers these requirements?"
   (only if test strategy is non-obvious)
+- **`/deep-research`** (via `Skill` tool, not `Agent`) — "Research [specific technology/pattern
+  question] to inform the plan" (invoke when Phase 1 identified a named third-party technology
+  and Phase 2 answers did not resolve the technology choice)
 
 ### Chat Output
 
