@@ -4,7 +4,7 @@ description: |
   Use when user needs multi-stakeholder analysis, business impact assessment, or wants
   perspectives from different roles. Triggers on: "analyze from business perspective",
   "what would stakeholders think", "impact analysis", "business case for", "ROI of"
-allowed-tools: [Read, Glob, Grep, WebSearch, WebFetch]
+allowed-tools: [Read, Glob, Grep, WebSearch, WebFetch, Skill]
 ---
 
 # business-panel — Multi-Stakeholder Analysis Mode
@@ -287,18 +287,11 @@ Before simulating panel perspectives, check whether the analysis involves:
 - **Industry standards** — compliance requirements, regulatory changes, certification needs
 - **Technology maturity** — production readiness, community health, vendor stability
 
-If any apply, output this recommendation as chat text:
-
-> This analysis would benefit from current market data. Run `/deep-research` in External
-> mode first. After /deep-research completes, re-invoke `/business-panel` — the research
-> report will be saved to `{memory_dir}/research/` and available for reference during
-> Step 2 (Gather Context). If no project memory directory exists, `/deep-research`
-> delivers the report in the conversation instead — skip the re-invoke advice and use
-> the in-conversation report directly.
-
-Do not use AskUserQuestion (not in this skill's allowed-tools). This is safe to output
-directly: /business-panel is always invoked as the Lead (direct user invocation), never as
-a subagent — it has no Agent/orchestration tools and no skill invokes it.
+If any apply, invoke `/deep-research` (via the `Skill` tool) in External mode before
+proceeding to Step 3. Pass the analysis topic as the research question. The research
+report will be saved to `{memory_dir}/research/` (if a memory directory exists) and its
+findings feed directly into Step 3's stakeholder simulations — grounding perspectives in
+current market data rather than training data.
 
 ### Step 3: Simulate Each Perspective
 - Put on each stakeholder's "hat"
