@@ -315,10 +315,11 @@ with reason "non-interactive — AskUserQuestion unavailable". For `spike_invali
 also preserve the spike verdict and plan impact details in the reason field so they surface in
 the Phase 5 DEFERRED section.
 
-**LoE escalation:** If an investigator estimates a finding's LoE as `significant`, move that
-finding to "needs refinement" and present to the user via `AskUserQuestion` before queuing for
-implementation. Significant LoE means the finding may have architectural impact — user should
-confirm before the lead proceeds.
+**LoE escalation:** If an investigator estimates a finding's LoE as `significant` AND returned
+verdict `refinement_needed`, include the LoE context in the AskUserQuestion presentation. If the
+investigator returned `resolution` despite `significant` LoE, proceed with the resolution — the
+investigator already determined a clear fix. Flag all `significant` LoE findings in the Phase 5
+report regardless of verdict.
 
 **Handling unverifiable findings:** If an investigator receives a finding with `verifier_verdict: "needs_context"` and cannot verify it (insufficient evidence to confirm or deny), it returns verdict `invalid` with reason "could not verify — insufficient evidence". The lead routes this to the `unverified_unresolved` bucket (not `findings_invalid`).
 

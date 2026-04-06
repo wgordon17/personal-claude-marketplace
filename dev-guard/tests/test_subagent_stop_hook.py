@@ -1,0 +1,1035 @@
+"""Tests for subagent-stop-hook.py
+
+Black-box subprocess tests. Each test feeds JSON on stdin and asserts exit codes
+and stdout content. State file isolation via SUBAGENT_STOP_HOOK_STATE_PATH env var.
+
+Approve: exit 0 + empty stdout.
+Block:   exit 0 + {"decision": "block", "reason": "..."} JSON on stdout.
+"""
+
+import json
+import os
+import subprocess
+import uuid
+from pathlib import Path
+
+SCRIPT = Path(__file__).parent.parent / "hooks" / "subagent-stop-hook.py"
+
+# Must match _STATE_KEY_SEP in subagent-stop-hook.py
+_STATE_KEY_SEP = "\x00"
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def make_payload(
+    *,
+    session_id: str | None = None,
+    transcript_path: str = "",
+    cwd: str = ".",
+    permission_mode: str = "default",
+) -> dict:
+    return {
+        "hook_event_name": "SubagentStop",
+        "session_id": session_id or str(uuid.uuid4()),
+        "transcript_path": transcript_path,
+        "cwd": cwd,
+        "permission_mode": permission_mode,
+    }
+
+
+def run_hook(
+    payload: dict,
+    *,
+    state_path: Path | None = None,
+) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    if state_path is not None:
+        env["SUBAGENT_STOP_HOOK_STATE_PATH"] = str(state_path)
+    return subprocess.run(
+        ["uv", "run", str(SCRIPT)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+
+def write_transcript(path: Path, entries: list[dict]) -> None:
+    """Write a list of dicts as JSONL to a transcript file."""
+    lines = [json.dumps(e) for e in entries]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_large_transcript(path: Path, entries: list[dict], target_size: int = 600 * 1024) -> None:
+    """Write a transcript padded with filler lines to exceed target_size bytes.
+
+    Padding lines are valid JSONL but contain no FixSummary markers, so they
+    don't affect detection. The real entries are appended AFTER the padding,
+    placing them in the tail window when target_size > _MAX_PARSE_BYTES.
+    """
+    filler_line = json.dumps({"role": "user", "content": "x" * 400}) + "\n"
+    filler_bytes = filler_line.encode("utf-8")
+    lines_needed = (target_size // len(filler_bytes)) + 1
+
+    with path.open("w", encoding="utf-8") as f:
+        for _ in range(lines_needed):
+            f.write(filler_line)
+        for entry in entries:
+            f.write(json.dumps(entry) + "\n")
+
+
+def make_fix_summary_entry(fix_summary: dict) -> dict:
+    """Create a transcript entry containing a FixSummary in assistant message content."""
+    return {
+        "role": "assistant",
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps(fix_summary),
+            }
+        ],
+    }
+
+
+# Reusable FixSummary dicts for tests.
+EMPTY_FIX_SUMMARY: dict = {
+    "schema": "FixSummary",
+    "findings_fixed": [],
+    "needs_input_items": [],
+    "user_deferred": [],
+    "fixes": [],
+    "files_modified": [],
+}
+
+VALID_FIX_SUMMARY: dict = {
+    "schema": "FixSummary",
+    "findings_fixed": ["finding-001", "finding-002"],
+    "needs_input_items": [],
+    "user_deferred": [],
+    "fixes": [
+        {"id": "finding-001", "description": "Fixed null pointer"},
+        {"id": "finding-002", "description": "Added input validation"},
+    ],
+    "files_modified": ["src/auth.py"],
+}
+
+
+# ── TestFastExit ──────────────────────────────────────────────────────────────
+
+
+class TestFastExit:
+    def test_no_transcript_path_approves(self, tmp_path):
+        """Payload with empty transcript_path -> approve (exit 0, empty stdout)."""
+        payload = make_payload(transcript_path="")
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_missing_transcript_file_approves(self, tmp_path):
+        """Payload with nonexistent transcript_path -> approve (file missing, fail-open)."""
+        payload = make_payload(transcript_path="/nonexistent/path/transcript.jsonl")
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_empty_transcript_file_approves(self, tmp_path):
+        """Zero-byte transcript file -> file_size == 0 guard -> fail-open -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_bytes(b"")
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+
+# ── TestFixSummaryDetection ───────────────────────────────────────────────────
+
+
+class TestFixSummaryDetection:
+    def test_transcript_with_valid_fix_summary_approves(self, tmp_path):
+        """Transcript containing VALID_FIX_SUMMARY -> structural validation passes -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix the findings."},
+            make_fix_summary_entry(VALID_FIX_SUMMARY),
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_real_transcript_format_approves(self, tmp_path):
+        """Real Claude Code transcript format with nested message dict -> detected -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": json.dumps(VALID_FIX_SUMMARY)},
+                    ],
+                },
+            },
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_transcript_without_fix_summary_approves(self, tmp_path):
+        """Transcript with only regular messages (no FixSummary) -> not a Fixer -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Summarize the repo."},
+            {"role": "assistant", "content": "The repo contains 9 plugins."},
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_fix_summary_with_needs_input_items_approves(self, tmp_path):
+        """FixSummary with findings_fixed + needs_input_items (total > 0) -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": ["finding-001"],
+            "needs_input_items": [{"id": "finding-002", "description": "Needs review"}],
+            "user_deferred": [],
+            "fixes": [{"id": "finding-001", "description": "Patched injection vector"}],
+            "files_modified": ["src/db.py"],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_user_deferred_only_fix_summary_approves(self, tmp_path):
+        """FixSummary with only user_deferred non-empty -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [],
+            "needs_input_items": [],
+            "user_deferred": [{"id": "finding-001", "reason": "user deferred"}],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_fix_summary_in_nested_tool_use_approves(self, tmp_path):
+        """FixSummary in tool_use nested inside assistant message content -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "SendMessage",
+                            "input": {
+                                "to": "team-lead",
+                                "message": json.dumps(VALID_FIX_SUMMARY),
+                                "summary": "FixSummary handoff",
+                            },
+                        }
+                    ],
+                },
+            },
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_invalid_fix_summary_in_nested_tool_use_blocks(self, tmp_path):
+        """Invalid FixSummary in nested tool_use inside assistant message -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "SendMessage",
+                            "input": {
+                                "to": "team-lead",
+                                "message": json.dumps(EMPTY_FIX_SUMMARY),
+                                "summary": "FixSummary handoff",
+                            },
+                        }
+                    ],
+                },
+            },
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block — invalid FixSummary in nested tool_use"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_fix_summary_embedded_in_prose_approves(self, tmp_path):
+        """FixSummary JSON surrounded by prose text in assistant message -> detected -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary_json = json.dumps(VALID_FIX_SUMMARY)
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            {
+                "role": "assistant",
+                "content": (
+                    f"I have completed all fixes. Here is the summary:\n\n"
+                    f"{fix_summary_json}\n\n"
+                    f"All findings have been addressed."
+                ),
+            },
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_invalid_fix_summary_in_tool_use_string_blocks(self, tmp_path):
+        """Invalid FixSummary (all empty arrays) as JSON string in tool_use input -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            {
+                "type": "tool_use",
+                "name": "SendMessage",
+                "id": "t1",
+                "input": {
+                    "to": "team-lead",
+                    "message": json.dumps(EMPTY_FIX_SUMMARY),
+                    "summary": "FixSummary handoff",
+                },
+            },
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON — invalid FixSummary detected"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_fix_summary_in_tool_use_content_block_approves(self, tmp_path):
+        """FixSummary as JSON-encoded string inside SendMessage tool_use input -> detected
+        via string value unwrapping -> validation passes -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            {
+                "type": "tool_use",
+                "name": "SendMessage",
+                "id": "t1",
+                "input": {
+                    "to": "team-lead",
+                    "message": json.dumps(VALID_FIX_SUMMARY),
+                    "summary": "FixSummary handoff",
+                },
+            },
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_flat_tool_use_with_direct_dict_fix_summary_approves(self, tmp_path):
+        """Flat tool_use entry where input IS the FixSummary dict -> direct dict match
+        at lines 192-193 -> detected -> validation passes -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            {
+                "type": "tool_use",
+                "name": "ReportFixSummary",
+                "id": "t1",
+                "input": VALID_FIX_SUMMARY,
+            },
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_flat_tool_use_with_direct_dict_invalid_fix_summary_blocks(self, tmp_path):
+        """Flat tool_use entry where input IS an invalid FixSummary dict -> direct dict
+        match -> detected -> validation fails -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            {
+                "type": "tool_use",
+                "name": "ReportFixSummary",
+                "id": "t1",
+                "input": EMPTY_FIX_SUMMARY,
+            },
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", (
+            "expected block JSON — invalid FixSummary as direct input dict"
+        )
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_large_transcript_fix_summary_in_tail_detected(self, tmp_path):
+        """Transcript >512KB with FixSummary at the END -> tail seek detects it -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        tail_entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(VALID_FIX_SUMMARY),
+        ]
+        write_large_transcript(transcript, tail_entries, target_size=600 * 1024)
+        assert transcript.stat().st_size > 512 * 1024, (
+            f"test setup error: transcript is only {transcript.stat().st_size} bytes"
+        )
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", (
+            f"expected approve — FixSummary in tail window should be detected: {result.stdout!r}"
+        )
+
+    def test_large_transcript_fix_summary_only_in_head_not_detected(self, tmp_path):
+        """Transcript >512KB with FixSummary ONLY at the START -> tail seek skips it -> approve
+        (fail-open: no FixSummary found, subagent treated as non-Fixer)."""
+        transcript = tmp_path / "transcript.jsonl"
+        head_entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(VALID_FIX_SUMMARY),
+        ]
+        head_lines = [json.dumps(e) + "\n" for e in head_entries]
+        filler_line = json.dumps({"role": "user", "content": "x" * 400}) + "\n"
+        filler_bytes_needed = 600 * 1024
+        lines_needed = (filler_bytes_needed // len(filler_line.encode("utf-8"))) + 1
+        with transcript.open("w", encoding="utf-8") as f:
+            for line in head_lines:
+                f.write(line)
+            for _ in range(lines_needed):
+                f.write(filler_line)
+        assert transcript.stat().st_size > 512 * 1024
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", (
+            f"expected approve — FixSummary outside tail window not detected: {result.stdout!r}"
+        )
+
+    def test_fix_summary_keyword_without_json_approves(self, tmp_path):
+        """Assistant message contains 'FixSummary' keyword but no parseable JSON -> approve.
+
+        Exercises: keyword quick-check passes, _try_parse_fix_summary returns None,
+        _find_fix_summary returns None, hook treats subagent as non-Fixer.
+        """
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix the findings."},
+            {
+                "role": "assistant",
+                "content": "I will output a FixSummary next with all findings_fixed.",
+            },
+        ]
+        write_transcript(transcript, entries)
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", (
+            f"expected approve — keyword present but no JSON: {result.stdout!r}"
+        )
+
+
+# ── TestValidationFailures ────────────────────────────────────────────────────
+
+
+class TestValidationFailures:
+    def test_empty_fix_summary_blocks(self, tmp_path):
+        """FixSummary with all empty arrays (total_accounted=0) -> block with reason."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON output, got empty stdout"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert output["reason"]  # non-empty reason
+
+    def test_whitespace_only_ids_blocks(self, tmp_path):
+        """FixSummary with whitespace-only string in findings_fixed -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": ["   ", "\t"],
+            "needs_input_items": [],
+            "user_deferred": [],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON output, got empty stdout"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_empty_dict_item_in_findings_fixed_blocks(self, tmp_path):
+        """FixSummary with empty dict in findings_fixed -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [{}],
+            "needs_input_items": [],
+            "user_deferred": [],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON output, got empty stdout"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "empty dict" in output["reason"]
+
+    def test_unexpected_type_item_in_findings_fixed_blocks(self, tmp_path):
+        """FixSummary with integer in findings_fixed -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [42],
+            "needs_input_items": [],
+            "user_deferred": [],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON output, got empty stdout"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "unexpected type" in output["reason"]
+
+    def test_needs_input_item_missing_id_blocks(self, tmp_path):
+        """FixSummary with dict in needs_input_items missing 'id' field -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [],
+            "needs_input_items": [{"description": "no id field"}],
+            "user_deferred": [],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON output, got empty stdout"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "missing non-empty 'id' field" in output["reason"]
+
+    def test_user_deferred_string_instead_of_dict_blocks(self, tmp_path):
+        """FixSummary with bare string in user_deferred (requires dict) -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [],
+            "needs_input_items": [],
+            "user_deferred": ["finding-001"],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON output, got empty stdout"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "must be a dict" in output["reason"]
+
+    def test_needs_input_string_instead_of_dict_blocks(self, tmp_path):
+        """FixSummary with bare string in needs_input_items (requires dict) -> block."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": ["finding-001"],
+            "needs_input_items": ["finding-002"],
+            "user_deferred": [],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON output, got empty stdout"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "must be a dict" in output["reason"]
+
+    def test_needs_input_item_whitespace_id_blocks(self, tmp_path):
+        """FixSummary with whitespace-only 'id' in needs_input_items -> block.
+
+        Exercises the require_dict=True path: item_id.strip() is falsy.
+        """
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [],
+            "needs_input_items": [{"id": "   ", "description": "spaces only"}],
+            "user_deferred": [],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON — whitespace-only id"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "missing non-empty 'id' field" in output["reason"]
+
+    def test_user_deferred_whitespace_id_blocks(self, tmp_path):
+        """FixSummary with whitespace-only 'id' in user_deferred -> block.
+
+        Exercises the require_dict=True path: item_id.strip() is falsy.
+        """
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [],
+            "needs_input_items": [],
+            "user_deferred": [{"id": "\t", "reason": "tab only"}],
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block JSON — whitespace-only id"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "missing non-empty 'id' field" in output["reason"]
+
+    def test_non_list_fields_coerced_to_empty_blocks(self, tmp_path):
+        """FixSummary with non-list findings_fixed (string) -> coerced to [] -> all empty -> block.
+
+        Exercises the isinstance guard at _validate_fix_summary lines 259-264.
+        """
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": "finding-001",  # string, not list
+            "needs_input_items": None,  # null, not list
+            "user_deferred": 42,  # int, not list
+            "fixes": [],
+            "files_modified": [],
+        }
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(fix_summary),
+        ]
+        write_transcript(transcript, entries)
+        session_id = str(uuid.uuid4())
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", "expected block — non-list fields coerced to []"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "all arrays empty" in output["reason"]
+
+    def test_malformed_transcript_approves(self, tmp_path):
+        """Transcript file with invalid JSONL content -> fail-open -> approve."""
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text("NOT JSON AT ALL\n{broken: json\n")
+        payload = make_payload(transcript_path=str(transcript))
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        # Fail-open: malformed transcript is treated as no FixSummary found
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+
+# ── TestLoopGuard ─────────────────────────────────────────────────────────────
+
+
+def make_empty_fix_summary_transcript(tmp_path: Path) -> Path:
+    """Create a transcript with an empty (invalid) FixSummary for block-testing."""
+    transcript = tmp_path / "transcript.jsonl"
+    entries = [
+        {"role": "user", "content": "Fix findings."},
+        make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+    ]
+    write_transcript(transcript, entries)
+    return transcript
+
+
+class TestLoopGuard:
+    def test_first_three_blocks_produce_block_json(self, tmp_path):
+        """Run 3 times with empty FixSummary, same session_id, same state_path -> all 3 block."""
+        transcript = make_empty_fix_summary_transcript(tmp_path)
+        session_id = str(uuid.uuid4())
+        state_path = tmp_path / "state.json"
+
+        for attempt in range(1, 4):
+            payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+            result = run_hook(payload, state_path=state_path)
+            assert result.returncode == 0, f"attempt {attempt} stderr: {result.stderr!r}"
+            assert result.stdout.strip() != "", (
+                f"attempt {attempt}: expected block JSON, got empty stdout"
+            )
+            output = json.loads(result.stdout)
+            assert output["decision"] == "block", (
+                f"attempt {attempt}: expected 'block', got {output['decision']!r}"
+            )
+
+    def test_fourth_block_approves(self, tmp_path):
+        """After 3 consecutive blocks, 4th attempt fails open -> approve (empty stdout)."""
+        transcript = make_empty_fix_summary_transcript(tmp_path)
+        session_id = str(uuid.uuid4())
+        state_path = tmp_path / "state.json"
+
+        # First 3 attempts -> block
+        for _ in range(3):
+            payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+            run_hook(payload, state_path=state_path)
+
+        # 4th attempt -> fail-open -> approve
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", (
+            f"expected approve (empty stdout) on 4th block, got: {result.stdout!r}"
+        )
+
+        # 5th attempt -> still fails open (counter >= 3 persists)
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", (
+            f"expected approve (empty stdout) on 5th block, got: {result.stdout!r}"
+        )
+
+        # Verify counter did NOT grow past 3 (fail-open should not call _record_block)
+        state_data = json.loads(state_path.read_text())
+        state_key = f"{session_id}{_STATE_KEY_SEP}{transcript}"
+        assert state_data[state_key]["consecutive_blocks"] == 3, (
+            f"counter should stay at 3 after fail-open, got {state_data[state_key]}"
+        )
+
+    def test_pass_through_resets_counter(self, tmp_path):
+        """Block twice, pass (valid FixSummary), block again -> normal block.
+
+        Uses the SAME transcript path throughout. The state key is
+        session_id + NUL + transcript_path, so overwriting the file content changes what
+        the hook sees without changing the key.
+        """
+        state_path = tmp_path / "state.json"
+        session_id = str(uuid.uuid4())
+        transcript = tmp_path / "transcript.jsonl"
+
+        # Phase 1: Block twice (counter = 2) with empty FixSummary
+        write_transcript(
+            transcript,
+            [
+                {"role": "user", "content": "Fix findings."},
+                make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+            ],
+        )
+        for _ in range(2):
+            payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+            result = run_hook(payload, state_path=state_path)
+            output = json.loads(result.stdout)
+            assert output["decision"] == "block"
+
+        # Phase 2: Overwrite with valid FixSummary -> approve -> counter reset for this key
+        write_transcript(
+            transcript,
+            [
+                {"role": "user", "content": "Fix findings."},
+                make_fix_summary_entry(VALID_FIX_SUMMARY),
+            ],
+        )
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=state_path)
+        assert result.stdout.strip() == "", "expected approve after valid FixSummary"
+
+        # Phase 3: Overwrite back to empty FixSummary -> normal block (counter at 1)
+        write_transcript(
+            transcript,
+            [
+                {"role": "user", "content": "Fix findings."},
+                make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+            ],
+        )
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", "expected block after counter reset"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+
+# ── TestEdgeCases ─────────────────────────────────────────────────────────────
+
+
+class TestEdgeCases:
+    def test_different_transcript_paths_independent(self, tmp_path):
+        """Block 3 times for transcript A (same session_id), then block for transcript B.
+
+        Transcript B's loop guard counter is independent -> normal block (not approve).
+        """
+        state_path = tmp_path / "state.json"
+        session_id = str(uuid.uuid4())
+
+        def make_bad_transcript(name: str) -> Path:
+            path = tmp_path / name
+            write_transcript(
+                path,
+                [
+                    {"role": "user", "content": "Fix findings."},
+                    make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+                ],
+            )
+            return path
+
+        transcript_a = make_bad_transcript("transcript_a.jsonl")
+        transcript_b = make_bad_transcript("transcript_b.jsonl")
+
+        # Block 3 times for transcript A -> loop guard exhausted for A
+        for _ in range(3):
+            payload = make_payload(session_id=session_id, transcript_path=str(transcript_a))
+            run_hook(payload, state_path=state_path)
+
+        # 4th attempt for transcript A -> approve (fail-open)
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript_a))
+        result_a4 = run_hook(payload, state_path=state_path)
+        assert result_a4.stdout.strip() == "", "transcript A 4th attempt should approve"
+
+        # Transcript B (same session) -> normal block (independent counter)
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript_b))
+        result_b1 = run_hook(payload, state_path=state_path)
+        assert result_b1.returncode == 0, f"stderr: {result_b1.stderr!r}"
+        assert result_b1.stdout.strip() != "", (
+            "transcript B first block should produce block JSON (independent counter)"
+        )
+        output = json.loads(result_b1.stdout)
+        assert output["decision"] == "block"
+
+    def test_stdin_payload_parsing(self, tmp_path):
+        """Verify hook correctly extracts session_id and transcript_path from stdin JSON.
+
+        Uses a valid FixSummary scenario to confirm end-to-end parsing works.
+        """
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(VALID_FIX_SUMMARY),
+        ]
+        write_transcript(transcript, entries)
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            permission_mode="acceptEdits",
+        )
+        result = run_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        # Valid FixSummary -> approve -> empty stdout
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_missing_session_id_uses_transcript_path_as_state_key(self, tmp_path):
+        """Payload with session_id="" -> else branch -> state key is transcript_path only."""
+        transcript = tmp_path / "transcript.jsonl"
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+        ]
+        write_transcript(transcript, entries)
+        state_path = tmp_path / "state.json"
+
+        # Construct payload directly — make_payload would replace "" with uuid4()
+        payload = {
+            "hook_event_name": "SubagentStop",
+            "session_id": "",
+            "transcript_path": str(transcript),
+            "cwd": ".",
+            "permission_mode": "default",
+        }
+
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", (
+            "expected block JSON — empty session_id, invalid FixSummary"
+        )
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+        # Verify state key is transcript_path alone (not ":transcript_path")
+        state_data = json.loads(state_path.read_text())
+        expected_key = str(transcript)
+        assert expected_key in state_data, (
+            f"state key should be transcript_path alone when session_id is empty; "
+            f"got keys: {list(state_data.keys())}"
+        )
+        assert state_data[expected_key]["consecutive_blocks"] == 1
+
+    def test_state_ttl_prunes_stale_entries(self, tmp_path):
+        """State entries older than 24h are pruned — stale loop guard counter resets."""
+        import time as _time
+
+        state_path = tmp_path / "state.json"
+        session_id = str(uuid.uuid4())
+        transcript = tmp_path / "transcript.jsonl"
+
+        # Write a stale state entry with consecutive_blocks=3 (would fail-open if not pruned)
+        stale_timestamp = _time.time() - (25 * 3600)  # 25 hours ago
+        stale_state = {
+            f"{session_id}{_STATE_KEY_SEP}{transcript}": {
+                "consecutive_blocks": 3,
+                "last_block_timestamp": stale_timestamp,
+            }
+        }
+        state_path.write_text(json.dumps(stale_state))
+
+        # Write a bad transcript
+        entries = [
+            {"role": "user", "content": "Fix findings."},
+            make_fix_summary_entry(EMPTY_FIX_SUMMARY),
+        ]
+        write_transcript(transcript, entries)
+
+        # Stale entry is pruned -> counter resets to 0 -> first block (not fail-open approve)
+        payload = make_payload(session_id=session_id, transcript_path=str(transcript))
+        result = run_hook(payload, state_path=state_path)
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() != "", (
+            "expected block JSON — stale state should be pruned, counter reset to 0"
+        )
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+
+# ── TestStdinParsing ──────────────────────────────────────────────────────────
+
+
+class TestStdinParsing:
+    def test_invalid_json_stdin_exits_approve(self, tmp_path):
+        """Non-JSON stdin -> JSONDecodeError in _parse_hook_input -> exit 0, empty stdout."""
+        env = os.environ.copy()
+        env["SUBAGENT_STOP_HOOK_STATE_PATH"] = str(tmp_path / "state.json")
+        result = subprocess.run(
+            ["uv", "run", str(SCRIPT)],
+            input="not json at all",
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"
+
+    def test_json_array_stdin_exits_approve(self, tmp_path):
+        """JSON array (not dict) stdin -> isinstance check in _parse_hook_input -> exit 0."""
+        env = os.environ.copy()
+        env["SUBAGENT_STOP_HOOK_STATE_PATH"] = str(tmp_path / "state.json")
+        result = subprocess.run(
+            ["uv", "run", str(SCRIPT)],
+            input="[1, 2, 3]",
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        assert result.stdout.strip() == "", f"unexpected stdout: {result.stdout!r}"

@@ -101,7 +101,7 @@ specific questions — not generic ones.
 
 ### Actions
 
-- Launch an **Explore agent** (`Agent` with `subagent_type: "Explore"`) for relevant codebase areas
+- Launch an **Explore agent** (`Agent` with `subagent_type: "general-purpose"`) for relevant codebase areas
 - Read `PROJECT.md` from the memory directory (detect using `code-quality/references/project-memory-reference.md` Directory Detection section) for past architectural decisions
 - Read `LESSONS.md` (if exists) from the memory directory for relevant past lessons. Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without

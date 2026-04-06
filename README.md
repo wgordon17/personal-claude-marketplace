@@ -85,7 +85,7 @@ Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__gith
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| dev-guard | Tool selection policies, commit validation, and pre-push review | 3 hooks | [README](dev-guard/README.md) |
+| dev-guard | Tool selection policies, commit validation, pre-push review, and subagent completion verification | 5 hooks | [README](dev-guard/README.md) |
 
 > **⚠️ Important:** Dev-guard's `"ask"` action uses Claude Code's JSON `hookSpecificOutput` protocol. This correctly overrides `permissions.allow` auto-approve rules in the CLI but is [not supported in VS Code](https://github.com/anthropics/claude-code/issues/13339). See the [dev-guard README](dev-guard/README.md#action-field) for details.
 
@@ -93,6 +93,8 @@ Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__gith
 - **PreToolUse: Tool Selection Guard** - Enforces native tool usage, Python/Rust tooling, git safety, URL fetch guard
 - **PreToolUse: Pre-push Review** - Commit summary and suggestions when pushing 3+ commits
 - **PostToolUse: Commit Validation** - Conventional Commits format enforcement
+- **Stop:** Quality stop gate - Deterministic triage + LLM evaluation for completion claims and write activity
+- **SubagentStop:** FixSummary validation - Structural completeness check for Fixer subagent outputs
 
 ## Installation
 

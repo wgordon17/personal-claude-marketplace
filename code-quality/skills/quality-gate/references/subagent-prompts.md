@@ -37,7 +37,11 @@ CHECKLIST:
 For each finding, report:
 - Vulnerability type and location (file:line)
 - Attack vector (how an adversary exploits it)
-- Classification and LoE per `code-quality/references/finding-classification.md`
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff).
+  needs-input is NOT for: uncertain severity, stylistic preferences, or "could go either way"
+  situations — pick the better option and classify as needs-fix.
+- LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
 If no issues found, say "No security findings." Do not fabricate issues.
@@ -71,7 +75,11 @@ CHECKLIST:
 For each finding, report:
 - What scenario or path lacks coverage
 - Risk if it goes untested
-- Classification and LoE per `code-quality/references/finding-classification.md`
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff).
+  needs-input is NOT for: uncertain severity, stylistic preferences, or "could go either way"
+  situations — pick the better option and classify as needs-fix.
+- LoE: trivial | moderate | significant
 - Suggested test approach (brief)
 
 If coverage is adequate, say "No QA findings." Do not fabricate issues.
@@ -105,7 +113,11 @@ CHECKLIST:
 For each finding, report:
 - The performance problem and location (file:line)
 - Expected impact (scale at which it matters, latency/throughput effect)
-- Classification and LoE per `code-quality/references/finding-classification.md`
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff).
+  needs-input is NOT for: uncertain severity, stylistic preferences, or "could go either way"
+  situations — pick the better option and classify as needs-fix.
+- LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
 If no performance issues found, say "No performance findings." Do not fabricate issues.
@@ -140,7 +152,11 @@ CHECKLIST:
 For each finding, report:
 - The quality concern and location (file:line)
 - Why it matters for long-term maintainability
-- Classification and LoE per `code-quality/references/finding-classification.md`
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff).
+  needs-input is NOT for: uncertain severity, stylistic preferences, or "could go either way"
+  situations — pick the better option and classify as needs-fix.
+- LoE: trivial | moderate | significant
 - Suggested improvement (brief)
 
 If code quality is good, say "No code quality findings." Do not fabricate issues.
@@ -234,7 +250,11 @@ PLAN FILE (if available):
 For each issue found, report:
 - What requirement or item is affected
 - What's missing or incomplete
-- Classification and LoE per `code-quality/references/finding-classification.md`
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff).
+  needs-input is NOT for: uncertain severity, stylistic preferences, or "could go either way"
+  situations — pick the better option and classify as needs-fix.
+- LoE: trivial | moderate | significant
 
 Be thorough. Assume at least 2 completeness gaps exist. Find them.
 ```
@@ -303,7 +323,11 @@ FOCUS AREA FOR ALL WORK TYPES:
 For each issue found, report:
 - The specific problem
 - Why it matters (impact)
-- Classification and LoE per `code-quality/references/finding-classification.md`
+- Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a
+  genuine human decision is required (architectural choice, scope decision, UX tradeoff).
+  needs-input is NOT for: uncertain severity, stylistic preferences, or "could go either way"
+  situations — pick the better option and classify as needs-fix.
+- LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
 This work has at least 3 real issues. Find them.

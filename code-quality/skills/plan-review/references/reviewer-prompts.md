@@ -450,6 +450,23 @@ Assign each finding to the category that best describes its nature:
 | Security | Missing security considerations, auth gaps, sensitive data handling |
 | Specification | Ambiguous steps, missing detail, unclear success criteria |
 
+## Classification Guidance
+
+Default classification to `needs-fix`. The reviewer already applied "default to needs-fix" —
+preserve the reviewer's classification unless your investigation reveals a NEW decision point
+the reviewer missed (e.g., you discovered two mutually exclusive approaches with different
+tradeoffs that the plan must choose between).
+
+Do NOT reclassify a finding to `needs-input` because:
+- You are uncertain whether the finding is valid — use verdict `needs_context` instead
+- The finding seems hard to address — that is an LoE concern, not a classification concern
+- The category is "Research Gaps" — unvalidated assumptions are actionable (validate them)
+
+Only set `needs-input` when your investigation surfaced a specific, articulable decision the
+user must make — e.g., two approaches with meaningfully different user-visible consequences
+(behavior, API contract, data model). A choice between two plan approaches (validation step
+vs spike, inline vs separate task, etc.) is NOT a decision point — pick the more thorough one.
+
 ## Output
 
 Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
@@ -472,8 +489,8 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "finding_id": "unk-1",
     "verdict": "needs_context",
     "category": "Research Gaps",
-    "classification": "needs-input",
-    "investigation_summary": "The plan states it 'assumes API supports webhooks' but does not cite documentation. Whether this is a real gap depends on whether the team has already validated this externally."
+    "classification": "needs-fix",
+    "investigation_summary": "The plan states it 'assumes API supports webhooks' but does not cite documentation. Whether this is a real gap depends on whether the team has already validated this externally. The fix (adding a validation step to the plan) is clear regardless."
   }
 ]
 

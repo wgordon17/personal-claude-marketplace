@@ -396,6 +396,22 @@ Assign each finding to the category that best describes its nature:
 | Performance | Bottlenecks, N+1, memory issues |
 | Style & Conventions | CLAUDE.md violations, naming, code quality |
 
+## Classification Guidance
+
+Default classification to `needs-fix`. The reviewer already applied "default to needs-fix" —
+preserve the reviewer's classification unless your investigation reveals a NEW decision point
+the reviewer missed (e.g., you discovered two mutually exclusive fixes with different tradeoffs).
+
+Do NOT reclassify a finding to `needs-input` because:
+- You are uncertain whether the finding is valid — use verdict `needs_context` instead
+- The finding seems hard to fix — that is an LoE concern, not a classification concern
+- The category is "Decisions Needed" — category describes the finding's nature, not its classification
+
+Only set `needs-input` when your investigation surfaced a specific, articulable decision the
+user must make — e.g., two approaches with meaningfully different user-visible consequences
+(behavior, API contract, data model). A choice between two implementation approaches (regex
+vs schema, loop vs map, etc.) is NOT a decision point — pick the simpler one.
+
 ## Output
 
 Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
@@ -417,9 +433,9 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
   {
     "finding_id": "perf-1",
     "verdict": "needs_context",
-    "category": "Decisions Needed",
-    "classification": "needs-input",
-    "investigation_summary": "N+1 query exists but dataset size is unclear. Could be 10 rows or 10,000 — performance impact depends on production data volume."
+    "category": "Performance",
+    "classification": "needs-fix",
+    "investigation_summary": "N+1 query exists but dataset size is unclear. Could be 10 rows or 10,000 — performance impact depends on production data volume. The fix (batching the query) is straightforward regardless of scale."
   }
 ]
 
