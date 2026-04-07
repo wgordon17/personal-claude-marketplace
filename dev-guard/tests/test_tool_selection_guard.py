@@ -1672,6 +1672,28 @@ class TestWorktreeStash:
         )
         assert result.returncode == 0
 
+    def test_worktree_env_unset_treated_as_non_worktree(self, tmp_path):
+        """When _GUARD_TEST_WORKTREE is unset in test context, treat as non-worktree.
+
+        Regression: old code fell through to real git detection when unset,
+        causing tests in worktrees to see the real CWD worktree name.
+        """
+        # Cannot use _env_no_worktree — that sets _GUARD_TEST_WORKTREE="";
+        # this test needs the key entirely absent.
+        env = {
+            **os.environ,
+            "GUARD_DB_PATH": str(tmp_path / "test.db"),
+            "PYTEST_CURRENT_TEST": "yes",
+        }
+        env.pop("_GUARD_TEST_WORKTREE", None)
+        result = run_guard(
+            "Bash",
+            {"command": "git stash"},
+            env=env,
+        )
+        # Not blocked — worktree guard returns early (not in a worktree)
+        assert result.returncode == 0
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Unit tests: _parse_branch_creation and _is_safe_start_point
@@ -3563,9 +3585,10 @@ class TestTrustIntegration:
 
     def test_trusted_rule_allows_silently(self, tmp_path):
         """An ask rule with a trust entry auto-allows with trusted reason."""
-        # git stash drop triggers the "stash-drop" ask rule
-        self._setup_trust(tmp_path, "stash-drop")
-        result = self._run("git stash drop", tmp_path)
+        # git checkout -- triggers the "checkout-dash-dash" ask rule
+        # (avoids git stash drop which hits the worktree stash guard in worktrees)
+        self._setup_trust(tmp_path, "checkout-dash-dash")
+        result = self._run("git checkout -- file.py", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         hook_output = output.get("hookSpecificOutput", {})
@@ -3581,38 +3604,38 @@ class TestTrustIntegration:
 
     def test_session_trust_expires(self, tmp_path):
         """Session-scoped trust only works for the matching session."""
-        self._setup_trust(tmp_path, "stash-drop", scope="session", sid="session-A")
+        self._setup_trust(tmp_path, "checkout-dash-dash", scope="session", sid="session-A")
         # Right session -> trusted
-        result = self._run("git stash drop", tmp_path, session_id="session-A")
+        result = self._run("git checkout -- file.py", tmp_path, session_id="session-A")
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert "[trusted]" in output.get("hookSpecificOutput", {}).get(
             "permissionDecisionReason", ""
         )
         # Wrong session -> ask
-        result = self._run("git stash drop", tmp_path, session_id="session-B")
+        result = self._run("git checkout -- file.py", tmp_path, session_id="session-B")
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
 
     def test_match_pattern_filters(self, tmp_path):
         """Trust with match pattern only matches commands containing the pattern."""
-        self._setup_trust(tmp_path, "stash-drop", match_pattern="stash@{0}")
-        result = self._run("git stash drop stash@{0}", tmp_path)
+        self._setup_trust(tmp_path, "checkout-dash-dash", match_pattern="file.py")
+        result = self._run("git checkout -- file.py", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert "[trusted]" in output.get("hookSpecificOutput", {}).get(
             "permissionDecisionReason", ""
         )
-        # Different stash ref -> not trusted, falls through to ask
-        result = self._run("git stash drop stash@{1}", tmp_path)
+        # Different file -> not trusted, falls through to ask
+        result = self._run("git checkout -- other.py", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
 
     def test_untrusted_rule_still_asks(self, tmp_path):
         """Without trust, ask rules still prompt."""
-        result = self._run("git stash drop", tmp_path)
+        result = self._run("git checkout -- file.py", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
@@ -3782,8 +3805,9 @@ class TestTrustCommand:
     def test_trust_hint_includes_session_id_bug004(self, tmp_path):
         """BUG-004: Ask prompt trust hint includes --session-id when available."""
         # Set up a guard check with a session ID and capture the ask output
+        # (uses checkout-dash-dash to avoid worktree stash guard interference)
         result = _run_guard_with_db(
-            "Bash", {"command": "git stash drop"}, tmp_path, session_id="test-session-abc"
+            "Bash", {"command": "git checkout -- file.py"}, tmp_path, session_id="test-session-abc"
         )
         assert result.returncode == 0
         output = json.loads(result.stdout)
