@@ -1,25 +1,32 @@
 ---
 name: summarize
 description: >-
-  Artifact summary, completion audit, and archival. Use when asked to "summarize",
-  "what's the status of", "is this plan done", "audit this", "review the artifact",
-  "archive this plan", or when pointing at a file in hack/plans/, hack/swarm/,
-  hack/research/, hack/speculative/, hack/map-reduce/, hack/unfuck/, or hack/BUGS.md.
-  Supports all 8 artifact-producing skill outputs. Cross-session: reads persisted
-  artifacts and audits against current codebase state.
+  Distills project-memory artifacts and pull requests into concise human-readable summaries.
+  Use when asked to "summarize", "what's the status of", "is this plan done", "audit this",
+  "review the artifact", "archive this plan", "summarize this PR", "what does this PR do",
+  "PR summary", or when pointing at a file in hack/plans/, hack/swarm/, hack/research/,
+  hack/speculative/, hack/map-reduce/, hack/unfuck/, or hack/BUGS.md. Supports all 8
+  artifact-producing skill outputs plus GitHub PRs. For quick PR summaries (not deep code
+  review). Cross-session: reads persisted artifacts and audits against current codebase state.
 allowed-tools: [Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # Summarize
 
-Cross-session artifact lifecycle skill. Reads skill-produced artifacts persisted in the
-project memory directory, produces format-appropriate summaries, audits artifact claims
-against actual codebase state, classifies lifecycle status, and optionally archives
-completed or superseded artifacts.
+Distills large project-memory artifacts and pull requests into concise, human-readable
+summaries. Supports all 8 artifact-producing skill outputs plus GitHub PRs. Verifies
+artifact claims against current codebase state and offers archival for completed artifacts.
 
 **Edit** is included for archival status header insertion only (Phase 3). This skill never
-creates new files — **Write** is intentionally excluded. **Bash** is used only for
-`uv run python` during archive file moves and path validation.
+creates new files — **Write** is intentionally excluded. **Bash** is used for `uv run python`
+(archive file moves, path validation) and `gh`/`git` commands (PR data fetching and diff
+retrieval for PR artifact type).
+
+Summarization is the primary purpose of this skill — Phase 1 produces the summary as fast
+feedback. Phase 2 always verifies the summary's claims for file-based artifacts (the existing
+skip for incomplete run artifacts is preserved). Phase 3 offers archival as a convenient side
+effect for completed artifacts. PRs follow a variant flow: Phase 1 (PR summary) → Phase 2
+(plan-adherence audit, if a matching plan is found) → Stop (Phase 3 never runs for PRs).
 
 ---
 
