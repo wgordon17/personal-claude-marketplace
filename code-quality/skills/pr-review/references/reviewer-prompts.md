@@ -45,6 +45,11 @@ CHECKLIST:
 5. Dependency risks: newly added dependencies with known CVEs or suspicious provenance?
 6. Error handling: stack traces, internal paths, or sensitive data exposed in errors?
 7. Configuration: insecure defaults, overly permissive settings, missing TLS?
+8. Third-party technology gaps: if a security issue involves a third-party library and the
+   correct secure configuration cannot be determined from the codebase alone, flag it with:
+   "Research needed: [description]. Recommended resolution: /deep-research [External|Bridged]
+   mode targeting [specific question]." Use External mode for pure technology questions,
+   Bridged mode when the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: what the vulnerability is
@@ -97,6 +102,11 @@ CHECKLIST:
 5. Flakiness: are there tests that depend on timing, ordering, or external state?
 6. Testability: does the new code make testing harder (hidden dependencies, global state)?
 7. Contract: do tests verify behavior (what it does) or implementation (how it does it)?
+8. Third-party technology gaps: if a test gap involves a third-party library whose expected
+   behavior cannot be determined from the codebase alone, flag it with: "Research needed:
+   [description]. Recommended resolution: /deep-research [External|Bridged] mode targeting
+   [specific question]." Use External mode for pure technology questions, Bridged mode when
+   the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: what scenario or path lacks coverage
@@ -149,6 +159,11 @@ CHECKLIST:
 5. Caching: repeated expensive computations? Cache invalidation issues?
 6. Startup/cold path: expensive operations on every request that should be amortized?
 7. Resource cleanup: connections, file handles, or goroutines that outlive their scope?
+8. Third-party technology gaps: if a performance issue involves a third-party library whose
+   performance characteristics cannot be determined from the codebase alone, flag it with:
+   "Research needed: [description]. Recommended resolution: /deep-research [External|Bridged]
+   mode targeting [specific question]." Use External mode for pure technology questions,
+   Bridged mode when the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: the performance problem
@@ -207,6 +222,11 @@ CHECKLIST:
    requirements, workflow rules, forbidden patterns)?
 9. CONTRIBUTING.md compliance: does the PR follow the contribution conventions (commit format,
    branch naming, PR requirements, testing expectations)?
+10. Third-party technology gaps: if a quality issue involves a third-party library whose
+    idiomatic usage cannot be determined from the codebase alone, flag it with: "Research
+    needed: [description]. Recommended resolution: /deep-research [External|Bridged] mode
+    targeting [specific question]." Use External mode for pure technology questions, Bridged
+    mode when the gap involves how the codebase uses the technology.
 
 For each finding, report:
 - Description: the quality concern
@@ -266,7 +286,13 @@ CHECKLIST:
    what callers expect? Are there mismatches between interfaces and implementations?
 6. Data flow: does data flow correctly through the system? Missing transformations,
    wrong variable used, stale state?
-7. Documentation accuracy: for any doc changes in the diff, assume the docs are wrong.
+7. Third-party technology gaps: if the code uses a third-party library, API, or service
+   incorrectly (wrong API, deprecated pattern, missing configuration), and the correct
+   usage cannot be determined from the codebase alone, flag it with the recommended
+   resolution format: "Research needed: [description]. Recommended resolution: /deep-research
+   [External|Bridged] mode targeting [specific question]." Use External mode for pure
+   technology questions, Bridged mode when the gap involves how the codebase uses the technology.
+8. Documentation accuracy: for any doc changes in the diff, assume the docs are wrong.
    Verify every documented claim against the actual codebase — use Read and Glob to check
    on-disk reality, not just what appears in the diff. If docs say "15 skills" — run
    `Glob("skills/*/SKILL.md")` and count. If docs say "supports X" — search the codebase

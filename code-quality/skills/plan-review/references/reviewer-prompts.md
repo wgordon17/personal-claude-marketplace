@@ -265,6 +265,11 @@ CHECKLIST:
    made implicitly (without stating them) that deserve scrutiny?
 6. External references: does the plan reference external APIs, services, or documentation?
    Are those references specific enough to act on, or are they vague hand-waves?
+7. When identifying a research gap involving third-party technology, explicitly recommend
+   `/deep-research` as the resolution method in the finding description. Use External mode for
+   pure technology questions, Bridged mode when the gap involves how the current codebase uses
+   the technology. Format: "Research Gap: [description]. Recommended resolution: `/deep-research`
+   [External|Bridged] mode targeting [specific question]."
 
 For each finding, report:
 - Description: what is assumed but not verified, or what is missing from the plan

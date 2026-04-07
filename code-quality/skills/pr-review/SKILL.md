@@ -508,4 +508,4 @@ runtime; this skill owns its own copies adapted for PR review context.
 
 | Skill | Relationship |
 |-------|-------------|
-| `code-quality:fix` | Acts on findings from pr-review. Run /fix after /pr-review to implement fixes. |
+| `code-quality:fix` | Acts on findings from pr-review. Run /fix after /pr-review to implement fixes. For findings flagged with `Recommended resolution: /deep-research`, /fix invokes `/deep-research` before dispatching investigators. |

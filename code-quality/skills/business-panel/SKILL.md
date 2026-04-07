@@ -4,7 +4,7 @@ description: |
   Use when user needs multi-stakeholder analysis, business impact assessment, or wants
   perspectives from different roles. Triggers on: "analyze from business perspective",
   "what would stakeholders think", "impact analysis", "business case for", "ROI of"
-allowed-tools: [Read, Glob, Grep, WebSearch, WebFetch]
+allowed-tools: [Read, Glob, Grep, WebSearch, WebFetch, Skill]
 ---
 
 # business-panel — Multi-Stakeholder Analysis Mode
@@ -280,9 +280,23 @@ Simulate perspectives from these roles:
 - Understand current state
 - Identify constraints
 
+### Step 2.5: External Research (conditional)
+
+Before simulating panel perspectives, check whether the analysis involves:
+- **Market positioning** — competitor landscape, pricing benchmarks, adoption trends
+- **Industry standards** — compliance requirements, regulatory changes, certification needs
+- **Technology maturity** — production readiness, community health, vendor stability
+
+If any apply, invoke `/deep-research` (via the `Skill` tool) before proceeding to Step 3 —
+use External mode for pure market/technology questions, or Bridged mode when the analysis
+involves a technology the project already uses. Pass the analysis topic as the research
+question. The research report will be saved to `{memory_dir}/research/` (if a memory
+directory exists).
+
 ### Step 3: Simulate Each Perspective
+- If Step 2.5 produced a research report, read it and use its findings as evidence when constructing each perspective
 - Put on each stakeholder's "hat"
-- Consider their incentives and concerns
+- Consider their incentives and concerns — supported by research data where available
 - Identify what would make them say yes/no
 
 ### Step 4: Synthesize
