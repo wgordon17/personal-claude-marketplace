@@ -81,10 +81,10 @@ Extract from the plan content:
 
 ### Read Test Plan (if linked)
 
-If the plan file contains a `## Test Plan` section, extract the `Test Plan:` path annotation from it.
+If the plan file contains a `## Test Plan` section, extract the `**Test Plan:**` path annotation from it.
 Normalize the path (resolve `..` components) and verify it falls within `{memory_dir}/test-plans/`.
 If the normalized path escapes that directory, set `{plan_test_plan}` to empty string and log a
-warning: "Test plan path escapes memory directory — skipping."
+warning: "Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string."
 If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string (graceful
 fallback — no error).
 If valid and readable, read the file and store its content as `{plan_test_plan}`.

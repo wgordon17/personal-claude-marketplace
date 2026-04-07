@@ -1241,6 +1241,7 @@ Construct the BDD framework context object:
   "feature_dir": "<{feature_target_dir}>",
   "step_dir": "<value of **BDD Step Dir:** from annotation>",
   "scaffold_cmd": "<value of **BDD Scaffold Command:** from annotation>",
+  "test_cmd": "<BDD test command for the detected framework>",
   "feature_files": ["<list of promoted .feature file paths in {feature_target_dir}>"]
 }
 ```
@@ -1257,10 +1258,12 @@ Agent(
   prompt="[context bundle]\n\n"
          "TEST PLAN CONTEXT:\n{TEST_PLAN}\n\n"
          "BDD FRAMEWORK INFO:\n{bdd_framework_info}\n\n"
-         "Your task: generate step definition skeletons for all unimplemented steps in "
-         "the .feature files listed in bdd_framework_info.feature_files. Write skeleton "
-         "step definitions to {step_dir}. Use the test plan personas and scenario intent "
-         "to name steps accurately. Do not implement step logic — produce stubs only. "
+         "Your task: generate step definitions for all unimplemented steps in "
+         "the .feature files listed in bdd_framework_info.feature_files. Write step "
+         "definitions to {step_dir}. Use the test plan personas and scenario intent "
+         "to name steps accurately. Fill in step definitions with actual assertions: "
+         "Given steps set up preconditions, When steps perform the user action, Then steps "
+         "assert the expected outcome. "
          "Send a BDDStepHandoff message when complete with: files_created, step_count, "
          "unresolved_steps (steps you could not scaffold)."
 )

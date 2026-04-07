@@ -233,6 +233,23 @@ Questions:
 
 Incorporate feedback before moving to Phase 3.
 
+### Per-Scenario Quality Review
+
+After incorporating user feedback, batch the finalized scenarios and spawn parallel Sonnet agents
+to review them for testability and completeness:
+
+Batch scenarios into groups of 5 and spawn one Agent (sonnet model) per batch (max 8 agents).
+Each reviewer receives the full scenario list for cross-reference but reviews only its assigned
+batch. Output per reviewer: for each scenario, `testable: yes|no`,
+`completeness: [missing conditions]`, `specificity: [vague terms]`. Present scenarios flagged
+as not testable or incomplete to the user for revision.
+
+### Scenario Persistence
+
+Write the finalized scenario list to `{output_dir}/{run-id}-scenarios-draft.md` before proceeding
+to Phase 3. This protects against context recycling loss during the multi-step Phase 3-4 interval.
+Phase 4 reads from this file instead of memory.
+
 ---
 
 ## Phase 3 — Output Mode Selection
@@ -308,7 +325,7 @@ Use the two-stage fallback:
 2. **If no memory dir found**: fall back to `~/.claude/test-plans/{run-id}.md`
    (create directory if it doesn't exist)
 
-Generate `{run-id}` as a Unix timestamp: `date +%s` via Bash.
+Generate `{run-id}` per the Run-ID Naming Convention in `code-quality/references/project-memory-reference.md`: `{branch-slug}-{unix-timestamp}` (e.g., `feat-auth-1711388400`).
 
 **Do NOT create a `hack/` directory if one doesn't exist.** Only write to confirmed existing
 memory directories or the `~/.claude/` fallback.
@@ -447,18 +464,19 @@ Write each `.feature` file using the Write tool.
 
 Record the appropriate scaffold command based on the detected (or user-selected) framework:
 
-| Language | Framework | Install Command | Scaffold Command |
-|---|---|---|---|
-| Python | pytest-bdd | `uv add --dev pytest-bdd` | `pytest-bdd generate {feature}` or `pytest --generate-missing` |
-| Go | godog + gherkingen | `go get github.com/cucumber/godog` | `gherkingen {feature.file}` |
-| Node.js | Cucumber.js | `npm install --save-dev @cucumber/cucumber` | `npx cucumber-js` (auto-generates snippets) |
-| Rust | cucumber-rs | `cargo add --dev cucumber` | Run tests with `.fail_on_skipped()` — reports unmatched steps |
-| Java | Cucumber-JVM | `<dependency>io.cucumber:cucumber-java</dependency>` | Run features — auto-generates snippets |
-| Ruby | Cucumber | `gem install cucumber` | `cucumber --dry-run` — generates undefined step snippets |
+| Language | Framework | Install Command | Scaffold Command | Test Command |
+|---|---|---|---|---|
+| Python | pytest-bdd | `uv add --dev pytest-bdd>=7.0` | `pytest-bdd generate {feature}` or `pytest --generate-missing` | `uv run pytest` |
+| Go | godog + gherkingen | `go get github.com/cucumber/godog@v0.15.0` | `gherkingen {feature.file}` | `go test ./features/...` |
+| Node.js | Cucumber.js | `npm install --save-dev @cucumber/cucumber@^11.0` | `npx cucumber-js` (auto-generates snippets) | `npx cucumber-js` |
+| Rust | cucumber-rs | `cargo add --dev cucumber` | Run tests with `.fail_on_skipped()` — reports unmatched steps | `cargo test` |
+| Java | Cucumber-JVM | `<dependency>io.cucumber:cucumber-java</dependency>` | Run features — auto-generates snippets | `mvn test` |
+| Ruby | Cucumber | `gem install cucumber` | `cucumber --dry-run` — generates undefined step snippets | `bundle exec cucumber` |
 
 Record:
 - `bdd_install_cmd` — the install command for the detected framework (with version pinning if known)
 - `bdd_scaffold_cmd` — the scaffold command to generate step definition skeletons
+- `bdd_test_cmd` — the command to run the BDD test suite (from the Test Command column above)
 - `bdd_framework` — the framework name
 - `bdd_feature_dir` — where `.feature` files will live in the source tree (e.g., `features/`, `tests/acceptance/`)
 - `bdd_step_dir` — where step definitions will live (e.g., `steps/`, `step_definitions/`, `*_test.go`)
@@ -488,6 +506,7 @@ Append to the end of `{plan_file}` using the Edit tool:
 **Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if UAT-only)
 **BDD Setup Needed:** {yes | no} (if yes: `{bdd_install_cmd}`)
 **BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if UAT-only)
+**BDD Test Command:** `{bdd_test_cmd}` (omit line if UAT-only)
 **BDD Framework:** {bdd_framework} (omit line if UAT-only)
 **BDD Feature Dir:** {bdd_feature_dir} (omit line if UAT-only)
 **BDD Step Dir:** {bdd_step_dir} (omit line if UAT-only)
@@ -560,7 +579,7 @@ When `/swarm` Phase 0 finds a `## Test Plan` section in the plan file:
    path. Inject into Implementer, Test-Writer, and Reviewer agent prompts.
 2. **If BDD mode:**
    - Copy `.feature` files from `**Feature Files:**` path into source tree (`**BDD Feature Dir:**`)
-   - If `**BDD Setup Needed:** yes` → run `**BDD Install Command:**` on the feature branch
+   - If `**BDD Setup Needed:** yes` → run the install command embedded in the **BDD Setup Needed:** field value on the feature branch
    - Run `**BDD Scaffold Command:**` to generate step definition skeletons
    - Add BDD-Step-Writer to the agent team roster
 
@@ -603,7 +622,7 @@ Phase 6: Annotate plan file → Completion report
 
 ### Plan File Annotation Fields (exact labels — never rename)
 **Test Plan:** | **Mode:** | **Feature Files:** | **BDD Setup Needed:**
-**BDD Scaffold Command:** | **BDD Framework:** | **BDD Feature Dir:** | **BDD Step Dir:**
+**BDD Scaffold Command:** | **BDD Test Command:** | **BDD Framework:** | **BDD Feature Dir:** | **BDD Step Dir:**
 **Scenarios:** | **Personas:** | ### Scenario-Task Mapping
 
 ### BDD Toolchain

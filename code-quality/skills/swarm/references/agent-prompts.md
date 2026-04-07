@@ -2654,7 +2654,7 @@ Send summary to lead when complete.
 
 ## Agent 3.5: BDD-Step-Writer
 
-**Type:** `general-purpose` | **Model:** sonnet | **Mode:** bypassPermissions | **Persistent**
+**Type:** `general-purpose` | **Model:** sonnet | **Mode:** bypassPermissions | **Single-use (Phase 3.5 only)**
 
 > **DISTINCT FROM Phase 3 Test-Writer.** The Test-Writer writes unit tests for approved components.
 > This agent writes BDD step definitions that wire Gherkin `.feature` files (promoted from the
@@ -2686,7 +2686,7 @@ You do NOT write unit tests — test-writer handles that.
 {bdd_framework_info}
 
 The lead populates `{bdd_framework_info}` with the following structure:
-- `framework_name`: e.g. `pytest-bdd`, `godog`, `cucumber.js`, `cucumber-rs`
+- `framework`: e.g. `pytest-bdd`, `godog`, `cucumber.js`, `cucumber-rs`
 - `install_cmd`: command to install the BDD framework if not already present
 - `scaffold_cmd`: command to generate step definition skeletons from `.feature` files (if available)
 - `test_cmd`: command to run the BDD test suite
@@ -2729,6 +2729,5 @@ SendMessage(type="message", recipient="team-lead",
   summary="BDD-Step-Writer: 4 scenarios wired")
 ```
 
-`scenarios_skipped` lists any scenarios that could not be wired (e.g. missing implementation
-hook), with a brief reason. The lead decides whether to escalate or accept the gap.
+`scenarios_skipped` is the count of scenarios that could not be wired. Include scenario names and reasons in the `summary` field. The lead decides whether to escalate or accept the gap.
 ```

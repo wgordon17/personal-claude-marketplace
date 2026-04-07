@@ -123,13 +123,13 @@ and Plan Adherence Reviewer use this to detect plan drift.
 ### Extract Test Plan
 
 If a plan file was found (i.e., `{plan_file_path}` is non-empty), check whether the plan
-file contains a `## Test Plan` section. If such a section exists, read the `Test Plan:` path
+file contains a `## Test Plan` section. If such a section exists, read the `**Test Plan:**` path
 annotation from it.
 
-Path boundary validation: normalize the extracted path (resolve `..` segments and symlinks)
+Path boundary validation: normalize the extracted path (resolve `..` segments)
 and verify it falls within `{memory_dir}/test-plans/`. If the normalized path escapes that
 directory, set `{plan_test_plan}` to `""` (empty string) and log a warning:
-"Test plan path rejected: path escapes {memory_dir}/test-plans/."
+"Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string."
 
 If the path is valid, attempt to read the file. If the file does not exist, set
 `{plan_test_plan}` to `""` (empty string) — graceful fallback. If the file exists and is

@@ -1,6 +1,6 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, and summarize.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, summarize, and test-plan.
 
 ## Agents (8)
 
@@ -15,7 +15,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `code-quality:code-simplifier` | Dead code removal, unnecessary abstraction cleanup, clarity improvement | Sonnet |
 | `code-quality:plan-adherence` | Plan file verification, task completion tracking, file structure reconciliation | Opus |
 
-## Skills (20)
+## Skills (21)
 
 | Skill | Description | Type |
 |-------|-------------|------|
@@ -39,6 +39,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/reflect` | Mid-task self-reflection checkpoint via Serena metacognitive tools | Manual |
 | `/index-repo` | Repository indexing for token-efficient codebase orientation | Manual |
 | `/summarize` | Distills project-memory artifacts and PRs into human-readable summaries; optionally audits and archives | Manual |
+| `/test-plan` | User-guided test plan generation with personas, Given/When/Then scenarios, manual UAT steps, and optional BDD .feature files | Manual |
 
 ## Commands (4)
 

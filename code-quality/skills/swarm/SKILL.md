@@ -112,8 +112,6 @@ agents plus any auto-detected optional reviewers. Allow the user to add or remov
 After the user approves the composition and confirms they understand the scope, proceed without
 further checkpoints. The user can walk away after Phase 1 approval.
 
-### Phase 3.5 Pipeline Agent
-
 Announce BDD-Step-Writer as part of the composition if Phase 0 discovered a plan file with a
 `**Feature Files:**` path in its `## Test Plan` section. BDD-Step-Writer is a Phase 3.5 pipeline
 agent with write access — it is distinct from read-only optional domain reviewers and does not
@@ -347,6 +345,7 @@ as recorded — do not strip versions.
   "feature_dir": "<{feature_target_dir}>",
   "step_dir": "<BDD step definitions directory>",
   "scaffold_cmd": "<BDD scaffold command from annotation>",
+  "test_cmd": "<BDD test command for the detected framework>",
   "feature_files": ["<list of promoted .feature files>"]
 }
 ```

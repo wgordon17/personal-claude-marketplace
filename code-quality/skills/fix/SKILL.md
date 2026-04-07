@@ -95,12 +95,12 @@ test plan. This follows the same branch-header matching algorithm as /swarm Phas
 2. Search `{memory_dir}/plans/` for plan files whose `**Branch:**` header field matches the
    current branch. Fall back to branch-slug prefix matching if no header match is found.
    Use the most recent by unix timestamp if multiple match.
-3. If a plan file is found and it contains a `## Test Plan` section, extract the `Test Plan:`
+3. If a plan file is found and it contains a `## Test Plan` section, extract the `**Test Plan:**`
    path annotation from that section.
 4. Normalize the path (resolve `..` components) and verify it falls within
    `{memory_dir}/test-plans/`. If the normalized path escapes that directory, set
-   `{plan_test_plan}` to empty string and log a warning: "Test plan path escapes memory
-   directory — UAT triage skipped."
+   `{plan_test_plan}` to empty string and log a warning: "Warning: test plan path escapes
+   {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string."
 5. If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string
    (graceful fallback — no error).
 6. If the path is valid and the file exists, read the file and store its content as
