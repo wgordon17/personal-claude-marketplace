@@ -233,9 +233,6 @@ class TestPythonTooling:
             ("pre-commit run --all-files", 2, "prek"),
             ("uvx pre-commit run", 2, "prek"),
             ("uv run pre-commit run", 2, "prek"),
-            ("prek run --all-files", 2, "make"),
-            ("uvx prek run --all-files", 2, "make"),
-            ("make prek", 0, None),
             ("ipython", 2, "uv run ipython"),
             ("uv run ipython", 0, None),
             ("tox -e py312", 2, "uvx tox"),
@@ -269,9 +266,6 @@ class TestPythonTooling:
             "pre-commit",
             "uvx-pre-commit",
             "uv-run-pre-commit",
-            "prek-direct",
-            "uvx-prek",
-            "make-prek-allow",
             "ipython",
             "uv-run-ipython-allow",
             "tox",
@@ -283,6 +277,26 @@ class TestPythonTooling:
     def test_python_tooling(self, command, expected_exit, expected_msg):
         result = run_bash(command)
         assert_guard(result, expected_exit, expected_msg)
+
+
+class TestPrekAsk:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "prek run --all-files",
+            "uvx prek run --all-files",
+        ],
+        ids=["prek-direct-ask", "uvx-prek-ask"],
+    )
+    def test_prek_direct_ask(self, command):
+        """prek commands get an ask decision for HITL review."""
+        result = run_bash(command)
+        assert_ask_decision(result, "prek", test_id=command)
+
+    def test_make_prek_exception_bypass(self):
+        """make prek matches the prek rule's exception — prek rule does not fire."""
+        result = run_bash("make prek")
+        assert_guard(result, 0, None)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
