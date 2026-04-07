@@ -85,6 +85,32 @@ Actionable findings: {count}
 Normalize all findings from the detected source(s) into a common internal format. This phase
 produces a flat list of normalized findings that all subsequent phases consume.
 
+### Test Plan Discovery
+
+Before normalizing findings, discover the plan file for the current branch and load any linked
+test plan. This follows the same branch-header matching algorithm as /swarm Phase 4 and
+/quality-gate Step 0:
+
+1. Get the current branch: `git branch --show-current`
+2. Search `{memory_dir}/plans/` for plan files whose `**Branch:**` header field matches the
+   current branch. Fall back to branch-slug prefix matching if no header match is found.
+   Use the most recent by unix timestamp if multiple match.
+3. If a plan file is found and it contains a `## Test Plan` section, extract the `Test Plan:`
+   path annotation from that section.
+4. Normalize the path (resolve `..` components) and verify it falls within
+   `{memory_dir}/test-plans/`. If the normalized path escapes that directory, set
+   `{plan_test_plan}` to empty string and log a warning: "Test plan path escapes memory
+   directory — UAT triage skipped."
+5. If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string
+   (graceful fallback — no error).
+6. If the path is valid and the file exists, read the file and store its content as
+   `{plan_test_plan}`.
+7. If no plan file is found, or no `## Test Plan` section exists, set `{plan_test_plan}` to
+   empty string.
+
+`{plan_test_plan}` is available to all subsequent phases (Phase 1 triage and Phase 2 investigator
+dispatch).
+
 ### Common Finding Schema
 
 Each normalized finding tracks:
@@ -189,6 +215,7 @@ Assess each finding and assign a triage label:
 | Needs refinement | Multiple valid approaches, UX implications, or architectural tradeoffs that cannot be resolved without user input | Queue for Phase 2 (marked for user confirmation before implementation) |
 | Needs plan | Any finding touching 5+ files OR requiring architectural redesign beyond localized changes | Recommend `/incremental-planning`; skip this finding |
 | Out of scope | Path outside CWD (identified in Step 1a) | Skip with note |
+| UAT validation | `{plan_test_plan}` is non-empty AND finding's `category` is one of `TESTING GAPS`, `CORRECTNESS`, or `SCOPE` | Queue for Phase 2 — investigator receives `{plan_test_plan}` context to check implementation against UAT scenarios |
 | Unverified | `verifier_verdict == "needs_context"` | Queue for Phase 2 — investigator will attempt to verify before fixing |
 
 ### Step 1c: Triage Summary
@@ -224,13 +251,17 @@ Out of scope ({count}):
   {id}: {description} — outside project root, skipped
   ...
 
+UAT validation ({count}):
+  {id}: {description} — investigator will check implementation against UAT scenarios
+  ...
+
 Unverified ({count}):
   {id}: {description} — will attempt verification in investigation
   ...
 
 Proceeding with {actionable_count} findings ({direct_fix_count} direct +
 {spike_count} spikes + {needs_refinement_count} needing refinement +
-{unverified_count} unverified).
+{uat_count} UAT validation + {unverified_count} unverified).
 Skipping {skip_count} ({needs_plan_count} needs-plan + {oos_count} out-of-scope).
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -288,6 +319,14 @@ Agent(
           entirely — do not leave a literal {RESEARCH_CONTEXT} placeholder in the prompt>
 )
 ```
+
+**UAT validation findings** use the standard investigator dispatch path (same grouping rules as code
+or plan findings). When one or more findings in a group are tagged UAT validation, include the
+`{plan_test_plan}` content in the `## UAT Context` section of the standard investigator prompt.
+If no findings in the group are UAT validation, omit that section entirely — do not leave a
+literal `{plan_test_plan}` placeholder in the prompt. Do NOT dispatch a separate agent for UAT
+validation findings; they share the standard investigator agent with other findings from the same
+file or plan section.
 
 > `mode="bypassPermissions"` is required — investigators run in background and cannot prompt for
 > permissions interactively. The read-only constraint is prompt-enforced, not technically enforced
@@ -354,6 +393,14 @@ investigator already determined a clear fix. Flag all `significant` LoE findings
 report regardless of verdict.
 
 **Handling unverifiable findings:** If an investigator receives a finding with `verifier_verdict: "needs_context"` and cannot verify it (insufficient evidence to confirm or deny), it returns verdict `invalid` with reason "could not verify — insufficient evidence". The lead routes this to the `unverified_unresolved` bucket (not `findings_invalid`).
+
+**UAT validation verdict routing:** For UAT validation findings, the standard verdict types apply
+with these UAT-specific interpretations:
+- `resolution` means the UAT scenario was verified through code inspection or test execution —
+  the implementation matches the UAT scenario expectations.
+- `refinement_needed` means the implementation differs from UAT scenario expectations — present
+  the specific mismatch to the user via `AskUserQuestion` with the scenario name, what was expected,
+  and what was found.
 
 ### Conflict Detection
 
