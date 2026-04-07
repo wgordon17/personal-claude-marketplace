@@ -47,6 +47,54 @@ token — do not match substrings within path components. For example: in `/summ
 hack/plans/obsolete-migration.md`, the token `obsolete` is part of the path component, not a
 standalone argument — `obsolete_flag` must NOT be set.
 
+**Step 1a — PR detection.**
+Before path validation, check if the argument is a PR reference. Detection patterns (check
+in order):
+
+1. **GitHub PR URL:** matches `https://github.com/{owner}/{repo}/pull/{number}` — extract
+   owner, repo, number.
+2. **PR number with hash:** matches `#N` where N is an integer — use current repo.
+3. **Bare PR number:** matches a bare integer AND no file exists at that path — use current
+   repo. (Bare integers cannot contain path traversal sequences or shell-special characters,
+   so probing file existence before CWD boundary validation is safe for this pattern only.)
+
+If any pattern matches, set `artifact_type = "pr"` and skip all remaining Path A steps
+(CWD validation, archive check, artifact classification are not applicable to PRs). Also
+skip the Phase 0 preamble instruction to read `references/artifact-formats.md` — that file
+contains no PR-relevant information. If `obsolete_flag` was set during Step 1, ignore it —
+PRs have no lifecycle classification (Phase 3 is skipped for PRs). Jump directly to Phase 1.
+
+**Prerequisite — `gh` CLI check:** Before running any `gh` command, verify the CLI is
+available: `gh --version 2>/dev/null`. If not found, print:
+> "gh CLI not found. Install from https://cli.github.com to use PR summaries."
+
+Stop.
+
+**PR validation:** For URL patterns, validate the PR exists and check its state:
+```bash
+gh pr view {number} --repo {owner}/{repo} --json number,state 2>/dev/null
+```
+If the command fails, print:
+> "PR not found: [reference]. Verify the PR number and repository."
+
+Stop.
+
+For `#N`/bare-number patterns, validate against the current repo:
+```bash
+gh pr view {number} --json number,state 2>/dev/null
+```
+If it fails, print:
+> "PR #{number} not found in the current repository."
+
+Stop.
+
+**Closed/merged PR handling:** If the PR exists but `state` is `CLOSED`, print a note before
+proceeding: "Note: PR #{number} is closed." For `MERGED` state, print: "Note: PR #{number}
+is merged." Proceed with summarization in both cases — summarizing historical PRs is valid.
+However, in Phase 2, skip the plan-adherence audit for `CLOSED` PRs (a closed PR was
+intentionally abandoned — auditing it against a plan would produce misleading FAIL results).
+`MERGED` PRs proceed to Phase 2 normally.
+
 **Step 2 — CWD boundary validation.**
 Validate the path stays within the project using:
 
@@ -136,6 +184,24 @@ and filename only where possible, read first 10 lines only when the path signal 
 
 Artifacts matching any of these signals are included in the scan but labeled "(archived)".
 When selected, `already_archived` is set and Phase 3 is skipped (same as Path A Step 3).
+
+**PR scan:** After scanning for all 8 artifact types, also check for open PRs on the current
+branch. First check if on a named branch: `git branch --show-current`. If the result is
+empty (detached HEAD), skip PR detection entirely. Otherwise:
+
+```bash
+gh pr list --head "$(git branch --show-current)" --json number,title --limit 5
+```
+
+If the current branch has open PRs, include them in the artifact selection list under a
+"Pull Requests" group with label "(PR)":
+```
+Pull Requests (1):
+  9. #42 — Add summarize skill redesign (PR)
+```
+
+If `gh` is not available or the command fails (not a GitHub repo, no auth), silently skip
+PR detection — do not error. PRs are additive to the existing scan.
 
 **Lazy hints:** Compute status from filename and type only (no full file reads at scan time).
 Show artifact name, creation date (from filename timestamp or file mtime), and type label.
@@ -533,6 +599,7 @@ Phase 0: Detect/Select → Phase 1: Summarize → Phase 2: Audit → Phase 3: Cl
 | Speculative | `{memory_dir}/speculative/{run-id}/` | `speculative-report.md` |
 | Map-Reduce | `{memory_dir}/map-reduce/{run-id}/` | `map-reduce-report.md` |
 | Unfuck | `{memory_dir}/unfuck/{run-id}/` | `cleanup-report.md` (fallback: `cleanup-plan.md`) |
+| PR | GitHub API via `gh pr view` | N/A (not file-based) |
 
 ### Status Lifecycle
 
