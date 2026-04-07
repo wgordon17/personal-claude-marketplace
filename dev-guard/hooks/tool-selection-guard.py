@@ -203,6 +203,7 @@ RULES: list[CommandRule] = [
         re.compile(r"^\s*make\b"),
         "Check for a `make` target (e.g. `make lint`, `make prek`) instead of "
         "running prek directly. If no make target, use `uvx prek run --all-files`.",
+        action="allow",
     ),
     CommandRule(
         "ipython",
