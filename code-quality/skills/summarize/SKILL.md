@@ -404,8 +404,13 @@ Resolution, Audit Output). Instead, execute only the PR-specific steps:
 
 1. Extract the PR's head branch name from the Phase 1 JSON data (`headRefName`).
 
-2. If `{memory_dir}` was not resolved in Phase 0 (PR detected before Path B scan), resolve
-   it now using the convention in `code-quality/references/project-memory-reference.md`
+2. **If PR state is `CLOSED`:** Skip the plan-adherence audit entirely. Print:
+   > "Skipping plan-adherence audit — PR is closed."
+
+   Then stop. Phase 3 never runs for PRs.
+
+3. If `{memory_dir}` was not resolved in Phase 0 (PR detected via Path A before Path B scan),
+   resolve it now using the convention in `code-quality/references/project-memory-reference.md`
    (Directory Detection and Worktree Resolution sections).
 
    Search `{memory_dir}/plans/` and `{memory_dir}/plans/done/` for a plan file whose
@@ -418,11 +423,6 @@ Resolution, Audit Output). Instead, execute only the PR-specific steps:
    **Note:** This adds a `plans/done/` search that /pr-review omits — archived plans for
    branches that completed their PR after archiving the plan will still match. This divergence
    is intentional.
-
-3. **If PR state is `CLOSED`:** Skip the plan-adherence audit entirely. Print:
-   > "Skipping plan-adherence audit — PR is closed."
-
-   Then stop. Phase 3 never runs for PRs.
 
 4. **If no matching plan found:** Print:
    > "No associated plan file found for branch \`{headRefName}\` — skipping implementation audit."
