@@ -26,7 +26,7 @@ Summarization is the primary purpose of this skill — Phase 1 produces the summ
 feedback. Phase 2 always verifies the summary's claims for file-based artifacts (the existing
 skip for incomplete run artifacts is preserved). Phase 3 offers archival as a convenient side
 effect for completed artifacts. PRs follow a variant flow: Phase 1 (PR summary) → Phase 2
-(plan-adherence audit, if a matching plan is found) → Stop (Phase 3 never runs for PRs).
+(plan-adherence audit, if plan found and PR not CLOSED) → Stop (Phase 3 never runs for PRs).
 
 ---
 
@@ -54,10 +54,12 @@ in order):
 1. **GitHub PR URL:** matches `https://github.com/{owner}/{repo}/pull/{number}` — extract
    owner, repo, number. Validate that owner and repo each match `[a-zA-Z0-9._-]+` and that
    number matches `[0-9]+` (positive integer only) before passing to `gh`.
-2. **PR number with hash:** matches `#N` where N is an integer — use current repo.
-3. **Bare PR number:** matches a bare integer AND no file exists at that path — use current
-   repo. (Bare integers cannot contain path traversal sequences or shell-special characters,
-   so probing file existence before CWD boundary validation is safe for this pattern only.)
+2. **PR number with hash:** matches `#N` where N is a positive integer (`[0-9]+`) — use
+   current repo.
+3. **Bare PR number:** matches a bare positive integer (`[0-9]+`) AND no file exists at that
+   path — use current repo. (Bare integers cannot contain path traversal sequences or
+   shell-special characters, so probing file existence before CWD boundary validation is safe
+   for this pattern only.)
 
 If any pattern matches, set `artifact_type = "pr"` and skip all remaining Path A steps
 (CWD validation, archive check, artifact classification are not applicable to PRs). Also
@@ -92,7 +94,9 @@ Stop.
 **Closed/merged PR handling:** If the PR exists but `state` is `CLOSED`, print a note before
 proceeding: "Note: PR #{number} is closed." For `MERGED` state, print: "Note: PR #{number}
 is merged." Proceed with summarization in both cases — summarizing historical PRs is valid.
-All PR states (OPEN, CLOSED, MERGED) proceed to Phase 2 normally.
+OPEN and MERGED PRs proceed to Phase 2 (plan-adherence audit). CLOSED PRs skip Phase 2
+entirely — a closed PR was intentionally abandoned, so auditing it against a plan would
+produce misleading FAIL results for work that was never intended to be completed.
 
 After all validation passes, jump directly to Phase 1.
 
@@ -379,8 +383,8 @@ Collapse (evaluate in priority order, first match wins): if the array is empty �
 checks". If any fail → "CI: failing" + list failing check names. If any pending → "CI: N
 checks pending". If all pass → "CI: passing".
 
-After the PR summary, continue to Phase 2 for plan-adherence audit (see Phase 2). Phase 3
-never runs for PRs.
+After the PR summary, continue to Phase 2 for plan-adherence audit (see Phase 2) — unless
+the PR is CLOSED (Phase 2 is skipped for CLOSED PRs). Phase 3 never runs for PRs.
 
 ---
 
@@ -393,9 +397,16 @@ directory with no `cleanup-report.md`; identified in Phase 0).
 
 ### PR Plan-Adherence Audit
 
-When `artifact_type == "pr"`, skip the entire file-based Phase 2 flow below (Preparation,
-Prompt Sanitization, Subagent Dispatch, Splitting, Failure Handling, Cross-Reference
-Resolution, Audit Output). Instead, execute only the PR-specific steps:
+When `artifact_type == "pr"`, skip the file-based Phase 2 subsections below (Preparation,
+Subagent Dispatch, Splitting, Failure Handling, Cross-Reference Resolution, Audit Output).
+The Prompt Sanitization escape table still applies — step 4 below references it for PR
+data sanitization. Instead, execute only the PR-specific steps:
+
+**If PR state is `CLOSED`:** Skip the plan-adherence audit entirely. Print:
+> "Skipping plan-adherence audit — PR is closed."
+
+Stop. Phase 3 never runs for PRs. A closed PR was intentionally abandoned — auditing it
+against a plan would produce misleading FAIL results.
 
 1. Extract the PR's head branch name from the Phase 1 JSON data (`headRefName`).
 
@@ -462,9 +473,7 @@ Resolution, Audit Output). Instead, execute only the PR-specific steps:
 
      For each plan task, check whether the PR's changed files and diff content address the
      task's steps. Report per-task PASS/PARTIAL/FAIL with evidence. Then compare planned
-     files vs files actually changed. If the PR State is CLOSED, note prominently in the
-     Assessment that this PR was abandoned without merging — FAIL results for unimplemented
-     tasks are expected, not defects. Return the structured audit followed by a narrative
+     files vs files actually changed. Return the structured audit followed by a narrative
      assessment.
 
      IMPORTANT: Do not create, edit, move, or delete any files. Your role is read-only
@@ -794,7 +803,7 @@ Print:
 
 ```
 File artifacts: Phase 0 → Phase 1: Summarize (fast feedback) → Phase 2: Audit → Phase 3: Classify/Archive
-PRs:            Phase 0 → Phase 1: PR Summary → Phase 2: Plan-adherence audit (if plan found) → Stop
+PRs:            Phase 0 → Phase 1: PR Summary → Phase 2: Plan-adherence audit (if plan found; skipped for CLOSED) → Stop
 Archived:       Phase 0 → Phase 1 → Phase 2 → Stop (Phase 3 skipped — lifecycle terminal)
 ```
 
