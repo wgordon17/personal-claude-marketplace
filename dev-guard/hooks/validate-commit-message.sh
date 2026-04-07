@@ -27,6 +27,11 @@ if ! git rev-parse --git-dir &>/dev/null; then
     exit 0
 fi
 
+# Defer entirely to project-level commit format enforcement
+if [[ "$(git config --get --type=bool claude-code.commit-trailers-required 2>/dev/null)" = "true" ]]; then
+    exit 0
+fi
+
 # Get commit message (optional SHA argument, defaults to HEAD)
 SHA="${1:-HEAD}"
 COMMIT_MSG=$(git log -1 --pretty=%B "$SHA" 2>/dev/null || echo "")
