@@ -50,7 +50,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/fix` - Comprehensive finding fixer with spike execution for plan-review Research Gaps
 - `/reflect` - Mid-task self-reflection checkpoint via Serena metacognitive tools
 - `/index-repo` - Repository indexing for token-efficient codebase orientation
-- `/summarize` - Artifact summary, completion audit, and archival for all skill outputs
+- `/summarize` - Distills project-memory artifacts and PRs into human-readable summaries
 
 **Commands:**
 - `/code-quality:session-start` - Load project context or initialize

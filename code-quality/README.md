@@ -38,7 +38,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/fix` | Comprehensive finding fixer with spike execution for plan-review Research Gaps | Manual |
 | `/reflect` | Mid-task self-reflection checkpoint via Serena metacognitive tools | Manual |
 | `/index-repo` | Repository indexing for token-efficient codebase orientation | Manual |
-| `/summarize` | Artifact summary, completion audit, and archival for all skill outputs | Manual |
+| `/summarize` | Distills project-memory artifacts and PRs into human-readable summaries; optionally audits and archives | Manual |
 
 ## Commands (4)
 
