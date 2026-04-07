@@ -254,8 +254,11 @@ this is the primary deliverable and should appear before Phase 2 begins.
 **Branch:** [if available from header]
 
 ### Overview
-[2-5 sentences answering: "What was this artifact trying to accomplish, and did it succeed?"
-Not just "what is this artifact about" — convey outcome and current relevance.]
+[First, answer this question internally before writing: "What was this artifact trying to
+accomplish, and did it succeed?" Then write the overview based on your answer. Not just
+"what is this artifact about" — convey outcome and current relevance. Scale length to
+artifact complexity: 2-3 sentences for artifacts under 100 lines, 4-5 for 100-300 lines,
+6-8 for 300+ lines. The Key Details section should scale similarly.]
 
 ### Key Details
 [Type-specific content — see per-type guidance below]
@@ -266,14 +269,22 @@ Not just "what is this artifact about" — convey outcome and current relevance.
 
 Status is NOT included in Phase 1 output — it is determined in Phase 3 after the audit
 completes. The summary should convey enough to understand the artifact without reading it,
-but must not reproduce it line-by-line.
+but must not reproduce it line-by-line. For file-based artifacts, only include information
+present in the artifact — do not infer, extrapolate, or add information not explicitly
+documented. If a field is ambiguous or absent, say so rather than guessing. (PR summaries
+have type-specific rules — see the PR section below.)
+
+**Guiding question pattern:** Each type below ends with "The summary should answer: [question]."
+Before writing the Overview, answer that question internally first — then write the Overview
+based on your answer. This intermediate reasoning step improves content selection and reduces
+omission of key information.
 
 ### Plan
 
 Read the Goal and Architecture Summary for context. For each Task heading, report the title
 and step completion ratio (e.g., "Task 1: Add auth middleware — 3/5 steps"). Highlight any
 tasks with 0% completion. Surface unresolved open questions from the header. The summary
-should tell the reader whether this plan is actionable, partially done, or stale.
+should answer: "Is this plan actionable, partially done, or stale?"
 
 ### Swarm Report
 
@@ -351,11 +362,20 @@ sanitized using the escape sequences in the Prompt Sanitization section.
 **Author:** {author}
 **Branch:** {head} → {base}
 **Status:** {state} | Review: {reviewDecision or "no reviews"} | CI: {collapsed CI status}
+**Review Effort:** [1-5] (1=trivial rename/config, 3=moderate feature, 5=major architectural change)
 
-### What This PR Does
-[2-5 sentences summarizing the substance of the code changes, based on the diff
-and PR description. Focus on what changed and why, not file-by-file listings.
-Group related changes by theme/purpose.]
+### What Changed
+[Summarize the substance of the code changes based on the diff. Group changes by
+semantic purpose — feature additions, bug fixes, refactoring, test additions,
+configuration changes — not by file path. For each group, name the purpose and
+list affected files. For PRs with 30+ changed files, focus on the highest-impact
+groups and note total scope.]
+
+### Why
+[Motivation for the change: what problem it solves, what feature it enables, or
+what improvement it makes. Draw from the PR description, linked issues, and
+associated plan files. If the PR body is empty or uninformative, infer purpose
+from the diff and note that the motivation is inferred.]
 
 ### Changes at a Glance
 [File-level summary: N files changed, +additions/-deletions.
@@ -398,7 +418,8 @@ directory with no `cleanup-report.md`; identified in Phase 0).
 ### PR Plan-Adherence Audit
 
 When `artifact_type == "pr"`, skip the file-based Phase 2 subsections below (Preparation,
-Subagent Dispatch, Splitting, Failure Handling, Cross-Reference Resolution, Audit Output).
+Subagent Dispatch, Splitting, Failure Handling, Cross-Reference Resolution, Audit Output,
+Summary Faithfulness Check).
 The Prompt Sanitization escape table still applies — step 4 below references it for PR
 data sanitization. Instead, execute only the PR-specific steps:
 
@@ -614,6 +635,22 @@ artifact was completed, not lost.
 - 100% PASS → candidate for "Completed" status in Phase 3
 - Any FAIL → indicates "Active" (unfinished work remains)
 - PARTIAL items → require narrative context to determine status
+
+### Summary Faithfulness Check
+
+After the completion audit, review the Phase 1 summary against the artifact content. This is a
+lightweight self-check — not a subagent dispatch. Verify:
+
+1. Every claim in the Overview is supported by the artifact content.
+2. No information was added that is not explicitly present in the artifact.
+3. No key details were omitted that would change the reader's understanding.
+
+If any discrepancy is found, print a correction below the audit output
+(e.g., "Correction: [what changed and why]"). This check catches hallucinated details and
+significant omissions before the user acts on the summary.
+
+**Skip this check** for PR summaries (PR data is fetched live via `gh` and the Phase 1 output
+directly reflects the API response) and for incomplete run artifacts where Phase 2 was skipped.
 
 ---
 

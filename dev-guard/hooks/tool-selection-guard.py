@@ -1519,12 +1519,14 @@ def _get_worktree_name() -> str | None:
     --git-common-dir points to the main repo's .git.  When they differ,
     we're in a worktree and the name is the last path component of --git-dir.
 
-    During tests, honours _GUARD_TEST_WORKTREE env var.
+    During tests (PYTEST_CURRENT_TEST set), uses _GUARD_TEST_WORKTREE env var
+    exclusively.  If unset, returns None (non-worktree) — real CWD is never probed.
     """
     if os.environ.get("PYTEST_CURRENT_TEST"):
         wt = os.environ.get("_GUARD_TEST_WORKTREE")
-        if wt is not None:
-            return wt or None  # empty string → None
+        # In tests: explicit env var controls worktree detection.
+        # If unset, treat as non-worktree to avoid real CWD leaking into tests.
+        return wt or None
     try:
         git_dir = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
