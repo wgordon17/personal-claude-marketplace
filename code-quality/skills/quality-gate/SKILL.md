@@ -72,9 +72,11 @@ branch; fallback to branch slug prefix matching; use most recent by unix timesta
 match). If a plan file is found and it contains a `## Test Plan` section, read the `**Test Plan:**`
 path annotation from that section. Normalize the path (resolve any `..` components, strip
 trailing slashes) and verify it falls within `{memory_dir}/test-plans/`. If the path escapes
-that directory or the file does not exist, set `{plan_test_plan}` to empty string and log a
-warning: "Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string." If the path is valid
-and the file exists, read the test plan file and store its content as `{plan_test_plan}`. This
+that directory, set `{plan_test_plan}` to empty string and log a warning:
+"Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan}
+to empty string." If the path is valid but the file does not exist, set `{plan_test_plan}` to
+empty string (graceful fallback — no warning needed). If the path is valid and the file exists,
+read the test plan file and store its content as `{plan_test_plan}`. This
 value is available to all subsequent layers (Layer 1 Rounds 2 and 5, and Layer 2 Subagent A).
 If work type is not Planning or Mixed, set `{plan_test_plan}` to empty string.
 

@@ -33,8 +33,9 @@ without needing to know the date or sequence number.
 **Conditional Prompt Sections:** `{TEST_PLAN}` is a conditional prompt-body section, not a
 context bundle JSON field. The Lead injects it directly into individual agent prompt bodies when
 the plan file contains a `## Test Plan` section. When no test plan exists, the Lead omits the
-entire `## User Acceptance Context` section (heading, guard text, and placeholder) from the
-prompt — agents never see an empty or partial section.
+entire section containing the `{TEST_PLAN}` placeholder — whether headed
+`## User Acceptance Context` or `## UAT SCENARIOS` — including heading, guard text, and
+placeholder. Agents never see an empty or partial section.
 
 ---
 

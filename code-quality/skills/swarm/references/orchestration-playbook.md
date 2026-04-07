@@ -1761,6 +1761,8 @@ Agent(
     - Check off tasks that were completed ([x])
     - Mark tasks skipped by user decision as [SKIPPED by user]
     - Mark tasks blocked due to unresolved issues as [BLOCKED: reason]
+    - Do NOT modify the ## Test Plan section or any content below it —
+      it is a machine-readable annotation consumed by downstream skills.
     Reconciliation results: {reconciliation_summary}"
 )
 ```
