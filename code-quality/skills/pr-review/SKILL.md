@@ -120,6 +120,26 @@ path as `{plan_file_path}`. If no plan exists, use `"No implementation plan foun
 `{plan_content}` and `""` (empty string) for `{plan_file_path}`. The Correctness Reviewer
 and Plan Adherence Reviewer use this to detect plan drift.
 
+### Extract Test Plan
+
+If a plan file was found (i.e., `{plan_file_path}` is non-empty), check whether the plan
+file contains a `## Test Plan` section. If such a section exists, read the `Test Plan:` path
+annotation from it.
+
+Path boundary validation: normalize the extracted path (resolve `..` segments and symlinks)
+and verify it falls within `{memory_dir}/test-plans/`. If the normalized path escapes that
+directory, set `{plan_test_plan}` to `""` (empty string) and log a warning:
+"Test plan path rejected: path escapes {memory_dir}/test-plans/."
+
+If the path is valid, attempt to read the file. If the file does not exist, set
+`{plan_test_plan}` to `""` (empty string) — graceful fallback. If the file exists and is
+readable, read its contents and store as `{plan_test_plan}`.
+
+If the plan file has no `## Test Plan` section, or if no plan file was found, set
+`{plan_test_plan}` to `""` (empty string).
+
+Pass `{plan_test_plan}` to the QA Reviewer, Correctness Reviewer, and Plan Adherence Reviewer.
+
 ### Fetch PR Diff
 
 After worktree alignment, ensure the base branch ref is available and compute the diff locally:
@@ -210,7 +230,7 @@ Agent(
 
 Each domain reviewer receives: `{pr_description}`, `{diff}`, `{claude_md_rules}`,
 `{contributing_md_rules}`, `{changed_files}`. The Correctness Reviewer also receives
-`{plan_content}` — see below.
+`{plan_content}` and `{plan_test_plan}`. The QA Reviewer also receives `{plan_test_plan}`.
 
 ### Plan Adherence Reviewer (6th, parallel with above)
 
@@ -224,8 +244,8 @@ Agent(
 )
 ```
 
-The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{diff}`,
-`{changed_files}`, `{pr_description}`, `{claude_md_rules}`, and `{contributing_md_rules}`.
+The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{plan_test_plan}`,
+`{diff}`, `{changed_files}`, `{pr_description}`, `{claude_md_rules}`, and `{contributing_md_rules}`.
 
 ### Collect Findings
 
@@ -500,6 +520,7 @@ runtime; this skill owns its own copies adapted for PR review context.
 | `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers + Verifier |
 | `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer, Plan Adherence Reviewer |
 | `{plan_file_path}` | Path to discovered plan file or empty string | Plan Adherence Reviewer only |
+| `{plan_test_plan}` | Full test plan document content or empty string | QA Reviewer, Correctness Reviewer, Plan Adherence Reviewer |
 | `{findings_json}` | JSON array of all findings with diff_context | Finding Verifier only |
 
 ---

@@ -247,6 +247,15 @@ PLAN FILE (if available):
    the task's specification?
    A plan task that is unchecked is a `needs-fix` completeness gap — the plan is a contract.
 
+UAT TEST PLAN (Planning/Mixed only — if available):
+{plan_test_plan}
+
+9. If a UAT test plan is provided above (non-empty): verify that ALL UAT scenarios have
+   been addressed by the implementation — not just code coverage, but user journey coverage.
+   For each scenario: does the planned work demonstrate that the scenario will succeed end-to-end?
+   Is there a corresponding task, test case, or acceptance criterion in the plan?
+   A UAT scenario with no coverage path is a `needs-fix` completeness gap.
+
 For each issue found, report:
 - What requirement or item is affected
 - What's missing or incomplete
