@@ -2687,11 +2687,11 @@ You do NOT write unit tests — test-writer handles that.
 
 The lead populates `{bdd_framework_info}` with the following structure:
 - `framework`: e.g. `pytest-bdd`, `godog`, `cucumber.js`, `cucumber-rs`
-- `install_cmd`: command to install the BDD framework if not already present
-- `scaffold_cmd`: command to generate step definition skeletons from `.feature` files (if available)
-- `test_cmd`: command to run the BDD test suite
 - `feature_dir`: path to `.feature` files (e.g. `features/`, `tests/acceptance/`)
-- `step_dir`: path where step definitions live (e.g. `steps/`, `step_definitions/`, `*_test.go`)
+- `step_dir`: path where step definitions live (e.g. `steps/`, `step_definitions/`)
+- `scaffold_cmd`: command to generate step definition skeletons from `.feature` files (if available)
+- `test_cmd`: command to run the BDD test suite (e.g. `uv run pytest`, `go test ./features/...`)
+- `feature_files`: list of promoted `.feature` file paths
 
 ## Step Writing Approach
 

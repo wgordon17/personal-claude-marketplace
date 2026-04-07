@@ -1264,16 +1264,16 @@ Agent(
          "to name steps accurately. Fill in step definitions with actual assertions: "
          "Given steps set up preconditions, When steps perform the user action, Then steps "
          "assert the expected outcome. "
-         "Send a BDDStepHandoff message when complete with: files_created, step_count, "
-         "unresolved_steps (steps you could not scaffold)."
+         "Send a BDDStepHandoff message when complete with: feature_files, step_files, "
+         "scenarios_wired, scenarios_skipped, summary, turn_count."
 )
 ```
 
 ### Step 3.5.5: Collect BDDStepHandoff and Shutdown
 
 Wait for the `BDDStepHandoff` message from bdd-step-writer. Record:
-- `bdd_step_files_created` — for Phase 7 (Verifier scope) and swarm-report.md
-- `bdd_unresolved_steps` — log to `{run_dir}/bdd-step-handoff.json` for reference
+- `step_files` — for Phase 7 (Verifier scope) and swarm-report.md
+- `scenarios_skipped` — log to `{run_dir}/bdd-step-handoff.json` with skip reasons from `summary`
 
 Store `{bdd_framework_info}` in Lead state — it is passed to the Verifier in Phase 7.
 

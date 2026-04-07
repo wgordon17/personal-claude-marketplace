@@ -325,7 +325,7 @@ Phase 3 completion.
 ```
 Lead spawns (single agent):
   bdd-step-writer  (general-purpose, sonnet, write access)
-    -- reads .feature files promoted to source tree during Phase 3
+    -- reads .feature files promoted to source tree at the start of Phase 3.5
     -- reads implementation output from Phase 3
     -- writes step definition files wired to all scenarios
     -- sends BDDStepHandoff to Lead on completion
