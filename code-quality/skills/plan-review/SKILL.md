@@ -79,6 +79,17 @@ Extract from the plan content:
 > **Note:** These extractions assume a structured plan format. If the plan lacks these headings,
 > reviewers will work with the full `{plan_content}` and report on what they can infer.
 
+### Read Test Plan (if linked)
+
+If the plan file contains a `## Test Plan` section, extract the `Test Plan:` path annotation from it.
+Normalize the path (resolve `..` components) and verify it falls within `{memory_dir}/test-plans/`.
+If the normalized path escapes that directory, set `{plan_test_plan}` to empty string and log a
+warning: "Test plan path escapes memory directory — skipping."
+If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string (graceful
+fallback — no error).
+If valid and readable, read the file and store its content as `{plan_test_plan}`.
+If no `## Test Plan` section exists in the plan file, set `{plan_test_plan}` to empty string.
+
 ### Read Project Context
 
 From the repo root:
@@ -106,6 +117,9 @@ Additional context for Unknown Unknowns reviewer:
 - `{plan_open_questions}` = extracted open questions or empty string
 - `{plan_trade_offs}` = extracted trade-offs or empty string
 - `{plan_decisions}` = extracted decisions or empty string
+
+Additional context for Scope & Completeness and Feasibility reviewers:
+- `{plan_test_plan}` = full test plan document content, or empty string if no test plan is linked
 
 ---
 
@@ -169,6 +183,8 @@ Each plan-specific reviewer receives: `{plan_file_path}`, `{plan_content}`, `{pl
 
 The Unknown Unknowns Reviewer additionally receives: `{plan_open_questions}`, `{plan_trade_offs}`,
 `{plan_decisions}`.
+
+The Scope & Completeness Reviewer and Feasibility Reviewer additionally receive: `{plan_test_plan}`.
 
 ### Domain Reviewers (2 parallel, with plan-specific reviewers above)
 
@@ -474,6 +490,7 @@ documentation that Claude reads and fills in.
 | `{plan_open_questions}` | Extracted open questions or empty string | Unknown Unknowns only |
 | `{plan_trade_offs}` | Extracted trade-offs or empty string | Unknown Unknowns only |
 | `{plan_decisions}` | Extracted decisions (not trade-offs) or empty string | Unknown Unknowns only |
+| `{plan_test_plan}` | Full test plan document content or empty string | Scope & Completeness + Feasibility only |
 | `{findings_json}` | JSON array of all findings | Finding Verifier only |
 | `{verification_note}` | Warning when verification JSON parse fails, or empty string | Phase 4 terminal output |
 | `{skipped_note}` | List of skipped reviewers with reasons, or empty string | Phase 4 terminal output |

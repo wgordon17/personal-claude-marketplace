@@ -453,6 +453,13 @@ After all tasks are written:
      reviewer-detected assumptions)
    - Collect all open questions from the plan header's "Open Questions" section marked `[human]`
    - Build a consolidated flags report to present in Phase 6
+7. **Suggest `/test-plan` if applicable:** If this plan involves user-facing behavior changes
+   (new features, modified user workflows, UI changes), output in chat:
+   "This plan includes user-facing changes. Consider running `/test-plan` with this plan file
+   to generate UAT scenarios and acceptance criteria before implementation."
+   This suggestion is informational only — do not gate, block, or use `AskUserQuestion` for it.
+   The determination of "user-facing behavior changes" is a runtime judgment call, not a
+   structured detection.
 
 **Chat output:**
 > "Validation complete. N flags collected. Proceeding to completion report."
