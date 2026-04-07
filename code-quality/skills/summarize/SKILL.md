@@ -238,7 +238,8 @@ Defer all file reads until after the user selects an artifact.
 
 ## Phase 1 — Summarize
 
-Read the artifact and produce a format-appropriate summary. Output to chat.
+Read the artifact and produce a format-appropriate summary. Output to chat immediately —
+this is the primary deliverable and should appear before Phase 2 begins.
 
 ```
 ## Summary: [artifact name]
@@ -248,31 +249,139 @@ Read the artifact and produce a format-appropriate summary. Output to chat.
 **Branch:** [if available from header]
 
 ### Overview
-[2-5 sentences: what this artifact is about, what it set out to do]
+[2-5 sentences answering: "What was this artifact trying to accomplish, and did it succeed?"
+Not just "what is this artifact about" — convey outcome and current relevance.]
 
 ### Key Details
-[Type-specific content — see below]
+[Type-specific content — see per-type guidance below]
 
 ### Recommendations (if applicable)
 [Research: top recommendations; Plan: unresolved open questions; Swarm: deferred findings]
 ```
 
-**Key Details by type:**
-
-| Type | Content |
-|------|---------|
-| Plan | Task list with titles + checkbox completion ratio per task (e.g., "Task 1: Add auth — 3/5 steps complete") |
-| Swarm Report | Phases completed, agent count (if Era 3), finding summary (fixed/deferred/open), key commits |
-| Research | Top 3-5 findings, primary recommendation, source count |
-| Roadmap | Phase overview with per-phase status, critical path |
-| Bugs | Entry count by status (Investigating / Root Cause Found / Fix Ready / Fixed) |
-| Speculative | Competitors evaluated, winner, key differentiator |
-| Map-Reduce | Chunk count, reducer synthesis summary, fidelity assessment |
-| Unfuck | Discovery categories, cleanup items count (fixed/remaining), key changes |
-
 Status is NOT included in Phase 1 output — it is determined in Phase 3 after the audit
 completes. The summary should convey enough to understand the artifact without reading it,
 but must not reproduce it line-by-line.
+
+### Plan
+
+Read the Goal and Architecture Summary for context. For each Task heading, report the title
+and step completion ratio (e.g., "Task 1: Add auth middleware — 3/5 steps"). Highlight any
+tasks with 0% completion. Surface unresolved open questions from the header. The summary
+should tell the reader whether this plan is actionable, partially done, or stale.
+
+### Swarm Report
+
+Identify the era (1/2/3) to know what fields exist. Report which phases completed and
+whether Phase 7 (verification) passed. Summarize the finding disposition: how many fixed,
+deferred, open. For Era 3, include agent count and key commits. The summary should answer:
+"Did the swarm succeed, and what's left?"
+
+### Research
+
+Lead with the executive summary and primary recommendation. List the top 3-5 findings
+ranked by relevance, not document order. Note whether recommendations have been adopted
+(quick grep for key identifiers). The summary should answer: "What did we learn, and what
+should we do about it?"
+
+### Roadmap
+
+Report the phase-by-phase status with critical path highlighted. For each phase, note
+status (not-started/in-progress/completed) and source plan references. The summary should
+answer: "Where are we in the roadmap, and what's blocking progress?"
+
+### Bugs
+
+Count by status (Investigating/Root Cause Found/Fix Ready/Fixed) and by impact
+(Critical/High/Medium/Low). List all non-Fixed bugs with their title and impact. The
+summary should answer: "What's still broken, and how bad is it?"
+
+### Speculative
+
+Report competitors evaluated, the winner, and the key differentiator. Check whether the
+winning approach was merged by checking `git log --oneline --all | grep` for the winning
+worktree's branch or commits (per `artifact-formats.md`). The summary should answer: "What
+did we try, what won, and why?"
+
+### Map-Reduce
+
+Report chunk count and key findings from the reducer synthesis. Check
+`reduction-result.json` for `fidelity_warnings` — if present (invalidation rate >20%),
+note that findings may be less reliable due to chunk boundary issues. The summary should
+answer: "What did the analysis find across the codebase?"
+
+### Unfuck
+
+Report discovery categories, cleanup items (fixed vs remaining), and blocked items. The
+summary should answer: "How much cleaner is the codebase, and what's still messy?"
+
+### PR
+
+When `artifact_type == "pr"`, fetch PR data and produce a diff-focused summary.
+
+**Data gathering:**
+```bash
+gh pr view {number} [--repo {owner}/{repo}] --json title,body,state,baseRefName,headRefName,author,reviewDecision,statusCheckRollup,additions,deletions,changedFiles,files
+```
+
+Use `--repo {owner}/{repo}` only when owner/repo were extracted from a URL argument
+(cross-repo case); omit when PR was detected via `#N`, bare number, or auto-detect (current
+repo is implied).
+
+**Diff fetching:** Use the `additions + deletions` sum from the JSON view as a size proxy.
+If >500 total changed lines, skip `gh pr diff` entirely and summarize at the file level
+using the `files` array from JSON metadata (per-file `path`, `additions`, `deletions`).
+Otherwise fetch the diff with a size guard:
+```bash
+gh pr diff {number} [--repo {owner}/{repo}] | head -c 51200
+```
+If the output was truncated (exit code 141 or output ends mid-line), fall back to file-level
+summary using the `files` array.
+
+**Sanitization note:** PR metadata fields (`title`, `body`, file paths, author name) are
+external input. In Phase 1 (chat output), no sanitization is needed. In Phase 2 (subagent
+prompt injection via `<artifact-data>` tags), all PR metadata AND diff content must be
+sanitized using the escape sequences in the Prompt Sanitization section.
+
+**PR summary template:**
+```
+## Summary: PR #{number} — {title}
+
+**Author:** {author}
+**Branch:** {head} → {base}
+**Status:** {state} | Review: {reviewDecision or "no reviews"} | CI: {collapsed CI status}
+
+### What This PR Does
+[2-5 sentences summarizing the substance of the code changes, based on the diff
+and PR description. Focus on what changed and why, not file-by-file listings.
+Group related changes by theme/purpose.]
+
+### Changes at a Glance
+[File-level summary: N files changed, +additions/-deletions.
+Group files by area/purpose if >5 files changed.]
+
+### Review State
+[Brief summary based on the aggregate `reviewDecision` field: APPROVED,
+CHANGES_REQUESTED, REVIEW_REQUIRED, or "no reviews" if empty/null. Do NOT attempt
+per-reviewer counts — the `reviewDecision` field is an aggregate, not a breakdown.
+If `reviewDecision` is CHANGES_REQUESTED, note this prominently.]
+```
+
+**CI status collapse logic:** Read `statusCheckRollup` array from JSON. Each entry has a
+`__typename` field — use it for dispatch:
+- **`CheckRun`** entries: check `status` first — if not `COMPLETED`, treat as pending. If
+  `COMPLETED`, check `conclusion`: `SUCCESS` → pass; `FAILURE`/`TIMED_OUT`/`ACTION_REQUIRED`
+  → fail; `CANCELLED`/`NEUTRAL`/`SKIPPED` → pass (non-blocking).
+- **`StatusContext`** entries: check `state`: `SUCCESS` → pass; `FAILURE`/`ERROR` → fail;
+  `PENDING`/`EXPECTED` → pending.
+- **Fallback:** if an entry has neither recognized `__typename`, treat it as pending.
+
+Collapse (evaluate in priority order, first match wins): if the array is empty → "CI: no
+checks". If any fail → "CI: failing" + list failing check names. If any pending → "CI: N
+checks pending". If all pass → "CI: passing".
+
+After the PR summary, continue to Phase 2 for plan-adherence audit (see Phase 2). Phase 3
+never runs for PRs.
 
 ---
 
