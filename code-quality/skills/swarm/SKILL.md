@@ -796,7 +796,7 @@ After escalation, wait for user input before proceeding.
 | Phase 2.8: Reduction Review | Config-only, docs-only, or test-only changes. Tasks where architect plan modifies fewer than 3 files total. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
 | Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
-| Phase 3.5: BDD Step Writing | No `## Test Plan` section in plan file, OR `## Test Plan` has no `**Feature Files:**` path, OR test plan path validation failed (path escapes `{memory_dir}/test-plans/`). |
+| Phase 3.5: BDD Step Writing | No `## Test Plan` section in plan file, OR `## Test Plan` has no `**Feature Files:**` path, OR test plan path validation failed (test plan or Feature Files path escapes `{memory_dir}/test-plans/`). |
 | Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings |
 | Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
 | Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |

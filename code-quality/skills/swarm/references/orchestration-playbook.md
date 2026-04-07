@@ -1235,7 +1235,7 @@ Construct the BDD framework context object:
   "feature_dir": "<{feature_target_dir}>",
   "step_dir": "<value of **BDD Step Dir:** from annotation>",
   "scaffold_cmd": "<value of **BDD Scaffold Command:** from annotation>",
-  "test_cmd": "<BDD test command for the detected framework>",
+  "test_cmd": "<value of **BDD Test Command:** from annotation>",
   "feature_files": ["<list of promoted .feature file paths in {feature_target_dir}>"]
 }
 ```
