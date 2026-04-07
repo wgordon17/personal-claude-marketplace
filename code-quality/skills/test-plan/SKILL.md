@@ -249,8 +249,8 @@ as not testable or incomplete to the user for revision.
 Write the finalized scenario list to a staging file before proceeding to Phase 3. Use the
 memory directory detected in Phase 0: `{memory_dir}/test-plans/scenarios-draft.md` (fallback:
 `~/.claude/test-plans/scenarios-draft.md`). This protects against context recycling loss during
-the multi-step Phase 3-4 interval. Phase 4 reads from this file instead of memory. The file
-is overwritten by the full test plan document in Phase 4 — it is a transient staging artifact.
+the multi-step Phase 3-4 interval. Phase 4 reads from this file instead of memory. After Phase 4
+writes the full test plan document, delete the staging file (`scenarios-draft.md`).
 
 ---
 

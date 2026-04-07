@@ -159,17 +159,11 @@ If no plan file exists, the architect will decompose the work in Phase 2.
 
 ### Step 0.4.5: Test Plan Discovery
 
-After plan file detection, check whether the found plan file contains a `## Test Plan` section.
+After plan file detection, check whether the plan file found in Step 0.4 contains a
+`## Test Plan` section. Reuse `{plan_file_path}` from Step 0.4 — do NOT run a separate
+discovery. If Step 0.4 found no plan file, skip this step entirely.
 
-**Discovery (Branch-header matching):**
-```
-Glob("{memory_dir}/plans/*.md", exclude: "{memory_dir}/plans/done/**")
-```
-For each result, Read the file and check the `**Branch:**` header. Select the file whose
-branch header matches the current git branch exactly. If no header match: fall back to
-filename slug matching (branch slug appears in the filename).
-
-**If a plan file is found with a `## Test Plan` section:**
+**If the plan file has a `## Test Plan` section:**
 
 1. Read the `**Test Plan:**` field value (the test plan document path)
 2. **Path validation (security):**

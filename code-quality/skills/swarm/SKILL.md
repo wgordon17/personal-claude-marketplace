@@ -495,6 +495,8 @@ If a plan file was found, the Lead performs reconciliation:
    - Checks off tasks that were completed (`[x]`)
    - Marks tasks skipped by user decision as `[SKIPPED by user]`
    - Marks tasks blocked due to unresolved issues as `[BLOCKED: reason]`
+   - Do NOT modify the `## Test Plan` section or any content below it — it is a
+     machine-readable annotation consumed by downstream skills with exact field label matching.
 
    The Lead does NOT write to the plan file directly (Can Edit: No).
 
