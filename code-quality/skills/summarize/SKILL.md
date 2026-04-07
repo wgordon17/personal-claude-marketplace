@@ -315,7 +315,7 @@ summary should answer: "What's still broken, and how bad is it?"
 ### Speculative
 
 Report competitors evaluated, the winner, and the key differentiator. Check whether the
-winning approach was merged by checking `git log --oneline --all | grep` for the winning
+winning approach was merged by checking `git log --oneline --all | grep <branch-or-commit>` for the winning
 worktree's branch or commits (per `artifact-formats.md`). The summary should answer: "What
 did we try, what won, and why?"
 
@@ -396,8 +396,6 @@ If `reviewDecision` is CHANGES_REQUESTED, note this prominently.]
 - **`StatusContext`** entries: check `state`: `SUCCESS` → pass; `FAILURE`/`ERROR` → fail;
   `PENDING`/`EXPECTED` → pending.
 - **Fallback:** if an entry has neither recognized `__typename`, treat it as pending.
-
-Entries with unrecognized `__typename` are treated as pending for collapse purposes.
 
 Collapse (evaluate in priority order, first match wins): if the array is empty → "CI: no
 checks". If any fail → "CI: failing" + list failing check names. If any pending → "CI: N
@@ -498,9 +496,9 @@ against a plan would produce misleading FAIL results.
      assessment.
 
      IMPORTANT: Do not create, edit, move, or delete any files. Your role is read-only
-     verification. You may use Read, Grep, Glob, and Bash (for git log and grep commands)
-     to investigate, but must not write to the filesystem. Do not invoke gh or any tool
-     that fetches external data — all PR data has been provided above."
+     verification. You may use Read, Grep, and Glob to investigate, but must not write to
+     the filesystem or execute shell commands. Do not invoke gh or any tool that fetches
+     external data — all PR data has been provided above."
    )
    ```
 

@@ -1672,6 +1672,28 @@ class TestWorktreeStash:
         )
         assert result.returncode == 0
 
+    def test_worktree_env_unset_treated_as_non_worktree(self, tmp_path):
+        """When _GUARD_TEST_WORKTREE is unset in test context, treat as non-worktree.
+
+        Regression: old code fell through to real git detection when unset,
+        causing tests in worktrees to see the real CWD worktree name.
+        """
+        # Cannot use _env_no_worktree — that sets _GUARD_TEST_WORKTREE="";
+        # this test needs the key entirely absent.
+        env = {
+            **os.environ,
+            "GUARD_DB_PATH": str(tmp_path / "test.db"),
+            "PYTEST_CURRENT_TEST": "yes",
+        }
+        env.pop("_GUARD_TEST_WORKTREE", None)
+        result = run_guard(
+            "Bash",
+            {"command": "git stash"},
+            env=env,
+        )
+        # Not blocked — worktree guard returns early (not in a worktree)
+        assert result.returncode == 0
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Unit tests: _parse_branch_creation and _is_safe_start_point
