@@ -30,6 +30,13 @@ the `key_files` list after the Architect completes.
 The `run_dir` field enables agents to write their outputs to the correct audit trail location
 without needing to know the date or sequence number.
 
+**Conditional Prompt Sections:** `{TEST_PLAN}` is a conditional prompt-body section, not a
+context bundle JSON field. The Lead injects it directly into individual agent prompt bodies when
+the plan file contains a `## Test Plan` section. When no test plan exists, the Lead omits the
+entire section containing the `{TEST_PLAN}` placeholder — whether headed
+`## User Acceptance Context` or `## UAT SCENARIOS` — including heading, guard text, and
+placeholder. Agents never see an empty or partial section.
+
 ---
 
 ## Architect Plan Schema
@@ -495,6 +502,25 @@ The Verifier sends this to the Lead after Phase 7 test execution. Written to
     "net_new_failures": "integer — failures not present in baseline",
     "regression": "boolean — true if net_new_failures > 0"
   }
+}
+```
+
+---
+
+## BDD Step Handoff Schema
+
+Sent by the BDD-Step-Writer to the Lead after Phase 3.5 completes. The Lead reads this before
+proceeding to Phase 4.
+
+```json
+{
+  "type": "BDDStepHandoff",
+  "feature_files": ["string — paths to promoted .feature files"],
+  "step_files": ["string — paths to step definition files created"],
+  "scenarios_wired": 0,
+  "scenarios_skipped": 0,
+  "summary": "string — summary of step writing results",
+  "turn_count": 0
 }
 ```
 

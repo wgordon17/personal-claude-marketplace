@@ -5,7 +5,8 @@ with actual values before passing to each Agent call.
 
 All plan reviewers receive `{plan_file_path}`, `{plan_content}`, `{plan_goal}`, `{plan_files}`,
 `{claude_md_rules}`, `{contributing_md_rules}`, and `{project_context}`. The Unknown Unknowns Reviewer additionally
-receives `{plan_open_questions}`, `{plan_trade_offs}`, and `{plan_decisions}`. The Finding
+receives `{plan_open_questions}`, `{plan_trade_offs}`, and `{plan_decisions}`. The Scope &
+Completeness Reviewer and Feasibility Reviewer additionally receive `{plan_test_plan}`. The Finding
 Verifier receives `{findings_json}`, `{plan_content}`, and `{plan_file_path}`.
 
 ## Classification Guidance (shared across all reviewers)
@@ -75,6 +76,18 @@ For each finding, report:
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested clarification or fix (brief)
 
+## UAT Context
+
+TEST PLAN:
+{plan_test_plan}
+
+If a test plan is provided above, cross-reference scenario preconditions against plan tasks. Flag
+scenarios whose preconditions (test data, environment setup, required state) are not addressed by
+any plan task. These represent feasibility gaps: the plan cannot be verified as written because the
+test environment it implicitly requires is not set up.
+
+If no test plan is provided (empty string), skip this check.
+
 If the plan is feasible as written, say "No feasibility findings." Do not fabricate issues.
 ```
 
@@ -136,6 +149,18 @@ For each finding, report:
   the reviewer cannot determine the correct resolution
 - Evidence: the specific goal text and the gap in the plan
 - Suggested addition or removal (brief)
+
+## UAT Context
+
+TEST PLAN:
+{plan_test_plan}
+
+If a test plan is provided above, cross-reference plan tasks against the scenario-task mapping in
+the test plan. Flag plan tasks that have no UAT coverage (no scenario exercises that task's
+behavior). These represent scope gaps: work the plan does that the test plan does not validate,
+which means the goal cannot be confirmed as complete.
+
+If no test plan is provided (empty string), skip this check.
 
 If scope and completeness are good, say "No scope findings." Do not fabricate issues.
 ```

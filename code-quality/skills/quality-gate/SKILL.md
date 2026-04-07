@@ -65,6 +65,21 @@ Determine work type from session activity:
 
 Select the lens set for the detected type (see `references/lens-rubrics.md`).
 
+**Test plan discovery (Planning/Mixed/Code work types):** After classifying the work type,
+discover the plan file using branch-header matching (same algorithm as Layer
+1.75: search `{memory_dir}/plans/` for files whose `**Branch:**` header matches the current git
+branch; fallback to branch slug prefix matching; use most recent by unix timestamp if multiple
+match). If a plan file is found and it contains a `## Test Plan` section, read the `**Test Plan:**`
+path annotation from that section. Normalize the path (resolve any `..` components, strip
+trailing slashes) and verify it falls within `{memory_dir}/test-plans/`. If the path escapes
+that directory, set `{plan_test_plan}` to empty string and log a warning:
+"Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan}
+to empty string." If the path is valid but the file does not exist, set `{plan_test_plan}` to
+empty string (graceful fallback — no warning). If the path is valid and the file exists,
+read the test plan file and store its content as `{plan_test_plan}`. This
+value is available to all subsequent layers (Layer 1 Rounds 2 and 5, and Layer 2 Subagent A).
+If no plan file is found for the current branch, set `{plan_test_plan}` to empty string.
+
 ---
 
 ## Layer 1: Self-Review Loop
@@ -79,10 +94,10 @@ comprehensive coverage from different angles.
 | Round | Lens | Core Question |
 |-------|------|---------------|
 | 1 | **Correctness** | What inputs produce wrong results? What assumptions are untested? |
-| 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. Includes documentation completeness (see below). |
+| 2 | **Completeness** | What was requested but not delivered? Read the original request word-by-word. Includes documentation completeness (see below). For Planning/Mixed work: also check completeness against any UAT scenarios discovered in Step 0. |
 | 3 | **Robustness** | How does this fail? Bad input, missing deps, concurrent access, edge cases? |
 | 4 | **Simplicity (BLOCKING)** | What's over-engineered? What could be deleted? What's AI slop? Dead code, unnecessary abstractions, and unused imports are `needs-fix` — blocking. |
-| 5 | **Adversarial** | You are a hostile reviewer. The author claims this is done. Prove them wrong. |
+| 5 | **Adversarial** | You are a hostile reviewer. The author claims this is done. Prove them wrong. For Planning/Mixed work with UAT scenarios (loaded in Step 0): assume you are a hostile QA tester — can you construct inputs that would break each UAT scenario? If not, the scenarios may be under-specified. |
 | 6 | **Structural** | What design flaws, race conditions, or failure modes exist in this system's architecture — not just in the current change, but in how it integrates? (Code/Mixed only) |
 
 Table shows code lenses. Other work types adapt lens names — e.g., planning uses "Feasibility"
@@ -142,7 +157,13 @@ Execute this protocol for EVERY round:
       on-disk components. Counts must match what's documented. A new component
       with no documentation entry is a completeness failure, same as a missing test.
 
-   c) Cross-reference integrity: search the ENTIRE codebase for references
+   c) UAT coverage verification (Planning/Mixed only): if Step 0 loaded a
+      non-empty `{plan_test_plan}`, for each scenario in the test plan: is
+      there a corresponding planned task or test case in the plan? Will the
+      planned work verify this scenario? A UAT scenario with no corresponding
+      plan coverage is a completeness gap — treat as `needs-fix`.
+
+   d) Cross-reference integrity: search the ENTIRE codebase for references
       to things you changed, renamed, or removed. Files you DIDN'T modify
       can have stale references to things you DID modify. Grep for:
       - Old names/values you replaced
@@ -389,6 +410,11 @@ Collect:
 - `{plan_content}` — plan content discovered by Layer 1.75 (if a plan was found). Pass to
   Subagent A (Completeness Reviewer) via the `{plan_content}` placeholder. Value is the plan
   file content or `'No plan file found.'` if Layer 1.75 was skipped.
+- `{plan_test_plan}` — UAT test plan content loaded in Step 0. Pass to Subagent A
+  (Completeness Reviewer) only. Value is the test plan file content or empty string if Step 0
+  did not load a test plan. Subagent B does NOT receive this context.
+  When `{plan_test_plan}` is empty string, omit the `UAT TEST PLAN` section entirely from the
+  Subagent A prompt — do not render the heading, label, or empty placeholder.
 
 ### Subagent Execution (2 passes each — BOTH mandatory)
 

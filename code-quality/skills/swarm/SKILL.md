@@ -5,7 +5,7 @@ description: >-
   of 21+ specialized agents (Architect, Security Design Reviewer, Reduction Analyst,
   Implementer, Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer,
   Performance, Plan Adherence, Fixer, Test Coverage Agent, Code-Simplifier, Docs,
-  Docs Reviewer, Lessons Extractor, Verifier) with structured JSON
+  Docs Reviewer, Lessons Extractor, Verifier, BDD-Step-Writer) with structured JSON
   communication, Cynefin domain classification, audit trails, and early user
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
@@ -64,6 +64,16 @@ specialist agent.
 | Plugin Validator | general-purpose | sonnet | `Glob("**/.claude-plugin/plugin.json")` finds results |
 | Skill Reviewer | general-purpose | sonnet | `Glob("**/skills/*/SKILL.md")` finds results |
 
+### Phase 3.5 Pipeline Agent
+
+| Phase | Role | Agent Type | Model | Can Edit | Purpose |
+|-------|------|------------|-------|----------|---------|
+| 3.5 | BDD-Step-Writer | general-purpose | sonnet | Yes | (conditional) BDD step definition writing |
+
+**Detection:** BDD-Step-Writer is spawned when the plan file `## Test Plan` section includes a
+`**Feature Files:**` path. It is distinct from the read-only optional domain reviewers — it has
+write access and runs as a pipeline agent in Phase 3.5, not as a Phase 4 reviewer.
+
 ---
 
 ## Workflow Phases
@@ -79,6 +89,19 @@ depends on it for reliable agent operation (warn the user if disabled). Generate
 Call `TeamCreate("swarm-impl")`, then create all tasks upfront with `addBlockedBy` dependencies
 so the full task graph is visible from the start.
 
+**Test Plan Discovery:** After branch creation and run-ID generation, discover the plan file
+using Branch-header matching: search `{memory_dir}/plans/` for files whose `**Branch:**` header
+matches the current branch, excluding `plans/done/`. Fallback: filename slug matching against
+the current branch slug. If a plan file is found AND it contains a `## Test Plan` section:
+read the `**Test Plan:**` path from the annotation. Before reading: normalize the path (resolve
+`..` segments) and verify it falls within `{memory_dir}/test-plans/`. If the normalized path
+escapes `{memory_dir}/test-plans/`, set `{TEST_PLAN}` to empty string and log a warning. Before
+copying any staged file, verify it is a regular file (not a symlink). If the path is valid: read
+the test plan document and store as `{TEST_PLAN}` context. If `**Feature Files:**` path exists:
+normalize and validate it falls within `{memory_dir}/test-plans/`. If `**BDD Setup Needed:** yes`,
+record the install command. Store the plan file path for Phase 4 Plan Adherence and Phase 5.5
+Plan Reconciliation to reuse (both phases skip re-discovery when the path is already known).
+
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
 Use `AskUserQuestion` to resolve any ambiguity in the task before spawning agents. Auto-detect
@@ -88,6 +111,11 @@ for API patterns (`router`, `endpoint`, `handler`, `@api`); Grep for DB patterns
 agents plus any auto-detected optional reviewers. Allow the user to add or remove reviewers.
 After the user approves the composition and confirms they understand the scope, proceed without
 further checkpoints. The user can walk away after Phase 1 approval.
+
+Announce BDD-Step-Writer as part of the composition if Phase 0 discovered a plan file with a
+`**Feature Files:**` path in its `## Test Plan` section. BDD-Step-Writer is a Phase 3.5 pipeline
+agent with write access — it is distinct from read-only optional domain reviewers and does not
+run in Phase 4. Include it in the composition count presented to the user.
 
 ### Phase 2: Architect (opus)
 
@@ -284,6 +312,60 @@ ELSE:
 This reduces context pressure on individual Implementers and improves output quality for large
 tasks. The Lead decides based on the dependency graph — never based on cost or token concerns.
 
+### Phase 3.5: BDD Step Writing (conditional)
+
+(Not to be confused with /speculative's internal Phase 3.5 synthesis within Phase 2.7.)
+
+**Skip when:** The plan file has no `## Test Plan` section, OR the `## Test Plan` section has no
+`**Feature Files:**` path, OR the `**Feature Files:**` path fails boundary validation (path
+escapes `{memory_dir}/test-plans/`). If `{TEST_PLAN}` is empty string (failed path validation),
+skip entirely.
+
+When triggered, run the following steps after Phase 3 completes and before Phase 4 begins:
+
+**Step 3.5.1 — Determine .feature target directory:** Check for an existing `features/` directory
+in the repo root. If not found, check for `tests/acceptance/`. If neither exists, create
+`tests/acceptance/`. Record the resolved target as `{feature_target_dir}`.
+
+**Step 3.5.2 — Promote .feature files:** Copy each `.feature` file from the staging path
+(`**Feature Files:**` directory in the test plan annotation) into `{feature_target_dir}`.
+Before copying each file, verify it is a regular file and not a symlink (SEC-004). If a
+`.feature` file with the same name already exists in `{feature_target_dir}`, use
+`AskUserQuestion` to resolve the collision: offer "Overwrite", "Keep existing", or "Rename
+incoming" for each conflict. Do not overwrite silently.
+
+**Step 3.5.3 — BDD dependency installation (if needed):** If `**BDD Setup Needed:** yes`,
+run the recorded install command (from `**BDD Setup Needed:**` annotation value, e.g.,
+`uv add --dev pytest-bdd==7.x.x`) on the current feature branch. Use the version specifier
+as recorded — do not strip versions.
+
+**Step 3.5.4 — Build BDD context and spawn BDD-Step-Writer:** Construct `{bdd_framework_info}`:
+
+```json
+{
+  "framework": "<value of **BDD Framework:** from test plan annotation>",
+  "feature_dir": "<{feature_target_dir}>",
+  "step_dir": "<value of **BDD Step Dir:** from test plan annotation>",
+  "scaffold_cmd": "<value of **BDD Scaffold Command:** from test plan annotation>",
+  "test_cmd": "<value of **BDD Test Command:** from test plan annotation>",
+  "feature_files": ["<list of promoted .feature files>"]
+}
+```
+
+Spawn the BDD-Step-Writer (general-purpose, sonnet, bypassPermissions) with the full context
+bundle, `{TEST_PLAN}` content, `{bdd_framework_info}`, and the promoted `.feature` files.
+The BDD-Step-Writer generates step definition skeletons for all unimplemented steps in the
+`.feature` files. Inject `{TEST_PLAN}` into the BDD-Step-Writer prompt the same way it is
+injected into the Implementer — the BDD-Step-Writer must understand user personas and scenario
+intent to name steps correctly.
+
+**Step 3.5.5 — Collect BDDStepHandoff:** Receive the BDD-Step-Writer's completion message
+(`BDDStepHandoff` type) listing files created, step count, and any steps it could not scaffold.
+Store `{bdd_framework_info}` for Phase 7 (Verifier scope). Shut down the BDD-Step-Writer.
+
+**Phase 3.5 does NOT run BDD tests.** BDD test execution is deferred to Phase 7 — the Verifier
+runs both the unit test suite and the BDD acceptance suite when `.feature` files are present.
+
 ### Phase 4: Parallel Review
 
 Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, and any
@@ -294,7 +376,8 @@ completed implementation. Each writes structured JSON findings to `{run_dir}/rev
 synthesizes into a consolidated view. Every finding — regardless of classification — is routed to
 Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
 
-**Plan Adherence reviewer:** Before spawning Phase 4 agents, search `{memory_dir}/plans/` for an
+**Plan Adherence reviewer:** If Phase 0 already discovered a plan file, reuse that path directly
+(do not re-discover). If Phase 0 did not find a plan file, search `{memory_dir}/plans/` for an
 incremental plan file whose `**Branch:**` header field matches the swarm's current feature branch.
 If no Branch header match is found, fall back to filename matching using the branch slug. If a
 plan file is found, spawn the `code-quality:plan-adherence` agent (opus model, read-only) alongside
@@ -396,7 +479,8 @@ phase entirely.
 
 If a plan file was found, the Lead performs reconciliation:
 
-1. **Discover the plan file** — Use the same Branch-header matching used in Phase 4: search
+1. **Discover the plan file** — If Phase 0 already discovered a plan file, reuse that path
+   directly. Otherwise, use the same Branch-header matching as Phase 4: search
    `{memory_dir}/plans/` for a file whose `**Branch:**` field matches the swarm's feature branch.
    Fall back to branch-slug filename matching if no header match is found.
 
@@ -413,6 +497,8 @@ If a plan file was found, the Lead performs reconciliation:
    - Checks off tasks that were completed (`[x]`)
    - Marks tasks skipped by user decision as `[SKIPPED by user]`
    - Marks tasks blocked due to unresolved issues as `[BLOCKED: reason]`
+   - Do NOT modify the `## Test Plan` section or any content below it — it is a
+     machine-readable annotation consumed by downstream skills with exact field label matching.
 
    The Lead does NOT write to the plan file directly (Can Edit: No).
 
@@ -499,9 +585,12 @@ The Lessons Extractor runs after Docs completes to avoid audit trail races.
 ### Phase 7: Verification & Completion
 
 Spawn the Verifier to run the full test suite and lint. Compare results against the Phase 0
-baseline — all tests that passed before must still pass; net-new failures are a blocker. After
-Verifier reports green, invoke the `quality-gate` skill for automated multi-pass review with
-rotating adversarial lenses, fresh-context subagent reviews, and blocking memory/artifact gates.
+baseline — all tests that passed before must still pass; net-new failures are a blocker. If BDD
+`.feature` files were promoted in Phase 3.5, pass `{bdd_framework_info}` to the Verifier — it
+runs BOTH the unit test suite AND the BDD acceptance suite. BDD failures are blockers on the
+same terms as unit test failures. After Verifier reports green, invoke the `quality-gate` skill
+for automated multi-pass review with rotating adversarial lenses, fresh-context subagent reviews,
+and blocking memory/artifact gates.
 If there are 20 or more modified files, run an `/unfuck` sweep to
 catch any issues introduced at scale. Generate the final audit report at
 `{run_dir}/swarm-report.md`. Announce completion with a summary and report path.
@@ -567,6 +656,13 @@ Phase 3: Pipelined Implementation
   | (next comp)   (feedback)     (next comp)    (results)   |
   |      <-------- reject ----------------------------------  |
   +-------------------------------------------------------+
+     |
+     v
+Phase 3.5: BDD Step Writing (conditional — only when Feature Files in Test Plan annotation)
+  +-- Promote .feature files from staging → {feature_target_dir}
+  +-- Install BDD dependency if BDD Setup Needed: yes
+  +-- BDD-Step-Writer (sonnet, bypassPermissions): generate step definition skeletons
+  +-- Collect BDDStepHandoff, store {bdd_framework_info} for Phase 7
      |
      v
 Phase 4: Parallel Review
@@ -702,6 +798,7 @@ After escalation, wait for user input before proceeding.
 | Phase 2.8: Reduction Review | Config-only, docs-only, or test-only changes. Tasks where architect plan modifies fewer than 3 files total. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
 | Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
+| Phase 3.5: BDD Step Writing | No `## Test Plan` section in plan file, OR `## Test Plan` has no `**Feature Files:**` path, OR test plan path validation failed (test plan or Feature Files path escapes `{memory_dir}/test-plans/`). |
 | Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings |
 | Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
 | Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |

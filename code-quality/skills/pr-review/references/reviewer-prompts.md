@@ -94,6 +94,14 @@ actual test files to confirm coverage gaps exist. Check if tests for the changed
 exist in other test files. Do not report speculative gaps — only report what you have confirmed
 by reading both the implementation and test code.
 
+UAT CROSS-REFERENCE:
+{plan_test_plan}
+
+If a test plan is provided above, cross-reference it against the test coverage in this PR:
+- For each UAT scenario, verify that test coverage exists for the happy path.
+- For each UAT scenario, verify that test coverage exists for error and edge conditions.
+- Verify that PR changes do not break existing UAT coverage.
+
 CHECKLIST:
 1. Coverage: what changed code paths have no corresponding test coverage?
 2. Test quality: are existing tests meaningful, or just asserting the implementation exists?
@@ -102,7 +110,8 @@ CHECKLIST:
 5. Flakiness: are there tests that depend on timing, ordering, or external state?
 6. Testability: does the new code make testing harder (hidden dependencies, global state)?
 7. Contract: do tests verify behavior (what it does) or implementation (how it does it)?
-8. Third-party technology gaps: if a test gap involves a third-party library whose expected
+8. UAT alignment: if a test plan is provided, are all UAT scenario paths covered by tests?
+9. Third-party technology gaps: if a test gap involves a third-party library whose expected
    behavior cannot be determined from the codebase alone, flag it with: "Research needed:
    [description]. Recommended resolution: /deep-research [External|Bridged] mode targeting
    [specific question]." Use External mode for pure technology questions, Bridged mode when
@@ -269,6 +278,9 @@ PROJECT RULES (CONTRIBUTING.md):
 IMPLEMENTATION PLAN (if provided):
 {plan_content}
 
+UAT SCENARIOS (if provided):
+{plan_test_plan}
+
 FOCUS: Correctness — does the code do what it claims? Not style, security, or performance.
 
 INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it before reporting. Read the
@@ -282,17 +294,20 @@ CHECKLIST:
 3. Edge cases: what inputs produce wrong results? Empty, null, boundary, concurrent?
 4. Plan drift: if an implementation plan is provided, does the code match the plan?
    Flag any deviation where the code does something different from what was planned.
-5. Contract violations: do function signatures, return types, or API contracts match
+5. UAT behavior alignment: if UAT scenarios are provided above, does the code implement the
+   behavior expected by each scenario? Flag any scenario whose expected outcome is not met
+   by the implementation.
+6. Contract violations: do function signatures, return types, or API contracts match
    what callers expect? Are there mismatches between interfaces and implementations?
-6. Data flow: does data flow correctly through the system? Missing transformations,
+7. Data flow: does data flow correctly through the system? Missing transformations,
    wrong variable used, stale state?
-7. Third-party technology gaps: if the code uses a third-party library, API, or service
+8. Third-party technology gaps: if the code uses a third-party library, API, or service
    incorrectly (wrong API, deprecated pattern, missing configuration), and the correct
    usage cannot be determined from the codebase alone, flag it with the recommended
    resolution format: "Research needed: [description]. Recommended resolution: /deep-research
    [External|Bridged] mode targeting [specific question]." Use External mode for pure
    technology questions, Bridged mode when the gap involves how the codebase uses the technology.
-8. Documentation accuracy: for any doc changes in the diff, assume the docs are wrong.
+9. Documentation accuracy: for any doc changes in the diff, assume the docs are wrong.
    Verify every documented claim against the actual codebase — use Read and Glob to check
    on-disk reality, not just what appears in the diff. If docs say "15 skills" — run
    `Glob("skills/*/SKILL.md")` and count. If docs say "supports X" — search the codebase
@@ -343,6 +358,9 @@ Source: {plan_file_path}
 
 {plan_content}
 
+UAT SCENARIOS (if provided):
+{plan_test_plan}
+
 FOCUS: Plan adherence — does the implementation match what was planned? Not style, security,
 or performance.
 
@@ -352,13 +370,17 @@ INSTRUCTIONS:
    files to confirm the implementation exists and matches the plan's intent.
 3. Verify the File Structure section (if present) against {changed_files} — confirm planned
    files were changed and no unplanned files were modified unexpectedly.
-4. Flag any deviations:
+4. Verify UAT coverage: if UAT scenarios are provided above, check that the diff includes
+   changes that address each scenario. Flag any scenario that is not addressed by the
+   implementation changes in this PR.
+5. Flag any deviations:
    - Tasks not implemented at all
    - Tasks only partially implemented
    - Tasks implemented differently from the specification
    - Files mentioned in the plan but not changed
    - Files changed but not mentioned in the plan (significant unexpected changes only)
-5. For each finding, report:
+   - UAT scenarios not addressed by the implementation
+6. For each finding, report:
    - Description: what the deviation is
    - Location: file:line (or task reference from the plan)
    - Classification: needs-fix | needs-input. Default to needs-fix. Only use needs-input when a

@@ -17,6 +17,7 @@ point is documented here.
 | 2.7 | Speculative Fork | N competitors + judge (conditional) | competitor-N (sonnet, worktree), judge (opus) |
 | 2.8 | Pre-Implementation Simplification Review | Single agent (conditional) | reduction-analyst (opus) |
 | 3 | Pipelined Implementation | Persistent team | implementer, reviewer, test-writer, test-runner |
+| 3.5 | BDD Step Writing | Single agent (conditional) | bdd-step-writer (sonnet, bypassPermissions) |
 | 4 | Parallel Review | All reviewers simultaneously | security, qa, code-reviewer, performance (+ optional) |
 | 4.5 | Structural Design Review | Adversarial pair | structural-concurrency (opus), structural-integration (opus) |
 | 5 | Fix, Test Coverage & Simplify | Sequential trio | fixer, test-coverage-agent, code-simplifier |
@@ -155,6 +156,38 @@ Read any plan file whose name or content matches the task description. If found:
 - Note the plan file path in the context bundle for all agents
 
 If no plan file exists, the architect will decompose the work in Phase 2.
+
+### Step 0.4.5: Test Plan Discovery
+
+After plan file detection, check whether the plan file found in Step 0.4 contains a
+`## Test Plan` section. Reuse `{plan_file_path}` from Step 0.4 — do NOT run a separate
+discovery. If Step 0.4 found no plan file, skip this step entirely.
+
+**If the plan file has a `## Test Plan` section:**
+
+1. Read the `**Test Plan:**` field value (the test plan document path)
+2. **Path validation (security):**
+   - Normalize the path: resolve `..` segments
+   - Verify the normalized path falls within `{memory_dir}/test-plans/`
+   - If the path escapes `{memory_dir}/test-plans/`: set `{TEST_PLAN}` = `""`, log a warning
+     to `{run_dir}/errors.log`, and skip the rest of this step
+3. If path is valid: Read the test plan document and store as `{TEST_PLAN}` context variable
+4. **If `**Feature Files:**` path exists:**
+   - Normalize and validate it falls within `{memory_dir}/test-plans/`
+   - Store as `{feature_files_staging_path}`
+   - Record `phase_3_5_enabled = true`
+5. **If `**BDD Setup Needed:** yes`:** extract the install command from the
+   backtick-delimited value within the parenthetical on that line (e.g., from
+   `**BDD Setup Needed:** yes (if yes: \`uv add --dev pytest-bdd==7.x.x\`)`,
+   extract `uv add --dev pytest-bdd==7.x.x`) and record it as `{bdd_install_cmd}`
+6. Store `{plan_file_path}` for Phase 4 (Plan Adherence) and Phase 5.5 (Plan Reconciliation)
+   to reuse — both phases skip re-discovery when this is already set
+
+**Before copying any staged file:** verify it is a regular file and not a symlink.
+Use `test -f` and `test ! -L` before each copy operation (SEC-004).
+
+**If no plan file found, or plan file has no `## Test Plan` section:**
+Set `{TEST_PLAN}` = `""` and `phase_3_5_enabled = false`. Proceed normally.
 
 ### Step 0.5: Context Health Pre-flight
 
@@ -1138,6 +1171,133 @@ One commit per successfully completed component. Failed/blocked components get n
 
 ---
 
+## Phase 3.5: BDD Step Writing (conditional)
+
+**Skip when:** `phase_3_5_enabled = false` (set in Step 0.4.5). Do not spawn any agent.
+
+### Step 3.5.1: Determine .feature Target Directory
+
+```bash
+# Check in order
+test -d features/ && echo "features/"
+test -d tests/acceptance/ && echo "tests/acceptance/"
+```
+
+| Result | Action |
+|--------|--------|
+| `features/` exists | Use `features/` as `{feature_target_dir}` |
+| `tests/acceptance/` exists | Use `tests/acceptance/` as `{feature_target_dir}` |
+| Neither exists | Create `tests/acceptance/` via Bash; use as `{feature_target_dir}` |
+
+### Step 3.5.2: Promote .feature Files
+
+For each `.feature` file in `{feature_files_staging_path}`:
+
+1. **Verify it is a regular file** (not a symlink):
+   ```bash
+   test -f {file} && test ! -L {file}
+   ```
+   If this check fails, log the file to `{run_dir}/errors.log` and skip it.
+
+2. **Check for collision** — if a file with the same name exists in `{feature_target_dir}`:
+   ```
+   AskUserQuestion(questions=[{
+     "question": "{filename} already exists in {feature_target_dir}. How should we proceed?",
+     "header": "Feature File Collision",
+     "options": [
+       {"label": "Overwrite", "description": "Replace the existing file with the staged version"},
+       {"label": "Keep existing", "description": "Skip — keep the file already in the repo"},
+       {"label": "Rename incoming", "description": "Copy as {filename}-new.feature"}
+     ],
+     "multiSelect": false
+   }])
+   ```
+
+3. **Copy the file** using Write (do not use Bash cp — Write validates permissions):
+   Read the staged file content, Write to `{feature_target_dir}/{filename}`.
+
+### Step 3.5.3: BDD Dependency Installation
+
+If `**BDD Setup Needed:** yes` AND an install command was recorded in Step 0.4.5:
+
+**Before executing, verify `{bdd_install_cmd}` starts with one of the known package
+manager prefixes:** `uv add`, `go get`, `npm install`, `cargo add`, `gem install`,
+or a Maven/Gradle dependency command. If it does not match any known prefix, log a
+warning to `{run_dir}/errors.log` and skip the remaining Phase 3.5 steps (3.5.3
+through 3.5.5) — proceed directly to Phase 4. The promoted `.feature` files from
+Step 3.5.2 remain in the source tree but no step definitions will be generated.
+`{bdd_framework_info}` is not set, so the Phase 7 Verifier skips BDD test execution.
+
+```bash
+{bdd_install_cmd}   # e.g., uv add --dev pytest-bdd==7.x.x
+```
+
+Run on the current feature branch. If the install command fails, use AskUserQuestion to
+report the error and ask how to proceed (skip BDD setup or abort).
+
+### Step 3.5.4: Build {bdd_framework_info} and Spawn BDD-Step-Writer
+
+Construct the BDD framework context object:
+
+```json
+{
+  "framework": "<value of **BDD Framework:** from annotation>",
+  "feature_dir": "<{feature_target_dir}>",
+  "step_dir": "<value of **BDD Step Dir:** from annotation>",
+  "scaffold_cmd": "<value of **BDD Scaffold Command:** from annotation>",
+  "test_cmd": "<value of **BDD Test Command:** from annotation>",
+  "feature_files": ["<list of promoted .feature file paths in {feature_target_dir}>"]
+}
+```
+
+Spawn the BDD-Step-Writer:
+
+```
+Agent(
+  name="bdd-step-writer",
+  subagent_type="general-purpose",
+  model="sonnet",
+  team_name="swarm-impl",
+  mode="bypassPermissions",
+  prompt="[context bundle]\n\n"
+         "TEST PLAN CONTEXT:\n{TEST_PLAN}\n\n"
+         "BDD FRAMEWORK INFO:\n{bdd_framework_info}\n\n"
+         "Your task: generate step definitions for all unimplemented steps in "
+         "the .feature files listed in bdd_framework_info.feature_files. Write step "
+         "definitions to {step_dir}. Use the test plan personas and scenario intent "
+         "to name steps accurately. Fill in step definitions with actual assertions: "
+         "Given steps set up preconditions, When steps perform the user action, Then steps "
+         "assert the expected outcome. "
+         "Send a BDDStepHandoff message when complete with: feature_files, step_files, "
+         "scenarios_wired, scenarios_skipped, summary, turn_count."
+)
+```
+
+### Step 3.5.5: Collect BDDStepHandoff and Shutdown
+
+Wait for the `BDDStepHandoff` message from bdd-step-writer. Record:
+- `step_files` — for Phase 7 (Verifier scope) and swarm-report.md
+- `scenarios_skipped` — log to `{run_dir}/bdd-step-handoff.json` with skip reasons from `summary`
+
+Store `{bdd_framework_info}` in Lead state — it is passed to the Verifier in Phase 7.
+
+```
+SendMessage(type="shutdown_request", recipient="bdd-step-writer", content="Phase 3.5 complete.")
+```
+
+Log Phase 3.5 completion to `{run_dir}/.swarm-run` (append):
+```json
+{
+  "phase": "3.5",
+  "status": "complete",
+  "feature_files_promoted": <count>,
+  "step_files_created": <count>,
+  "bdd_setup_installed": <true|false>
+}
+```
+
+---
+
 ## Phase 4: Parallel Review
 
 ### Step 4.1: Shutdown Pipeline Team and Architect
@@ -1198,7 +1358,9 @@ Agent(name="skill-reviewer", subagent_type="general-purpose", model="sonnet",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[skill-reviewer prompt — include skill validation checklist]")
 
-# Conditional: only if incremental plan file found via Branch-header matching
+# Conditional: only if incremental plan file found
+# If Phase 0 Step 0.4.5 already set {plan_file_path}, reuse it — do not re-discover.
+# Otherwise discover via Branch-header matching (search {memory_dir}/plans/ for **Branch:** match).
 Agent(name="plan-adherence", subagent_type="code-quality:plan-adherence", model="opus",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[plan-adherence prompt from agent-prompts.md]")
@@ -1576,8 +1738,10 @@ incremental plan file.
 
 ### Step 5.5.1: Discover the Plan File
 
-Use the same Branch-header matching from Phase 4: search `{memory_dir}/plans/` for a file
-whose `**Branch:**` field matches the swarm's feature branch. Fall back to branch-slug filename
+If Phase 0 Step 0.4.5 already set `{plan_file_path}`, reuse it directly — no re-discovery needed.
+
+Otherwise, use Branch-header matching: search `{memory_dir}/plans/` for a file whose
+`**Branch:**` field matches the swarm's feature branch. Fall back to branch-slug filename
 matching if no header match is found.
 
 ### Step 5.5.2: Cross-Reference Tasks Against Cumulative Diff
@@ -1607,6 +1771,8 @@ Agent(
     - Check off tasks that were completed ([x])
     - Mark tasks skipped by user decision as [SKIPPED by user]
     - Mark tasks blocked due to unresolved issues as [BLOCKED: reason]
+    - Do NOT modify the ## Test Plan section or any content below it —
+      it is a machine-readable annotation consumed by downstream skills.
     Reconciliation results: {reconciliation_summary}"
 )
 ```
@@ -1746,7 +1912,12 @@ SendMessage(type="shutdown_request", recipient="lessons-extractor",
 Agent(name="verifier", subagent_type="code-quality:test-runner", model="haiku",
      team_name="swarm-impl",
      prompt="[context bundle]\n\n[verifier prompt from agent-prompts.md]\n\n"
-            "BASELINE: {baseline from Phase 0.1}")
+            "BASELINE: {baseline from Phase 0.1}\n\n"
+            "{if bdd_framework_info is set:}"
+            "BDD FRAMEWORK INFO:\n{bdd_framework_info}\n\n"
+            "Run BOTH the unit test suite AND the BDD acceptance suite. "
+            "BDD failures are blockers on the same terms as unit test failures. "
+            "{end if}")
 ```
 
 The verifier runs the full test suite and lint. It compares results against the Phase 0 baseline:
@@ -1754,6 +1925,10 @@ The verifier runs the full test suite and lint. It compares results against the 
 - Same number of passing tests or more: PASS
 - Fewer passing tests than baseline: FAIL (regression)
 - Same number of failing tests as baseline (pre-existing): note, do not fail
+
+If `{bdd_framework_info}` is set (Phase 3.5 ran), the Verifier also runs the BDD acceptance
+suite using the framework's test command. BDD suite failures are treated identically to unit
+test failures — they block completion and trigger the same fix/retry protocol.
 
 ### Step 7.2: Quality Gate
 
@@ -2011,6 +2186,7 @@ TeamCreate:
 | 3 | reviewer | general-purpose | opus | default | No |
 | 3 | test-writer | general-purpose | sonnet | bypassPermissions | Yes |
 | 3 | test-runner | code-quality:test-runner | haiku | default | No |
+| 3.5 | bdd-step-writer (conditional) | general-purpose | sonnet | bypassPermissions | Yes |
 | 4 | security-reviewer | code-quality:security | opus | default | No |
 | 4 | qa-reviewer | code-quality:qa | opus | default | No |
 | 4 | code-reviewer | code-quality:code-reviewer | sonnet | default | No |
@@ -2034,7 +2210,7 @@ TeamCreate:
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 26 (21 core + 5 optional domain reviewers).
+Maximum agent count: 27 (21 core + 5 optional domain reviewers + 1 optional BDD-Step-Writer).
 Minimum agent count: 21 (all domain reviewers skipped, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)

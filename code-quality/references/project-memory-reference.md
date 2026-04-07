@@ -2,7 +2,7 @@
 
 > **Cross-reference note:** This file is referenced by multiple skills and commands. When editing, check all consumers.
 > Consumers — Skills: swarm (+ references), speculative, unfuck, map-reduce, incremental-planning, deep-research, index-repo,
-> roadmap, pr-review, plan-review, quality-gate, bug-investigation, file-audit, fix, summarize. Commands: session-start, session-end, review-project.
+> roadmap, pr-review, plan-review, quality-gate, bug-investigation, file-audit, fix, summarize, test-plan. Commands: session-start, session-end, review-project.
 
 Canonical definitions for project memory conventions. All memory-aware skills and commands in this plugin reference
 this file. Do not maintain ad-hoc memory conventions elsewhere — point here.
@@ -100,6 +100,8 @@ RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
 | Audit trail directories | `{memory_dir}/{skill}/{run-id}/` | `hack/swarm/feat-auth-1711388400/` |
 | Report/plan filenames | `{memory_dir}/{type}/{run-id}-<topic>.md` | `hack/plans/feat-auth-1711388400-scope.md` |
 | Git branch names | `{skill}/{run-id}-<task-slug>` or `{skill}/{run-id}` | `swarm/feat-auth-1711388400-api` |
+| Test plan documents | `{memory_dir}/test-plans/{run-id}.md` | `hack/test-plans/feat-auth-1711388400.md` |
+| Staged feature files | `{memory_dir}/test-plans/{run-id}-features/` | `hack/test-plans/feat-auth-1711388400-features/` |
 
 ### Non-Scope
 
@@ -173,6 +175,7 @@ artifact type's directory. This convention keeps active artifact scans clean whi
 Examples:
 - `hack/plans/done/feat-auth-1711388400-scope.md`
 - `hack/swarm/done/feat-fix-skill-1775231207/`
+- `hack/test-plans/done/feat-auth-1711388400.md`
 - `hack/unfuck/done/root-20260218/`
 
 ### Current State
@@ -186,7 +189,10 @@ Skills scanning for active artifacts **MUST** exclude `done/` subdirectories to 
 archived content. Specifically:
 
 - `/summarize` Phase 0 Path B: include `done/` artifacts but label them "(archived)" — Phase 3
-  is skipped for archived artifacts (summary and audit still run)
+  is skipped for archived artifacts (summary and audit still run); exclude `test-plans/done/` when
+  scanning `{memory_dir}/test-plans/` for active test plan artifacts
+- `/swarm` Phase 0: reads test plan documents referenced by plan file annotations in
+  `{memory_dir}/test-plans/` (excludes `test-plans/done/`)
 - `/swarm` Phase 4 Plan Adherence: when searching `{memory_dir}/plans/` for plan files matching a
   branch header, exclude `plans/done/`
 - `/swarm` Phase 5.5 Plan Reconciliation: same exclusion as Plan Adherence

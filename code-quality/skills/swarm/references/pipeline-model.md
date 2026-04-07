@@ -316,6 +316,29 @@ messages show `status: pass`. The Lead sends shutdown requests to all 4 pipeline
 Architect before spawning the Phase 4 review team. The Architect's clarification role ends at
 Phase 3 completion.
 
+### Phase 3.5: BDD Step Writing (conditional)
+
+**Condition:** The plan file contains a `## Test Plan` section that lists Feature Files.
+
+**Timing:** After all Phase 3 components complete (pipeline team shut down), before Phase 4.
+
+```
+Lead spawns (single agent):
+  bdd-step-writer  (general-purpose, sonnet, write access)
+    -- reads .feature files promoted to source tree at the start of Phase 3.5
+    -- reads implementation output from Phase 3
+    -- writes step definition files wired to all scenarios
+    -- sends BDDStepHandoff to Lead on completion
+```
+
+The BDD-Step-Writer operates on the final state of the source tree after Phase 3. It receives the
+paths to all promoted `.feature` files and writes step definitions for each scenario. Scenarios
+that cannot be wired (e.g., missing implementation hooks) are noted in `scenarios_skipped` with
+a reason. The Lead reads the `BDDStepHandoff` and proceeds to Phase 4 — BDD step files are
+included in the set of modified files passed to Phase 4 reviewers.
+
+When no `## Test Plan` section is present in the plan file, Phase 3.5 is skipped entirely.
+
 ### Phase 4: Review Team Spawn
 
 Spawn all Phase 4 reviewers simultaneously at the start of Phase 4:
@@ -384,6 +407,7 @@ Single agent, shut down after it sends `VerificationResult`.
 | 2.5 | Security Design Reviewer | 2 |
 | 2.7 | Speculative Competitors + Judge (conditional) | 2-5 + Lead |
 | 3 | Architect (standby) + Implementer, Reviewer, Test-Writer, Test-Runner | 6 (5 + Lead) |
+| 3.5 | BDD-Step-Writer (conditional) | 2 (1 + Lead) |
 | 4 | Security, QA, Code-Reviewer, Performance (+ optionals) | 5-10 + Lead |
 | 4.5 | Structural Analyst ×2 | 3 (2 + Lead) |
 | 5 | Fixer, Test Coverage Agent, then Code-Simplifier | 3 + Lead |
