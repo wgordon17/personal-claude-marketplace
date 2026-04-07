@@ -332,6 +332,11 @@ Generate `{run-id}` per the Run-ID Naming Convention in `code-quality/references
 **Do NOT create a `hack/` directory if one doesn't exist.** Only write to confirmed existing
 memory directories or the `~/.claude/` fallback.
 
+**Fallback limitation:** When the `~/.claude/` fallback is used, downstream skills validate
+test plan paths against their own `{memory_dir}/test-plans/`. If the downstream skill's
+`{memory_dir}` differs from `~/.claude/`, path validation rejects the test plan (empty string
+fallback). The test plan document remains useful standalone for manual UAT reference.
+
 Print: "Writing test plan to: `{output_path}`"
 
 ### Document Format
@@ -560,48 +565,6 @@ Next: Run /swarm to implement the plan. /swarm will automatically discover
 this test plan from the plan file annotation.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
-
----
-
-## Downstream Skill Integration
-
-This section documents how downstream skills discover and use the test plan. It is
-informational — no action required by this skill beyond the plan file annotation in Phase 6.
-
-### Discovery Mechanism
-
-All downstream skills that read the plan file will find the `## Test Plan` section. No
-separate discovery mechanism is required — the plan file is the single source of truth.
-
-### `/swarm` Integration
-
-When `/swarm` Phase 0 finds a `## Test Plan` section in the plan file:
-
-1. **Load test plan as `{TEST_PLAN}` context** — Read the test plan document from `**Test Plan:**`
-   path. Inject into Implementer, Test-Writer, and Reviewer agent prompts.
-2. **If BDD mode:**
-   - Copy `.feature` files from `**Feature Files:**` path into source tree (`**BDD Feature Dir:**`)
-   - If `**BDD Setup Needed:** yes` → run the install command embedded in the **BDD Setup Needed:** field value on the feature branch
-   - Run `**BDD Scaffold Command:**` to generate step definition skeletons
-   - Add BDD-Step-Writer to the agent team roster
-
-### UAT Context Injection Points
-
-When `/swarm` injects `{TEST_PLAN}` into agent prompts:
-
-**Implementer agent** — receives:
-> "The user will manually validate these scenarios after implementation. Ensure your
-> implementation handles each scenario's preconditions and expected outcomes. Do not
-> implement features that technically work but would fail the user walkthrough."
-
-**Test-Writer agent** — receives:
-> "These are the user journeys being validated. Ensure your unit tests cover the underlying
-> logic for each scenario. Your tests should verify the same paths the user will manually
-> check, at the code level rather than the UI level."
-
-**Reviewer agent** — receives:
-> "Cross-reference your review against the UAT scenarios. Flag any implementation gaps where
-> a scenario's preconditions or expected outcomes are not handled."
 
 ---
 
