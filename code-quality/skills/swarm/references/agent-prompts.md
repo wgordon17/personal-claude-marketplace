@@ -2650,8 +2650,6 @@ Send summary to lead when complete.
 
 ---
 
-## Phase 3.5 Pipeline Agent (Write Access)
-
 ## Agent 3.5: BDD-Step-Writer
 
 **Type:** `general-purpose` | **Model:** sonnet | **Mode:** bypassPermissions | **Single-use (Phase 3.5 only)**

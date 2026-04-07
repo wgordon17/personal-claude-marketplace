@@ -59,7 +59,13 @@ Read and parse the input plan file before doing anything else.
 
 ### Actions
 
-1. **Read the plan file** — Extract:
+1. **Validate plan file path** — Before reading the plan file, normalize the provided path
+   (resolve `..` segments, collapse `./` sequences). Verify the normalized path falls within
+   the current working directory. If the path escapes the CWD boundary, stop with an error:
+   "Plan file path is outside the project boundary. Provide a path within the current
+   working directory."
+
+2. **Read the plan file** — Extract:
    - **Branch header** (`**Branch:**` field) for downstream cross-session discovery
    - **Goal** (`**Goal:**` field) — 1-sentence feature description
    - **Tech Stack** (`**Tech Stack:**` field) — language/framework context
@@ -68,20 +74,25 @@ Read and parse the input plan file before doing anything else.
      "This plan file already has a test plan. Run `/test-plan` on a fresh plan or delete
      the `## Test Plan` section from `{plan_file}` to regenerate."
 
-2. **Read project memory** — Detect `{memory_dir}` per
+3. **Read project memory** — Detect `{memory_dir}` per
    `code-quality/references/project-memory-reference.md` (Directory Detection and Worktree
    Resolution sections). Then read:
    - `{memory_dir}/PROJECT.md` — architectural decisions, domain context
    - `{memory_dir}/LESSONS.md` — past lessons (if exists). Silently incorporate.
 
-3. **Identify user-facing tasks** — Not every plan task represents a user-visible behavior.
+4. **Generate `{run-id}`** — Generate the run-id early so it is available for the staging file
+   in Phase 2. Follow the Run-ID Naming Convention in
+   `code-quality/references/project-memory-reference.md`: `{branch-slug}-{unix-timestamp}`
+   (e.g., `feat-auth-1711388400`).
+
+5. **Identify user-facing tasks** — Not every plan task represents a user-visible behavior.
    Scan task titles and steps for user-facing surface area:
    - UI changes, API endpoints, CLI commands, configuration options
    - Error messages, validation rules, success states
    - Tasks marked as "internal refactor" or "infrastructure" with no user-visible changes
      are noted but do not generate scenarios
 
-4. **Detect BDD infrastructure** — Search project dependency files for BDD tooling:
+6. **Detect BDD infrastructure** — Search project dependency files for BDD tooling:
 
    | File | Pattern | Framework |
    |---|---|---|
@@ -96,7 +107,7 @@ Read and parse the input plan file before doing anything else.
    Search using Grep with `output_mode: "files_with_matches"`. Record detected framework
    (or `none`) and the detected file path for Phase 5 (BDD Staging).
 
-5. **Print ingestion summary:**
+7. **Print ingestion summary:**
 
    ```
    Plan ingested: {plan_file}
@@ -247,10 +258,11 @@ as not testable or incomplete to the user for revision.
 ### Scenario Persistence
 
 Write the finalized scenario list to a staging file before proceeding to Phase 3. Use the
-memory directory detected in Phase 0: `{memory_dir}/test-plans/scenarios-draft.md` (fallback:
-`~/.claude/test-plans/scenarios-draft.md`). This protects against context recycling loss during
-the multi-step Phase 3-4 interval. Phase 4 reads from this file instead of memory. After Phase 4
-writes the full test plan document, delete the staging file (`scenarios-draft.md`).
+memory directory detected in Phase 0: `{memory_dir}/test-plans/{run-id}-scenarios-draft.md`
+(fallback: `~/.claude/test-plans/{run-id}-scenarios-draft.md`). The `{run-id}` was generated
+in Phase 0 Step 4. This protects against context recycling loss during the multi-step Phase 3-4
+interval and ensures concurrent `/test-plan` runs do not collide. Phase 4 reads from this file
+instead of memory. After Phase 4 writes the full test plan document, delete the staging file.
 
 ---
 
@@ -327,7 +339,7 @@ Use the two-stage fallback:
 2. **If no memory dir found**: fall back to `~/.claude/test-plans/{run-id}.md`
    (create directory if it doesn't exist)
 
-Generate `{run-id}` per the Run-ID Naming Convention in `code-quality/references/project-memory-reference.md`: `{branch-slug}-{unix-timestamp}` (e.g., `feat-auth-1711388400`).
+Use the `{run-id}` generated in Phase 0 Step 4.
 
 **Do NOT create a `hack/` directory if one doesn't exist.** Only write to confirmed existing
 memory directories or the `~/.claude/` fallback.

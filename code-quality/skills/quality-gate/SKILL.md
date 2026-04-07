@@ -75,7 +75,7 @@ trailing slashes) and verify it falls within `{memory_dir}/test-plans/`. If the 
 that directory, set `{plan_test_plan}` to empty string and log a warning:
 "Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan}
 to empty string." If the path is valid but the file does not exist, set `{plan_test_plan}` to
-empty string (graceful fallback — no warning needed). If the path is valid and the file exists,
+empty string (graceful fallback — no warning). If the path is valid and the file exists,
 read the test plan file and store its content as `{plan_test_plan}`. This
 value is available to all subsequent layers (Layer 1 Rounds 2 and 5, and Layer 2 Subagent A).
 If no plan file is found for the current branch, set `{plan_test_plan}` to empty string.
@@ -413,6 +413,8 @@ Collect:
 - `{plan_test_plan}` — UAT test plan content loaded in Step 0. Pass to Subagent A
   (Completeness Reviewer) only. Value is the test plan file content or empty string if Step 0
   did not load a test plan. Subagent B does NOT receive this context.
+  When `{plan_test_plan}` is empty string, omit the `UAT TEST PLAN` section entirely from the
+  Subagent A prompt — do not render the heading, label, or empty placeholder.
 
 ### Subagent Execution (2 passes each — BOTH mandatory)
 

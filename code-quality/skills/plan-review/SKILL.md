@@ -85,8 +85,7 @@ If the plan file contains a `## Test Plan` section, extract the `**Test Plan:**`
 Normalize the path (resolve `..` components) and verify it falls within `{memory_dir}/test-plans/`.
 If the normalized path escapes that directory, set `{plan_test_plan}` to empty string and log a
 warning: "Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string."
-If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string (graceful
-fallback — no error).
+If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string (graceful fallback — no warning).
 If valid and readable, read the file and store its content as `{plan_test_plan}`.
 If no `## Test Plan` section exists in the plan file, set `{plan_test_plan}` to empty string.
 
@@ -185,6 +184,9 @@ The Unknown Unknowns Reviewer additionally receives: `{plan_open_questions}`, `{
 `{plan_decisions}`.
 
 The Scope & Completeness Reviewer and Feasibility Reviewer additionally receive: `{plan_test_plan}`.
+When `{plan_test_plan}` is empty string, omit the `## UAT Context` section entirely from the
+Feasibility and Scope & Completeness reviewer prompts — do not render the heading, `TEST PLAN:`
+label, or empty placeholder.
 
 ### Domain Reviewers (2 parallel, with plan-specific reviewers above)
 

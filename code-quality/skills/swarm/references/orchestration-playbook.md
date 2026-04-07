@@ -176,8 +176,10 @@ discovery. If Step 0.4 found no plan file, skip this step entirely.
    - Normalize and validate it falls within `{memory_dir}/test-plans/`
    - Store as `{feature_files_staging_path}`
    - Record `phase_3_5_enabled = true`
-5. **If `**BDD Setup Needed:** yes`:** extract and record the install command (the value
-   after `: ` on that line, e.g., `uv add --dev pytest-bdd==7.x.x`)
+5. **If `**BDD Setup Needed:** yes`:** extract the install command from the
+   backtick-delimited value within the parenthetical on that line (e.g., from
+   `**BDD Setup Needed:** yes (if yes: \`uv add --dev pytest-bdd==7.x.x\`)`,
+   extract `uv add --dev pytest-bdd==7.x.x`) and record it as `{bdd_install_cmd}`
 6. Store `{plan_file_path}` for Phase 4 (Plan Adherence) and Phase 5.5 (Plan Reconciliation)
    to reuse — both phases skip re-discovery when this is already set
 
@@ -1217,6 +1219,14 @@ For each `.feature` file in `{feature_files_staging_path}`:
 ### Step 3.5.3: BDD Dependency Installation
 
 If `**BDD Setup Needed:** yes` AND an install command was recorded in Step 0.4.5:
+
+**Before executing, verify `{bdd_install_cmd}` starts with one of the known package
+manager prefixes:** `uv add`, `go get`, `npm install`, `cargo add`, `gem install`,
+or a Maven/Gradle dependency command. If it does not match any known prefix, log a
+warning to `{run_dir}/errors.log` and skip the remaining Phase 3.5 steps (3.5.3
+through 3.5.5) — proceed directly to Phase 4. The promoted `.feature` files from
+Step 3.5.2 remain in the source tree but no step definitions will be generated.
+`{bdd_framework_info}` is not set, so the Phase 7 Verifier skips BDD test execution.
 
 ```bash
 {bdd_install_cmd}   # e.g., uv add --dev pytest-bdd==7.x.x

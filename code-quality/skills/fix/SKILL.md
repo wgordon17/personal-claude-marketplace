@@ -102,7 +102,7 @@ test plan. This follows the same branch-header matching algorithm as /swarm Phas
    `{plan_test_plan}` to empty string and log a warning: "Warning: test plan path escapes
    {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string."
 5. If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string
-   (graceful fallback — no error).
+   (graceful fallback — no warning).
 6. If the path is valid and the file exists, read the file and store its content as
    `{plan_test_plan}`.
 7. If no plan file is found, or no `## Test Plan` section exists, set `{plan_test_plan}` to
@@ -378,10 +378,12 @@ After all investigators complete, route each result by verdict:
 | `spike_confirmed` | Queue plan update for Phase 3 |
 | `spike_partial` | Queue plan update with partial evidence for Phase 3; note evidence gaps in report |
 | `spike_invalidated` | Present to user via `AskUserQuestion` with three options: (1) Update plan with corrected information, (2) Skip — address during implementation, (3) Defer to `/incremental-planning` for replanning |
+| `uat_validated` | Route to `findings_fixed` bucket — UAT scenario confirmed |
+| `uat_mismatch` | Present mismatch to user via `AskUserQuestion` with scenario name, expected vs found. User chooses fix → `findings_fixed`; user defers → `user-deferred` |
 | Agent failure (timeout, crash, empty output, or unparseable response) | Record all findings assigned to that agent as `blocked` with reason "investigator agent failed"; note in report |
 
 **AskUserQuestion unavailable fallback:** If `AskUserQuestion` is unavailable (non-interactive
-environment), record all `refinement_needed` and `spike_invalidated` findings as `user-deferred`
+environment), record all `refinement_needed`, `spike_invalidated`, and `uat_mismatch` findings as `user-deferred`
 with reason "non-interactive — AskUserQuestion unavailable". For `spike_invalidated` findings,
 also preserve the spike verdict and plan impact details in the reason field so they surface in
 the Phase 5 DEFERRED section.
@@ -394,13 +396,13 @@ report regardless of verdict.
 
 **Handling unverifiable findings:** If an investigator receives a finding with `verifier_verdict: "needs_context"` and cannot verify it (insufficient evidence to confirm or deny), it returns verdict `invalid` with reason "could not verify — insufficient evidence". The lead routes this to the `unverified_unresolved` bucket (not `findings_invalid`).
 
-**UAT validation verdict routing:** For UAT validation findings, the standard verdict types apply
-with these UAT-specific interpretations:
-- `resolution` means the UAT scenario was verified through code inspection or test execution —
-  the implementation matches the UAT scenario expectations.
-- `refinement_needed` means the implementation differs from UAT scenario expectations — present
-  the specific mismatch to the user via `AskUserQuestion` with the scenario name, what was expected,
-  and what was found.
+**UAT validation verdict routing:** For UAT validation findings, investigators return one of two
+explicit verdict types:
+- `uat_validated`: The UAT scenario was verified through code inspection or test execution —
+  the implementation matches the UAT scenario expectations. Lead routes to `findings_fixed` bucket.
+- `uat_mismatch`: The implementation differs from UAT scenario expectations — present the specific
+  mismatch to the user via `AskUserQuestion` with the scenario name, what was expected, and what
+  was found.
 
 ### Conflict Detection
 
@@ -500,6 +502,9 @@ with 7 outcome buckets to cover all standalone /fix outcomes.
 | Agent failure (investigator crashed, timed out, or returned unparseable output) | `blocked` |
 | Unverified, investigator confirmed valid | route through normal triage (direct fix / needs refinement / etc.) |
 | Unverified, investigator could not resolve | `unverified_unresolved` |
+| UAT validated (`uat_validated` verdict) | `findings_fixed` |
+| UAT mismatch — user chose fix implementation | `findings_fixed` |
+| UAT mismatch — user chose defer | `user-deferred` |
 
 ### Verification Check
 

@@ -132,7 +132,7 @@ directory, set `{plan_test_plan}` to `""` (empty string) and log a warning:
 "Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string."
 
 If the path is valid, attempt to read the file. If the file does not exist, set
-`{plan_test_plan}` to `""` (empty string) — graceful fallback. If the file exists and is
+`{plan_test_plan}` to `""` (empty string) (graceful fallback — no warning). If the file exists and is
 readable, read its contents and store as `{plan_test_plan}`.
 
 If the plan file has no `## Test Plan` section, or if no plan file was found, set
@@ -246,6 +246,11 @@ Agent(
 
 The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{plan_test_plan}`,
 `{diff}`, `{changed_files}`, `{pr_description}`, `{claude_md_rules}`, and `{contributing_md_rules}`.
+
+When `{plan_test_plan}` is empty string, omit the `UAT CROSS-REFERENCE` section entirely from
+the QA Reviewer prompt, omit the `UAT SCENARIOS` section from the Correctness Reviewer and Plan
+Adherence Reviewer prompts — do not render the heading, label, or empty placeholder in any of
+these reviewers.
 
 ### Collect Findings
 

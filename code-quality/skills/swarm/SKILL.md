@@ -317,7 +317,9 @@ tasks. The Lead decides based on the dependency graph — never based on cost or
 (Not to be confused with /speculative's internal Phase 3.5 synthesis within Phase 2.7.)
 
 **Skip when:** The plan file has no `## Test Plan` section, OR the `## Test Plan` section has no
-`**Feature Files:**` path. If `{TEST_PLAN}` is empty string (failed path validation), skip entirely.
+`**Feature Files:**` path, OR the `**Feature Files:**` path fails boundary validation (path
+escapes `{memory_dir}/test-plans/`). If `{TEST_PLAN}` is empty string (failed path validation),
+skip entirely.
 
 When triggered, run the following steps after Phase 3 completes and before Phase 4 begins:
 
@@ -341,11 +343,11 @@ as recorded — do not strip versions.
 
 ```json
 {
-  "framework": "<BDD framework name>",
+  "framework": "<value of **BDD Framework:** from test plan annotation>",
   "feature_dir": "<{feature_target_dir}>",
-  "step_dir": "<BDD step definitions directory>",
-  "scaffold_cmd": "<BDD scaffold command from annotation>",
-  "test_cmd": "<BDD test command for the detected framework>",
+  "step_dir": "<value of **BDD Step Dir:** from test plan annotation>",
+  "scaffold_cmd": "<value of **BDD Scaffold Command:** from test plan annotation>",
+  "test_cmd": "<value of **BDD Test Command:** from test plan annotation>",
   "feature_files": ["<list of promoted .feature files>"]
 }
 ```
