@@ -22,7 +22,7 @@ Spawn the `jira:jira-agent` agent for background Jira operations from plan tasks
 Spawn jira:jira-agent to create a MGMT task for X under epic MGMT-YYYYY
 ```
 
-The agent carries full OSAC conventions and returns the created issue key.
+The agent carries full OSAC conventions and returns the created issue URL.
 
 ## MCP Server Setup
 
@@ -62,7 +62,7 @@ Plan tasks can reference the jira agent directly. No changes to existing skills 
 
 ```
 ## Task: Create MGMT tracking issue
-Spawn jira:jira-agent to create a MGMT Story under epic MGMT-12345 with summary "X" and description per osac-conventions.md templates. Return the created key.
+Spawn jira:jira-agent to create a MGMT Story under epic MGMT-12345 with summary "X" and description per osac-conventions.md templates.
 ```
 
 When using `/incremental-planning` for OSAC work, include Jira card creation as plan tasks to keep Jira synchronized with implementation.

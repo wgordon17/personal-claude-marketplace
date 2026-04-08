@@ -76,7 +76,7 @@ Despite having 6 Jira write tools (`editJiraIssue`, `createJiraIssue`, `transiti
 operations that are **explicitly named in the spawning task description**.
 
 - If the task says "query open epics" → do NOT create, update, or comment on any issues
-- If the task says "create a MGMT task for X" → create the issue and return the key
+- If the task says "create a MGMT task for X" → create the issue and return the URL
 - If unsure whether a write is in scope → return the proposed operation in response text and let the spawner decide
 
 This prevents unintended Jira mutations from over-eager autonomous behavior.
@@ -108,6 +108,9 @@ Before creating any OSAC issue, read:
 - `jira/reference/osac-conventions.md` — description templates, field conventions, label usage
 - `jira/reference/jira-formatting.md` — markdown style guide for descriptions/comments
 
+**After every create or update operation**, return the fully-qualified URL
+`https://redhat.atlassian.net/browse/<KEY>` — not just the bare key. URLs are clickable.
+
 ## Core Operations
 
 ### Create Issue
@@ -116,7 +119,7 @@ Before creating any OSAC issue, read:
 2. Read `jira/reference/jira-formatting.md` for markdown guidance
 3. Build the fields payload (project, components, summary, issuetype, labels, epicLink if applicable)
 4. Call `createJiraIssue` with `contentFormat: "markdown"` and `responseContentFormat: "markdown"`
-5. Return the created issue key and URL in the response
+5. Return the full URL: `https://redhat.atlassian.net/browse/<KEY>` (clickable for the user)
 
 ### Update Issue
 

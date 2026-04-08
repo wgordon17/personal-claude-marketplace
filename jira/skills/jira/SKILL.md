@@ -128,6 +128,9 @@ results if they appear unexpectedly in `searchAtlassian` output.
 
 ## CRUD Operations
 
+**After every create or update operation**, return the fully-qualified URL
+`https://redhat.atlassian.net/browse/<KEY>` — not just the bare key. URLs are clickable.
+
 ### Creating Issues
 
 When creating a MGMT/OSAC issue, always set:
