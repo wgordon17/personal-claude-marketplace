@@ -41,7 +41,7 @@ Two-tier taxonomy:
 - "Two valid architectures exist (X vs Y) with different tradeoffs" — genuine design decision
 - "This changes user-facing behavior — should the API return 404 or 200 with empty body?" — UX decision
 - "This requires choosing between backward compatibility and correctness" — scope decision
-- "The BDD annotation says Cucumber.js but the project uses Vitest" inside a PROVENANCE block
+- "The BDD annotation says Cucumber.js but the project uses Vitest" in a PROVENANCE-marked section
   — user-confirmed decision, must escalate not auto-fix
 
 **What is NOT `needs-input`:**
