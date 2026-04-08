@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "3.1.0"
+    "version": "3.2.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -104,6 +104,17 @@
       "description": "GitHub MCP server with full toolsets for repository management, code security, and workflow automation",
       "category": "productivity",
       "tags": ["github", "mcp", "issues", "pull-requests", "code-security"],
+      "author": {
+        "name": "wgordon17"
+      }
+    },
+    {
+      "name": "jira",
+      "version": "1.0.0",
+      "source": "./jira",
+      "description": "Jira integration for issue tracking, querying, and management — OSAC defaults with full redhat.atlassian.net support",
+      "category": "productivity",
+      "tags": ["jira", "mcp", "issue-tracking", "osac"],
       "author": {
         "name": "wgordon17"
       }

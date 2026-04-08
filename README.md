@@ -1,6 +1,6 @@
 # Personal Claude Marketplace
 
-Personal Claude Code plugins: LSP servers, code quality agents, development utilities, git tools, and GitHub MCP integration.
+Personal Claude Code plugins: LSP servers, code quality agents, development utilities, git tools, GitHub MCP integration, and Jira issue tracking.
 
 ## Plugins
 
@@ -81,6 +81,18 @@ Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__gith
 
 **Enabled toolsets:** `default`, `actions`, `orgs`, `labels`, `notifications`, `discussions`, `gists`, `projects`, `code_security`, `secret_protection`, `dependabot`, `security_advisories`, `github_support_docs_search`
 
+### Jira
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| jira | Jira integration for issue tracking, querying, and management — OSAC defaults with full redhat.atlassian.net support | 1 skill, 1 agent, 3 reference files | [README](jira/README.md) |
+
+Enables `mcp__plugin_jira_mcp-atlassian-prod__*` tools via Atlassian Rovo MCP server. Defaults to OSAC scope (project=MGMT, component=OSAC). Operates across any project on request.
+
+**Skill:** `/jira:jira` — Interactive Jira queries, issue management, and CRUD
+
+**Agent:** `jira:jira-agent` — Spawnable specialist for plan tasks and background Jira operations
+
 ### Development Guard
 
 | Plugin | Description | Components | Docs |
@@ -107,6 +119,7 @@ claude plugin install dev-guard@personal-claude-marketplace
 claude plugin install code-quality@personal-claude-marketplace
 claude plugin install git-tools@personal-claude-marketplace
 claude plugin install github-mcp@personal-claude-marketplace
+claude plugin install jira@personal-claude-marketplace
 
 # Install LSP plugins (pick what you need)
 claude plugin install pyright-uvx@personal-claude-marketplace
@@ -125,6 +138,11 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 ### For GitHub MCP
 
 - **GITHUB_PERSONAL_ACCESS_TOKEN**: Set in your environment — Required for MCP server authentication. Needs `repo`, `workflow`, `read:org` scopes (or broader) depending on toolsets used.
+
+### For Jira MCP
+
+- **Atlassian Rovo OAuth**: Run `/mcp` and authenticate the `mcp-atlassian-prod` server on first use. OAuth credentials are keyed by plugin name — must re-authenticate even if previously authenticated via `hcm-jira-administrator-agent` (the `jira` plugin uses a separate credential entry).
+- **Optional write-tool approval**: Add desired write tools to `~/.claude/settings.local.json` under `permissions.allow` to skip per-use prompts. See [jira/README.md](jira/README.md) for the full JSON snippet.
 
 ### For LSP Plugins
 
@@ -214,6 +232,7 @@ These MCP servers enhance functionality but are not required for core operation 
 | MCP Server | Plugin | Dependency | Purpose |
 |------------|--------|------------|---------|
 | **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
+| **[Atlassian Rovo MCP](https://mcp.atlassian.com/v1/mcp)** | jira | **Hard** (plugin is the server) | Full Jira API: issue query, create, update, transitions, comments, worklogs via `mcp__plugin_jira_mcp-atlassian-prod__*` tools. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
 | **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode. Alternative tools work. |
@@ -238,13 +257,14 @@ No hard dependencies on external plugins remain. All previously referenced exter
 
 Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** = degraded without it.
 
-| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless |
-|--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|
-| **code-quality** | soft | HARD | soft | soft | soft | soft | -- | -- |
-| **git-tools** | -- | soft | -- | -- | -- | HARD | soft | HARD |
-| **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- |
-| **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- |
-| **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- |
+| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | Atlassian Rovo |
+|--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|----------------|
+| **code-quality** | soft | HARD | soft | soft | soft | soft | -- | -- | -- |
+| **git-tools** | -- | soft | -- | -- | -- | HARD | soft | HARD | -- |
+| **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **jira** | -- | -- | -- | -- | -- | -- | -- | -- | HARD |
+| **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.
 
