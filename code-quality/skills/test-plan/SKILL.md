@@ -92,7 +92,30 @@ Read and parse the input plan file before doing anything else.
    - Tasks marked as "internal refactor" or "infrastructure" with no user-visible changes
      are noted but do not generate scenarios
 
-6. **Detect BDD infrastructure** — Search project dependency files for BDD tooling:
+6. **Detect test runner and BDD infrastructure** — Search project dependency files for both
+   the project's test runner and any existing BDD tooling. Both are needed: the test runner
+   informs Phase 3's BDD framework recommendations; the BDD detection determines whether
+   Phase 3 auto-selects or asks the user.
+
+   **Test runner detection:**
+
+   | File | Pattern | Test Runner |
+   |---|---|---|
+   | `package.json` | `vitest` | Vitest |
+   | `package.json` | `jest` or `@jest/` | Jest |
+   | `package.json` | `mocha` | Mocha |
+   | `pyproject.toml` / `requirements*.txt` | `pytest` | pytest |
+   | `go.mod` | (Go convention) | go test |
+   | `Cargo.toml` | (Rust convention) | cargo test |
+   | `build.gradle` / `pom.xml` | `junit` or `testng` | JUnit / TestNG |
+   | `Gemfile` | `rspec` | RSpec |
+   | `Gemfile` | `minitest` | Minitest |
+
+   Search using Grep with `output_mode: "files_with_matches"`. Record `test_runner`
+   (or `unknown`). If multiple match, prefer the one in test scripts
+   (e.g., `"test": "vitest"` in `package.json` scripts).
+
+   **BDD infrastructure detection:**
 
    | File | Pattern | Framework |
    |---|---|---|
@@ -104,8 +127,8 @@ Read and parse the input plan file before doing anything else.
    | `build.gradle` or `pom.xml` | `cucumber-java` | Java/Cucumber-JVM |
    | `Gemfile` | `cucumber` | Ruby/Cucumber |
 
-   Search using Grep with `output_mode: "files_with_matches"`. Record detected framework
-   (or `none`) and the detected file path for Phase 5 (BDD Staging).
+   Search using Grep with `output_mode: "files_with_matches"`. Record detected BDD
+   framework (or `none`) and the detected file path for Phase 5 (BDD Staging).
 
 7. **Print ingestion summary:**
 
@@ -114,6 +137,7 @@ Read and parse the input plan file before doing anything else.
    Goal: {goal}
    Branch: {branch}
    Tech stack: {tech_stack}
+   Test runner: {test_runner | unknown}
    User-facing tasks: {N} of {total_tasks}
    BDD infra: {framework | none detected}
    ```
@@ -281,28 +305,65 @@ BDD infra detected ({framework} in {file}). Generating UAT document + .feature f
 ```
 
 **If NO BDD infra detected:**
-Ask via `AskUserQuestion`:
 
-"No BDD framework detected in this project. How should I generate the test plan?
+Before presenting options, research BDD integration options that are compatible with the
+project's actual test runner. This prevents recommending frameworks that conflict with the
+existing test setup (e.g., suggesting Cucumber.js for a Vitest project).
 
-Options:
-A) Manual UAT checklist only (recommended for most projects)
+```
+Skill("deep-research", "External: BDD and Gherkin integration options for {test_runner}
+in {tech_stack} projects. Compare: (1) native BDD plugins that integrate directly with
+{test_runner} (e.g., vitest-cucumber-plugin for Vitest, jest-cucumber for Jest, pytest-bdd
+for pytest), (2) standalone BDD frameworks (Cucumber.js, godog, cucumber-rs) and their
+compatibility with {test_runner}, (3) using Gherkin .feature files as specification-only
+documentation (not executable). For each viable option: package name, registry page,
+last release date, open issues count, compatibility notes with {test_runner}, setup
+complexity. Exclude options unmaintained (no release in 12+ months) or incompatible
+with {test_runner}.")
+```
+
+Use the research findings to build a project-aware options list. Present via `AskUserQuestion`:
+
+"No BDD framework detected. Your project uses **{test_runner}** for testing.
+
+Based on research, here are the BDD options compatible with {test_runner}:
+
+A) **Manual UAT checklist only** (no BDD)
    — Human-readable walkthrough with pass/fail checkboxes. No BDD setup required.
 
-B) UAT + generate .feature files only (set up BDD later)
-   — Adds Gherkin .feature files to the test plan doc. BDD framework not installed.
-   — Requires BDD setup before scenarios can be executed automatically.
+B) **Gherkin specification files only** (documentation, not executable)
+   — Generates .feature files as living specifications. Tests remain in {test_runner}.
+   — No additional framework needed.
 
-C) UAT + set up BDD + generate .feature files
-   — Records the BDD framework install command for /swarm to run on the feature branch.
-   — {framework recommendation based on tech stack}
+{If research found a native {test_runner} BDD plugin:}
+C) **{test_runner}-native BDD** ({plugin_name})
+   — {1-sentence from research: what it does, maintenance status}
+   — Tests run through {test_runner}. No second test runner.
 
-Which option? (A/B/C)"
+{If research found a compatible standalone BDD framework:}
+D) **Standalone BDD framework** ({standalone_name})
+   — Adds a separate test runner alongside {test_runner}.
+   — {1-sentence from research: tradeoffs}
+
+{Omit C if no viable native plugin found. Omit D if no compatible standalone found.
+If neither C nor D is viable, note this and explain why.}
+
+Recommendation: {research-informed — prefer native integration (C) over standalone (D)
+over specification-only (B). Recommend A if the plan is simple and BDD adds no value.}
+
+Which option?"
 
 Record the selected mode as `mode`:
 - A → `Manual UAT`
-- B → `UAT + BDD (feature files only)`
-- C → `UAT + BDD (full setup)`
+- B → `UAT + BDD (feature files only)` — set `bdd_framework: none (specification only)`,
+  `BDD Setup Needed: no`. Omit install/scaffold/test commands from annotation.
+- C → `UAT + BDD (native integration)` — use the researched plugin's install/scaffold/test
+  commands. Record `bdd_framework` as the plugin name.
+- D → `UAT + BDD (standalone)` — use the standalone framework's commands.
+
+Store the research-derived `bdd_install_cmd`, `bdd_scaffold_cmd`, `bdd_test_cmd`,
+`bdd_framework`, `bdd_feature_dir`, and `bdd_step_dir` from the selected option.
+For option B, these are all empty/none — Phase 6 handles this format.
 
 ### Exploratory Charter Decision
 
@@ -447,7 +508,8 @@ Write the document to `{output_path}` using the Write tool.
 
 **Skip this phase entirely if mode is `Manual UAT`.**
 
-Run only when mode is `UAT + BDD (feature files only)` or `UAT + BDD (full setup)`.
+Run when mode is any BDD variant: `UAT + BDD (feature files only)`,
+`UAT + BDD (native integration)`, or `UAT + BDD (standalone)`.
 
 ### Feature File Generation
 
@@ -481,7 +543,12 @@ Write each `.feature` file using the Write tool.
 
 ### BDD Toolchain Reference
 
-Record the appropriate scaffold command based on the detected (or user-selected) framework:
+**If Phase 3 ran /deep-research** (no existing BDD infra): use the research-derived values
+stored in Phase 3. The research already identified the correct framework, install commands,
+and compatibility with the project's test runner. Skip this section.
+
+**If Phase 3 auto-selected BDD** (existing BDD infra detected in Phase 0): derive values
+from the detected framework using this fallback table:
 
 | Language | Framework | Install Command | Scaffold Command | Test Command |
 |---|---|---|---|---|
@@ -492,10 +559,13 @@ Record the appropriate scaffold command based on the detected (or user-selected)
 | Java | Cucumber-JVM | `<dependency>io.cucumber:cucumber-java</dependency>` | Run features — auto-generates snippets | `mvn test` |
 | Ruby | Cucumber | `gem install cucumber` | `cucumber --dry-run` — generates undefined step snippets | `bundle exec cucumber` |
 
+This table is a fallback for projects that already have BDD installed. For new BDD setups,
+Phase 3's /deep-research provides test-runner-aware recommendations that supersede this table.
+
 Record:
-- `bdd_install_cmd` — the install command for the detected framework (with version pinning if known)
+- `bdd_install_cmd` — the install command (from research or fallback table)
 - `bdd_scaffold_cmd` — the scaffold command to generate step definition skeletons
-- `bdd_test_cmd` — the command to run the BDD test suite (from the Test Command column above)
+- `bdd_test_cmd` — the command to run the BDD test suite
 - `bdd_framework` — the framework name
 - `bdd_feature_dir` — where `.feature` files will live in the source tree (e.g., `features/`, `tests/acceptance/`)
 - `bdd_step_dir` — where step definitions will live (e.g., `steps/`, `step_definitions/`, `*_test.go`)
@@ -520,15 +590,24 @@ Append to the end of `{plan_file}` using the Edit tool:
 ```markdown
 ## Test Plan
 
+<!-- PROVENANCE: Generated by /test-plan with explicit user confirmation at checkpoints:
+     - Personas: confirmed Phase 1 (AskUserQuestion)
+     - Scenarios: confirmed Phase 2 (AskUserQuestion checkpoint + per-scenario review)
+     - Output Mode & BDD decisions: confirmed Phase 3 (AskUserQuestion)
+     All fields below reflect user-confirmed decisions.
+     Downstream skills: if you disagree with a choice here, classify as needs-input
+     (require user confirmation before changing), not needs-fix. Do not silently
+     overwrite user decisions. -->
+
 **Test Plan:** {output_path}
 **Mode:** {Manual UAT | UAT + BDD}
 **Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if UAT-only)
 **BDD Setup Needed:** {yes | no} (if yes: `{bdd_install_cmd}`)
-**BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if UAT-only)
-**BDD Test Command:** `{bdd_test_cmd}` (omit line if UAT-only)
+**BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if UAT-only or specification-only)
+**BDD Test Command:** `{bdd_test_cmd}` (omit line if UAT-only or specification-only)
 **BDD Framework:** {bdd_framework} (omit line if UAT-only)
 **BDD Feature Dir:** {bdd_feature_dir} (omit line if UAT-only)
-**BDD Step Dir:** {bdd_step_dir} (omit line if UAT-only)
+**BDD Step Dir:** {bdd_step_dir} (omit line if UAT-only or specification-only)
 **Scenarios:** {total scenario count}
 **Personas:** {Primary Persona Name}, {Edge Case Persona Name}
 
@@ -543,6 +622,13 @@ Append to the end of `{plan_file}` using the Edit tool:
 
 **Field label format is fixed.** Downstream skills match on exact bold field names
 (`**Test Plan:**`, `**Mode:**`, `**Feature Files:**`, etc.). Do not reorder or rename.
+
+**Specification-only mode** (Phase 3 option B): When the user chose Gherkin files as
+documentation only (not executable), write:
+- `**BDD Setup Needed:** no (feature files are Gherkin specifications; tests implemented in {test_runner})`
+- `**BDD Framework:** none (specification only)`
+- Include `**BDD Feature Dir:**` (files still exist for documentation)
+- Omit: `**BDD Scaffold Command:**`, `**BDD Test Command:**`, `**BDD Step Dir:**`
 
 The `**BDD Setup Needed:** yes` signal is what `/swarm` Phase 0 uses to decide whether to
 install the BDD framework on the feature branch.
@@ -584,12 +670,13 @@ this test plan from the plan file annotation.
 
 ```
 ### Phase Flow
-Phase 0: Ingest plan file → Phase 1: Map user journeys →
+Phase 0: Ingest plan file (detect test runner + BDD infra) →
+Phase 1: Map user journeys →
 Phase 2: Write scenarios + user checkpoint →
-Phase 3: Select output mode (BDD or UAT-only) →
+Phase 3: Select output mode (/deep-research for BDD compatibility) →
 Phase 4: Write test plan document →
 Phase 5: Generate .feature files (BDD only) →
-Phase 6: Annotate plan file → Completion report
+Phase 6: Annotate plan file (with provenance markers) → Completion report
 
 ### Output Paths (two-stage fallback)
 1. {memory_dir}/test-plans/{run-id}.md          — test plan document
@@ -603,6 +690,8 @@ Phase 6: Annotate plan file → Completion report
 **Scenarios:** | **Personas:** | ### Scenario-Task Mapping
 
 ### BDD Toolchain
+Research-driven (Phase 3 /deep-research) when no existing BDD infra.
+Fallback table (Phase 5) when BDD already installed:
 Python: pytest-bdd | Go: godog+gherkingen | Node.js: Cucumber.js
 Rust: cucumber-rs | Java: Cucumber-JVM | Ruby: Cucumber
 
