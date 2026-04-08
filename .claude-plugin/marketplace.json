@@ -110,7 +110,7 @@
     },
     {
       "name": "jira",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./jira",
       "description": "Jira integration for issue tracking, querying, and management — OSAC defaults with full redhat.atlassian.net support",
       "category": "productivity",
