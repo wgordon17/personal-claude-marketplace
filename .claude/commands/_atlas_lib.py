@@ -10,6 +10,8 @@ _atlas_lib.py has no PEP 723 header and must not be run directly via `uv run`.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -94,8 +96,6 @@ def parse_marketplace(repo_root: Path) -> list[Plugin]:
         Ordered list of Plugin dataclasses from marketplace.json.
         Warns (does not fail) for missing plugin source directories.
     """
-    import sys
-
     mp_path = repo_root / ".claude-plugin" / "marketplace.json"
     data = json.loads(mp_path.read_text())
     plugins: list[Plugin] = []
@@ -133,8 +133,6 @@ def parse_skills(plugin_path: Path, plugin_name: str = "") -> list[Skill]:
         List of Skill dataclasses with name, description, allowed_tools, body, and path.
         Warns (does not fail) for corrupt YAML frontmatter.
     """
-    import sys
-
     if not plugin_name:
         plugin_name = plugin_path.name
     skills: list[Skill] = []
@@ -179,8 +177,6 @@ def parse_agents(plugin_path: Path, plugin_name: str = "") -> list[Agent]:
         List of Agent dataclasses with name, description, tools, model, color, body, and path.
         Warns (does not fail) for corrupt YAML frontmatter.
     """
-    import sys
-
     if not plugin_name:
         plugin_name = plugin_path.name
     agents: list[Agent] = []
@@ -231,8 +227,6 @@ def parse_commands(plugin_path: Path, plugin_name: str = "") -> list[Command]:
         List of Command dataclasses with name, description, and path.
         Warns (does not fail) for corrupt YAML frontmatter.
     """
-    import sys
-
     if not plugin_name:
         plugin_name = plugin_path.name
     commands: list[Command] = []
@@ -293,6 +287,23 @@ def list_reference_docs(plugin_path: Path) -> list[Path]:
             refs.extend(sorted(f for f in skill_refs.iterdir() if f.is_file()))
 
     return refs
+
+
+# ---------------------------------------------------------------------------
+# Git helpers
+# ---------------------------------------------------------------------------
+
+
+def repo_root_from_git(cwd: Path) -> Path:
+    """Return the worktree root via git rev-parse."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return Path(result.stdout.strip())
 
 
 # ---------------------------------------------------------------------------

@@ -256,10 +256,12 @@ class TestParseCommands:
 
     def test_parse_command_without_frontmatter(self):
         """Plain markdown command files get name from filename stem."""
-        # code-quality/commands/ has flat .md files without COMMAND.md pattern
+        # code-quality/commands/ has 4 flat .md files without COMMAND.md pattern
         code_quality_commands = parse_commands(CODE_QUALITY, "code-quality")
-        # Flat commands should be found; their names come from filename stems
-        assert len(code_quality_commands) >= 0  # May be zero if no flat commands
+        assert len(code_quality_commands) == 4, (
+            f"Expected 4 flat commands in code-quality, got {len(code_quality_commands)}. "
+            "Update this count if a command was added or removed."
+        )
 
     def test_parse_command_plugin_field(self):
         """Command.plugin field is set from the plugin_name argument."""

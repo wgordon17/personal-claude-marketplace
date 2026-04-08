@@ -8,7 +8,6 @@ writing to the live repo ATLAS.md or requiring the live ATLAS.md to exist.
 """
 
 import subprocess
-import sys
 from pathlib import Path
 
 # Locate scripts — parents[2] from dev-guard/tests/ resolves to repo root
@@ -32,8 +31,6 @@ def _run_generate(
     date: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run generate-atlas.py with uv run and return the completed process."""
-    cmd = [sys.executable, "-m", "uv", "run", str(GENERATE_ATLAS)]
-    # Use uv run directly for PEP 723 script
     cmd = ["uv", "run", str(GENERATE_ATLAS)]
     if atlas_path is not None:
         cmd.extend(["--atlas-path", str(atlas_path)])

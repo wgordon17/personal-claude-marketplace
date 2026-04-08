@@ -33,6 +33,7 @@ import re
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
@@ -44,6 +45,7 @@ from _atlas_lib import (  # noqa: E402
     parse_agents,
     parse_marketplace,
     parse_skills,
+    repo_root_from_git,
 )
 
 # ---------------------------------------------------------------------------
@@ -212,9 +214,6 @@ def _call_vertex(prompt: str) -> str:
     project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID", "")
     region = os.environ.get("CLOUD_ML_REGION", "us-east5")
 
-    if not project_id:
-        _fail_open("ANTHROPIC_VERTEX_PROJECT_ID not set")
-
     try:
         client = AnthropicVertex(project_id=project_id, region=region)
         message = client.messages.create(
@@ -246,9 +245,6 @@ def _call_vertex(prompt: str) -> str:
 # ---------------------------------------------------------------------------
 # Finding data structures
 # ---------------------------------------------------------------------------
-
-
-from dataclasses import dataclass  # noqa: E402 (after sys.path insert)
 
 
 @dataclass
@@ -497,18 +493,6 @@ def _format_output(findings: list[Finding]) -> tuple[str, int]:
 # ---------------------------------------------------------------------------
 
 
-def _repo_root_from_git(cwd: Path) -> Path:
-    """Return the worktree root via git rev-parse."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return Path(result.stdout.strip())
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Vertex AI semantic health analysis for ATLAS components",
@@ -536,7 +520,7 @@ def main() -> None:
         repo_root = args.repo_root.resolve()
     else:
         try:
-            repo_root = _repo_root_from_git(Path.cwd())
+            repo_root = repo_root_from_git(Path.cwd())
         except subprocess.CalledProcessError:
             _fail_open("not in a git repository — could not determine repo root")
 

@@ -39,6 +39,9 @@ from _atlas_lib import (  # noqa: E402
 from _atlas_lib import (
     list_reference_docs as _lib_list_reference_docs,
 )
+from _atlas_lib import (
+    repo_root_from_git as _repo_root_from_git,
+)
 
 # ---------------------------------------------------------------------------
 # Additional data classes (not shared with atlas-health-llm.py)
@@ -78,18 +81,6 @@ _LSP_PLUGINS = _atlas_lib.LSP_PLUGINS
 # ---------------------------------------------------------------------------
 # Parsing helpers
 # ---------------------------------------------------------------------------
-
-
-def _repo_root_from_git(cwd: Path) -> Path:
-    """Return the worktree root via git rev-parse."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return Path(result.stdout.strip())
 
 
 def _validate_repo_root(repo_root: Path) -> None:
@@ -230,17 +221,18 @@ def _build_spawn_graph(agents: list[Agent], skills: list[Skill]) -> dict[str, li
     """
     spawn_graph: dict[str, list[str]] = {a.name: [] for a in agents}
 
-    for skill in skills:
-        body = skill.body
-        if not body:
-            try:
-                body = skill.path.read_text()
-            except Exception:
-                continue
+    for agent in agents:
+        # Normalize agent name: strip plugin prefix
+        bare = agent.name.split(":", 1)[-1]
+        backtick_pattern = r"`" + re.escape(bare) + r"`"
 
-        for agent in agents:
-            # Normalize agent name: strip plugin prefix
-            bare = agent.name.split(":", 1)[-1]
+        for skill in skills:
+            body = skill.body
+            if not body:
+                try:
+                    body = skill.path.read_text()
+                except Exception:
+                    continue
 
             # Match subagent_type patterns
             for match in _SUBAGENT_TYPE_RE.finditer(body):
@@ -251,7 +243,6 @@ def _build_spawn_graph(agents: list[Agent], skills: list[Skill]) -> dict[str, li
                     spawn_graph[agent.name].append(skill.name)
 
             # Match backtick-quoted agent names
-            backtick_pattern = r"`" + re.escape(bare) + r"`"
             if re.search(backtick_pattern, body) and skill.name not in spawn_graph[agent.name]:
                 spawn_graph[agent.name].append(skill.name)
 
@@ -637,8 +628,12 @@ def _render_health_report(findings: list[HealthFinding], repo_root: Path) -> str
 # ---------------------------------------------------------------------------
 
 
-def generate(repo_root: Path, today: str) -> str:
-    """Generate the full ATLAS.md content and return it as a string."""
+def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
+    """Generate the full ATLAS.md content and return it with summary stats.
+
+    Returns:
+        (content, stats) where stats has keys: plugins, skills, agents, refs.
+    """
     plugins = parse_marketplace(repo_root)
     skills = _parse_skills(plugins)
     agents = _parse_agents(plugins)
@@ -706,7 +701,14 @@ def generate(repo_root: Path, today: str) -> str:
     # Health report
     parts.append(_render_health_report(health_findings, repo_root))
 
-    return "\n".join(parts) + "\n"
+    total_refs = sum(len(v) for v in ref_docs.values())
+    stats = {
+        "plugins": len(plugins),
+        "skills": len(skills),
+        "agents": len(agents),
+        "refs": total_refs,
+    }
+    return "\n".join(parts) + "\n", stats
 
 
 # ---------------------------------------------------------------------------
@@ -721,12 +723,12 @@ def _strip_timestamp(content: str) -> str:
     return _TIMESTAMP_RE.sub("", content, count=1)
 
 
-def check_staleness(atlas_path: Path, generated: str) -> bool:
-    """Return True if atlas_path matches generated content (ignoring timestamp)."""
+def check_staleness(atlas_path: Path, content: str) -> bool:
+    """Return True if atlas_path matches content (ignoring timestamp)."""
     if not atlas_path.exists():
         return False
     on_disk = atlas_path.read_text()
-    return _strip_timestamp(on_disk) == _strip_timestamp(generated)
+    return _strip_timestamp(on_disk) == _strip_timestamp(content)
 
 
 # ---------------------------------------------------------------------------
@@ -803,7 +805,7 @@ def main() -> None:
 
     # Generate
     try:
-        content = generate(repo_root, today)
+        content, stats = generate(repo_root, today)
     except SystemExit:
         raise
     except Exception as exc:
@@ -827,16 +829,10 @@ def main() -> None:
             sys.exit(1)
     else:
         atlas_path.write_text(content)
-        # Parse once to get summary counts
-        _plugins = parse_marketplace(repo_root)
-        _skills = _parse_skills(_plugins)
-        _agents = _parse_agents(_plugins)
-        _refs = _list_reference_docs(_plugins)
-        total_refs = sum(len(v) for v in _refs.values())
         print(
-            f"ATLAS.md generated ({len(_plugins)} plugins, "
-            f"{len(_skills)} skills, {len(_agents)} agents, "
-            f"{total_refs} references)"
+            f"ATLAS.md generated ({stats['plugins']} plugins, "
+            f"{stats['skills']} skills, {stats['agents']} agents, "
+            f"{stats['refs']} references)"
         )
 
 
