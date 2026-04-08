@@ -128,8 +128,9 @@ results if they appear unexpectedly in `searchAtlassian` output.
 
 ## CRUD Operations
 
-**After every create or update operation**, return the fully-qualified URL
-`https://redhat.atlassian.net/browse/<KEY>` — not just the bare key. URLs are clickable.
+**Always present issue keys as fully-qualified URLs:**
+`https://redhat.atlassian.net/browse/<KEY>` — never bare keys. This applies to query results,
+create/update confirmations, and any context where an issue is referenced. URLs are clickable.
 
 ### Creating Issues
 
