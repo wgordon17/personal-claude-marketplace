@@ -152,7 +152,7 @@ LEAD (you)
 2. **For analysis workloads:** present the synthesized summary and `needs-fix` findings to the
    user. For `needs-input` findings: present each individually via AskUserQuestion (one question
    per finding, batch up to 4 per call). Each question includes full context:
-   `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}"` with
+   `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"` with
    options "Fix" (promoted to `needs-fix`) and "Defer" (`user-deferred`). `multiSelect: false`.
    Do NOT exit with unresolved `needs-input` findings. If AskUserQuestion is unavailable, treat
    all `needs-input` findings as `needs_context` in the final report (surface them, don't hide
@@ -163,7 +163,7 @@ LEAD (you)
      test failure.
    - For `needs-input` findings: present each individually via AskUserQuestion (one question
      per finding, batch up to 4 per call). Each question includes full context:
-     `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}"`
+     `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"`
      with options "Fix" (apply change) and "Defer" (`user-deferred`). `multiSelect: false`.
      Selected items are applied, then tests re-run. Do NOT apply `needs-input` changes without
      user approval. If AskUserQuestion is unavailable, treat all `needs-input` findings as

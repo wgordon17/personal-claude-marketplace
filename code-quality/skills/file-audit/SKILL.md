@@ -348,7 +348,7 @@ question with full context. Batch up to 4 per call:
 ```
 AskUserQuestion(questions=[
   {
-    "question": "[{file}:{issue_type}] {action}\n\nDiagnostic: {diagnostic_level}\nDecision needed: {input_needed}",
+    "question": "[{file}:{issue_type}] {action}\n\nDiagnostic: {diagnostic_level}\nDecision needed: {input_needed}\n▸dp:file={file},line=0,cat={issue_type},skill=file-audit",
     "header": "{file}",
     "options": [
       {"label": "Fix", "description": "Confirm this needs work — promoted to needs-fix"},

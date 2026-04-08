@@ -361,7 +361,7 @@ per AskUserQuestion call (the tool's question limit):
 ```
 AskUserQuestion(questions=[
   {
-    "question": "[{id}] [{Reviewer}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}",
+    "question": "[{id}] [{Reviewer}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={Reviewer},skill=pr-review",
     "header": "{id}",
     "options": [
       {"label": "Fix", "description": "Confirm this finding needs work — promoted to needs-fix"},
