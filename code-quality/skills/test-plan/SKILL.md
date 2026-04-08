@@ -310,6 +310,11 @@ Before presenting options, research BDD integration options that are compatible 
 project's actual test runner. This prevents recommending frameworks that conflict with the
 existing test setup (e.g., suggesting Cucumber.js for a Vitest project).
 
+**If `test_runner` is `unknown`:** ask the user first via `AskUserQuestion`:
+"I couldn't detect your test runner automatically. What test framework does this project use?
+(e.g., Vitest, Jest, pytest, go test)" — then use the answer as `test_runner` for the
+research query below.
+
 ```
 Skill("deep-research", "External: BDD and Gherkin integration options for {test_runner}
 in {tech_stack} projects. Compare: (1) native BDD plugins that integrate directly with
@@ -321,6 +326,11 @@ last release date, open issues count, compatibility notes with {test_runner}, se
 complexity. Exclude options unmaintained (no release in 12+ months) or incompatible
 with {test_runner}.")
 ```
+
+**Fallback:** If `/deep-research` is unavailable, errors, or returns no viable options,
+fall back to the static BDD Toolchain Reference table in Phase 5. Present options A and B
+only (no C/D), noting: "BDD framework research was inconclusive. Options C/D omitted.
+If you know which BDD framework you want, choose A now and set it up manually."
 
 Use the research findings to build a project-aware options list. Present via `AskUserQuestion`:
 
@@ -600,14 +610,14 @@ Append to the end of `{plan_file}` using the Edit tool:
      overwrite user decisions. -->
 
 **Test Plan:** {output_path}
-**Mode:** {Manual UAT | UAT + BDD}
-**Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if UAT-only)
+**Mode:** {mode} (one of: Manual UAT, UAT + BDD (feature files only), UAT + BDD (native integration), UAT + BDD (standalone))
+**Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if Manual UAT)
 **BDD Setup Needed:** {yes | no} (if yes: `{bdd_install_cmd}`)
-**BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if UAT-only or specification-only)
-**BDD Test Command:** `{bdd_test_cmd}` (omit line if UAT-only or specification-only)
-**BDD Framework:** {bdd_framework} (omit line if UAT-only)
-**BDD Feature Dir:** {bdd_feature_dir} (omit line if UAT-only)
-**BDD Step Dir:** {bdd_step_dir} (omit line if UAT-only or specification-only)
+**BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if Manual UAT or specification-only)
+**BDD Test Command:** `{bdd_test_cmd}` (omit line if Manual UAT or specification-only)
+**BDD Framework:** {bdd_framework} (omit line if Manual UAT)
+**BDD Feature Dir:** {bdd_feature_dir} (omit line if Manual UAT)
+**BDD Step Dir:** {bdd_step_dir} (omit line if Manual UAT or specification-only)
 **Scenarios:** {total scenario count}
 **Personas:** {Primary Persona Name}, {Edge Case Persona Name}
 
