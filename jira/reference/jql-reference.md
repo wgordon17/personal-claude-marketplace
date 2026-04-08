@@ -1,6 +1,15 @@
 # JQL Reference
 
-JQL (Jira Query Language) syntax reference for redhat.atlassian.net. Adapted from HCM JQL documentation with OSAC-specific patterns and Cloud-only function notes.
+JQL (Jira Query Language) syntax reference for redhat.atlassian.net. Covers operators,
+functions, MGMT custom fields, and OSAC-specific query patterns.
+
+**Official Atlassian documentation:**
+- [JQL operators](https://support.atlassian.com/jira-software-cloud/docs/jql-operators/)
+- [JQL functions](https://support.atlassian.com/jira-software-cloud/docs/jql-functions/)
+- [JQL fields](https://support.atlassian.com/jira-software-cloud/docs/jql-fields/)
+- [Advanced search overview](https://support.atlassian.com/jira-software-cloud/docs/what-is-advanced-search-in-jira-cloud/)
+
+When a specific JQL syntax isn't covered here, consult the official docs above.
 
 ## Syntax Overview
 
@@ -30,9 +39,27 @@ assignee = currentUser() AND status != Closed ORDER BY priority DESC
 | `IS EMPTY` | Field is empty | `assignee IS EMPTY` |
 | `IS NOT EMPTY` | Field has value | `duedate IS NOT EMPTY` |
 | `WAS` | Historical state | `status WAS 'In Progress'` |
+| `WAS NOT` | Was never in state | `status WAS NOT Closed` |
+| `WAS IN` | Was in any of list | `status WAS IN ('In Progress', 'To Do')` |
+| `WAS NOT IN` | Was never in list | `status WAS NOT IN (Closed, Done)` |
 | `CHANGED` | Field changed | `status CHANGED` |
 
 **Note:** JQL does not support `NOT` as a standalone logical operator. To negate, use `!=`, `NOT IN`, `IS NOT EMPTY`, etc.
+
+### History Operator Predicates
+
+The `WAS`, `WAS NOT`, `WAS IN`, `WAS NOT IN`, and `CHANGED` operators support optional predicates to narrow history searches. These only work with: Assignee, Fix Version, Priority, Reporter, Resolution, and Status fields.
+
+| Predicate | Purpose | Example |
+|-----------|---------|---------|
+| `AFTER` | Changes after a date | `status CHANGED AFTER -7d` |
+| `BEFORE` | Changes before a date | `status CHANGED BEFORE "2026-01-01"` |
+| `BY` | Changes by a user | `status CHANGED BY currentUser()` |
+| `ON` | Changes on a date | `status CHANGED ON "2026-04-01"` |
+| `FROM` | Changed from value | `status CHANGED FROM 'To Do' TO 'In Progress'` |
+| `TO` | Changed to value | `status WAS 'In Progress' BEFORE "2026-01-01"` |
+
+Predicates can be combined: `status CHANGED FROM 'To Do' TO 'In Progress' BY currentUser() AFTER -30d`
 
 ## Logical Operators
 
@@ -114,31 +141,71 @@ These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTy
 
 ## JQL Functions (Atlassian Cloud)
 
-These functions are available on Atlassian Cloud (redhat.atlassian.net):
+Built-in functions on Atlassian Cloud (redhat.atlassian.net). For the complete list with
+syntax details, see the [official JQL functions reference](https://support.atlassian.com/jira-software-cloud/docs/jql-functions/).
 
 ### User Functions
 
-- `currentUser()` — Current logged-in user (prefer this over literal usernames)
+- `currentUser()` — Current logged-in user (prefer over literal usernames)
 - `membersOf("group-name")` — Members of a group
+- `currentLogin()` — Time the current user's session began
+- `lastLogin()` — Time of the user's previous login
 
 ### Date Functions
 
 - `now()` — Current date/time
-- `startOfDay()`, `endOfDay()` — Start/end of today
-- `startOfWeek()`, `endOfWeek()` — Start/end of current week
-- `startOfMonth()`, `endOfMonth()` — Start/end of current month
-- `startOfYear()`, `endOfYear()` — Start/end of current year
+- `startOfDay([offset])`, `endOfDay([offset])` — Day boundaries (offset: `startOfDay(-1d)`)
+- `startOfWeek([offset])`, `endOfWeek([offset])` — Week boundaries
+- `startOfMonth([offset])`, `endOfMonth([offset])` — Month boundaries
+- `startOfYear([offset])`, `endOfYear([offset])` — Year boundaries
 
 **Date literals:** `-1d` (1 day ago), `-2w` (2 weeks ago), `-3m` (3 months ago), `+1d` (1 day from now)
 
 ### Sprint Functions
 
-- `openSprints()` — All currently active sprints
-- `closedSprints()` — All completed sprints
+- `openSprints()` — Currently active sprints
+- `closedSprints()` — Completed sprints
+- `futureSprints()` — Sprints not yet started
+
+### Issue Functions
+
+- `linkedIssues(issueKey[, linkType])` — Issues linked to a specific issue
+- `watchedIssues()` — Issues watched by the current user
+- `votedIssues()` — Issues voted for by the current user
+- `issueHistory()` — Issues from the user's recent history
+- `standardIssueTypes()` — All non-sub-task issue types
+- `subtaskIssueTypes()` — All sub-task issue types
+
+### Version Functions
+
+- `earliestUnreleasedVersion(project)` — Earliest unreleased version
+- `latestReleasedVersion(project)` — Most recently released version
+- `releasedVersions([project])` — All released versions
+- `unreleasedVersions([project])` — All unreleased versions
 
 ### Project Functions
 
-- `currentProject()` — Current project context
+- `projectsLeadByUser([user])` — Projects led by a user (defaults to current user)
+- `projectsWhereUserHasPermission("permission")` — Projects where user has a permission
+- `projectsWhereUserHasRole("role")` — Projects where user has a role
+
+### Other Functions
+
+- `cascadeOption(parentValue[, childValue])` — Cascading select custom field matching
+
+## Discovering Custom JQL Functions
+
+Marketplace apps installed on redhat.atlassian.net may provide additional JQL functions.
+To discover all available functions (built-in + app-provided), use the JQL autocomplete
+endpoint via `fetchAtlassian`:
+
+```
+fetchAtlassian with ARI: ari:cloud:jira::site/<cloudId>
+GET /rest/api/3/jql/autocompletedata
+```
+
+The response includes a `jqlReservedWords` array and `visibleFunctionNames` listing all
+available JQL functions including any from installed apps.
 
 ## ScriptRunner Functions — NOT Available on Cloud
 
@@ -152,7 +219,7 @@ The following functions existed on Jira Server but are **absent on Atlassian Clo
 - `epicsOf()` / `issuesInEpics()` — epic hierarchy
 - `portfolioChildrenOf()` / `portfolioParentsOf()` — Advanced Roadmaps hierarchy
 
-For link traversal on Cloud, use `getJiraIssueRemoteIssueLinks`, `createIssueLink`, and `getIssueLinkTypes` MCP tools instead.
+For link traversal on Cloud, use `linkedIssues()` function in JQL, or `getJiraIssueRemoteIssueLinks` and `getIssueLinkTypes` MCP tools for programmatic access.
 
 ## OSAC Query Patterns
 
