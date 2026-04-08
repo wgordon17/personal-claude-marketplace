@@ -13,11 +13,16 @@ auto-resolving previously-decided review findings.
 
 import hashlib
 import json
+import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 # ── Constants ──
+
+VALID_DECISIONS: frozenset[str] = frozenset({"Fix", "Defer"})
+_MAX_FIELD_LEN = 512
 
 METADATA_PREFIX = "▸dp:"
 DECISIONS_FILENAME = "review-decisions.json"
@@ -71,8 +76,13 @@ def _load_decisions(path: Path) -> dict:
 
 
 def _save_decisions(path: Path, data: dict) -> None:
-    """Save decisions to the JSON file."""
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    """Save decisions to the JSON file (atomic write via tmp + rename)."""
+    tmp = path.with_suffix(f".{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(data, indent=2) + "\n")
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
 
 
 def _fingerprint(file: str, category: str, line: str = "0") -> str:
@@ -82,6 +92,11 @@ def _fingerprint(file: str, category: str, line: str = "0") -> str:
     All three fields come from deterministic ▸dp: metadata, not LLM prose.
     The line_window groups nearby lines so minor line shifts don't
     invalidate a decision (e.g., line 42 and 47 both map to window 40).
+
+    Note: `category` comes from ▸dp:cat= which carries different semantics
+    per skill — reviewer name (pr-review, plan-review, quality-gate) vs
+    issue type (map-reduce, file-audit). Decisions are scoped per-skill
+    so cross-skill collisions don't occur in practice.
     """
     line_window = (int(line) // 10) * 10 if line.isdigit() else 0
     normalized = f"{file}|{category}|{line_window}"
@@ -91,11 +106,27 @@ def _fingerprint(file: str, category: str, line: str = "0") -> str:
 # ── Metadata parsing ──
 
 
+def _sanitize_path_field(value: str) -> str:
+    """Normalize and bound a file path field from metadata.
+
+    Rejects path traversal sequences and absolute paths. Strips
+    non-path characters and enforces a length limit.
+    """
+    if ".." in value or value.startswith("/"):
+        return "<invalid>"
+    clean = re.sub(r"[^\w./_-]", "_", value)
+    return clean[:_MAX_FIELD_LEN]
+
+
 def _parse_metadata(question_text: str) -> dict | None:
     """Extract structured metadata from a question's ▸dp: suffix.
 
     Expected format: ▸dp:file=path,line=N,cat=Category,skill=skill-name
     Returns dict with keys: file, line, cat, skill, or None if not found.
+
+    NOTE: file paths containing commas will cause parse failure because
+    the metadata format uses comma-delimited key=value pairs. Producer
+    skills must avoid commas in file paths.
     """
     if METADATA_PREFIX not in question_text:
         return None
@@ -112,6 +143,12 @@ def _parse_metadata(question_text: str) -> dict | None:
 
     if not result.get("file") or not result.get("cat"):
         return None
+
+    # Sanitize path-like fields
+    result["file"] = _sanitize_path_field(result["file"])
+    if result["file"] == "<invalid>":
+        return None
+
     return result
 
 
@@ -194,7 +231,11 @@ def _handle_pre_tool_use(data: dict) -> None:
 
         if fp in stored:
             prior = stored[fp]
-            answers[q_text] = prior["decision"]
+            decision = prior["decision"]
+            if decision not in VALID_DECISIONS:
+                all_matched = False
+                break  # corrupted/unexpected stored value — re-ask
+            answers[q_text] = decision
         else:
             all_matched = False
             break
@@ -259,6 +300,7 @@ def _handle_post_tool_use(data: dict) -> None:
     existing_fps = {d["fingerprint"] for d in stored if "fingerprint" in d}
 
     new_decisions = []
+    mutated = False
     for q in questions:
         if not _is_fix_defer_question(q):
             continue
@@ -269,8 +311,8 @@ def _handle_post_tool_use(data: dict) -> None:
             continue
 
         answer = answers.get(q_text)
-        if answer is None:
-            continue
+        if answer is None or answer not in VALID_DECISIONS:
+            continue  # discard unexpected answers
 
         fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"))
         snippet = _extract_description_snippet(q_text)
@@ -279,19 +321,22 @@ def _handle_post_tool_use(data: dict) -> None:
             "fingerprint": fp,
             "file": meta["file"],
             "line": meta.get("line"),
-            "category": meta["cat"],
-            "skill": meta.get("skill", "unknown"),
+            "category": meta["cat"][:_MAX_FIELD_LEN],
+            "skill": meta.get("skill", "unknown")[:_MAX_FIELD_LEN],
             "decision": answer,
             "description_snippet": snippet[:80],
             "decided_at": datetime.now(UTC).isoformat(),
         }
 
         if fp in existing_fps:
-            # Update existing decision
             stored = [d if d.get("fingerprint") != fp else decision_record for d in stored]
         else:
             new_decisions.append(decision_record)
             existing_fps.add(fp)
+        mutated = True
+
+    if not mutated:
+        sys.exit(0)  # no mutations — skip unnecessary write
 
     if new_decisions:
         stored.extend(new_decisions)
