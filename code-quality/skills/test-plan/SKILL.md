@@ -304,6 +304,12 @@ so `.feature` files are expected. Print:
 BDD infra detected ({framework} in {file}). Generating UAT document + .feature files.
 ```
 
+Record `mode` based on the detected framework's relationship to the test runner: if the
+detected BDD framework is a plugin for `test_runner` (e.g., `pytest-bdd` for pytest,
+`jest-cucumber` for Jest), set `mode` to `UAT + BDD (native integration)`. If it is a
+standalone framework (e.g., `godog`, `Cucumber.js`, `cucumber-rs`), set `mode` to
+`UAT + BDD (standalone)`.
+
 **If NO BDD infra detected:**
 
 Before presenting options, research BDD integration options that are compatible with the
