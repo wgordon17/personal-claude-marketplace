@@ -151,20 +151,6 @@ Always include the `OSAC` label on creation.
 
 Do not set these fields when creating OSAC issues unless specifically requested.
 
-## Active Epics
-
-Point-in-time snapshot may be stale. Run this JQL to get current epics after plugin installation:
-
-```jql
-project = MGMT AND component = OSAC AND type = Epic AND statusCategory != Done ORDER BY status ASC
-```
-
-| Key | Summary | Status | Owner | Labels |
-|-----|---------|--------|-------|--------|
-| (run JQL above after installing the jira plugin and authenticating via /mcp) | | | | |
-
-After authenticating (`/mcp` → auth `mcp-atlassian-prod`), run the JQL above via `/jira:jira` to populate this table.
-
 ## Custom Field IDs
 
 These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
