@@ -7,8 +7,9 @@
 PreToolUse: checks stored decisions and auto-answers AskUserQuestion via updatedInput.
 PostToolUse: captures Fix/Defer decisions to {memory_dir}/review-decisions.json.
 
-Spike implementation — validates the updatedInput + answers mechanism for
-auto-resolving previously-decided review findings.
+Decisions are persisted as fingerprinted records (file + category + line window) so
+that repeated reviews of the same finding auto-apply the prior Fix/Defer decision
+without re-prompting the user.
 """
 
 import hashlib
@@ -16,13 +17,14 @@ import json
 import os
 import re
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # ── Constants ──
 
 VALID_DECISIONS: frozenset[str] = frozenset({"Fix", "Defer"})
 _MAX_FIELD_LEN = 512
+_MAX_DECISION_AGE_DAYS = 30
 
 METADATA_PREFIX = "▸dp:"
 DECISIONS_FILENAME = "review-decisions.json"
@@ -35,7 +37,7 @@ MEMORY_DIR_CANDIDATES = ("hack", ".local", "scratch", ".dev")
 def _find_memory_dir() -> Path | None:
     """Find the project memory directory (hack/, .local/, scratch/, .dev/).
 
-    Walks from CWD up to git root looking for a memory dir candidate.
+    Finds git root by walking up from CWD, then checks for candidates at root level.
     """
     cwd = Path.cwd()
     # Find git root
@@ -45,11 +47,16 @@ def _find_memory_dir() -> Path | None:
             break
         git_root = git_root.parent
     else:
-        git_root = cwd  # fallback to cwd if no git root
+        git_root = cwd  # reset to cwd after exhausting walk (no .git found)
+
+    core_files = ("PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md")
 
     for candidate in MEMORY_DIR_CANDIDATES:
         candidate_path = git_root / candidate
         if candidate_path.is_dir():
+            core_count = sum(1 for f in core_files if (candidate_path / f).is_file())
+            if core_count < 2:
+                continue  # not a validated memory directory
             return candidate_path
     return None
 
@@ -81,25 +88,26 @@ def _save_decisions(path: Path, data: dict) -> None:
     try:
         tmp.write_text(json.dumps(data, indent=2) + "\n")
         os.replace(tmp, path)
-    except OSError:
+    except OSError as exc:
         tmp.unlink(missing_ok=True)
+        print(
+            f"[decision-persistence] WARNING: failed to save decisions to {path}: {exc}",
+            file=sys.stderr,
+        )
 
 
-def _fingerprint(file: str, category: str, line: str = "0") -> str:
+def _fingerprint(file: str, category: str, line: str = "0", skill: str = "unknown") -> str:
     """Create a stable fingerprint for a finding.
 
-    Uses file + category + line_window (rounded to nearest 10 lines).
-    All three fields come from deterministic ▸dp: metadata, not LLM prose.
-    The line_window groups nearby lines so minor line shifts don't
-    invalidate a decision (e.g., line 42 and 47 both map to window 40).
-
-    Note: `category` comes from ▸dp:cat= which carries different semantics
-    per skill — reviewer name (pr-review, plan-review, quality-gate) vs
-    issue type (map-reduce, file-audit). Decisions are scoped per-skill
-    so cross-skill collisions don't occur in practice.
+    Uses file + category + line_window + skill. All fields come from
+    deterministic ▸dp: metadata, not LLM prose. The line_window groups
+    nearby lines so minor line shifts don't invalidate a decision
+    (e.g., line 42 and 47 both map to window 40). The skill field
+    prevents cross-skill collisions (e.g., pr-review and quality-gate
+    both reporting Security findings on the same file/line window).
     """
     line_window = (int(line) // 10) * 10 if line.isdigit() else 0
-    normalized = f"{file}|{category}|{line_window}"
+    normalized = f"{file}|{category}|{line_window}|{skill}"
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
@@ -131,7 +139,7 @@ def _parse_metadata(question_text: str) -> dict | None:
     if METADATA_PREFIX not in question_text:
         return None
 
-    _, _, meta_str = question_text.partition(METADATA_PREFIX)
+    _, _, meta_str = question_text.rpartition(METADATA_PREFIX)
     meta_str = meta_str.strip()
 
     result = {}
@@ -158,8 +166,8 @@ def _extract_description_snippet(question_text: str) -> str:
     Strips the leading [id] [category] prefix and the ▸dp: suffix,
     then takes the first line as the description snippet.
     """
-    # Remove metadata suffix
-    text = question_text.split(METADATA_PREFIX)[0].strip()
+    # Remove metadata suffix (last occurrence, consistent with rpartition in _parse_metadata)
+    text = question_text.rsplit(METADATA_PREFIX, 1)[0].strip()
     # Remove leading [bracketed] prefixes
     first_line = text.split("\n")[0].strip()
     # Strip [id] and [Category] prefixes
@@ -191,12 +199,14 @@ def _handle_pre_tool_use(data: dict) -> None:
     if not questions:
         sys.exit(0)  # passthrough
 
-    # Only process Fix/Defer questions
+    # Only process Fix/Defer questions — bail if batch is mixed-type
     fix_defer_questions = [q for q in questions if _is_fix_defer_question(q)]
     if not fix_defer_questions:
         sys.exit(0)  # passthrough — not our kind of question
+    if len(fix_defer_questions) != len(questions):
+        sys.exit(0)  # mixed-type batch: answers dict would only cover Fix/Defer subset
 
-    # Parse metadata for all Fix/Defer questions (single pass, cached)
+    # Parse metadata for all Fix/Defer questions (deduplicated per question text)
     parsed: dict[str, dict] = {}
     for q in fix_defer_questions:
         q_text = q.get("question", "")
@@ -211,12 +221,15 @@ def _handle_pre_tool_use(data: dict) -> None:
         sys.exit(0)  # no memory dir — passthrough
 
     decisions_data = _load_decisions(dec_path)
+    cutoff = (datetime.now(UTC) - timedelta(days=_MAX_DECISION_AGE_DAYS)).isoformat()
     stored = {
-        d["fingerprint"]: d for d in decisions_data.get("decisions", []) if "fingerprint" in d
+        d["fingerprint"]: d
+        for d in decisions_data.get("decisions", [])
+        if "fingerprint" in d and d.get("decided_at", "") >= cutoff
     }
 
     if not stored:
-        sys.exit(0)  # no prior decisions — passthrough
+        sys.exit(0)  # no prior decisions (or all expired) — passthrough
 
     # Try to match each Fix/Defer question
     answers = {}
@@ -225,7 +238,8 @@ def _handle_pre_tool_use(data: dict) -> None:
     for q in fix_defer_questions:
         q_text = q.get("question", "")
         meta = parsed[q_text]
-        fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"))
+        skill = meta.get("skill", "unknown")
+        fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"), skill)
 
         if fp in stored:
             prior = stored[fp]
@@ -279,20 +293,32 @@ def _handle_post_tool_use(data: dict) -> None:
     tool_response = data.get("tool_response", {})
 
     questions = tool_input.get("questions", [])
-    # Answers come from tool_input.answers (populated by user interaction)
-    # or from tool_response depending on Claude Code version
-    answers = tool_input.get("answers", {})
-    if not answers and isinstance(tool_response, dict):
+    # Answers come from tool_response (user's actual answers).
+    # tool_input.answers is populated by PreToolUse updatedInput — those are
+    # auto-applied decisions, not new user decisions. Reading from tool_input
+    # first would re-capture already-stored decisions with a fresh timestamp,
+    # misleading future staleness detection.
+    answers = {}
+    answers_from_user = True
+    if isinstance(tool_response, dict):
         answers = tool_response.get("answers", {})
+    if not answers:
+        # Fallback: may contain auto-applied answers from PreToolUse updatedInput.
+        # Flag so we can skip re-capture of unchanged decisions below.
+        answers = tool_input.get("answers", {})
+        answers_from_user = False
 
     if not questions or not answers:
         sys.exit(0)
 
-    # Pre-scan: any capturable Fix/Defer questions with metadata?
-    capturable = any(
-        _is_fix_defer_question(q) and _parse_metadata(q.get("question", "")) is not None
-        for q in questions
-    )
+    # Pre-scan: parse metadata for all Fix/Defer questions (deduplicated)
+    parsed: dict[str, dict | None] = {}
+    for q in questions:
+        if _is_fix_defer_question(q):
+            q_text = q.get("question", "")
+            parsed[q_text] = _parse_metadata(q_text)
+
+    capturable = any(meta is not None for meta in parsed.values())
     if not capturable:
         sys.exit(0)  # nothing to capture — skip disk I/O
 
@@ -302,17 +328,18 @@ def _handle_post_tool_use(data: dict) -> None:
         sys.exit(0)  # no memory dir — can't persist
 
     decisions_data = _load_decisions(dec_path)
-    stored = decisions_data.get("decisions", [])
-    existing_fps = {d["fingerprint"] for d in stored if "fingerprint" in d}
+    # Use a dict keyed by fingerprint for O(1) upserts
+    stored_by_fp: dict[str, dict] = {
+        d["fingerprint"]: d for d in decisions_data.get("decisions", []) if "fingerprint" in d
+    }
 
-    new_decisions = []
     mutated = False
     for q in questions:
         if not _is_fix_defer_question(q):
             continue
 
         q_text = q.get("question", "")
-        meta = _parse_metadata(q_text)
+        meta = parsed.get(q_text)
         if meta is None:
             continue
 
@@ -320,34 +347,38 @@ def _handle_post_tool_use(data: dict) -> None:
         if answer is None or answer not in VALID_DECISIONS:
             continue  # discard unexpected answers
 
-        fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"))
+        skill = meta.get("skill", "unknown")
+        fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"), skill)
+
+        # Skip re-capture of auto-applied decisions (prevents timestamp refresh)
+        already_stored = fp in stored_by_fp and stored_by_fp[fp].get("decision") == answer
+        if not answers_from_user and already_stored:
+            continue
+
         snippet = _extract_description_snippet(q_text)
 
         decision_record = {
             "fingerprint": fp,
             "file": meta["file"],
-            "line": meta.get("line"),
-            "category": meta["cat"][:_MAX_FIELD_LEN],
-            "skill": meta.get("skill", "unknown")[:_MAX_FIELD_LEN],
+            "line": meta.get("line", "0")[:_MAX_FIELD_LEN] if meta.get("line") else "0",
+            "category": re.sub(r"[^\w./_-]", "_", meta["cat"])[:_MAX_FIELD_LEN],
+            "skill": re.sub(r"[^\w./_-]", "_", meta.get("skill", "unknown"))[:_MAX_FIELD_LEN],
             "decision": answer,
             "description_snippet": snippet[:80],
             "decided_at": datetime.now(UTC).isoformat(),
         }
 
-        if fp in existing_fps:
-            stored = [d if d.get("fingerprint") != fp else decision_record for d in stored]
-        else:
-            new_decisions.append(decision_record)
-            existing_fps.add(fp)
+        stored_by_fp[fp] = decision_record  # O(1) upsert
         mutated = True
 
     if not mutated:
         sys.exit(0)  # no mutations — skip unnecessary write
 
-    if new_decisions:
-        stored.extend(new_decisions)
+    # Prune expired decisions on write
+    cutoff = (datetime.now(UTC) - timedelta(days=_MAX_DECISION_AGE_DAYS)).isoformat()
+    stored_by_fp = {fp: d for fp, d in stored_by_fp.items() if d.get("decided_at", "") >= cutoff}
 
-    decisions_data["decisions"] = stored
+    decisions_data["decisions"] = list(stored_by_fp.values())
     _save_decisions(dec_path, decisions_data)
     sys.exit(0)
 
