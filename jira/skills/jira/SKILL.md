@@ -3,7 +3,8 @@ name: jira
 description: |
   Use when user asks about Jira issues, wants to search/query Jira, track work,
   update issues, create new issues, or mentions OSAC/MGMT project work.
-  Triggers on: "jira", "MGMT-", "my tickets", "my issues", "sprint",
+  Triggers on: "jira", "MGMT-", "my tickets", "my issues", "ticket",
+  "issue tracker", "sprint", "kanban", "story points", "epic",
   "create a ticket", "update the jira", "what's assigned to me",
   "OSAC backlog", "OSAC sprint".
 allowed-tools: [Read, Bash, Agent, AskUserQuestion,
@@ -70,6 +71,8 @@ Unless the user asks about other projects, apply these defaults to all queries a
 - `project = MGMT`
 - `component = OSAC`
 - Label: `OSAC`
+- Sprint naming: `OSAC Sprint N` (sequential numbering; use current open sprint when creating in-sprint issues)
+- Board: `4269`
 
 When the user says "my work" without project context, use OSAC defaults.
 When the user asks about another project or "everything", drop the OSAC filter.
@@ -181,8 +184,8 @@ When working outside MGMT/OSAC, drop the default project/component filter and:
 
 ### Generic Escape Hatches
 
-**`fetchAtlassian`** — Use only for REST API endpoints not covered by typed tools (e.g., custom
-Atlassian API features). This is a raw HTTP escape hatch, not a first-choice tool.
+**`fetchAtlassian`** — ARI-based (Atlassian Resource Identifier) read-only content fetcher.
+Use only for ARI-based resource retrieval not covered by typed tools. Not a first-choice tool.
 
 **`searchAtlassian`** — Use only when explicitly searching across Jira AND Confluence
 simultaneously. Prefer `searchJiraIssuesUsingJql` for Jira-only queries — it has structured

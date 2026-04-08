@@ -193,8 +193,8 @@ When spawned for non-OSAC work, drop the MGMT/OSAC defaults:
 
 **Generic escape hatches:**
 
-`fetchAtlassian` — Use only for REST API endpoints not covered by typed tools. Raw HTTP
-escape hatch; not a first-choice tool.
+`fetchAtlassian` — ARI-based (Atlassian Resource Identifier) read-only content fetcher.
+Use only for ARI-based resource retrieval not covered by typed tools. Not a first-choice tool.
 
 `searchAtlassian` — Use only when explicitly searching across Jira AND Confluence
 simultaneously. Prefer typed Jira tools for Jira-only work. Always prefer typed tools
