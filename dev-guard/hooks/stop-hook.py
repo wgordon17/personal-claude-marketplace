@@ -137,6 +137,11 @@ _RESEARCH_MCP_TOOLS = frozenset(
         "mcp__plugin_github-mcp_github__get_commit",
         "mcp__plugin_github-mcp_github__search_repositories",
         "mcp__plugin_github-mcp_github__github_support_docs_search",
+        # Jira read tools (both server qualifications) — enables fast-exit for query-only sessions
+        "mcp__plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__searchJiraIssuesUsingJql",
+        "mcp__plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__getJiraIssue",
+        "mcp__plugin_jira_mcp-atlassian-prod__searchJiraIssuesUsingJql",
+        "mcp__plugin_jira_mcp-atlassian-prod__getJiraIssue",
     }
 )
 

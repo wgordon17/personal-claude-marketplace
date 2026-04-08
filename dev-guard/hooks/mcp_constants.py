@@ -83,6 +83,25 @@ MCP_READ_ONLY: frozenset[str] = frozenset(
         ],
     )
     + _qualify(
+        "plugin_jira_mcp-atlassian-prod",
+        [
+            # Jira read
+            "atlassianUserInfo",
+            "fetchAtlassian",
+            "getAccessibleAtlassianResources",
+            "getIssueLinkTypes",
+            "getJiraIssue",
+            "getJiraIssueRemoteIssueLinks",
+            "getJiraIssueTypeMetaWithFields",
+            "getJiraProjectIssueTypesMetadata",
+            "getTransitionsForJiraIssue",
+            "getVisibleJiraProjects",
+            "lookupJiraAccountId",
+            "searchAtlassian",
+            "searchJiraIssuesUsingJql",
+        ],
+    )
+    + _qualify(
         "metadata-service",
         ["get_cluster_info", "get_cluster_cves", "list_clusters"],
     )
