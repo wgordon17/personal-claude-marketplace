@@ -5503,6 +5503,16 @@ class TestMCPReadOnlyFrozenset:
             not in MCP_READ_ONLY
         )
 
+    def test_jira_plugin_read_tool_present(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert "plugin_jira_mcp-atlassian-prod__getJiraIssue" in MCP_READ_ONLY
+
+    def test_jira_plugin_write_tool_absent(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert "plugin_jira_mcp-atlassian-prod__createJiraIssue" not in MCP_READ_ONLY
+
     def test_bare_name_not_present(self):
         """Bare function names should NOT match — must be server-qualified."""
         from mcp_constants import MCP_READ_ONLY
