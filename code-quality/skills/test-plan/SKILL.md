@@ -601,6 +601,9 @@ what all downstream skills parse — field labels must match exactly.
 
 ### Annotation Format
 
+**Read the full Phase 6 section (including the Specification-only mode overrides below
+the template) before writing.** For option B, field values differ from the generic template.
+
 Append to the end of `{plan_file}` using the Edit tool:
 
 ```markdown
