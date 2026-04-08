@@ -25,6 +25,6 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 quote-style = "double"
 
 [tool.pyright]
-include = ["dev-guard/hooks"]
+include = ["dev-guard/hooks", ".claude/commands"]
 pythonVersion = "3.13"
 typeCheckingMode = "basic"

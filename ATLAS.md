@@ -124,7 +124,7 @@ HTML/CSS language servers (via npx - always latest)
 
 Rust language server (requires rust-analyzer via rustup)
 
-### dev-guard (v1.57.0)
+### dev-guard (v1.58.0)
 
 Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard, trust management, oc/kubectl introspection, subagent completion verification
 
