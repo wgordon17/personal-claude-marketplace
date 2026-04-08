@@ -75,12 +75,16 @@ def _save_decisions(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def _fingerprint(file: str, category: str, description_snippet: str) -> str:
+def _fingerprint(file: str, category: str, line: str = "0") -> str:
     """Create a stable fingerprint for a finding.
 
-    Uses file + category + first 60 chars of description (lowered, stripped).
+    Uses file + category + line_window (rounded to nearest 10 lines).
+    All three fields come from deterministic ▸dp: metadata, not LLM prose.
+    The line_window groups nearby lines so minor line shifts don't
+    invalidate a decision (e.g., line 42 and 47 both map to window 40).
     """
-    normalized = f"{file}|{category}|{description_snippet[:60].lower().strip()}"
+    line_window = (int(line) // 10) * 10 if line.isdigit() else 0
+    normalized = f"{file}|{category}|{line_window}"
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
@@ -186,8 +190,7 @@ def _handle_pre_tool_use(data: dict) -> None:
         if meta is None:
             all_matched = False
             break
-        snippet = _extract_description_snippet(q_text)
-        fp = _fingerprint(meta["file"], meta["cat"], snippet)
+        fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"))
 
         if fp in stored:
             prior = stored[fp]
@@ -269,8 +272,8 @@ def _handle_post_tool_use(data: dict) -> None:
         if answer is None:
             continue
 
+        fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"))
         snippet = _extract_description_snippet(q_text)
-        fp = _fingerprint(meta["file"], meta["cat"], snippet)
 
         decision_record = {
             "fingerprint": fp,
