@@ -41,8 +41,8 @@ Two-tier taxonomy:
 - "Two valid architectures exist (X vs Y) with different tradeoffs" — genuine design decision
 - "This changes user-facing behavior — should the API return 404 or 200 with empty body?" — UX decision
 - "This requires choosing between backward compatibility and correctness" — scope decision
-- "The BDD annotation says Cucumber.js but the project uses Vitest" in a PROVENANCE-marked section
-  — user-confirmed decision, must escalate not auto-fix
+- A downstream skill proposes changing a field in a PROVENANCE-marked section (e.g., "the annotation
+  says Cucumber.js but the project uses Vitest") — user-confirmed decision, must escalate not auto-fix
 
 **What is NOT `needs-input`:**
 - "I'm not sure if this is worth fixing" → `needs-fix`. Your opinion of worth is irrelevant.

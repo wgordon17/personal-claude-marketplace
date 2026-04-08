@@ -105,15 +105,21 @@ Read and parse the input plan file before doing anything else.
    | `package.json` | `jest` or `@jest/` | Jest |
    | `package.json` | `mocha` | Mocha |
    | `pyproject.toml` / `requirements*.txt` | `pytest` | pytest |
-   | `go.mod` | (Go convention) | go test |
-   | `Cargo.toml` | (Rust convention) | cargo test |
+   | `go.mod` | file exists (Glob) | go test |
+   | `Cargo.toml` | file exists (Glob) | cargo test |
    | `build.gradle` / `pom.xml` | `junit` or `testng` | JUnit / TestNG |
    | `Gemfile` | `rspec` | RSpec |
    | `Gemfile` | `minitest` | Minitest |
 
-   Search using Grep with `output_mode: "files_with_matches"`. Record `test_runner`
-   (or `unknown`). If multiple match, prefer the one in test scripts
-   (e.g., `"test": "vitest"` in `package.json` scripts).
+   For rows with a grep pattern: use Grep with `output_mode: "files_with_matches"`.
+   For rows marked "file exists (Glob)": use Glob to check whether the file exists in the
+   project root (e.g., `Glob("go.mod")`). Record `test_runner` (or `unknown`). If multiple
+   match, resolve by this priority ladder:
+   1. **scripts.test contains a runner name** (e.g., `"test": "vitest run"`) → that runner wins,
+      even if the scripts value uses a prefix or flags (substring match is sufficient).
+   2. **No scripts match or scripts key absent** → fall back to the order of appearance in the
+      detection table above (earlier rows win — package.json patterns before file-existence rows).
+   3. **Still ambiguous** → record `unknown`; Step 7 will ask the user.
 
    **BDD infrastructure detection:**
 
@@ -130,14 +136,25 @@ Read and parse the input plan file before doing anything else.
    Search using Grep with `output_mode: "files_with_matches"`. Record detected BDD
    framework (or `none`) and the detected file path for Phase 5 (BDD Staging).
 
-7. **Print ingestion summary:**
+7. **Resolve unknown test runner** — If `test_runner` is still `unknown` after the detection
+   tables above, ask via `AskUserQuestion` before proceeding:
+   "I couldn't detect your test runner automatically. What test framework does this project use?
+   (e.g., Vitest, Jest, pytest, go test, cargo test)"
+   Use the answer as `test_runner` for all subsequent phases. Before writing `test_runner` into
+   any annotation field, sanitize the value: collapse to a single line (strip newlines), strip
+   markdown bold markers (`**`), backtick sequences, HTML comment delimiters (`<!--`, `-->`),
+   and pipe characters (`|`). Store only the sanitized value.
+   This resolution happens once in Phase 0 so both the BDD auto-select branch (when BDD infra
+   exists) and the research branch (when no BDD infra exists) receive a known test_runner value.
+
+8. **Print ingestion summary:**
 
    ```
    Plan ingested: {plan_file}
    Goal: {goal}
    Branch: {branch}
    Tech stack: {tech_stack}
-   Test runner: {test_runner | unknown}
+   Test runner: {test_runner}
    User-facing tasks: {N} of {total_tasks}
    BDD infra: {framework | none detected}
    ```
@@ -309,6 +326,12 @@ detected BDD framework is a plugin for `test_runner` (e.g., `pytest-bdd` for pyt
 `jest-cucumber` for Jest), set `mode` to `UAT + BDD (native integration)`. If it is a
 standalone framework (e.g., `godog`, `Cucumber.js`, `cucumber-rs`), set `mode` to
 `UAT + BDD (standalone)`.
+Set `BDD Setup Needed: no` — the framework is already installed. Scan the project for
+existing `.feature` files and step definitions to determine `bdd_feature_dir` and `bdd_step_dir`.
+If none found, use the framework's conventional defaults: Python/pytest-bdd → `tests/features/`,
+`tests/step_defs/`; Go/godog → `features/`, `features/`; Node.js/Cucumber.js → `features/`,
+`features/step_definitions/`; Rust/cucumber-rs → `tests/features/`, `tests/`; Java/Cucumber-JVM
+→ `src/test/resources/`, `src/test/java/`; Ruby/Cucumber → `features/`, `features/step_definitions/`.
 
 **If NO BDD infra detected:**
 
@@ -316,10 +339,7 @@ Before presenting options, research BDD integration options that are compatible 
 project's actual test runner. This prevents recommending frameworks that conflict with the
 existing test setup (e.g., suggesting Cucumber.js for a Vitest project).
 
-**If `test_runner` is `unknown`:** ask the user first via `AskUserQuestion`:
-"I couldn't detect your test runner automatically. What test framework does this project use?
-(e.g., Vitest, Jest, pytest, go test)" — then use the answer as `test_runner` for the
-research query below.
+(`test_runner` is always known at this point — unknown was resolved in Phase 0 Step 7.)
 
 ```
 Skill("deep-research", "BDD and Gherkin integration options for {test_runner}
@@ -334,11 +354,17 @@ with {test_runner}. Mode: External")
 ```
 
 **Fallback:** If `/deep-research` is unavailable, errors, or returns no viable options,
-fall back to the static BDD Toolchain Reference table in Phase 5. Present options A and B
-only (no C/D), noting: "BDD framework research was inconclusive. Options C/D omitted.
-If you know which BDD framework you want, choose A now and set it up manually."
+present options A and B only (no C/D), with this note:
+"BDD framework research was inconclusive — viable framework and install commands could not be
+determined for {test_runner}. Options C/D require confirmed package compatibility and have been
+omitted. Choose A (no BDD) or B (specification-only .feature files). If you know which BDD
+framework you want, set it up manually after the plan is complete."
+Do NOT fall back to the Phase 5 BDD Toolchain Reference table — that table applies only to
+projects that already have BDD installed; it does not provide install commands suitable for
+fresh BDD setup on arbitrary test runners.
 
-Use the research findings to build a project-aware options list. Present via `AskUserQuestion`:
+**If research succeeds:** Use the research findings to build a project-aware options list.
+Present via `AskUserQuestion`:
 
 "No BDD framework detected. Your project uses **{test_runner}** for testing.
 
@@ -583,8 +609,8 @@ Record:
 - `bdd_scaffold_cmd` — the scaffold command to generate step definition skeletons
 - `bdd_test_cmd` — the command to run the BDD test suite
 - `bdd_framework` — the framework name
-- `bdd_feature_dir` — where `.feature` files will live in the source tree (e.g., `features/`, `tests/acceptance/`)
-- `bdd_step_dir` — where step definitions will live (e.g., `steps/`, `step_definitions/`, `*_test.go`)
+- `bdd_feature_dir` — where `.feature` files will live (from Phase 3 project scan or research; not in the fallback table)
+- `bdd_step_dir` — where step definitions will live (from Phase 3 project scan or research; not in the fallback table)
 
 These values are written into the plan file annotation in Phase 6 so `/swarm` Phase 0 knows
 what to install and run without re-detecting.
@@ -620,13 +646,14 @@ Append to the end of `{plan_file}` using the Edit tool:
 
 **Test Plan:** {output_path}
 **Mode:** {Manual UAT | UAT + BDD (feature files only) | UAT + BDD (native integration) | UAT + BDD (standalone)}
-**Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if Manual UAT)
+**Test Runner:** {test_runner}
+**Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if Manual UAT or UAT + BDD (feature files only))
 **BDD Setup Needed:** {yes | no} (if yes: `{bdd_install_cmd}`) (omit line if Manual UAT)
-**BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if Manual UAT or specification-only)
-**BDD Test Command:** `{bdd_test_cmd}` (omit line if Manual UAT or specification-only)
+**BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if Manual UAT or UAT + BDD (feature files only))
+**BDD Test Command:** `{bdd_test_cmd}` (omit line if Manual UAT or UAT + BDD (feature files only))
 **BDD Framework:** {bdd_framework} (omit line if Manual UAT)
 **BDD Feature Dir:** {bdd_feature_dir} (omit line if Manual UAT)
-**BDD Step Dir:** {bdd_step_dir} (omit line if Manual UAT or specification-only)
+**BDD Step Dir:** {bdd_step_dir} (omit line if Manual UAT or UAT + BDD (feature files only))
 **Scenarios:** {total scenario count}
 **Personas:** {Primary Persona Name}, {Edge Case Persona Name}
 
@@ -647,7 +674,12 @@ documentation only (not executable), write:
 - `**BDD Setup Needed:** no (feature files are Gherkin specifications; tests implemented in {test_runner})`
 - `**BDD Framework:** none (specification only)`
 - Include `**BDD Feature Dir:**` (files still exist for documentation)
-- Omit: `**BDD Scaffold Command:**`, `**BDD Test Command:**`, `**BDD Step Dir:**`
+- Omit: `**Feature Files:**`, `**BDD Scaffold Command:**`, `**BDD Test Command:**`, `**BDD Step Dir:**`
+
+Note: `**Feature Files:**` is intentionally omitted for specification-only mode. Swarm Phase 3.5
+(BDD-Step-Writer) is triggered by the presence of `**Feature Files:**`; spec-only has no executable
+BDD infrastructure and must not trigger step generation. The `.feature` file location is still
+recorded in `**BDD Feature Dir:**` for documentation reference.
 
 The `**BDD Setup Needed:** yes` signal is what `/swarm` Phase 0 uses to decide whether to
 install the BDD framework on the feature branch.
@@ -671,7 +703,7 @@ Tasks covered: {M} of {total_user_facing_tasks} user-facing tasks
 
 {if BDD (native integration or standalone):}
 Feature files: {feature_dir} ({file_count} files)
-BDD setup needed: yes ({framework} — /swarm will handle installation)
+BDD setup needed: {yes | no} ({framework}{if yes: — /swarm will handle installation}{if no: — already installed})
 {end if}
 
 {if BDD (feature files only — specification-only):}
@@ -709,7 +741,7 @@ Phase 6: Annotate plan file (with provenance markers) → Completion report
    ~/.claude/test-plans/{run-id}-features/      — fallback (BDD only)
 
 ### Plan File Annotation Fields (exact labels — never rename)
-**Test Plan:** | **Mode:** | **Feature Files:** | **BDD Setup Needed:**
+**Test Plan:** | **Mode:** | **Test Runner:** | **Feature Files:** | **BDD Setup Needed:**
 **BDD Scaffold Command:** | **BDD Test Command:** | **BDD Framework:** | **BDD Feature Dir:** | **BDD Step Dir:**
 **Scenarios:** | **Personas:** | ### Scenario-Task Mapping
 
