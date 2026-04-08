@@ -29,9 +29,10 @@ Two-tier taxonomy:
   specific decision the user must make and why the agent cannot make it.
 - `needs-input` is NOT a way to defer work. Using `needs-input` to avoid implementing a fix you
   could make yourself is deferral-by-classification — a violation of the Anti-Deferral Principle.
-- **Provenance override:** Findings that propose changing fields inside a `<!-- PROVENANCE: ... -->`
-  block indicating user confirmation MUST be classified as `needs-input`. These fields represent
-  decisions the user already made via explicit checkpoints (e.g., AskUserQuestion in `/test-plan`).
+- **Provenance override:** Findings that propose changing fields in a section marked with a
+  `<!-- PROVENANCE: ... -->` comment MUST be classified as `needs-input`. The comment marks all
+  fields that follow it as user-confirmed decisions made via explicit checkpoints (e.g.,
+  AskUserQuestion in `/test-plan`).
   Overwriting them without re-confirming with the user violates the decision chain. If you believe
   a user-confirmed decision is wrong (e.g., incompatible framework choice), surface the conflict
   as `needs-input` with your evidence — let the user reconcile, don't auto-fix.
