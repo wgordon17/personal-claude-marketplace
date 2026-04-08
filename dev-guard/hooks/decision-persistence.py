@@ -196,13 +196,14 @@ def _handle_pre_tool_use(data: dict) -> None:
     if not fix_defer_questions:
         sys.exit(0)  # passthrough — not our kind of question
 
-    # Check if ALL Fix/Defer questions have metadata
-    all_have_metadata = all(
-        _parse_metadata(q.get("question", "")) is not None for q in fix_defer_questions
-    )
-    if not all_have_metadata:
-        # Some questions lack metadata — can't reliably match, passthrough
-        sys.exit(0)
+    # Parse metadata for all Fix/Defer questions (single pass, cached)
+    parsed: dict[str, dict] = {}
+    for q in fix_defer_questions:
+        q_text = q.get("question", "")
+        meta = _parse_metadata(q_text)
+        if meta is None:
+            sys.exit(0)  # some questions lack metadata — passthrough
+        parsed[q_text] = meta
 
     # Load stored decisions
     dec_path = _decisions_path()
@@ -223,10 +224,7 @@ def _handle_pre_tool_use(data: dict) -> None:
 
     for q in fix_defer_questions:
         q_text = q.get("question", "")
-        meta = _parse_metadata(q_text)
-        if meta is None:
-            all_matched = False
-            break
+        meta = parsed[q_text]
         fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"))
 
         if fp in stored:
@@ -250,7 +248,7 @@ def _handle_pre_tool_use(data: dict) -> None:
         f"Decision persistence: auto-applying {len(answers)} prior decision(s).",
     ]
     for q_text, decision in answers.items():
-        meta = _parse_metadata(q_text)
+        meta = parsed.get(q_text)
         if meta is not None:
             context_lines.append(
                 f"  {meta['file']}:{meta.get('line', '?')} [{meta['cat']}] → {decision}"
@@ -289,6 +287,14 @@ def _handle_post_tool_use(data: dict) -> None:
 
     if not questions or not answers:
         sys.exit(0)
+
+    # Pre-scan: any capturable Fix/Defer questions with metadata?
+    capturable = any(
+        _is_fix_defer_question(q) and _parse_metadata(q.get("question", "")) is not None
+        for q in questions
+    )
+    if not capturable:
+        sys.exit(0)  # nothing to capture — skip disk I/O
 
     # Find the decisions file
     dec_path = _decisions_path()
