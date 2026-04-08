@@ -12,6 +12,7 @@ on:
       - '**/SKILL.md'
       - '.claudelint.yaml'
       - '.github/workflows/plugin-lint.yml'
+      - '.claude/commands/*.py'  # generator changes must update ATLAS.md
   workflow_dispatch:
 
 permissions:
@@ -30,3 +31,6 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
       - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7
       - run: uvx claudelint --strict
+      - run: uv python install 3.13
+      - name: Check ATLAS.md staleness
+        run: uv run .claude/commands/generate-atlas.py --check
