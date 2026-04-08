@@ -174,8 +174,8 @@ requirements, or domain-specific workflows not obvious from the tech stack), inv
 `/deep-research` in Bridged mode before defining personas:
 
 ```
-Skill("deep-research", "Bridged: Research {domain} user journeys and acceptance criteria
-patterns to inform user personas for {goal}")
+Skill("deep-research", "Research {domain} user journeys and acceptance criteria
+patterns to inform user personas for {goal}. Mode: Bridged")
 ```
 
 Feed research findings into persona definitions.
@@ -316,7 +316,7 @@ existing test setup (e.g., suggesting Cucumber.js for a Vitest project).
 research query below.
 
 ```
-Skill("deep-research", "External: BDD and Gherkin integration options for {test_runner}
+Skill("deep-research", "BDD and Gherkin integration options for {test_runner}
 in {tech_stack} projects. Compare: (1) native BDD plugins that integrate directly with
 {test_runner} (e.g., vitest-cucumber-plugin for Vitest, jest-cucumber for Jest, pytest-bdd
 for pytest), (2) standalone BDD frameworks (Cucumber.js, godog, cucumber-rs) and their
@@ -324,7 +324,7 @@ compatibility with {test_runner}, (3) using Gherkin .feature files as specificat
 documentation (not executable). For each viable option: package name, registry page,
 last release date, open issues count, compatibility notes with {test_runner}, setup
 complexity. Exclude options unmaintained (no release in 12+ months) or incompatible
-with {test_runner}.")
+with {test_runner}. Mode: External")
 ```
 
 **Fallback:** If `/deep-research` is unavailable, errors, or returns no viable options,
@@ -377,7 +377,7 @@ For option B, these are all empty/none — Phase 6 handles this format.
 
 ### Exploratory Charter Decision
 
-Ask as a follow-up (or combine with the above if UAT-only):
+Ask as a follow-up (or combine with the above if Manual UAT):
 
 "Should I include exploratory test charters for any high-uncertainty areas?
 Exploratory charters are brief mission statements for manual testing sessions where
@@ -432,7 +432,7 @@ Write the complete test plan document using this exact format:
 **Source Plan:** {plan_file_path}
 **Branch:** {branch from plan header}
 **Date:** {YYYY-MM-DD}
-**Mode:** {Manual UAT | UAT + BDD}
+**Mode:** {mode}
 
 ---
 
