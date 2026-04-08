@@ -616,7 +616,7 @@ Append to the end of `{plan_file}` using the Edit tool:
      overwrite user decisions. -->
 
 **Test Plan:** {output_path}
-**Mode:** {mode} (one of: Manual UAT, UAT + BDD (feature files only), UAT + BDD (native integration), UAT + BDD (standalone))
+**Mode:** {Manual UAT | UAT + BDD (feature files only) | UAT + BDD (native integration) | UAT + BDD (standalone)}
 **Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if Manual UAT)
 **BDD Setup Needed:** {yes | no} (if yes: `{bdd_install_cmd}`)
 **BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if Manual UAT or specification-only)
@@ -666,9 +666,14 @@ Mode: {mode}
 Scenarios: {N} ({primary_count} primary, {edge_case_count} edge case)
 Tasks covered: {M} of {total_user_facing_tasks} user-facing tasks
 
-{if BDD:}
+{if BDD (native integration or standalone):}
 Feature files: {feature_dir} ({file_count} files)
-BDD setup needed: {yes | no} ({framework} — /swarm will handle installation)
+BDD setup needed: yes ({framework} — /swarm will handle installation)
+{end if}
+
+{if BDD (feature files only — specification-only):}
+Feature files: {feature_dir} ({file_count} files, specification only)
+BDD setup needed: no (Gherkin specifications — tests in {test_runner})
 {end if}
 
 {if exploratory charters:}
