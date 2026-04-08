@@ -618,7 +618,7 @@ Append to the end of `{plan_file}` using the Edit tool:
 **Test Plan:** {output_path}
 **Mode:** {Manual UAT | UAT + BDD (feature files only) | UAT + BDD (native integration) | UAT + BDD (standalone)}
 **Feature Files:** {memory_dir}/test-plans/{run-id}-features/ (omit line if Manual UAT)
-**BDD Setup Needed:** {yes | no} (if yes: `{bdd_install_cmd}`)
+**BDD Setup Needed:** {yes | no} (if yes: `{bdd_install_cmd}`) (omit line if Manual UAT)
 **BDD Scaffold Command:** `{bdd_scaffold_cmd}` (omit line if Manual UAT or specification-only)
 **BDD Test Command:** `{bdd_test_cmd}` (omit line if Manual UAT or specification-only)
 **BDD Framework:** {bdd_framework} (omit line if Manual UAT)
