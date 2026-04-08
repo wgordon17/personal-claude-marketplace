@@ -20,54 +20,29 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-import frontmatter
+sys.path.insert(0, str(Path(__file__).parent))
+import _atlas_lib  # noqa: E402
+from _atlas_lib import (  # noqa: E402
+    Agent,
+    Command,
+    Plugin,
+    Skill,
+    parse_agents,
+    parse_commands,
+    parse_marketplace,
+    parse_skills,
+)
+from _atlas_lib import (
+    list_reference_docs as _lib_list_reference_docs,
+)
 
 # ---------------------------------------------------------------------------
-# Data classes
+# Additional data classes (not shared with atlas-health-llm.py)
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class Plugin:
-    name: str
-    version: str
-    description: str
-    source: str
-    category: str
-    tags: list[str]
-    is_lsp: bool = False
-
-
-@dataclass
-class Skill:
-    name: str
-    plugin: str
-    description: str
-    allowed_tools: list[str]
-    path: Path = field(default_factory=Path)
-
-
-@dataclass
-class Agent:
-    name: str
-    plugin: str
-    description: str
-    tools: list[str]
-    model: str
-    color: str
-    path: Path = field(default_factory=Path)
-
-
-@dataclass
-class Command:
-    name: str
-    plugin: str
-    description: str
-    path: Path = field(default_factory=Path)
 
 
 @dataclass
@@ -88,18 +63,17 @@ class McpServer:
 
 @dataclass
 class HealthFinding:
-    severity: str  # "warning" | "info"
+    severity: str  # "WARN" | "INFO"
     category: str
     message: str
+    file_path: str = ""
 
 
 # ---------------------------------------------------------------------------
-# LSP plugin names (render only header + description)
+# LSP plugin names (from shared lib)
 # ---------------------------------------------------------------------------
 
-_LSP_PLUGINS = frozenset(
-    ["pyright-uvx", "vtsls-npx", "gopls-go", "vscode-html-css-npx", "rust-analyzer-rustup"]
-)
+_LSP_PLUGINS = _atlas_lib.LSP_PLUGINS
 
 # ---------------------------------------------------------------------------
 # Parsing helpers
@@ -118,137 +92,77 @@ def _repo_root_from_git(cwd: Path) -> Path:
     return Path(result.stdout.strip())
 
 
-def _parse_marketplace(repo_root: Path) -> list[Plugin]:
-    """Parse .claude-plugin/marketplace.json and return ordered Plugin list."""
+def _validate_repo_root(repo_root: Path) -> None:
+    """Validate that repo_root is a git root with marketplace.json."""
+    if not repo_root.is_dir():
+        print(f"ERROR: --repo-root {repo_root} is not a directory.", file=sys.stderr)
+        sys.exit(1)
     mp_path = repo_root / ".claude-plugin" / "marketplace.json"
-    data = json.loads(mp_path.read_text())
-    plugins: list[Plugin] = []
-    for entry in data["plugins"]:
-        plugins.append(
-            Plugin(
-                name=entry["name"],
-                version=entry["version"],
-                description=entry["description"],
-                source=entry["source"],
-                category=entry["category"],
-                tags=entry.get("tags", []),
-                is_lsp=entry["name"] in _LSP_PLUGINS,
-            )
+    if not mp_path.exists():
+        print(
+            f"ERROR: --repo-root {repo_root} does not contain .claude-plugin/marketplace.json.",
+            file=sys.stderr,
         )
-    return plugins
+        sys.exit(1)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        git_root = Path(result.stdout.strip()).resolve()
+        resolved = repo_root.resolve()
+        if git_root != resolved:
+            print(
+                f"ERROR: --repo-root {repo_root} is not the git root (git says {git_root}).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    except subprocess.CalledProcessError:
+        print(
+            f"ERROR: --repo-root {repo_root} is not inside a git repository.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
-def _parse_skills(repo_root: Path, plugins: list[Plugin]) -> list[Skill]:
-    """Collect all SKILL.md files across plugins."""
+def _parse_skills(plugins: list[Plugin]) -> list[Skill]:
+    """Collect all SKILL.md files across all plugins via _atlas_lib."""
     skills: list[Skill] = []
     for plugin in plugins:
-        plugin_dir = repo_root / plugin.source.lstrip("./")
-        skill_files = sorted(plugin_dir.glob("skills/*/SKILL.md"))
-        for sf in skill_files:
-            try:
-                post = frontmatter.load(str(sf))
-            except Exception:
-                continue
-            raw_tools = post.get("allowed-tools", [])
-            if isinstance(raw_tools, str):
-                tools = [t.strip() for t in raw_tools.split(",") if t.strip()]
-            elif isinstance(raw_tools, list):
-                tools = raw_tools
-            else:
-                tools = []
-            skills.append(
-                Skill(
-                    name=post.get("name", sf.parent.name),
-                    plugin=plugin.name,
-                    description=str(post.get("description", "")).strip(),
-                    allowed_tools=tools,
-                    path=sf,
-                )
-            )
+        skills.extend(parse_skills(plugin.source_path, plugin.name))
     return skills
 
 
-def _parse_agents(repo_root: Path, plugins: list[Plugin]) -> list[Agent]:
-    """Collect all agent .md files across plugins."""
+def _parse_agents(plugins: list[Plugin]) -> list[Agent]:
+    """Collect all agent .md files across all plugins via _atlas_lib."""
     agents: list[Agent] = []
     for plugin in plugins:
-        plugin_dir = repo_root / plugin.source.lstrip("./")
-        agent_files = sorted(plugin_dir.glob("agents/*.md"))
-        for af in agent_files:
-            try:
-                post = frontmatter.load(str(af))
-            except Exception:
-                continue
-            raw_tools = post.get("tools", "")
-            if isinstance(raw_tools, str):
-                tools = [t.strip() for t in raw_tools.split(",") if t.strip()]
-            elif isinstance(raw_tools, list):
-                tools = raw_tools
-            else:
-                tools = []
-            agents.append(
-                Agent(
-                    name=post.get("name", af.stem),
-                    plugin=plugin.name,
-                    description=str(post.get("description", "")).strip(),
-                    tools=tools,
-                    model=post.get("model", ""),
-                    color=post.get("color", ""),
-                    path=af,
-                )
-            )
+        agents.extend(parse_agents(plugin.source_path, plugin.name))
     return agents
 
 
-def _parse_commands(repo_root: Path, plugins: list[Plugin]) -> list[Command]:
-    """Collect all command .md files across plugins (COMMAND.md and flat *.md)."""
+def _parse_commands(plugins: list[Plugin]) -> list[Command]:
+    """Collect all command .md files across all plugins via _atlas_lib."""
     commands: list[Command] = []
     for plugin in plugins:
-        plugin_dir = repo_root / plugin.source.lstrip("./")
-        # Pattern 1: commands/<name>/COMMAND.md
-        cmd_files = sorted(plugin_dir.glob("commands/*/COMMAND.md"))
-        for cf in cmd_files:
-            try:
-                post = frontmatter.load(str(cf))
-            except Exception:
-                continue
-            commands.append(
-                Command(
-                    name=post.get("name", cf.parent.name),
-                    plugin=plugin.name,
-                    description=str(post.get("description", "")).strip(),
-                    path=cf,
-                )
-            )
-        # Pattern 2: commands/*.md (flat)
-        flat_files = sorted(plugin_dir.glob("commands/*.md"))
-        for cf in flat_files:
-            try:
-                post = frontmatter.load(str(cf))
-            except Exception:
-                continue
-            commands.append(
-                Command(
-                    name=post.get("name", cf.stem),
-                    plugin=plugin.name,
-                    description=str(post.get("description", "")).strip(),
-                    path=cf,
-                )
-            )
+        commands.extend(parse_commands(plugin.source_path, plugin.name))
     return commands
 
 
-def _parse_hooks(repo_root: Path, plugins: list[Plugin]) -> list[Hook]:
+def _parse_hooks(plugins: list[Plugin]) -> list[Hook]:
     """Collect all hooks from hooks.json files."""
     hooks: list[Hook] = []
     for plugin in plugins:
-        plugin_dir = repo_root / plugin.source.lstrip("./")
-        hooks_file = plugin_dir / "hooks" / "hooks.json"
+        hooks_file = plugin.source_path / "hooks" / "hooks.json"
         if not hooks_file.exists():
             continue
         try:
             data = json.loads(hooks_file.read_text())
-        except Exception:
+        except Exception as exc:
+            print(f"WARNING: failed to parse {hooks_file}: {exc}", file=sys.stderr)
             continue
         for event, entries in data.get("hooks", {}).items():
             for entry in entries:
@@ -266,17 +180,17 @@ def _parse_hooks(repo_root: Path, plugins: list[Plugin]) -> list[Hook]:
     return hooks
 
 
-def _parse_mcp_servers(repo_root: Path, plugins: list[Plugin]) -> list[McpServer]:
+def _parse_mcp_servers(plugins: list[Plugin]) -> list[McpServer]:
     """Collect MCP servers from .mcp.json files."""
     servers: list[McpServer] = []
     for plugin in plugins:
-        plugin_dir = repo_root / plugin.source.lstrip("./")
-        mcp_file = plugin_dir / ".mcp.json"
+        mcp_file = plugin.source_path / ".mcp.json"
         if not mcp_file.exists():
             continue
         try:
             data = json.loads(mcp_file.read_text())
-        except Exception:
+        except Exception as exc:
+            print(f"WARNING: failed to parse {mcp_file}: {exc}", file=sys.stderr)
             continue
         for server_name, cfg in data.get("mcpServers", {}).items():
             servers.append(
@@ -290,16 +204,13 @@ def _parse_mcp_servers(repo_root: Path, plugins: list[Plugin]) -> list[McpServer
     return servers
 
 
-def _list_reference_docs(repo_root: Path, plugins: list[Plugin]) -> dict[str, list[str]]:
-    """Return {plugin_name: [filename, ...]} for references/ directories."""
-    refs: dict[str, list[str]] = {}
+def _list_reference_docs(plugins: list[Plugin]) -> dict[str, list[Path]]:
+    """Return {plugin_name: [Path, ...]} for references/ directories via _atlas_lib."""
+    refs: dict[str, list[Path]] = {}
     for plugin in plugins:
-        plugin_dir = repo_root / plugin.source.lstrip("./")
-        ref_dir = plugin_dir / "references"
-        if ref_dir.exists():
-            files = sorted(f.name for f in ref_dir.iterdir() if f.is_file())
-            if files:
-                refs[plugin.name] = files
+        paths = _lib_list_reference_docs(plugin.source_path)
+        if paths:
+            refs[plugin.name] = paths
     return refs
 
 
@@ -307,41 +218,113 @@ def _list_reference_docs(repo_root: Path, plugins: list[Plugin]) -> dict[str, li
 # Cross-reference generation
 # ---------------------------------------------------------------------------
 
+# Regex to match subagent_type = "value" or subagent_type: "value"
+_SUBAGENT_TYPE_RE = re.compile(r'subagent_type\s*[=:]\s*["\']([^"\']+)["\']')
 
-def _agent_spawn_graph(agents: list[Agent], skills: list[Skill]) -> list[tuple[str, str]]:
-    """Find (skill_name, agent_name) pairs where skill body references agent subagent_type."""
-    pairs: list[tuple[str, str]] = []
+
+def _build_spawn_graph(agents: list[Agent], skills: list[Skill]) -> dict[str, list[str]]:
+    """Return {agent_name: [skill_name, ...]} — which skills spawn each agent.
+
+    Matches via subagent_type= patterns and backtick-quoted agent names in skill bodies.
+    Handles both bare names ('architect') and plugin-qualified names ('code-quality:architect').
+    """
+    spawn_graph: dict[str, list[str]] = {a.name: [] for a in agents}
+
     for skill in skills:
-        try:
-            body = skill.path.read_text()
-        except Exception:
-            continue
+        body = skill.body
+        if not body:
+            try:
+                body = skill.path.read_text()
+            except Exception:
+                continue
+
         for agent in agents:
-            # Normalize agent name: strip plugin prefix if present
-            agent_short = agent.name.split(":")[-1]
-            # Match subagent_type: "agent_name" or plugin:agent_name
-            pattern = r"subagent_type[\"']?\s*[:=]\s*[\"']" + re.escape(agent_short) + r"[\"']"
-            if re.search(pattern, body, re.IGNORECASE):
-                pairs.append((skill.name, agent.name))
-    return pairs
+            # Normalize agent name: strip plugin prefix
+            bare = agent.name.split(":", 1)[-1]
+
+            # Match subagent_type patterns
+            for match in _SUBAGENT_TYPE_RE.finditer(body):
+                captured = match.group(1)
+                # Normalize captured value
+                captured_bare = captured.split(":", 1)[-1]
+                if captured_bare == bare and skill.name not in spawn_graph[agent.name]:
+                    spawn_graph[agent.name].append(skill.name)
+
+            # Match backtick-quoted agent names
+            backtick_pattern = r"`" + re.escape(bare) + r"`"
+            if re.search(backtick_pattern, body) and skill.name not in spawn_graph[agent.name]:
+                spawn_graph[agent.name].append(skill.name)
+
+    return spawn_graph
 
 
-def _reference_consumption(
-    skills: list[Skill], ref_docs: dict[str, list[str]]
-) -> list[tuple[str, str, str]]:
-    """Return (skill_name, plugin_name, ref_filename) where skill body mentions reference doc."""
-    results: list[tuple[str, str, str]] = []
+def _build_reference_consumption(
+    skills: list[Skill], agents: list[Agent], ref_docs: dict[str, list[Path]]
+) -> dict[str, list[str]]:
+    """Return {ref_filename: [skill_or_agent_name, ...]} — who references each doc.
+
+    Uses the 'references/{filename}' suffix pattern for matching.
+    """
+    # Collect all bodies (skills + agents)
+    bodies: list[tuple[str, str]] = []  # (name, body_text)
     for skill in skills:
+        body = skill.body or ""
+        if not body:
+            try:
+                body = skill.path.read_text()
+            except Exception:
+                body = ""
+        bodies.append((skill.name, body))
+    for agent in agents:
+        body = agent.body or ""
+        if not body:
+            try:
+                body = agent.path.read_text()
+            except Exception:
+                body = ""
+        bodies.append((agent.name, body))
+
+    consumption: dict[str, list[str]] = {}
+    for _plugin_name, paths in ref_docs.items():
+        for ref_path in paths:
+            fn = ref_path.name
+            pattern = r"references/" + re.escape(fn)
+            consumers: list[str] = []
+            for name, body in bodies:
+                if re.search(pattern, body):
+                    consumers.append(name)
+            if consumers:
+                consumption[fn] = consumers
+
+    return consumption
+
+
+def _skill_ref_count(skill: Skill, ref_docs: dict[str, list[Path]]) -> int:
+    """Count how many reference docs this skill body mentions."""
+    body = skill.body or ""
+    if not body:
         try:
             body = skill.path.read_text()
         except Exception:
-            continue
-        for plugin_name, filenames in ref_docs.items():
-            for fn in filenames:
-                # Use re.escape to safely match filename in body
-                if re.search(re.escape(fn), body):
-                    results.append((skill.name, plugin_name, fn))
-    return results
+            return 0
+    count = 0
+    for paths in ref_docs.values():
+        for ref_path in paths:
+            pattern = r"references/" + re.escape(ref_path.name)
+            if re.search(pattern, body):
+                count += 1
+    return count
+
+
+def _skill_spawns(
+    skill: Skill, agents: list[Agent], spawn_graph: dict[str, list[str]]
+) -> list[str]:
+    """Return agent names spawned by this skill."""
+    result = []
+    for agent in agents:
+        if skill.name in spawn_graph.get(agent.name, []):
+            result.append(agent.name)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -355,13 +338,49 @@ def _run_health_checks(
     agents: list[Agent],
     commands: list[Command],
     hooks: list[Hook],
+    ref_docs: dict[str, list[Path]],
+    ref_consumption: dict[str, list[str]],
 ) -> list[HealthFinding]:
     """Return structural health findings."""
     findings: list[HealthFinding] = []
 
-    # Version consistency: compare plugin.json vs marketplace.json
-    # (Both already parsed via Plugin dataclass — marketplace is canonical)
-    # Check for plugins that have no skills, agents, commands, or hooks (non-LSP)
+    # Version mismatches: plugin.json vs marketplace.json
+    for plugin in plugins:
+        plugin_json = plugin.source_path / ".claude-plugin" / "plugin.json"
+        if plugin_json.exists():
+            try:
+                pdata = json.loads(plugin_json.read_text())
+                plugin_version = pdata.get("version", "")
+                if plugin_version and plugin_version != plugin.version:
+                    findings.append(
+                        HealthFinding(
+                            severity="WARN",
+                            category="version-mismatch",
+                            message=(
+                                f"{plugin.name}: plugin.json={plugin_version} "
+                                f"vs marketplace.json={plugin.version}"
+                            ),
+                            file_path=str(plugin_json),
+                        )
+                    )
+            except Exception:
+                pass
+
+    # Orphaned reference docs (not referenced by any skill or agent body)
+    for _plugin_name, paths in ref_docs.items():
+        for ref_path in paths:
+            fn = ref_path.name
+            if fn not in ref_consumption:
+                findings.append(
+                    HealthFinding(
+                        severity="WARN",
+                        category="orphan",
+                        message="Not referenced by any skill or agent",
+                        file_path=str(ref_path),
+                    )
+                )
+
+    # Empty non-LSP plugins
     for plugin in plugins:
         if plugin.is_lsp:
             continue
@@ -374,9 +393,10 @@ def _run_health_checks(
         if not has_content:
             findings.append(
                 HealthFinding(
-                    severity="warning",
+                    severity="WARN",
                     category="empty-plugin",
                     message=f"{plugin.name} has no skills, agents, commands, or hooks",
+                    file_path=str(plugin.source_path),
                 )
             )
 
@@ -385,9 +405,10 @@ def _run_health_checks(
         if not skill.description:
             findings.append(
                 HealthFinding(
-                    severity="info",
+                    severity="INFO",
                     category="missing-description",
-                    message=f"skill:{skill.plugin}:{skill.name} has no description",
+                    message=f"skill {skill.name} has no description",
+                    file_path=str(skill.path),
                 )
             )
 
@@ -396,20 +417,10 @@ def _run_health_checks(
         if not agent.description:
             findings.append(
                 HealthFinding(
-                    severity="info",
+                    severity="INFO",
                     category="missing-description",
-                    message=f"agent:{agent.plugin}:{agent.name} has no description",
-                )
-            )
-
-    # Agents with no tools
-    for agent in agents:
-        if not agent.tools:
-            findings.append(
-                HealthFinding(
-                    severity="info",
-                    category="no-tools",
-                    message=f"agent:{agent.plugin}:{agent.name} has no tools defined",
+                    message=f"agent {agent.name} has no description",
+                    file_path=str(agent.path),
                 )
             )
 
@@ -421,7 +432,7 @@ def _run_health_checks(
 # ---------------------------------------------------------------------------
 
 
-def _abbr_tools(tools: list[str], max_show: int = 3) -> str:
+def _abbr_tools(tools: list[str], max_show: int = 2) -> str:
     """Abbreviate a long tool list with <abbr> hover."""
     if not tools:
         return "—"
@@ -442,70 +453,17 @@ def _description_first_line(desc: str) -> str:
     return desc.strip()
 
 
+def _short_path(path: str, repo_root: Path) -> str:
+    """Return path relative to repo_root if possible."""
+    try:
+        return str(Path(path).relative_to(repo_root))
+    except ValueError:
+        return path
+
+
 # ---------------------------------------------------------------------------
 # ATLAS.md sections
 # ---------------------------------------------------------------------------
-
-
-_WORKFLOW_CONTENT = """\
-# Plugin Workflow Guide
-
-This guide describes the recommended skill workflow for working in this marketplace.
-
-## Primary Workflow
-
-```
-[deep-research] → [swarm] → [pr-review] → [fix] → [quality-gate]
-    (skill)        (skill)     (skill)     (skill)    (skill)
-```
-
-Each step:
-
-1. **`/deep-research`** (skill) — Research the problem space thoroughly before designing a
-   solution. Supports External mode (web) and Bridged mode (internal + external).
-
-2. **`/swarm`** (skill) — Launch a full 21+ agent pipelined team for implementation.
-   Covers architecture, security design, reduction, implementation, review, testing,
-   QA, performance, plan adherence, simplification, docs, and verification.
-
-3. **`/pr-review`** (skill) — Multi-agent PR review with 6 parallel specialized reviewers.
-   Verifies findings by investigating source code before reporting.
-
-4. **`/fix`** (skill) — Comprehensive finding fixer. Reads findings from the current session
-   and applies targeted fixes with 8-bucket verification.
-
-5. **`/quality-gate`** (skill) — Final checkpoint before claiming work is complete.
-   Use after any significant deliverable.
-
-## Side Workflows
-
-```
-Bug hunting:    [bug-investigation] → [fix]
-Cleanup:        [unfuck] → [quality-gate]
-Parallel impl:  [speculative] → [quality-gate]
-Bulk analysis:  [map-reduce] → [fix]
-Deep audit:     [file-audit] → [fix]
-```
-
-## Planning
-
-Use **`/incremental-planning`** (skill) before any multi-file implementation task.
-Native plan mode is disabled by hook — this skill replaces it.
-
-Use **`/roadmap`** (skill) to sequence multiple implementation plans.
-
-## Session Lifecycle
-
-| Command | Purpose |
-|---------|---------|
-| `/session-start` (command) | Load project context or initialize new project |
-| `/session-end` (command) | Sync project memory and update hack/ files |
-
-## Quality Gate Callout
-
-**Always run `/quality-gate` before claiming work is done.**
-This applies after `/swarm`, `/fix`, subagent-driven development, or any significant deliverable.
-"""
 
 
 def _render_plugin_section(
@@ -515,186 +473,162 @@ def _render_plugin_section(
     commands: list[Command],
     hooks: list[Hook],
     mcp_servers: list[McpServer],
-    ref_docs: dict[str, list[str]],
+    ref_docs: dict[str, list[Path]],
+    spawn_graph: dict[str, list[str]],
+    ref_consumption: dict[str, list[str]],
 ) -> str:
     """Render the full markdown section for one plugin."""
     lines: list[str] = []
-    lines.append(f"## {plugin.name}")
-    lines.append("")
-    lines.append(
-        f"**Version:** {plugin.version} | **Category:** {plugin.category} | "
-        f"**Tags:** {', '.join(plugin.tags)}"
-    )
+    lines.append(f"### {plugin.name} (v{plugin.version})")
     lines.append("")
     lines.append(plugin.description)
     lines.append("")
 
-    # LSP plugins: stop here
+    # LSP plugins: stop here (no sub-sections)
     if plugin.is_lsp:
         return "\n".join(lines)
 
-    plugin_skills = [s for s in skills if s.plugin == plugin.name]
-    plugin_agents = [a for a in agents if a.plugin == plugin.name]
-    plugin_commands = [c for c in commands if c.plugin == plugin.name]
-    plugin_hooks = [h for h in hooks if h.plugin == plugin.name]
-    plugin_mcp = [m for m in mcp_servers if m.plugin == plugin.name]
     plugin_refs = ref_docs.get(plugin.name, [])
 
     # Skills table
-    if plugin_skills:
-        lines.append("### Skills")
+    if skills:
+        lines.append(f"#### Skills ({len(skills)})")
         lines.append("")
-        lines.append("| Skill | Description | Tools |")
-        lines.append("|-------|-------------|-------|")
-        for skill in plugin_skills:
-            desc = _description_first_line(skill.description)
+        lines.append("| Skill | Tools | Refs | Spawns |")
+        lines.append("|-------|-------|------|--------|")
+        for skill in skills:
             tools_str = _abbr_tools(skill.allowed_tools)
-            lines.append(f"| `{skill.name}` | {desc} | {tools_str} |")
+            ref_count = _skill_ref_count(skill, ref_docs)
+            refs_str = str(ref_count) if ref_count else "—"
+            spawned = _skill_spawns(skill, agents, spawn_graph)
+            spawns_str = ", ".join(spawned) if spawned else "—"
+            lines.append(f"| {skill.name} | {tools_str} | {refs_str} | {spawns_str} |")
         lines.append("")
 
     # Agents table
-    if plugin_agents:
-        lines.append("### Agents")
+    if agents:
+        lines.append(f"#### Agents ({len(agents)})")
         lines.append("")
-        lines.append("| Agent | Description | Model | Tools |")
-        lines.append("|-------|-------------|-------|-------|")
-        for agent in plugin_agents:
-            desc = _description_first_line(agent.description)
+        lines.append("| Agent | Model | Tools | Spawned By |")
+        lines.append("|-------|-------|-------|------------|")
+        for agent in agents:
             model_str = agent.model if agent.model else "—"
             tools_str = _abbr_tools(agent.tools)
-            lines.append(f"| `{agent.name}` | {desc} | {model_str} | {tools_str} |")
-        lines.append("")
-
-    # Commands table
-    if plugin_commands:
-        lines.append("### Commands")
-        lines.append("")
-        lines.append("| Command | Description |")
-        lines.append("|---------|-------------|")
-        for cmd in plugin_commands:
-            desc = _description_first_line(cmd.description)
-            lines.append(f"| `/{cmd.name}` | {desc} |")
+            spawned_by = spawn_graph.get(agent.name, [])
+            spawned_by_str = ", ".join(spawned_by) if spawned_by else "—"
+            lines.append(f"| {agent.name} | {model_str} | {tools_str} | {spawned_by_str} |")
         lines.append("")
 
     # Hooks table
-    if plugin_hooks:
-        lines.append("### Hooks")
+    if hooks:
+        lines.append("#### Hooks")
         lines.append("")
-        lines.append("| Event | Matcher | Command |")
-        lines.append("|-------|---------|---------|")
-        for hook in plugin_hooks:
+        lines.append("| Event | Matcher | Script |")
+        lines.append("|-------|---------|--------|")
+        for hook in hooks:
             matcher_str = hook.matcher if hook.matcher else "(any)"
-            # Abbreviate long command paths
             cmd_display = hook.command.replace("${CLAUDE_PLUGIN_ROOT}/", "")
             lines.append(f"| {hook.event} | `{matcher_str}` | `{cmd_display}` |")
         lines.append("")
 
+    # Commands table
+    if commands:
+        lines.append(f"#### Commands ({len(commands)})")
+        lines.append("")
+        lines.append("| Command | Description |")
+        lines.append("|---------|-------------|")
+        for cmd in commands:
+            desc = _description_first_line(cmd.description)
+            lines.append(f"| {cmd.name} | {desc} |")
+        lines.append("")
+
     # MCP servers table
-    if plugin_mcp:
-        lines.append("### MCP Servers")
+    if mcp_servers:
+        lines.append("#### MCP Servers")
         lines.append("")
         lines.append("| Server | Type | URL |")
         lines.append("|--------|------|-----|")
-        for mcp in plugin_mcp:
+        for mcp in mcp_servers:
             lines.append(f"| `{mcp.server_name}` | {mcp.server_type} | `{mcp.url}` |")
         lines.append("")
 
-    # Reference docs
+    # References table — deduplicate by filename for display
     if plugin_refs:
-        lines.append("### Reference Docs")
+        seen: set[str] = set()
+        unique_refs: list[Path] = []
+        for ref_path in plugin_refs:
+            if ref_path.name not in seen:
+                seen.add(ref_path.name)
+                unique_refs.append(ref_path)
+        lines.append(f"#### References ({len(unique_refs)})")
         lines.append("")
-        for fn in plugin_refs:
-            lines.append(f"- `{fn}`")
+        lines.append("| Reference | Consumed By |")
+        lines.append("|-----------|-------------|")
+        for ref_path in unique_refs:
+            fn = ref_path.name
+            consumers = ref_consumption.get(fn, [])
+            consumers_str = ", ".join(consumers) if consumers else "—"
+            lines.append(f"| {fn} | {consumers_str} |")
         lines.append("")
 
     return "\n".join(lines)
 
 
 def _render_cross_references(
-    spawn_graph: list[tuple[str, str]],
-    ref_consumption: list[tuple[str, str, str]],
+    agents: list[Agent],
+    spawn_graph: dict[str, list[str]],
+    ref_consumption: dict[str, list[str]],
 ) -> str:
     """Render the cross-reference section."""
     lines: list[str] = []
     lines.append("## Cross-References")
     lines.append("")
 
-    if spawn_graph:
-        lines.append("### Agent Spawn Graph")
-        lines.append("")
-        lines.append("Skills that spawn agents via `subagent_type`:")
-        lines.append("")
-        lines.append("| Skill | Agent |")
-        lines.append("|-------|-------|")
-        for skill_name, agent_name in sorted(spawn_graph):
-            lines.append(f"| `{skill_name}` | `{agent_name}` |")
-        lines.append("")
+    # Agent spawn graph (agent -> spawned by skills)
+    lines.append("### Agent Spawn Graph")
+    lines.append("")
+    lines.append("| Agent | Spawned By |")
+    lines.append("|-------|------------|")
+    for agent in agents:
+        spawned_by = spawn_graph.get(agent.name, [])
+        spawned_by_str = ", ".join(spawned_by) if spawned_by else "—"
+        lines.append(f"| {agent.name} | {spawned_by_str} |")
+    lines.append("")
 
+    # Reference consumption
     if ref_consumption:
-        lines.append("### Reference Doc Consumption")
+        lines.append("### Reference Consumption")
         lines.append("")
-        lines.append("Skills that reference shared documentation:")
-        lines.append("")
-        lines.append("| Skill | Plugin | Reference |")
-        lines.append("|-------|--------|-----------|")
-        for skill_name, plugin_name, fn in sorted(ref_consumption):
-            lines.append(f"| `{skill_name}` | {plugin_name} | `{fn}` |")
+        lines.append("| Reference | Consumed By |")
+        lines.append("|-----------|-------------|")
+        for fn in sorted(ref_consumption):
+            consumers = ref_consumption[fn]
+            lines.append(f"| {fn} | {', '.join(consumers)} |")
         lines.append("")
 
     return "\n".join(lines)
 
 
-def _render_health_report(findings: list[HealthFinding]) -> str:
+def _render_health_report(findings: list[HealthFinding], repo_root: Path) -> str:
     """Render the structural health section."""
     lines: list[str] = []
-    lines.append("## Structural Health")
+    lines.append("## Health Report")
+    lines.append("")
+    lines.append("### Structural Findings")
     lines.append("")
 
     if not findings:
-        lines.append("No structural issues found.")
+        lines.append("No structural findings.")
         lines.append("")
         return "\n".join(lines)
 
-    warnings = [f for f in findings if f.severity == "warning"]
-    infos = [f for f in findings if f.severity == "info"]
-
-    if warnings:
-        lines.append("### Warnings")
-        lines.append("")
-        for f in warnings:
-            lines.append(f"- **[{f.category}]** {f.message}")
-        lines.append("")
-
-    if infos:
-        lines.append("### Info")
-        lines.append("")
-        for f in infos:
-            lines.append(f"- [{f.category}] {f.message}")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def _render_summary_table(
-    plugins: list[Plugin],
-    skills: list[Skill],
-    agents: list[Agent],
-    commands: list[Command],
-) -> str:
-    """Render the top-level summary table."""
-    non_lsp = [p for p in plugins if not p.is_lsp]
-    lsp = [p for p in plugins if p.is_lsp]
-
-    lines: list[str] = []
-    lines.append("## Summary")
+    lines.append("| Severity | Category | Finding | File |")
+    lines.append("|----------|----------|---------|------|")
+    for f in findings:
+        short = _short_path(f.file_path, repo_root) if f.file_path else "—"
+        lines.append(f"| {f.severity} | {f.category} | {f.message} | {short} |")
     lines.append("")
-    lines.append("| Total Plugins | LSP Plugins | Non-LSP Plugins | Skills | Agents | Commands |")
-    lines.append("|--------------|------------|-----------------|--------|--------|----------|")
-    lines.append(
-        f"| {len(plugins)} | {len(lsp)} | {len(non_lsp)} "
-        f"| {len(skills)} | {len(agents)} | {len(commands)} |"
-    )
-    lines.append("")
+
     return "\n".join(lines)
 
 
@@ -705,63 +639,72 @@ def _render_summary_table(
 
 def generate(repo_root: Path, today: str) -> str:
     """Generate the full ATLAS.md content and return it as a string."""
-    plugins = _parse_marketplace(repo_root)
-    skills = _parse_skills(repo_root, plugins)
-    agents = _parse_agents(repo_root, plugins)
-    commands = _parse_commands(repo_root, plugins)
-    hooks = _parse_hooks(repo_root, plugins)
-    mcp_servers = _parse_mcp_servers(repo_root, plugins)
-    ref_docs = _list_reference_docs(repo_root, plugins)
+    plugins = parse_marketplace(repo_root)
+    skills = _parse_skills(plugins)
+    agents = _parse_agents(plugins)
+    commands = _parse_commands(plugins)
+    hooks = _parse_hooks(plugins)
+    mcp_servers = _parse_mcp_servers(plugins)
+    ref_docs = _list_reference_docs(plugins)
 
-    spawn_graph = _agent_spawn_graph(agents, skills)
-    ref_consumption = _reference_consumption(skills, ref_docs)
-    health_findings = _run_health_checks(plugins, skills, agents, commands, hooks)
+    spawn_graph = _build_spawn_graph(agents, skills)
+    ref_consumption = _build_reference_consumption(skills, agents, ref_docs)
+    health_findings = _run_health_checks(
+        plugins, skills, agents, commands, hooks, ref_docs, ref_consumption
+    )
+
+    # Read docs/WORKFLOW.md verbatim
+    workflow_path = repo_root / "docs" / "WORKFLOW.md"
+    if not workflow_path.exists():
+        print(
+            "ERROR: docs/WORKFLOW.md not found. Create it first (Task 1).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    workflow_content = workflow_path.read_text()
 
     parts: list[str] = []
 
-    # Header with timestamp
+    # Header
+    parts.append("# ATLAS — Plugin Inventory and Health Report")
+    parts.append("<!-- Generated by generate-atlas.py — do not edit manually -->")
     parts.append(f"<!-- Last generated: {today} -->")
     parts.append("")
-    parts.append("# ATLAS — Plugin Inventory")
+
+    # Verbatim WORKFLOW.md content
+    parts.append(workflow_content.rstrip())
     parts.append("")
-    parts.append(
-        "_Auto-generated by `generate-atlas.py`. Do not edit manually — run "
-        "`uv run .claude/commands/generate-atlas.py` to regenerate._"
-    )
+    parts.append("---")
     parts.append("")
 
-    # Workflow guide (inlined)
-    parts.append(_WORKFLOW_CONTENT)
-
-    # Summary
-    parts.append(_render_summary_table(plugins, skills, agents, commands))
-
-    # Plugin sections in marketplace.json order
-    parts.append("## Plugins")
+    # Plugin Inventory
+    parts.append("## Plugin Inventory")
     parts.append("")
     for plugin in plugins:
-        plugin_skills = [s for s in skills if s.plugin == plugin.name]
-        plugin_agents = [a for a in agents if a.plugin == plugin.name]
-        plugin_commands = [c for c in commands if c.plugin == plugin.name]
-        plugin_hooks = [h for h in hooks if h.plugin == plugin.name]
-        plugin_mcp = [m for m in mcp_servers if m.plugin == plugin.name]
         section = _render_plugin_section(
             plugin,
-            plugin_skills,
-            plugin_agents,
-            plugin_commands,
-            plugin_hooks,
-            plugin_mcp,
+            [s for s in skills if s.plugin == plugin.name],
+            [a for a in agents if a.plugin == plugin.name],
+            [c for c in commands if c.plugin == plugin.name],
+            [h for h in hooks if h.plugin == plugin.name],
+            [m for m in mcp_servers if m.plugin == plugin.name],
             ref_docs,
+            spawn_graph,
+            ref_consumption,
         )
         parts.append(section)
 
+    parts.append("---")
+    parts.append("")
+
     # Cross-references
-    if spawn_graph or ref_consumption:
-        parts.append(_render_cross_references(spawn_graph, ref_consumption))
+    parts.append(_render_cross_references(agents, spawn_graph, ref_consumption))
+
+    parts.append("---")
+    parts.append("")
 
     # Health report
-    parts.append(_render_health_report(health_findings))
+    parts.append(_render_health_report(health_findings, repo_root))
 
     return "\n".join(parts) + "\n"
 
@@ -770,7 +713,7 @@ def generate(repo_root: Path, today: str) -> str:
 # --check mode
 # ---------------------------------------------------------------------------
 
-_TIMESTAMP_RE = re.compile(r"^<!-- Last generated: \d{4}-\d{2}-\d{2} -->\n?", re.MULTILINE)
+_TIMESTAMP_RE = re.compile(r"^<!-- Last generated: \d{4}-\d{2}-\d{2} -->\n", re.MULTILINE)
 
 
 def _strip_timestamp(content: str) -> str:
@@ -811,42 +754,49 @@ def main() -> None:
         "--atlas-path",
         type=Path,
         default=argparse.SUPPRESS,
-        help="Path to ATLAS.md (default: <repo-root>/ATLAS.md)",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--date",
         default=argparse.SUPPRESS,
-        help="Date string for timestamp (default: today in YYYY-MM-DD)",
+        help=argparse.SUPPRESS,
     )
     args = parser.parse_args()
 
+    # Track which args were explicitly provided
+    atlas_path_explicit = hasattr(args, "atlas_path")
+    repo_root_explicit = args.repo_root is not None
+
     # Resolve repo root
-    if args.repo_root is not None:
+    if repo_root_explicit:
         repo_root = args.repo_root.resolve()
+        _validate_repo_root(repo_root)
     else:
         try:
             repo_root = _repo_root_from_git(Path.cwd())
         except subprocess.CalledProcessError:
-            print("ERROR: Not in a git repository. Use --repo-root to specify.", file=sys.stderr)
-            sys.exit(1)
-
-    # Resolve atlas path
-    atlas_path: Path = getattr(args, "atlas_path", repo_root / "ATLAS.md")
-    atlas_path = atlas_path.resolve()
-
-    # Path boundary validation: atlas_path must be within repo_root
-    # (Skip only when both --atlas-path and --repo-root are explicitly provided and they
-    # point outside each other — e.g., test mode with /tmp paths)
-    explicit_both = args.repo_root is not None and hasattr(args, "atlas_path")
-    if not explicit_both:
-        try:
-            atlas_path.relative_to(repo_root)
-        except ValueError:
             print(
-                f"ERROR: --atlas-path {atlas_path} is outside --repo-root {repo_root}",
+                "ERROR: Not in a git repository. Use --repo-root to specify.",
                 file=sys.stderr,
             )
             sys.exit(1)
+
+    # Resolve atlas path
+    if atlas_path_explicit:
+        atlas_path = Path(args.atlas_path).resolve()
+    else:
+        atlas_path = (repo_root / "ATLAS.md").resolve()
+
+    # Path boundary validation: atlas_path must be within repo_root
+    # Skip only when BOTH --atlas-path and --repo-root are explicitly provided (test mode)
+    if not (atlas_path_explicit and repo_root_explicit) and not atlas_path.is_relative_to(
+        repo_root
+    ):
+        print(
+            f"Error: --atlas-path must be within --repo-root ({repo_root})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Date
     today: str = getattr(args, "date", date.today().isoformat())
@@ -854,23 +804,40 @@ def main() -> None:
     # Generate
     try:
         content = generate(repo_root, today)
-    except FileNotFoundError as exc:
+    except SystemExit:
+        raise
+    except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
     if args.check:
+        if not atlas_path.exists():
+            print(
+                "ATLAS.md not found. Generate with: uv run .claude/commands/generate-atlas.py",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         if check_staleness(atlas_path, content):
-            print("ATLAS.md is current.")
             sys.exit(0)
         else:
-            if not atlas_path.exists():
-                print("ATLAS.md does not exist. Run generate-atlas.py to create it.")
-            else:
-                print("ATLAS.md is stale. Run generate-atlas.py to regenerate.")
+            print(
+                "ATLAS.md is stale. Regenerate with: uv run .claude/commands/generate-atlas.py",
+                file=sys.stderr,
+            )
             sys.exit(1)
     else:
         atlas_path.write_text(content)
-        print(f"Wrote {atlas_path}")
+        # Parse once to get summary counts
+        _plugins = parse_marketplace(repo_root)
+        _skills = _parse_skills(_plugins)
+        _agents = _parse_agents(_plugins)
+        _refs = _list_reference_docs(_plugins)
+        total_refs = sum(len(v) for v in _refs.values())
+        print(
+            f"ATLAS.md generated ({len(_plugins)} plugins, "
+            f"{len(_skills)} skills, {len(_agents)} agents, "
+            f"{total_refs} references)"
+        )
 
 
 if __name__ == "__main__":
