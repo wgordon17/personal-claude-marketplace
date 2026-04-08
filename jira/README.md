@@ -45,17 +45,6 @@ This plugin uses the Atlassian Rovo MCP server (`mcp-atlassian-prod`).
 | **Link** | Issue linking with configurable link types |
 | **Discover** | Project metadata, issue type fields, workflow transitions |
 
-## OSAC Defaults
-
-When working in the OSAC context, the skill/agent applies these defaults automatically:
-- **Project:** MGMT
-- **Component:** OSAC
-- **Label:** OSAC
-- **Sprint:** current `OSAC Sprint <N>` (sequential numbering)
-- **Board:** 4269
-
-These defaults are dropped when you ask about other projects or the full instance.
-
 ## Integration with Existing Skills
 
 Plan tasks can reference the jira agent directly. No changes to existing skills are needed — the integration is plan-driven:
@@ -102,16 +91,6 @@ If you are migrating from the old `hcm-jira-administrator-agent` plugin:
    ```
 4. Clean up `~/.claude/settings.local.json` — remove any `mcp__plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__*` entries from `permissions.allow`
 5. Optionally remove the HCM entry from dev-guard's `mcp_constants.py` (the old key is harmless but dead)
-
-## Reference Files
-
-The plugin ships three reference files loaded contextually (not on every invocation):
-
-| File | When Loaded |
-|------|-------------|
-| `jira/reference/osac-conventions.md` | Creating or updating OSAC issues |
-| `jira/reference/jql-reference.md` | Building complex JQL queries |
-| `jira/reference/jira-formatting.md` | Writing descriptions or comments |
 
 ## Installation
 
