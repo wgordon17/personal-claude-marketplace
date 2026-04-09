@@ -120,7 +120,6 @@ create/update confirmations, and any context where an issue is referenced. URLs 
 2. Read `jira/reference/jira-formatting.md` for markdown guidance
 3. Build the fields payload (project, components, summary, issuetype, labels, epicLink if applicable)
 4. Call `createJiraIssue` with `contentFormat: "markdown"` and `responseContentFormat: "markdown"`
-5. Return the full URL: `https://redhat.atlassian.net/browse/<KEY>` (clickable for the user)
 
 ### Update Issue
 
