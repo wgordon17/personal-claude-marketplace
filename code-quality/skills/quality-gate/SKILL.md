@@ -315,8 +315,6 @@ After all 4 reviewers complete, synthesize findings by classification
    per finding, batch up to 4 per call). Each question includes full context:
    `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`
    with options "Fix" and "Defer". `multiSelect: false`. User decides per-finding.
-   The `▸dp:` metadata suffix enables cross-session decision persistence via the
-   decision-persistence hook. Use the finding's file, line, and reviewer category.
    Fix approved items. Record deferred items with user's reason.
 4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
    `needs-input` items are resolved via user decision.

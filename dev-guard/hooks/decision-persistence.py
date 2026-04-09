@@ -29,6 +29,21 @@ _MAX_DECISION_AGE_DAYS = 30
 METADATA_PREFIX = "▸dp:"
 DECISIONS_FILENAME = "review-decisions.json"
 MEMORY_DIR_CANDIDATES = ("hack", ".local", "scratch", ".dev")
+_CODE_HASH_WINDOW = 5  # ±N lines around finding location for staleness detection
+
+
+# ── Git root detection ──
+
+
+def _find_git_root() -> Path:
+    """Find the git root by walking up from CWD. Falls back to CWD if no .git found."""
+    cwd = Path.cwd()
+    git_root = cwd
+    while git_root != git_root.parent:
+        if (git_root / ".git").exists():
+            return git_root
+        git_root = git_root.parent
+    return cwd  # no .git found — fall back to CWD
 
 
 # ── Memory directory detection ──
@@ -39,15 +54,7 @@ def _find_memory_dir() -> Path | None:
 
     Finds git root by walking up from CWD, then checks for candidates at root level.
     """
-    cwd = Path.cwd()
-    # Find git root
-    git_root = cwd
-    while git_root != git_root.parent:
-        if (git_root / ".git").exists():
-            break
-        git_root = git_root.parent
-    else:
-        git_root = cwd  # reset to cwd after exhausting walk (no .git found)
+    git_root = _find_git_root()
 
     core_files = ("PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md")
 
@@ -109,6 +116,31 @@ def _fingerprint(file: str, category: str, line: str = "0", skill: str = "unknow
     line_window = (int(line) // 10) * 10 if line.isdigit() else 0
     normalized = f"{file}|{category}|{line_window}|{skill}"
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+def _compute_code_hash(file_path: str, line: str = "0") -> str | None:
+    """Hash ±N lines around a finding location for staleness detection.
+
+    Returns a 16-char hex digest, or None if the file can't be read.
+    When the code around a finding changes, the hash changes, invalidating
+    the stored decision so the user is re-prompted.
+    """
+    git_root = _find_git_root()
+    resolved = git_root / file_path
+    try:
+        lines = resolved.read_text().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not lines:
+        return None
+
+    target = int(line) if line.isdigit() else 0
+    # 0-indexed target line
+    center = max(0, target - 1)  # line numbers are 1-based
+    start = max(0, center - _CODE_HASH_WINDOW)
+    end = min(len(lines), center + _CODE_HASH_WINDOW + 1)
+    window = "\n".join(lines[start:end])
+    return hashlib.sha256(window.encode()).hexdigest()[:16]
 
 
 # ── Metadata parsing ──
@@ -247,14 +279,22 @@ def _handle_pre_tool_use(data: dict) -> None:
             if decision not in VALID_DECISIONS:
                 all_matched = False
                 break  # corrupted/unexpected stored value — re-ask
+            # Staleness check: verify code hasn't changed since decision was made
+            stored_hash = prior.get("code_hash")
+            if stored_hash is not None:
+                current_hash = _compute_code_hash(meta["file"], meta.get("line", "0"))
+                if current_hash != stored_hash:
+                    all_matched = False
+                    break  # code changed — decision is stale, re-ask
             answers[q_text] = decision
         else:
             all_matched = False
             break
 
     if not all_matched:
-        # Can't auto-answer partial batches reliably — passthrough for all
-        # TODO(v2): test whether partial answers work with AskUserQuestion
+        # Partial batch auto-answer is architecturally blocked: updatedInput
+        # requires permissionDecision to take effect (anthropics/claude-code#32060),
+        # so there's no "allow some, prompt for rest" mode. Passthrough all.
         sys.exit(0)
 
     # All questions matched — build context message
@@ -356,17 +396,21 @@ def _handle_post_tool_use(data: dict) -> None:
             continue
 
         snippet = _extract_description_snippet(q_text)
+        line_val = re.sub(r"[^\d]", "", meta.get("line", "0"))[:_MAX_FIELD_LEN] or "0"
+        code_hash = _compute_code_hash(meta["file"], meta.get("line", "0"))
 
         decision_record = {
             "fingerprint": fp,
             "file": meta["file"],
-            "line": meta.get("line", "0")[:_MAX_FIELD_LEN] if meta.get("line") else "0",
+            "line": line_val,
             "category": re.sub(r"[^\w./_-]", "_", meta["cat"])[:_MAX_FIELD_LEN],
             "skill": re.sub(r"[^\w./_-]", "_", meta.get("skill", "unknown"))[:_MAX_FIELD_LEN],
             "decision": answer,
-            "description_snippet": snippet[:80],
+            "description_snippet": re.sub(r"[\x00-\x1f\x7f]", " ", snippet)[:80],
             "decided_at": datetime.now(UTC).isoformat(),
         }
+        if code_hash is not None:
+            decision_record["code_hash"] = code_hash
 
         stored_by_fp[fp] = decision_record  # O(1) upsert
         mutated = True

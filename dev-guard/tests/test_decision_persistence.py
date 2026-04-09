@@ -16,6 +16,7 @@ Exit semantics for this hook:
 import importlib.util
 import json
 import subprocess
+import types
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -30,7 +31,7 @@ METADATA_PREFIX = "▸dp:"
 # ── Module loader ─────────────────────────────────────────────────────────────
 
 
-def _load_module():
+def _load_module() -> types.ModuleType:
     """Import decision-persistence.py as a module for unit testing internal functions."""
     spec = importlib.util.spec_from_file_location("decision_persistence", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
@@ -245,16 +246,13 @@ class TestFindMemoryDir:
 class TestSaveDecisionsOSError:
     """Unit tests for _save_decisions OSError cleanup path."""
 
-    def setup_method(self):
-        self.mod = _load_module()
-
     def test_oserror_during_write_cleans_up_tmp(self, tmp_path):
         """If write_text raises OSError, the .tmp file is removed."""
         decisions_path = tmp_path / "review-decisions.json"
         data = {"version": 1, "decisions": []}
 
         with patch.object(Path, "write_text", side_effect=OSError("disk full")):
-            self.mod._save_decisions(decisions_path, data)
+            _MOD._save_decisions(decisions_path, data)
 
         tmp_files = list(tmp_path.glob("*.tmp"))
         assert tmp_files == [], f"unexpected .tmp files left: {tmp_files}"
@@ -266,7 +264,7 @@ class TestSaveDecisionsOSError:
         data = {"version": 1, "decisions": []}
 
         with patch("os.replace", side_effect=OSError("cross-device link")):
-            self.mod._save_decisions(decisions_path, data)
+            _MOD._save_decisions(decisions_path, data)
 
         tmp_files = list(tmp_path.glob("*.tmp"))
         assert tmp_files == [], f"orphaned .tmp files: {tmp_files}"
@@ -276,7 +274,7 @@ class TestSaveDecisionsOSError:
         """Happy path: _save_decisions writes valid JSON atomically."""
         decisions_path = tmp_path / "review-decisions.json"
         data = {"version": 1, "decisions": [{"fingerprint": "abc123", "decision": "Fix"}]}
-        self.mod._save_decisions(decisions_path, data)
+        _MOD._save_decisions(decisions_path, data)
 
         assert decisions_path.exists()
         loaded = json.loads(decisions_path.read_text())
@@ -290,9 +288,6 @@ class TestSaveDecisionsOSError:
 class TestFingerprint:
     """Unit tests for _fingerprint windowing behavior."""
 
-    def setup_method(self):
-        self.mod = _load_module()
-
     @pytest.mark.parametrize(
         "line_a,line_b,same_window",
         [
@@ -305,8 +300,8 @@ class TestFingerprint:
         ],
     )
     def test_line_windowing(self, line_a, line_b, same_window):
-        fp_a = self.mod._fingerprint("src/auth.py", "Security", line_a)
-        fp_b = self.mod._fingerprint("src/auth.py", "Security", line_b)
+        fp_a = _MOD._fingerprint("src/auth.py", "Security", line_a)
+        fp_b = _MOD._fingerprint("src/auth.py", "Security", line_b)
         if same_window:
             assert fp_a == fp_b, f"lines {line_a} and {line_b} should map to the same window"
         else:
@@ -314,40 +309,40 @@ class TestFingerprint:
 
     def test_non_digit_line_uses_zero_window(self):
         """Non-digit line string falls back to window 0."""
-        fp_non_digit = self.mod._fingerprint("src/auth.py", "Security", "N/A")
-        fp_zero = self.mod._fingerprint("src/auth.py", "Security", "0")
+        fp_non_digit = _MOD._fingerprint("src/auth.py", "Security", "N/A")
+        fp_zero = _MOD._fingerprint("src/auth.py", "Security", "0")
         assert fp_non_digit == fp_zero
 
     def test_empty_string_line_uses_zero_window(self):
         """Empty string line is non-digit → window 0."""
-        fp_empty = self.mod._fingerprint("src/auth.py", "Security", "")
-        fp_zero = self.mod._fingerprint("src/auth.py", "Security", "0")
+        fp_empty = _MOD._fingerprint("src/auth.py", "Security", "")
+        fp_zero = _MOD._fingerprint("src/auth.py", "Security", "0")
         assert fp_empty == fp_zero
 
     def test_different_categories_different_fingerprints(self):
-        fp_a = self.mod._fingerprint("src/auth.py", "Security", "42")
-        fp_b = self.mod._fingerprint("src/auth.py", "Performance", "42")
+        fp_a = _MOD._fingerprint("src/auth.py", "Security", "42")
+        fp_b = _MOD._fingerprint("src/auth.py", "Performance", "42")
         assert fp_a != fp_b
 
     def test_different_files_different_fingerprints(self):
-        fp_a = self.mod._fingerprint("src/auth.py", "Security", "42")
-        fp_b = self.mod._fingerprint("src/other.py", "Security", "42")
+        fp_a = _MOD._fingerprint("src/auth.py", "Security", "42")
+        fp_b = _MOD._fingerprint("src/other.py", "Security", "42")
         assert fp_a != fp_b
 
     def test_fingerprint_length_is_16(self):
-        fp = self.mod._fingerprint("src/auth.py", "Security", "42")
+        fp = _MOD._fingerprint("src/auth.py", "Security", "42")
         assert len(fp) == 16
         assert all(c in "0123456789abcdef" for c in fp)
 
     def test_default_line_argument(self):
-        fp_default = self.mod._fingerprint("src/auth.py", "Security")
-        fp_explicit = self.mod._fingerprint("src/auth.py", "Security", "0")
+        fp_default = _MOD._fingerprint("src/auth.py", "Security")
+        fp_explicit = _MOD._fingerprint("src/auth.py", "Security", "0")
         assert fp_default == fp_explicit
 
     def test_different_skills_different_fingerprints(self):
         """Same file/cat/line but different skill → different fingerprint."""
-        fp_a = self.mod._fingerprint("src/auth.py", "Security", "42", "pr-review")
-        fp_b = self.mod._fingerprint("src/auth.py", "Security", "42", "quality-gate")
+        fp_a = _MOD._fingerprint("src/auth.py", "Security", "42", "pr-review")
+        fp_b = _MOD._fingerprint("src/auth.py", "Security", "42", "quality-gate")
         assert fp_a != fp_b
 
 
@@ -357,39 +352,36 @@ class TestFingerprint:
 class TestSanitizePathField:
     """Unit tests for _sanitize_path_field path traversal and injection rejection."""
 
-    def setup_method(self):
-        self.mod = _load_module()
-
     def test_path_traversal_rejected(self):
-        assert self.mod._sanitize_path_field("../../etc/passwd") == "<invalid>"
+        assert _MOD._sanitize_path_field("../../etc/passwd") == "<invalid>"
 
     def test_path_traversal_in_middle_rejected(self):
-        assert self.mod._sanitize_path_field("src/../../../etc/shadow") == "<invalid>"
+        assert _MOD._sanitize_path_field("src/../../../etc/shadow") == "<invalid>"
 
     def test_absolute_path_rejected(self):
-        assert self.mod._sanitize_path_field("/absolute/path") == "<invalid>"
+        assert _MOD._sanitize_path_field("/absolute/path") == "<invalid>"
 
     def test_absolute_path_root_rejected(self):
-        assert self.mod._sanitize_path_field("/") == "<invalid>"
+        assert _MOD._sanitize_path_field("/") == "<invalid>"
 
     def test_valid_relative_path_accepted(self):
-        assert self.mod._sanitize_path_field("src/auth.py") == "src/auth.py"
+        assert _MOD._sanitize_path_field("src/auth.py") == "src/auth.py"
 
     def test_valid_nested_path_accepted(self):
-        result = self.mod._sanitize_path_field("deep/nested/path/file.py")
+        result = _MOD._sanitize_path_field("deep/nested/path/file.py")
         assert result == "deep/nested/path/file.py"
 
     def test_non_path_characters_normalized(self):
-        result = self.mod._sanitize_path_field("src/file with spaces.py")
+        result = _MOD._sanitize_path_field("src/file with spaces.py")
         assert result == "src/file_with_spaces.py"
 
     def test_long_string_truncated_at_512(self):
         long_path = "a/b/" + "x" * 600
-        result = self.mod._sanitize_path_field(long_path)
+        result = _MOD._sanitize_path_field(long_path)
         assert len(result) <= 512
 
     def test_empty_string_accepted(self):
-        assert self.mod._sanitize_path_field("") == ""
+        assert _MOD._sanitize_path_field("") == ""
 
 
 # ── pr-test-4: _parse_metadata edge cases ────────────────────────────────────
@@ -398,12 +390,9 @@ class TestSanitizePathField:
 class TestParseMetadata:
     """Unit tests for _parse_metadata format edge cases."""
 
-    def setup_method(self):
-        self.mod = _load_module()
-
     def test_valid_full_metadata(self):
         text = f"Question {METADATA_PREFIX}file=src/a.py,line=42,cat=Sec,skill=pr-review"
-        result = self.mod._parse_metadata(text)
+        result = _MOD._parse_metadata(text)
         assert result is not None
         assert result["file"] == "src/a.py"
         assert result["line"] == "42"
@@ -412,40 +401,40 @@ class TestParseMetadata:
 
     def test_missing_file_returns_none(self):
         text = f"Question {METADATA_PREFIX}line=42,cat=Security,skill=pr-review"
-        assert self.mod._parse_metadata(text) is None
+        assert _MOD._parse_metadata(text) is None
 
     def test_missing_cat_returns_none(self):
         text = f"Question {METADATA_PREFIX}file=src/auth.py,line=42,skill=pr-review"
-        assert self.mod._parse_metadata(text) is None
+        assert _MOD._parse_metadata(text) is None
 
     def test_no_prefix_returns_none(self):
         text = "A normal question without any metadata suffix"
-        assert self.mod._parse_metadata(text) is None
+        assert _MOD._parse_metadata(text) is None
 
     def test_file_with_comma_causes_parse_failure(self):
         """File path with comma breaks the parser (known limitation)."""
         pfx = METADATA_PREFIX
         text = f"Q {pfx}file=src/file,name.py,line=42,cat=Sec,skill=pr-review"
-        result = self.mod._parse_metadata(text)
+        result = _MOD._parse_metadata(text)
         if result is not None:
             assert result.get("file") != "src/file,name.py"
 
     def test_file_with_path_traversal_returns_none(self):
         pfx = METADATA_PREFIX
         text = f"Question {pfx}file=../../etc/passwd,line=1,cat=Sec,skill=pr"
-        assert self.mod._parse_metadata(text) is None
+        assert _MOD._parse_metadata(text) is None
 
     def test_whitespace_around_values_stripped(self):
         pfx = METADATA_PREFIX
         text = f"Q {pfx}file= src/auth.py ,line= 42 ,cat= Security ,skill= pr "
-        result = self.mod._parse_metadata(text)
+        result = _MOD._parse_metadata(text)
         assert result is not None
         assert result["file"] == "src/auth.py"
         assert result["cat"] == "Security"
 
     def test_optional_line_field_absent(self):
         text = f"Question {METADATA_PREFIX}file=src/auth.py,cat=Security,skill=pr-review"
-        result = self.mod._parse_metadata(text)
+        result = _MOD._parse_metadata(text)
         assert result is not None
         assert result["file"] == "src/auth.py"
         assert result["cat"] == "Security"
@@ -454,7 +443,7 @@ class TestParseMetadata:
         """If ▸dp: appears in description body, rpartition finds the last (real) suffix."""
         pfx = METADATA_PREFIX
         text = f"Describes {pfx} injection {pfx}file=src/a.py,line=1,cat=Sec,skill=pr"
-        result = self.mod._parse_metadata(text)
+        result = _MOD._parse_metadata(text)
         assert result is not None
         assert result["file"] == "src/a.py"
         assert result["cat"] == "Sec"
@@ -463,14 +452,11 @@ class TestParseMetadata:
 class TestExtractDescriptionSnippet:
     """Unit tests for _extract_description_snippet."""
 
-    def setup_method(self):
-        self.mod = _load_module()
-
     def test_double_prefix_preserves_full_description(self):
         """rsplit on last ▸dp: preserves description containing the prefix."""
         pfx = METADATA_PREFIX
         text = f"Describes {pfx} injection {pfx}file=src/a.py,line=1,cat=Sec,skill=pr"
-        snippet = self.mod._extract_description_snippet(text)
+        snippet = _MOD._extract_description_snippet(text)
         assert "injection" in snippet
 
 
@@ -811,3 +797,401 @@ class TestHookPassthrough:
         result = run_hook(payload, cwd=tmp_path)
         assert result.returncode == 0
         assert result.stdout.strip() == ""
+
+
+# ── Code-hash staleness detection ─────────────────────────────────────────────
+
+
+class TestComputeCodeHash:
+    """Unit tests for _compute_code_hash."""
+
+    def test_hash_returns_16_hex_chars(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "auth.py").write_text("line0\nline1\nline2\nline3\nline4\n")
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h = _MOD._compute_code_hash("src/auth.py", "3")
+        assert h is not None
+        assert len(h) == 16
+        assert all(c in "0123456789abcdef" for c in h)
+
+    def test_hash_changes_when_code_changes(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        f = src / "auth.py"
+        f.write_text("line0\nline1\noriginal\nline3\nline4\n")
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h1 = _MOD._compute_code_hash("src/auth.py", "3")
+        f.write_text("line0\nline1\nmodified\nline3\nline4\n")
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h2 = _MOD._compute_code_hash("src/auth.py", "3")
+        assert h1 != h2
+
+    def test_hash_stable_when_code_unchanged(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "auth.py").write_text("line0\nline1\nstable\nline3\nline4\n")
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h1 = _MOD._compute_code_hash("src/auth.py", "3")
+            h2 = _MOD._compute_code_hash("src/auth.py", "3")
+        assert h1 == h2
+
+    def test_missing_file_returns_none(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h = _MOD._compute_code_hash("src/nonexistent.py", "1")
+        assert h is None
+
+    def test_empty_file_returns_none(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "empty.py").write_text("")
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h = _MOD._compute_code_hash("src/empty.py", "1")
+        assert h is None
+
+    def test_non_digit_line_uses_zero(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "f.py").write_text("a\nb\nc\n")
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h1 = _MOD._compute_code_hash("src/f.py", "N/A")
+            h2 = _MOD._compute_code_hash("src/f.py", "0")
+        assert h1 == h2
+
+
+class TestCodeHashStaleness:
+    """Integration tests for code-hash staleness in PreToolUse."""
+
+    @staticmethod
+    def _make_source_file(line_42_content: str = "original_code") -> str:
+        """Generate a 50-line source file with controllable content at line 42."""
+        lines = [f"line_{i}" for i in range(50)]
+        lines[41] = line_42_content  # line 42 (0-indexed as 41)
+        return "\n".join(lines) + "\n"
+
+    def _compute_hash_for_file(self, filepath: Path, line: str) -> str:
+        """Compute the code hash the same way the hook does."""
+        import hashlib as _hl
+
+        lines = filepath.read_text().splitlines()
+        target = int(line) if line.isdigit() else 0
+        center = max(0, target - 1)
+        start = max(0, center - 5)
+        end = min(len(lines), center + 5 + 1)
+        window = "\n".join(lines[start:end])
+        return _hl.sha256(window.encode()).hexdigest()[:16]
+
+    def test_stale_decision_not_auto_applied(self, tmp_path):
+        """Code changed since decision → decision is stale → passthrough."""
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        src = project / "src"
+        src.mkdir()
+        f = src / "auth.py"
+        f.write_text(self._make_source_file("original_code"))
+
+        code_hash = self._compute_hash_for_file(f, "42")
+        record = make_decision_record()
+        record["code_hash"] = code_hash
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        # Now change the code at line 42
+        f.write_text(self._make_source_file("MODIFIED_code"))
+
+        q = make_dp_question("SQL injection")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        assert result.stdout.strip() == "", "expected passthrough — code changed, decision is stale"
+
+    def test_fresh_decision_auto_applied(self, tmp_path):
+        """Code unchanged since decision → decision is fresh → auto-answer."""
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        src = project / "src"
+        src.mkdir()
+        f = src / "auth.py"
+        f.write_text(self._make_source_file("original_code"))
+
+        code_hash = self._compute_hash_for_file(f, "42")
+        record = make_decision_record()
+        record["code_hash"] = code_hash
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        q = make_dp_question("SQL injection")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", (
+            "expected auto-answer — code unchanged, decision is fresh"
+        )
+        output = json.loads(result.stdout)
+        assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    def test_no_code_hash_skips_staleness_check(self, tmp_path):
+        """Decision without code_hash (legacy) → staleness check skipped → auto-answer."""
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+
+        record = make_decision_record()
+        assert "code_hash" not in record
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        q = make_dp_question("SQL injection")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", (
+            "expected auto-answer — no code_hash means skip staleness check"
+        )
+
+    def test_post_tool_use_stores_code_hash(self, tmp_path):
+        """PostToolUse stores code_hash in the decision record."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+        src = project / "src"
+        src.mkdir()
+        (src / "auth.py").write_text(self._make_source_file("vulnerable_code"))
+
+        q = make_dp_question("SQL injection")
+        q_text = q["question"]
+        payload = make_post_payload([q], {q_text: "Fix"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert len(stored["decisions"]) == 1
+        assert "code_hash" in stored["decisions"][0]
+        assert len(stored["decisions"][0]["code_hash"]) == 16
+
+    def test_post_tool_use_missing_file_omits_code_hash(self, tmp_path):
+        """PostToolUse with non-existent file → code_hash omitted from record."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        q = make_dp_question("SQL injection")
+        q_text = q["question"]
+        payload = make_post_payload([q], {q_text: "Fix"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert len(stored["decisions"]) == 1
+        assert "code_hash" not in stored["decisions"][0]
+
+
+# ── PR review coverage gaps ───────────────────────────────────────────────────
+
+
+class TestPreToolUseAnswerValues:
+    """qa-1: Verify auto-answer values are correct, not just structure."""
+
+    def test_auto_answer_returns_correct_decision_value(self, tmp_path):
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        record = make_decision_record(
+            file="src/auth.py", line="20", cat="Security", decision="Defer"
+        )
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        q = make_dp_question("Unvalidated input", file="src/auth.py", line="20", cat="Security")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        q_text = q["question"]
+        assert output["hookSpecificOutput"]["updatedInput"]["answers"][q_text] == "Defer"
+
+    def test_multi_question_answer_values_correct(self, tmp_path):
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        r1 = make_decision_record(file="src/auth.py", line="42", cat="Security", decision="Fix")
+        r2 = make_decision_record(
+            file="src/templates.py", line="88", cat="Quality", decision="Defer"
+        )
+        seed_decisions_file(hack / "review-decisions.json", [r1, r2])
+
+        q1 = make_dp_question("SQL injection", file="src/auth.py", line="42", cat="Security")
+        q2 = make_dp_question("XSS in template", file="src/templates.py", line="88", cat="Quality")
+        payload = make_pre_payload([q1, q2])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        answers = output["hookSpecificOutput"]["updatedInput"]["answers"]
+        assert answers[q1["question"]] == "Fix"
+        assert answers[q2["question"]] == "Defer"
+
+
+class TestPreToolUseCorruptedRecord:
+    """qa-2: Corrupted stored record passthrough."""
+
+    def test_invalid_decision_value_passthroughs(self, tmp_path):
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        record = make_decision_record()
+        record["decision"] = "INVALID"
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        q = make_dp_question("SQL injection")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        assert result.stdout.strip() == "", "expected passthrough for corrupted decision value"
+
+
+class TestPostToolUseCoverageGaps:
+    """qa-3, qa-6: PostToolUse coverage gaps."""
+
+    def test_fix_defer_without_metadata_not_captured(self, tmp_path):
+        """qa-3: Fix/Defer questions without ▸dp: metadata → nothing captured."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        q = make_fix_defer_question("Bare question without metadata")
+        q_text = q["question"]
+        payload = make_post_payload([q], {q_text: "Fix"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert stored["decisions"] == []
+
+    def test_no_memory_dir_passthroughs(self, tmp_path):
+        """qa-6: PostToolUse with no memory dir → passthrough."""
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".git").mkdir()
+
+        q = make_dp_question("Missing validation")
+        q_text = q["question"]
+        payload = make_post_payload([q], {q_text: "Fix"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
+
+class TestLoadDecisionsRecovery:
+    """qa-4: _load_decisions corrupted JSON recovery."""
+
+    def test_invalid_json_returns_empty_structure(self):
+        data = _MOD._load_decisions(Path("/dev/null"))
+        assert data == {"version": 1, "decisions": []}
+
+    def test_corrupted_json_returns_empty_structure(self, tmp_path):
+        f = tmp_path / "review-decisions.json"
+        f.write_text("not valid json {{{")
+        data = _MOD._load_decisions(f)
+        assert data == {"version": 1, "decisions": []}
+
+    def test_valid_json_round_trips(self, tmp_path):
+        f = tmp_path / "review-decisions.json"
+        expected = {"version": 1, "decisions": [{"fingerprint": "abc", "decision": "Fix"}]}
+        f.write_text(json.dumps(expected))
+        data = _MOD._load_decisions(f)
+        assert data == expected
+
+    def test_missing_file_returns_empty_structure(self, tmp_path):
+        f = tmp_path / "nonexistent.json"
+        data = _MOD._load_decisions(f)
+        assert data == {"version": 1, "decisions": []}
+
+
+class TestNonHackMemoryDir:
+    """qa-5: Non-hack memory directory candidates."""
+
+    def test_local_dir_found(self, tmp_path):
+        """Memory dir using .local/ instead of hack/."""
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".git").mkdir()
+        local = project / ".local"
+        local.mkdir()
+        (local / "PROJECT.md").write_text("# Project\n")
+        (local / "TODO.md").write_text("# TODO\n")
+
+        q = make_dp_question("Finding in .local project")
+        record = make_decision_record()
+        seed_decisions_file(local / "review-decisions.json", [record])
+
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", "expected auto-answer when .local/ is the memory dir"
+
+
+class TestExtractDescriptionSnippetBrackets:
+    """qa-7: Bracket-stripping coverage."""
+
+    def test_single_bracket_prefix_stripped(self):
+        pfx = METADATA_PREFIX
+        text = f"[sec-1] SQL injection {pfx}file=a.py,line=1,cat=Sec,skill=pr"
+        snippet = _MOD._extract_description_snippet(text)
+        assert snippet == "SQL injection"
+
+    def test_double_bracket_prefix_stripped(self):
+        pfx = METADATA_PREFIX
+        text = f"[sec-1] [Security] SQL injection {pfx}file=a.py,line=1,cat=Sec,skill=pr"
+        snippet = _MOD._extract_description_snippet(text)
+        assert snippet == "SQL injection"
+
+    def test_unclosed_bracket_preserved(self):
+        pfx = METADATA_PREFIX
+        text = f"[broken description without close {pfx}file=a.py,line=1,cat=Sec,skill=pr"
+        snippet = _MOD._extract_description_snippet(text)
+        assert snippet.startswith("[broken")
+
+
+class TestLineSanitization:
+    """sec-1: Line field sanitization."""
+
+    def test_non_digit_line_sanitized(self, tmp_path):
+        """Non-digit characters stripped from line field in stored record."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        q = make_dp_question("Finding", file="src/a.py", line="42abc", cat="Sec")
+        q_text = q["question"]
+        payload = make_post_payload([q], {q_text: "Fix"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert stored["decisions"][0]["line"] == "42"
+
+
+class TestDescriptionSnippetSanitization:
+    """sec-2: Control character stripping in description_snippet."""
+
+    def test_control_chars_stripped(self, tmp_path):
+        """Control characters replaced with spaces in stored snippet."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        pfx = METADATA_PREFIX
+        q_text = f"Desc with\x00null and\ttab {pfx}file=src/a.py,line=1,cat=Sec,skill=pr"
+        q = make_fix_defer_question(q_text)
+        payload = make_post_payload([q], {q_text: "Fix"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        snippet = stored["decisions"][0]["description_snippet"]
+        assert "\x00" not in snippet
+        assert "\t" not in snippet
