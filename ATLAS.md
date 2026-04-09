@@ -78,40 +78,40 @@ Code quality agents, development utilities, and orchestration skills: architectu
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| bug-investigation | Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion | — |
-| business-panel | Read, Glob, Grep, WebSearch, WebFetch, Skill | — |
-| deep-research | WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs | — |
-| file-audit | LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs | — |
-| fix | Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch | — |
-| incremental-planning | Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch | — |
-| index-repo | Read, Glob, Grep, Write, Bash | — |
-| lsp-navigation | LSP, Read, Grep, Glob | — |
-| map-reduce | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet | — |
-| plan-review | Read, Glob, Grep, Bash, Agent, AskUserQuestion | plan-adherence |
-| pr-review | Read, Glob, Grep, Bash, Agent, AskUserQuestion | — |
-| quality-gate | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill | plan-adherence |
-| reflect | mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information, mcp__serena__think_about_whether_you_are_done, mcp__serena__summarize_changes, mcp__serena__read_memory, mcp__serena__write_memory, mcp__serena__list_memories, Read, Glob, Grep | — |
-| roadmap | Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, ToolSearch | — |
-| speculative | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill | — |
-| summarize | Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion | — |
-| swarm | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
-| test-plan | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Skill | — |
-| test-runner | Bash, Read, Grep, Glob | test-runner |
-| unfuck | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill | security, test-runner |
-| uv-python | Bash, Read, Write, Edit, Grep, Glob | — |
+| bug-investigation | <small>Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion</small> | — |
+| business-panel | <small>Read, Glob, Grep, WebSearch, WebFetch, Skill</small> | — |
+| deep-research | <small>WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs</small> | — |
+| file-audit | <small>LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs</small> | — |
+| fix | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch</small> | — |
+| incremental-planning | <small>Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch</small> | — |
+| index-repo | <small>Read, Glob, Grep, Write, Bash</small> | — |
+| lsp-navigation | <small>LSP, Read, Grep, Glob</small> | — |
+| map-reduce | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet</small> | — |
+| plan-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | plan-adherence |
+| pr-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
+| quality-gate | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill</small> | plan-adherence |
+| reflect | <small>mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information, mcp__serena__think_about_whether_you_are_done, mcp__serena__summarize_changes, mcp__serena__read_memory, mcp__serena__write_memory, mcp__serena__list_memories, Read, Glob, Grep</small> | — |
+| roadmap | <small>Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, ToolSearch</small> | — |
+| speculative | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill</small> | — |
+| summarize | <small>Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
+| swarm | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill</small> | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
+| test-plan | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Skill</small> | — |
+| test-runner | <small>Bash, Read, Grep, Glob</small> | test-runner |
+| unfuck | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill</small> | security, test-runner |
+| uv-python | <small>Bash, Read, Write, Edit, Grep, Glob</small> | — |
 
 **Agents (8)**
 
 | Agent | Model | Tools | Spawned By |
 |-------|-------|-------|------------|
-| architect | opus | Read, Glob, Grep, LSP, WebSearch, WebFetch | swarm |
-| code-reviewer | sonnet | Read, Glob, Grep, LSP | swarm |
-| code-simplifier | sonnet | Read, Glob, Grep, LSP, Edit, Write | swarm |
-| performance | sonnet | Read, Glob, Grep, LSP, Bash, WebSearch | swarm |
-| plan-adherence | opus | Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage | plan-review, quality-gate, swarm |
-| qa | sonnet | Read, Glob, Grep, LSP, Bash | swarm |
-| security | sonnet | Read, Glob, Grep, LSP, WebSearch | swarm, unfuck |
-| test-runner | haiku | Bash, Read, Grep, TodoWrite | test-runner, swarm, unfuck |
+| architect | opus | <small>Read, Glob, Grep, LSP, WebSearch, WebFetch</small> | swarm |
+| code-reviewer | sonnet | <small>Read, Glob, Grep, LSP</small> | swarm |
+| code-simplifier | sonnet | <small>Read, Glob, Grep, LSP, Edit, Write</small> | swarm |
+| performance | sonnet | <small>Read, Glob, Grep, LSP, Bash, WebSearch</small> | swarm |
+| plan-adherence | opus | <small>Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage</small> | plan-review, quality-gate, swarm |
+| qa | sonnet | <small>Read, Glob, Grep, LSP, Bash</small> | swarm |
+| security | sonnet | <small>Read, Glob, Grep, LSP, WebSearch</small> | swarm, unfuck |
+| test-runner | haiku | <small>Bash, Read, Grep, TodoWrite</small> | test-runner, swarm, unfuck |
 
 **Commands (4)**
 
@@ -163,7 +163,7 @@ Git workflow tools: dynamic SessionStart git instructions, history manipulation,
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| git-history | Bash | — |
+| git-history | <small>Bash</small> | — |
 
 **Hooks**
 
@@ -202,13 +202,13 @@ Jira integration for issue tracking, querying, and management — OSAC defaults 
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| jira | Read, Bash, Agent, AskUserQuestion, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian | — |
+| jira | <small>Read, Bash, Agent, AskUserQuestion, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian</small> | — |
 
 **Agents (1)**
 
 | Agent | Model | Tools | Spawned By |
 |-------|-------|-------|------------|
-| jira-agent | sonnet | Read, Grep, Bash, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian | — |
+| jira-agent | sonnet | <small>Read, Grep, Bash, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian</small> | — |
 
 _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without prefix._
 
@@ -254,6 +254,8 @@ _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without p
 | INFO | orphan-agent | agent qa has no 'Spawned By' entries in skill spawn graph | code-quality/agents/qa.md |
 | INFO | orphan-agent | agent security has no 'Spawned By' entries in skill spawn graph | code-quality/agents/security.md |
 | INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in skill spawn graph | jira/agents/jira-agent.md |
+| INFO | subagent-consistency | skill swarm spawns agents via reference docs (architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/swarm/SKILL.md |
+| INFO | subagent-consistency | skill unfuck spawns agents via reference docs (security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/unfuck/SKILL.md |
 | INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
