@@ -80,8 +80,8 @@ Code quality agents, development utilities, and orchestration skills: architectu
 |-------|-------|--------|
 | bug-investigation | <small>Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion</small> | — |
 | business-panel | <small>Read, Glob, Grep, WebSearch, WebFetch, Skill</small> | — |
-| deep-research | <small>WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs</small> | — |
-| file-audit | <small>LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs</small> | — |
+| deep-research | <small>WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion, context7:resolve-library-id, context7:query-docs</small> | — |
+| file-audit | <small>LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, context7:resolve-library-id, context7:query-docs</small> | — |
 | fix | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch</small> | — |
 | incremental-planning | <small>Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch</small> | — |
 | index-repo | <small>Read, Glob, Grep, Write, Bash</small> | — |
@@ -90,7 +90,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | plan-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
 | pr-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
 | quality-gate | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill</small> | plan-adherence |
-| reflect | <small>mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information, mcp__serena__think_about_whether_you_are_done, mcp__serena__summarize_changes, mcp__serena__read_memory, mcp__serena__write_memory, mcp__serena__list_memories, Read, Glob, Grep</small> | — |
+| reflect | <small>serena:think_about_task_adherence, serena:think_about_collected_information, serena:think_about_whether_you_are_done, serena:summarize_changes, serena:read_memory, serena:write_memory, serena:list_memories, Read, Glob, Grep</small> | — |
 | roadmap | <small>Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, ToolSearch</small> | — |
 | speculative | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill</small> | — |
 | summarize | <small>Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
@@ -99,6 +99,8 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | test-runner | <small>Bash, Read, Grep, Glob</small> | test-runner |
 | unfuck | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill</small> | test-runner |
 | uv-python | <small>Bash, Read, Write, Edit, Grep, Glob</small> | — |
+
+_MCP tools shown as `server:function` (full: `mcp__server__function`)._
 
 **Agents (8)**
 
@@ -202,15 +204,17 @@ Jira integration for issue tracking, querying, and management — OSAC defaults 
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| jira | <small>Read, Bash, Agent, AskUserQuestion, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian</small> | — |
+| jira | <small>Read, Bash, Agent, AskUserQuestion, mcp-atlassian-prod:atlassianUserInfo, mcp-atlassian-prod:getAccessibleAtlassianResources, mcp-atlassian-prod:searchJiraIssuesUsingJql, mcp-atlassian-prod:getJiraIssue, mcp-atlassian-prod:editJiraIssue, mcp-atlassian-prod:createJiraIssue, mcp-atlassian-prod:addCommentToJiraIssue, mcp-atlassian-prod:transitionJiraIssue, mcp-atlassian-prod:getTransitionsForJiraIssue, mcp-atlassian-prod:lookupJiraAccountId, mcp-atlassian-prod:getJiraProjectIssueTypesMetadata, mcp-atlassian-prod:getJiraIssueTypeMetaWithFields, mcp-atlassian-prod:createIssueLink, mcp-atlassian-prod:getIssueLinkTypes, mcp-atlassian-prod:addWorklogToJiraIssue, mcp-atlassian-prod:getVisibleJiraProjects, mcp-atlassian-prod:getJiraIssueRemoteIssueLinks, mcp-atlassian-prod:fetchAtlassian, mcp-atlassian-prod:searchAtlassian</small> | — |
+
+_MCP tools shown as `server:function` (full: `mcp__server__function`)._
 
 **Agents (1)**
 
 | Agent | Model | Tools | Spawned By |
 |-------|-------|-------|------------|
-| jira-agent | sonnet | <small>Read, Grep, Bash, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian</small> | — |
+| jira-agent | sonnet | <small>Read, Grep, Bash, mcp-atlassian-prod:atlassianUserInfo, mcp-atlassian-prod:getAccessibleAtlassianResources, mcp-atlassian-prod:searchJiraIssuesUsingJql, mcp-atlassian-prod:getJiraIssue, mcp-atlassian-prod:editJiraIssue, mcp-atlassian-prod:createJiraIssue, mcp-atlassian-prod:addCommentToJiraIssue, mcp-atlassian-prod:transitionJiraIssue, mcp-atlassian-prod:getTransitionsForJiraIssue, mcp-atlassian-prod:lookupJiraAccountId, mcp-atlassian-prod:getJiraProjectIssueTypesMetadata, mcp-atlassian-prod:getJiraIssueTypeMetaWithFields, mcp-atlassian-prod:createIssueLink, mcp-atlassian-prod:getIssueLinkTypes, mcp-atlassian-prod:addWorklogToJiraIssue, mcp-atlassian-prod:getVisibleJiraProjects, mcp-atlassian-prod:getJiraIssueRemoteIssueLinks, mcp-atlassian-prod:fetchAtlassian, mcp-atlassian-prod:searchAtlassian</small> | — |
 
-_Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without prefix._
+_MCP tools shown as `server:function` (full: `mcp__server__function`)._
 
 **MCP Servers**
 

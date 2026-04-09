@@ -553,11 +553,8 @@ def _run_health_checks(
                 body = skill.path.read_text()
             except Exception:
                 continue
-        # Normalize allowed_tools: strip Jira prefix for comparison
-        allowed_set = {
-            t[len(_JIRA_MCP_PREFIX) :] if t.startswith(_JIRA_MCP_PREFIX) else t
-            for t in skill.allowed_tools
-        }
+        # Normalize allowed_tools: shorten MCP names for comparison
+        allowed_set = {_shorten_mcp_tool(t) for t in skill.allowed_tools}
         for tool in sorted(_KNOWN_TOOLS):
             in_body = bool(re.search(r"\b" + re.escape(tool) + r"\b", body))
             in_allowed = tool in allowed_set
@@ -588,22 +585,36 @@ def _run_health_checks(
 # ---------------------------------------------------------------------------
 
 
-_JIRA_MCP_PREFIX = "mcp__plugin_jira_mcp-atlassian-prod__"
+def _shorten_mcp_tool(name: str) -> str:
+    """Shorten mcp__server__function to server:function."""
+    if not name.startswith("mcp__"):
+        return name
+    # mcp__server__func or mcp__plugin_X_server__func
+    parts = name.split("__")
+    if len(parts) >= 3:
+        server = parts[1]
+        func = "__".join(parts[2:])
+        # Plugin-qualified servers: "plugin_jira_mcp-atlassian-prod" → just use last segment
+        if server.startswith("plugin_"):
+            # mcp__plugin_jira_mcp-atlassian-prod__func → extract server from middle
+            # Pattern: plugin_{plugin}_{server-name}
+            seg = server.split("_", 2)
+            server = seg[-1] if len(seg) >= 3 else server
+        return f"{server}:{func}"
+    return name
 
 
 def _format_tools(tools: list[str]) -> str:
-    """Return tools in <small> text, stripping the verbose Jira MCP prefix."""
+    """Return tools in <small> text, shortening MCP tool names."""
     if not tools:
         return "—"
-    display_tools = [
-        t[len(_JIRA_MCP_PREFIX) :] if t.startswith(_JIRA_MCP_PREFIX) else t for t in tools
-    ]
+    display_tools = [_shorten_mcp_tool(t) for t in tools]
     return "<small>" + ", ".join(display_tools) + "</small>"
 
 
-def _has_jira_tools(tools: list[str]) -> bool:
-    """Return True if any tool has the Jira MCP prefix."""
-    return any(t.startswith(_JIRA_MCP_PREFIX) for t in tools)
+def _has_mcp_tools(tools: list[str]) -> bool:
+    """Return True if any tool is an MCP tool (starts with mcp__)."""
+    return any(t.startswith("mcp__") for t in tools)
 
 
 def _compact_description(desc: str) -> str:
@@ -710,13 +721,16 @@ def _render_plugin_section(
             spawned = _skill_spawns(skill, agents, spawn_graph)
             spawns_str = ", ".join(spawned) if spawned else "—"
             lines.append(f"| {skill.name} | {tools_str} | {spawns_str} |")
+        if any(_has_mcp_tools(s.allowed_tools) for s in skills):
+            lines.append("")
+            lines.append("_MCP tools shown as `server:function` (full: `mcp__server__function`)._")
         lines.append("")
 
     # Agents table
     if agents:
         lines.append(f"**Agents ({len(agents)})**")
         lines.append("")
-        jira_note = any(_has_jira_tools(a.tools) for a in agents)
+        mcp_note = any(_has_mcp_tools(a.tools) for a in agents)
         lines.append("| Agent | Model | Tools | Spawned By |")
         lines.append("|-------|-------|-------|------------|")
         for agent in agents:
@@ -725,12 +739,9 @@ def _render_plugin_section(
             spawned_by = spawn_graph.get(agent.name, [])
             spawned_by_str = ", ".join(spawned_by) if spawned_by else "—"
             lines.append(f"| {agent.name} | {model_str} | {tools_str} | {spawned_by_str} |")
-        if jira_note:
+        if mcp_note:
             lines.append("")
-            lines.append(
-                "_Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__`"
-                " are shown without prefix._"
-            )
+            lines.append("_MCP tools shown as `server:function` (full: `mcp__server__function`)._")
         lines.append("")
 
     # Hooks table
