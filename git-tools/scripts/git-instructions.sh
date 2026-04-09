@@ -322,8 +322,8 @@ PR_WORKFLOW
 
 if [ "$IS_FORK" -eq 1 ]; then
     # Resolve OWNER/REPO from upstream, and fork owner from origin
-    UPSTREAM_REPO=$(git remote get-url upstream 2>/dev/null | sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
-    ORIGIN_OWNER=$(git remote get-url origin 2>/dev/null | sed -E 's|.*[:/]([^/]+)/[^/]+?$|\1|')
+    UPSTREAM_REPO=$(git remote get-url upstream 2>/dev/null | sed -E 's|\.git$||; s|.*[:/]([^/]+/[^/]+)$|\1|')
+    ORIGIN_OWNER=$(git remote get-url origin 2>/dev/null | sed -E 's|\.git$||; s|.*[:/]([^/]+)/[^/]+$|\1|')
     # Validate before interpolation into session instructions (same allowlist as detect_fork)
     if ! echo "$UPSTREAM_REPO" | grep -qE '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$'; then
         UPSTREAM_REPO="<upstream-owner>/<upstream-repo>"
