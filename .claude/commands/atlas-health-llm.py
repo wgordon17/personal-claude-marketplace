@@ -78,13 +78,15 @@ def _fail_open(reason: str) -> NoReturn:
 # ---------------------------------------------------------------------------
 
 _SECRET_PATTERNS = [
-    # Env var assignments with long values (likely API keys)
-    re.compile(r'([A-Z_]+=)["\']([A-Za-z0-9+/]{20,})["\']'),
-    # Bearer tokens
-    re.compile(r"(Bearer )([A-Za-z0-9\-._~+/]+=*)"),
+    # Env var assignments with long values (case-insensitive)
+    re.compile(r'([A-Za-z_]+=)["\']([A-Za-z0-9+/]{20,})["\']'),
+    # Bearer / Token auth headers
+    re.compile(r"((?:Bearer|Token) )([A-Za-z0-9\-._~+/]+=*)"),
+    # GitHub-style prefixed tokens (ghp_, ghs_, gho_, etc.)
+    re.compile(r"(gh[psourat]_)([A-Za-z0-9]{36,})"),
 ]
 
-_PEM_HEADER = re.compile(r"-----BEGIN\s+\S.*?-----")
+_PEM_BLOCK = re.compile(r"-----BEGIN[^-]+-----[\s\S]*?-----END[^-]+-----", re.MULTILINE)
 
 
 def _redact_secrets(text: str, file_path: Path) -> str:
@@ -94,14 +96,15 @@ def _redact_secrets(text: str, file_path: Path) -> str:
     This is best-effort defense-in-depth — skill/agent files should not contain secrets.
     """
     redacted = False
+    # First pass: redact full PEM blocks (multiline)
+    if _PEM_BLOCK.search(text):
+        text = _PEM_BLOCK.sub("[REDACTED]", text)
+        redacted = True
+    # Second pass: line-by-line patterns
     lines = text.splitlines(keepends=True)
     result_lines: list[str] = []
     for line in lines:
         original = line
-        # PEM headers
-        if _PEM_HEADER.search(line):
-            line = _PEM_HEADER.sub("[REDACTED]", line)
-        # Env var and bearer token patterns
         for pattern in _SECRET_PATTERNS:
             line = pattern.sub(r"\g<1>[REDACTED]", line)
         if line != original:
@@ -140,8 +143,8 @@ def _build_drift_prompt(components: list[tuple[str, str, str, str]]) -> str:
     ]
     for i, (name, comp_type, description, body) in enumerate(components, 1):
         lines.append(f"[{i}] {name} (type: {comp_type})")
-        lines.append(f"Frontmatter description: {description}")
-        lines.append(f"Body content (first 2000 chars): {body}")
+        lines.append(f"Frontmatter description: <description>{description}</description>")
+        lines.append(f"Body content (first 2000 chars): <body>{body}</body>")
         lines.append("")
 
     lines += [
@@ -182,10 +185,10 @@ def _build_duplication_prompt(
         "Related but complementary documents are NOT duplicates.",
         "",
         f"Doc A: {filename_a}",
-        f"Content (first 1500 chars): {content_a}",
+        f"Content (first 1500 chars): <content>{content_a}</content>",
         "",
         f"Doc B: {filename_b}",
-        f"Content (first 1500 chars): {content_b}",
+        f"Content (first 1500 chars): <content>{content_b}</content>",
         "",
         'Respond with JSON: {"duplicate": true|false, "severity": "CRITICAL"|"INFO"|null,',
         '                    "overlap_description": "..." | null}',
