@@ -4,6 +4,7 @@ description: Simplifies and refines code for clarity, consistency, and maintaina
 model: sonnet
 color: magenta
 tools: Read, Glob, Grep, LSP, Edit, Write
+spawned-by: [swarm]
 ---
 
 You are an expert code simplification specialist. You analyze recently modified code and

@@ -422,22 +422,24 @@ def _run_health_checks(
                 )
             )
 
-    # Orphaned agents: not spawned by any skill (INFO — may be spawned programmatically)
+    # Build spawn graphs: body-only (for consistency check) and full (for orphan/mismatch)
     spawn_graph = _build_spawn_graph(agents, skills)
+    spawn_graph_with_refs = _build_spawn_graph(agents, skills, ref_docs)
+
+    # Orphaned agents: not spawned by any skill even with ref doc scanning
     for agent in agents:
-        if not spawn_graph.get(agent.name):
+        if not spawn_graph_with_refs.get(agent.name):
             findings.append(
                 HealthFinding(
                     severity="INFO",
                     category="orphan-agent",
-                    message=f"agent {agent.name} has no 'Spawned By' entries in skill spawn graph",
+                    message=f"agent {agent.name} has no 'Spawned By' entries in spawn graph",
                     file_path=str(agent.path),
                 )
             )
 
     # subagent_type consistency: flag skills that spawn agents (per ref doc scan)
     # but don't have subagent_type in their SKILL.md body
-    spawn_graph_with_refs = _build_spawn_graph(agents, skills, ref_docs)
     for skill in skills:
         body = skill.body or ""
         if not body:

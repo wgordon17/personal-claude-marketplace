@@ -247,23 +247,9 @@ _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without p
 | WARN | orphan | Not referenced by any skill or agent | code-quality/skills/file-audit/references/analyzer-prompt.md |
 | WARN | orphan | Not referenced by any skill or agent | code-quality/skills/file-audit/references/inventory-schema.json |
 | WARN | orphan | Not referenced by any skill or agent | code-quality/skills/file-audit/references/issue-types.md |
-| INFO | orphan-agent | agent architect has no 'Spawned By' entries in skill spawn graph | code-quality/agents/architect.md |
-| INFO | orphan-agent | agent code-reviewer has no 'Spawned By' entries in skill spawn graph | code-quality/agents/code-reviewer.md |
-| INFO | orphan-agent | agent code-simplifier has no 'Spawned By' entries in skill spawn graph | code-quality/agents/code-simplifier.md |
-| INFO | orphan-agent | agent performance has no 'Spawned By' entries in skill spawn graph | code-quality/agents/performance.md |
-| INFO | orphan-agent | agent qa has no 'Spawned By' entries in skill spawn graph | code-quality/agents/qa.md |
-| INFO | orphan-agent | agent security has no 'Spawned By' entries in skill spawn graph | code-quality/agents/security.md |
-| INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in skill spawn graph | jira/agents/jira-agent.md |
+| INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in spawn graph | jira/agents/jira-agent.md |
 | INFO | subagent-consistency | skill swarm spawns agents via reference docs (architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/swarm/SKILL.md |
 | INFO | subagent-consistency | skill unfuck spawns agents via reference docs (test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/unfuck/SKILL.md |
-| INFO | spawn-mismatch | agent architect has no spawned-by frontmatter — add spawned-by: [swarm] | code-quality/agents/architect.md |
-| INFO | spawn-mismatch | agent code-reviewer has no spawned-by frontmatter — add spawned-by: [swarm] | code-quality/agents/code-reviewer.md |
-| INFO | spawn-mismatch | agent code-simplifier has no spawned-by frontmatter — add spawned-by: [swarm] | code-quality/agents/code-simplifier.md |
-| INFO | spawn-mismatch | agent performance has no spawned-by frontmatter — add spawned-by: [swarm] | code-quality/agents/performance.md |
-| INFO | spawn-mismatch | agent plan-adherence has no spawned-by frontmatter — add spawned-by: [quality-gate, swarm] | code-quality/agents/plan-adherence.md |
-| INFO | spawn-mismatch | agent qa has no spawned-by frontmatter — add spawned-by: [swarm] | code-quality/agents/qa.md |
-| INFO | spawn-mismatch | agent security has no spawned-by frontmatter — add spawned-by: [swarm] | code-quality/agents/security.md |
-| INFO | spawn-mismatch | agent test-runner has no spawned-by frontmatter — add spawned-by: [swarm, test-runner, unfuck] | code-quality/agents/test-runner.md |
 | INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |

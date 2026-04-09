@@ -4,6 +4,7 @@ description: Use when designing system architecture, evaluating technology choic
 tools: Read, Glob, Grep, LSP, WebSearch, WebFetch
 model: opus
 color: blue
+spawned-by: [swarm]
 ---
 
 # code-quality:architect — System Architecture Specialist

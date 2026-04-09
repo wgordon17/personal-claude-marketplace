@@ -4,6 +4,7 @@ description: "Verifies implementation against plan file tasks. Reads plan, extra
 model: opus
 color: orange
 tools: Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage
+spawned-by: [quality-gate, swarm]
 ---
 
 # code-quality:plan-adherence — Plan Adherence Verification Agent
