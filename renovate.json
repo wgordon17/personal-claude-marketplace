@@ -1,12 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "managers": [
-    {
-      "managerName": "pep723",
-      "managerFilePatterns": [
-        "/^\\.claude/commands/[^/]+\\.py$/"
-      ]
-    }
-  ]
+  "pep723": {
+    "managerFilePatterns": ["/^\\.claude/commands/[^/]+\\.py$/"]
+  }
 }

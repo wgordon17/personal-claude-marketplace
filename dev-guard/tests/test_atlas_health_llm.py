@@ -440,3 +440,48 @@ class TestAnalyzeDrift:
         assert findings[0].severity == "CRITICAL"
         assert findings[0].category == "drift"
         assert "Description says X" in findings[0].message
+
+
+class TestAnalyzeDuplication:
+    def test_analyze_duplication_mocked_vertex_returns_finding(self, tmp_path):
+        """With mocked _call_vertex returning a duplicate, _analyze_duplication yields finding."""
+        mod = _load_module()
+        from _atlas_lib import Plugin  # noqa: PLC0415
+
+        # Create a plugin dir with two reference docs
+        plugin_dir = tmp_path / "test-plugin"
+        refs_dir = plugin_dir / "references"
+        refs_dir.mkdir(parents=True)
+        ref_a = refs_dir / "guide-a.md"
+        ref_b = refs_dir / "guide-b.md"
+        ref_a.write_text("# Guide A\n\n" + "Content about topic X. " * 50)
+        ref_b.write_text("# Guide B\n\n" + "Content about topic X. " * 50)
+
+        plugins = [
+            Plugin(
+                name="test-plugin",
+                version="1.0.0",
+                description="Test plugin",
+                source="./test-plugin",
+                category="test",
+                tags=[],
+                source_path=plugin_dir,
+            )
+        ]
+
+        mock_response = json.dumps(
+            {
+                "duplicate": True,
+                "severity": "INFO",
+                "overlap_description": "Both cover topic X.",
+            }
+        )
+
+        import time as _time
+
+        with patch.object(mod, "_call_vertex", return_value=mock_response):
+            findings = mod._analyze_duplication(plugins, _time.monotonic(), dry_run=False)
+
+        assert len(findings) == 1
+        assert findings[0].severity == "INFO"
+        assert findings[0].category == "duplication"
