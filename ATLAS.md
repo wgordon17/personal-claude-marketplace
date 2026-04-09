@@ -254,6 +254,12 @@ _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 | INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in spawn graph | jira/agents/jira-agent.md |
 | INFO | subagent-consistency | skill swarm spawns agents via reference docs (architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/swarm/SKILL.md |
 | INFO | subagent-consistency | skill unfuck spawns agents via reference docs (test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/unfuck/SKILL.md |
+| WARN | unnamed-agent | skill fix has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/fix/SKILL.md |
+| WARN | unnamed-agent | skill incremental-planning has 2 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/incremental-planning/SKILL.md |
+| WARN | unnamed-agent | skill plan-review has 7 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/plan-review/SKILL.md |
+| WARN | unnamed-agent | skill pr-review has 7 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/pr-review/SKILL.md |
+| WARN | unnamed-agent | skill quality-gate has 9 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/quality-gate/SKILL.md |
+| WARN | unnamed-agent | skill summarize has 2 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/summarize/SKILL.md |
 | INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |

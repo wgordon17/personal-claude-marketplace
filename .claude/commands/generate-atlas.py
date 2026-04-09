@@ -586,6 +586,47 @@ def _run_health_checks(
                 )
             )
 
+    # Unnamed agent spawns: flag Agent( calls with model= but no name=
+    for skill in skills:
+        texts: list[str] = []
+        body = skill.body or ""
+        if not body:
+            try:
+                body = skill.path.read_text()
+            except Exception:
+                body = ""
+        texts.append(body)
+        for _pn, paths in ref_docs.items():
+            for ref_path in paths:
+                parts = ref_path.parts
+                for i, part in enumerate(parts):
+                    if part == "skills" and i + 1 < len(parts) and parts[i + 1] == skill.name:
+                        with contextlib.suppress(Exception):
+                            texts.append(ref_path.read_text())
+                        break
+        full_text = "\n".join(texts)
+        unnamed_count = 0
+        for match in _AGENT_CALL_RE.finditer(full_text):
+            start = match.start()
+            paren_end = full_text.find(")", start)
+            if paren_end <= 0:
+                continue
+            call_text = full_text[start : paren_end + 1]
+            if not _AGENT_NAME_RE.search(call_text):
+                unnamed_count += 1
+        if unnamed_count:
+            findings.append(
+                HealthFinding(
+                    severity="WARN",
+                    category="unnamed-agent",
+                    message=(
+                        f"skill {skill.name} has {unnamed_count} Agent() call(s) "
+                        f"without name= — add name= for inventory tracking"
+                    ),
+                    file_path=str(skill.path),
+                )
+            )
+
     # Tool frontmatter validation: compare allowed-tools vs tools mentioned in skill body
     _KNOWN_TOOLS = {
         "Read",
