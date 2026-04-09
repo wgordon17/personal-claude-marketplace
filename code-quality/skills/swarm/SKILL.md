@@ -86,7 +86,7 @@ whether a feature branch is needed. If not already on a feature branch, create o
 `upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
 depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `code-quality/references/project-memory-reference.md`
 (Run-ID Naming Convention section) and create the audit trail directory at `{memory_dir}/swarm/{run-id}/`.
-Call `TeamCreate("swarm-impl")`, then create all tasks upfront with `addBlockedBy` dependencies
+Call `TeamCreate("swarm-{run_id}")` (using the run ID generated above), then create all tasks upfront with `addBlockedBy` dependencies
 so the full task graph is visible from the start.
 
 **Test Plan Discovery:** After branch creation and run-ID generation, discover the plan file
