@@ -108,8 +108,9 @@ Before creating any OSAC issue, read:
 - `jira/reference/osac-conventions.md` — description templates, field conventions, label usage
 - `jira/reference/jira-formatting.md` — markdown style guide for descriptions/comments
 
-**After every create or update operation**, return the fully-qualified URL
-`https://redhat.atlassian.net/browse/<KEY>` — not just the bare key. URLs are clickable.
+**Always present issue keys as fully-qualified URLs:**
+`https://redhat.atlassian.net/browse/<KEY>` — never bare keys. This applies to query results,
+create/update confirmations, and any context where an issue is referenced. URLs are clickable.
 
 ## Core Operations
 
@@ -119,7 +120,6 @@ Before creating any OSAC issue, read:
 2. Read `jira/reference/jira-formatting.md` for markdown guidance
 3. Build the fields payload (project, components, summary, issuetype, labels, epicLink if applicable)
 4. Call `createJiraIssue` with `contentFormat: "markdown"` and `responseContentFormat: "markdown"`
-5. Return the full URL: `https://redhat.atlassian.net/browse/<KEY>` (clickable for the user)
 
 ### Update Issue
 

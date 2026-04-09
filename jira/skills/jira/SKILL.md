@@ -126,10 +126,11 @@ Jira-specific pagination. Use `searchAtlassian` only when the user explicitly re
 cross-product search across Jira and Confluence simultaneously. Filter or ignore Confluence
 results if they appear unexpectedly in `searchAtlassian` output.
 
-## CRUD Operations
+**Always present issue keys as fully-qualified URLs:**
+`https://redhat.atlassian.net/browse/<KEY>` — never bare keys. This applies to query results,
+create/update confirmations, and any context where an issue is referenced. URLs are clickable.
 
-**After every create or update operation**, return the fully-qualified URL
-`https://redhat.atlassian.net/browse/<KEY>` — not just the bare key. URLs are clickable.
+## CRUD Operations
 
 ### Creating Issues
 
