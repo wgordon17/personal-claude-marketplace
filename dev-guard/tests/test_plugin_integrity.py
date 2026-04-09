@@ -1,10 +1,11 @@
-"""Structural tests for Jira plugin integrity.
+"""Structural tests for plugin integrity.
 
 Verifies that:
 1. jira/skills/jira/SKILL.md contains the URL presentation directive.
 2. jira/agents/jira-agent.md contains the URL presentation directive.
 3. Both files stay in sync — drift is detected immediately.
 4. Version numbers in each plugin's plugin.json match the entry in marketplace.json.
+5. Every marketplace.json entry has a corresponding plugin.json on disk.
 
 These are grep-based and JSON-parse lint tests — no LLM calls, no subprocess execution.
 They guard against accidental deletion of the URL rule and against
