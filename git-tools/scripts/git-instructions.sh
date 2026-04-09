@@ -62,6 +62,16 @@ detect_mainline() {
     echo "$mainline"
 }
 
+parse_url_owner() {
+    # Extract owner from a git remote URL (SSH SCP-style, ssh://, or HTTPS)
+    echo "$1" | sed -E 's|\.git$||; s|.*[:/]([^/]+)/[^/]+$|\1|'
+}
+
+parse_url_owner_repo() {
+    # Extract owner/repo from a git remote URL (SSH SCP-style, ssh://, or HTTPS)
+    echo "$1" | sed -E 's|\.git$||; s|.*[:/]([^/]+/[^/]+)$|\1|'
+}
+
 detect_fork() {
     # Returns owner of upstream remote if fork, empty string otherwise
     local upstream_url
@@ -71,16 +81,8 @@ detect_fork() {
         return
     fi
 
-    # Extract owner from SSH (SCP-style or ssh://), HTTPS URL
-    local owner=""
-    if echo "$upstream_url" | grep -q "git@.*:"; then
-        # SCP-style SSH: git@github.com:owner/repo.git
-        owner=$(echo "$upstream_url" | sed 's|.*:\([^/]*\)/.*|\1|')
-    else
-        # HTTPS or ssh:// style: https://github.com/owner/repo.git
-        # Also handles ssh://git@github.com/owner/repo.git
-        owner=$(echo "$upstream_url" | sed 's|.*/\([^/]*\)/[^/]*$|\1|')
-    fi
+    local owner
+    owner=$(parse_url_owner "$upstream_url")
     # Validate owner contains only safe characters
     if echo "$owner" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
         echo "$owner"
@@ -313,34 +315,51 @@ cat <<PR_WORKFLOW
 
 2. **Push to origin**:
    \`\`\`bash
-   git push -u origin <branch-name>
+   git push -u origin HEAD
    \`\`\`
 
-3. **Create PR** via \`gh\` CLI:
+3. **Create PR** via \`gh\` CLI — always pass \`--title\`, \`--body\`, and \`--head\` (no interactive prompts):
 
 PR_WORKFLOW
 
 if [ "$IS_FORK" -eq 1 ]; then
+    UPSTREAM_REPO=$(parse_url_owner_repo "$(git remote get-url upstream 2>/dev/null)")
+    ORIGIN_OWNER=$(parse_url_owner "$(git remote get-url origin 2>/dev/null)")
+    # Validate before interpolation into session instructions
+    if ! echo "$UPSTREAM_REPO" | grep -qE '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$'; then
+        UPSTREAM_REPO="<upstream-owner>/<upstream-repo>"
+    fi
+    if ! echo "$ORIGIN_OWNER" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
+        ORIGIN_OWNER="<fork-owner>"
+    fi
     cat <<FORK_PR
-   **Fork repo — PR targets upstream:**
-   \`gh pr create --repo ${UPSTREAM_OWNER}/<repo-name>\`
+   **Fork repo — \`upstream\` = PR target, \`origin\` = PR head (your fork).**
+   Use a multiline double-quoted string for \`--body\`. Never use HEREDOC, \`--body-file\`, or pipes.
+   \`\`\`bash
+   BRANCH=\$(git branch --show-current)
+   gh pr create --repo ${UPSTREAM_REPO} --head "${ORIGIN_OWNER}:\$BRANCH" \\
+     --title "type(scope): description" \\
+     --body "## Summary
+- What changed and why"
+   \`\`\`
 
 FORK_PR
 else
     cat <<'NONFORK_PR'
-   `gh pr create`
+   Use a multiline double-quoted string for `--body`. Never use HEREDOC, `--body-file`, or pipes.
+   ```bash
+   BRANCH=$(git branch --show-current)
+   gh pr create --head "$BRANCH" \
+     --title "type(scope): description" \
+     --body "## Summary
+- What changed and why"
+   ```
 
 NONFORK_PR
 fi
 
 cat <<'PR_FORMAT'
-**PR body format — strictly follow this structure:**
-```
-## Summary
-- What changed and why (1-3 bullets)
-- Second bullet if needed
-- Third bullet if needed
-```
+**PR body rules:** Max 3 bullets under `## Summary`.
 
 **NEVER include in PR descriptions:**
 - "Test plan" sections
