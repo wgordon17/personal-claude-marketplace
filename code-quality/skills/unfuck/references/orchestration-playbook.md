@@ -44,7 +44,7 @@ All paths in this playbook use `{run_dir}` to refer to this directory. The orche
 
 Phase 0 has several independent tasks that SHOULD run in parallel using TeamCreate:
 
-1. **Create team immediately:** `TeamCreate(team_name="cleanup-swarm")` — needed before spawning any teammates
+1. **Create team immediately:** `TeamCreate(team_name="cleanup-{run_id}")` — needed before spawning any teammates
 2. **Launch parallel setup teammates** — spawn these as background teammates in a single message:
    - `setup-indexer`: Runs `code-quality:index-repo` to create PROJECT_INDEX.md
    - `setup-tools`: Detects available external tools (version checks)
@@ -130,7 +130,7 @@ This creates:
 ### Step 0.6: Create team
 
 ```
-TeamCreate(team_name="cleanup-swarm", description="Comprehensive repo cleanup swarm")
+TeamCreate(team_name="cleanup-{run_id}", description="Comprehensive repo cleanup swarm")
 ```
 
 ### Step 0.7: Prepare agent context bundle
@@ -192,31 +192,31 @@ In a single message, issue 7 parallel Agent calls with `team_name` to spawn as t
 
 ```
 Agent(name="dead-code-hunter", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 1 prompt from discovery-agents.md]")
 
 Agent(name="duplicate-detector", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 2 prompt from discovery-agents.md]")
 
 Agent(name="security-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 3 prompt from discovery-agents.md]")
 
 Agent(name="architecture-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 4 prompt from discovery-agents.md]")
 
 Agent(name="ai-slop-detector", subagent_type="general-purpose", model="opus",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 5 prompt from discovery-agents.md]")
 
 Agent(name="complexity-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 6 prompt from discovery-agents.md]")
 
 Agent(name="documentation-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 7 prompt from discovery-agents.md]")
 ```
 
@@ -272,7 +272,7 @@ Spawn a single `synthesis-planner` teammate using opus:
 
 ```
 Agent(name="synthesis-planner", subagent_type="general-purpose", model="opus",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\n[Full synthesis instructions below]\n\nRun directory: {run_dir}")
 ```
 
@@ -457,19 +457,19 @@ Spawn 4 persistent teammates in a single message. They collaborate on each categ
 
 ```
 Agent(name="impl-writer", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the WRITER on the implementation team. You implement fixes from the cleanup plan.\nYour teammates are: impl-qa (reviews your changes), impl-tester (runs tests), impl-docs (updates docs).\n\nWait for the team lead to assign you a category. For each category:\n1. Read the category's findings from {run_dir}/cleanup-plan.md\n2. Apply fixes using the strategies from references/implementation-agents.md\n3. When done with a category, message impl-qa to review your changes\n4. After QA approval and tests pass, commit the category\n5. Message the team lead that the category is complete\n\n[Full implementation agent shared rules from references/implementation-agents.md]")
 
 Agent(name="impl-qa", subagent_type="general-purpose", model="opus",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are QA on the implementation team. You review changes made by impl-writer.\n\nWhen impl-writer messages you that a category is ready for review:\n1. Read the modified files (git diff)\n2. Verify changes match the cleanup plan findings\n3. Check for regressions, broken imports, missing error handling\n4. Use LSP findReferences to verify no callers are broken\n5. If issues found, message impl-writer with specific feedback\n6. If clean, message impl-tester to run the test suite\n\nApply code-review rigor: no assumptions, verify everything.")
 
 Agent(name="impl-tester", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the TESTER on the implementation team. You run tests and formatters.\n\nWhen impl-qa messages you that changes are reviewed:\n1. Run the project's test suite (auto-detect: make test / uv run pytest / npm test / etc.)\n2. Run the formatter (make format / uvx ruff format / etc.)\n3. If tests pass: message impl-writer to commit\n4. If tests fail: message impl-writer with the failure details for rollback\n\nAuto-detect test commands from Makefile, pyproject.toml, or package.json.")
 
 Agent(name="impl-docs", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-swarm", mode="bypassPermissions",
+     team_name="cleanup-{run_id}", mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Match existing documentation style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nDo NOT create new documentation files. Only update existing ones.")
 ```
 
@@ -828,7 +828,7 @@ See `code-quality/references/finding-classification.md` for the canonical classi
 
 ```
 TeamCreate:
-  team_name: "cleanup-swarm"
+  team_name: "cleanup-{run_id}"
   description: "Comprehensive repo cleanup -- setup, discovery, synthesis, and implementation swarm"
 ```
 

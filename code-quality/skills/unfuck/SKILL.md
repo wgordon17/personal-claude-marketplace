@@ -39,12 +39,13 @@ Phase 4 verifies everything passes and generates a report.
 ## Workflow Phases
 
 ### Phase 0: Index & Setup
-1. Create TeamCreate swarm: `cleanup-swarm`
-2. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection
-3. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
-   (Run-ID Naming Convention section) and create feature branch: `cleanup/comprehensive-{run-id}` (from `origin/main`)
-4. Create `{memory_dir}/unfuck/{run-id}/discovery/` directory for agent output
-5. Collect setup results and build context bundle for discovery agents
+1. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+   (Run-ID Naming Convention section)
+2. Create TeamCreate swarm: `cleanup-{run_id}` (using the run ID from step 1)
+3. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection
+4. Create feature branch: `cleanup/comprehensive-{run-id}` (from `origin/main`)
+5. Create `{memory_dir}/unfuck/{run-id}/discovery/` directory for agent output
+6. Collect setup results and build context bundle for discovery agents
 
 ### Phase 1: Discovery (7 parallel agents)
 
