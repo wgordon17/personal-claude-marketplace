@@ -324,12 +324,19 @@ if [ "$IS_FORK" -eq 1 ]; then
     # Resolve OWNER/REPO from upstream, and fork owner from origin
     UPSTREAM_REPO=$(git remote get-url upstream 2>/dev/null | sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
     ORIGIN_OWNER=$(git remote get-url origin 2>/dev/null | sed -E 's|.*[:/]([^/]+)/[^/]+?$|\1|')
+    # Validate before interpolation into session instructions (same allowlist as detect_fork)
+    if ! echo "$UPSTREAM_REPO" | grep -qE '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$'; then
+        UPSTREAM_REPO="<upstream-owner>/<upstream-repo>"
+    fi
+    if ! echo "$ORIGIN_OWNER" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
+        ORIGIN_OWNER="<fork-owner>"
+    fi
+    # Unquoted heredoc: UPSTREAM_REPO and ORIGIN_OWNER expand at script runtime
     cat <<FORK_PR
    **Fork repo — \`upstream\` = PR target, \`origin\` = PR head (your fork).**
    Use a multiline double-quoted string for \`--body\`. Never use HEREDOC, \`--body-file\`, or pipes.
    \`\`\`bash
    BRANCH=\$(git branch --show-current)
-   git push -u origin HEAD
    gh pr create --repo ${UPSTREAM_REPO} --head "${ORIGIN_OWNER}:\$BRANCH" \\
      --title "type(scope): description" \\
      --body "## Summary
@@ -338,12 +345,11 @@ if [ "$IS_FORK" -eq 1 ]; then
 
 FORK_PR
 else
+    # Quoted heredoc: no expansion — literal shell code for the reader
     cat <<'NONFORK_PR'
-   **Push first, then create with explicit `--head`.**
    Use a multiline double-quoted string for `--body`. Never use HEREDOC, `--body-file`, or pipes.
    ```bash
    BRANCH=$(git branch --show-current)
-   git push -u origin HEAD
    gh pr create --head "$BRANCH" \
      --title "type(scope): description" \
      --body "## Summary
