@@ -18,8 +18,6 @@ deep-research ──► incremental-planning ──► test-plan ──► plan-
               roadmap (if multi-plan) ──► swarm ──► pr-review ──► fix
 ```
 
-**Pre-merge:** `review-commits ──► push`
-
 ### Step Notes
 
 - **deep-research** (skill) — Comprehensive investigation using background agents, web search, and documentation lookup. Use when requirements need validation, technology choices need comparison, or a feature area needs thorough exploration before planning. Produces a research report.
@@ -37,10 +35,6 @@ deep-research ──► incremental-planning ──► test-plan ──► plan-
 - **swarm** (skill) — Full pipelined agent swarm for implementation tasks. Launches 21+ specialized agents (Architect, Security, Reduction Analyst, Implementer, Reviewer, Test-Writer, Test-Runner, QA, Performance, Code-Reviewer, and more) in a coordinated pipeline. Use for substantial implementation tasks defined by a plan file.
 
 - **pr-review** (skill) — Spawns 6 parallel specialized reviewers (security, QA, performance, code quality, correctness, plan adherence) to review a pull request. Produces verified findings with false-positive filtering. Use before merging any PR.
-
-- **review-commits** (command) — AI-assisted commit review for PR readiness. Checks commit message quality, conventional commit format, and whether commits are logically grouped. Use after completing all commits on a branch and before pushing.
-
-- **push** (manual) — Standard `git push` to the remote. Run after `review-commits` confirms commits are clean.
 
 ---
 
