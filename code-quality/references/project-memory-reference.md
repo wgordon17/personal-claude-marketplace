@@ -152,10 +152,10 @@ collisions. Team files persist at `~/.claude/teams/{team-name}/` and are home-di
 
 | Skill | Team Name Pattern |
 |-------|------------------|
-| `/swarm` | `swarm-{run_id}` |
-| `/unfuck` | `cleanup-{run_id}` |
+| `/swarm` | `swarm-{run-id}` |
+| `/unfuck` | `cleanup-{run-id}` |
 
-New skills using TeamCreate must follow the same `{prefix}-{run_id}` pattern.
+New skills using TeamCreate must follow the same `{prefix}-{run-id}` pattern.
 
 ---
 
