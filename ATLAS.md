@@ -82,22 +82,22 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | business-panel | <small>Read, Glob, Grep,<br>WebSearch, WebFetch, Skill</small> | — |
 | deep-research | <small>WebSearch, WebFetch, Read,<br>Write, Glob, Grep,<br>Agent, AskUserQuestion, context7:resolve-library-id,<br>context7:query-docs</small> | — |
 | file-audit | <small>LSP, Read, Grep,<br>Glob, Write, Bash,<br>Agent, Skill, AskUserQuestion,<br>context7:resolve-library-id, context7:query-docs</small> | — |
-| fix | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, Skill, AskUserQuestion,<br>WebSearch, WebFetch</small> | Sonnet(1) |
-| incremental-planning | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>Bash, AskUserQuestion, LSP,<br>Skill, ToolSearch</small> | Sonnet(2) |
+| fix | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, Skill, AskUserQuestion,<br>WebSearch, WebFetch</small> | Generic: Sonnet(1: ?) |
+| incremental-planning | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>Bash, AskUserQuestion, LSP,<br>Skill, ToolSearch</small> | Generic: Sonnet(1: ?) |
 | index-repo | <small>Read, Glob, Grep,<br>Write, Bash</small> | — |
 | lsp-navigation | <small>LSP, Read, Grep,<br>Glob</small> | — |
 | map-reduce | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, CronCreate,<br>CronDelete, SendMessage, TaskCreate,<br>TaskUpdate, TaskList, TaskGet</small> | — |
-| plan-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | Opus(1), Sonnet(6) |
-| pr-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | Opus(1), Sonnet(6) |
-| quality-gate | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, SendMessage,<br>Skill</small> | plan-adherence, Opus(4), Sonnet(4) |
+| plan-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | Generic: Opus(1: ?), Sonnet(1: ?) |
+| pr-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | Generic: Opus(1: ?), Sonnet(1: ?) |
+| quality-gate | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, SendMessage,<br>Skill</small> | plan-adherence, Generic: Opus(1: ?), Sonnet(1: ?) |
 | reflect | <small>serena:think_about_task_adherence, serena:think_about_collected_information, serena:think_about_whether_you_are_done,<br>serena:summarize_changes, serena:read_memory, serena:write_memory,<br>serena:list_memories, Read, Glob,<br>Grep</small> | — |
 | roadmap | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>AskUserQuestion, Bash, ToolSearch</small> | — |
 | speculative | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, SendMessage,<br>TaskCreate, TaskUpdate, TaskList,<br>TaskGet, CronCreate, CronDelete,<br>Skill</small> | — |
-| summarize | <small>Read, Edit, Glob,<br>Grep, Bash, Agent,<br>AskUserQuestion</small> | Sonnet(2) |
-| swarm | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>TeamDelete, SendMessage, TaskCreate,<br>TaskUpdate, TaskList, TaskGet,<br>CronCreate, CronDelete, Skill</small> | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner, Opus(5), Sonnet(17) |
+| summarize | <small>Read, Edit, Glob,<br>Grep, Bash, Agent,<br>AskUserQuestion</small> | Generic: Sonnet(1: ?) |
+| swarm | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>TeamDelete, SendMessage, TaskCreate,<br>TaskUpdate, TaskList, TaskGet,<br>CronCreate, CronDelete, Skill</small> | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner, Generic: Opus(5: speculative-judge, reduction-analyst, reviewer, structural-concurrency, structural-integration), Sonnet(16: competitor-1, competitor-2, implementer, test-writer, bdd-step-writer, ui-reviewer, api-reviewer, db-reviewer, plugin-validator, skill-reviewer, fixer, test-coverage-agent, plan-file-updater, docs, docs-reviewer, lessons-extractor) |
 | test-plan | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, Skill</small> | — |
 | test-runner | <small>Bash, Read, Grep,<br>Glob</small> | test-runner |
-| unfuck | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>SendMessage, TaskCreate, TaskUpdate,<br>TaskList, TaskGet, LSP,<br>Skill</small> | test-runner, Opus(3), Sonnet(9) |
+| unfuck | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>SendMessage, TaskCreate, TaskUpdate,<br>TaskList, TaskGet, LSP,<br>Skill</small> | test-runner, Generic: Opus(3: ai-slop-detector, synthesis-planner, impl-qa), Sonnet(9: dead-code-hunter, duplicate-detector, security-auditor, architecture-reviewer, complexity-auditor, documentation-auditor, impl-writer, impl-tester, impl-docs) |
 | uv-python | <small>Bash, Read, Write,<br>Edit, Grep, Glob</small> | — |
 
 _MCP tools shown as `server:function` (full: `mcp__server__function`)._

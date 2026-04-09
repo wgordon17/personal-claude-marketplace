@@ -331,16 +331,16 @@ _AGENT_CALL_RE = re.compile(r"Agent\([^)]*?model\s*=\s*[\"'](\w+)[\"']", re.DOTA
 _AGENT_SUBTYPE_IN_CALL_RE = re.compile(
     r"Agent\([^)]*?subagent_type\s*=\s*[\"']([^\"']+)[\"']", re.DOTALL
 )
+_AGENT_NAME_RE = re.compile(r'name\s*=\s*["\']([^"\']+)["\']')
 
 
 def _count_agent_spawns(skill: Skill, ref_docs: dict[str, list[Path]]) -> str:
-    """Count anonymous and named agent spawns, return display string.
+    """Count generic agent spawns by model with role names.
 
-    Returns strings like: "architect, Sonnet(2), Opus(1)" or "—"
+    Returns strings like: "Generic: Sonnet(2: implementer, fixer), Opus(1: reviewer)"
     Named agents (non-general-purpose subagent_type) are excluded since they
-    appear in the spawn graph. Only general-purpose agents are counted by model.
+    appear in the spawn graph.
     """
-    # Collect all text bodies to scan (skill body + owned reference docs)
     texts: list[str] = []
     body = skill.body or ""
     if not body:
@@ -350,7 +350,6 @@ def _count_agent_spawns(skill: Skill, ref_docs: dict[str, list[Path]]) -> str:
             body = ""
     texts.append(body)
 
-    # Add reference doc content owned by this skill
     for _plugin_name, paths in ref_docs.items():
         for ref_path in paths:
             parts = ref_path.parts
@@ -362,30 +361,34 @@ def _count_agent_spawns(skill: Skill, ref_docs: dict[str, list[Path]]) -> str:
 
     full_text = "\n".join(texts)
 
-    # Find all Agent( calls with model=
-    model_counts: dict[str, int] = {}
+    # {model: [role_name, ...]}
+    model_roles: dict[str, list[str]] = {}
     for match in _AGENT_CALL_RE.finditer(full_text):
         model = match.group(1)
-        # Check if this same Agent( call has a non-general-purpose subagent_type
-        call_text = match.group(0)
-        # Expand to capture full Agent(...) call for subtype check
         start = match.start()
         paren_end = full_text.find(")", start)
-        if paren_end > 0:
-            call_text = full_text[start : paren_end + 1]
+        if paren_end <= 0:
+            continue
+        call_text = full_text[start : paren_end + 1]
         subtype_match = _AGENT_SUBTYPE_IN_CALL_RE.search(call_text)
-        if subtype_match:
-            subtype = subtype_match.group(1)
-            if subtype != "general-purpose":
-                continue  # Named agent — already in spawn graph
-        # Count this anonymous/general-purpose agent by model
+        if subtype_match and subtype_match.group(1) != "general-purpose":
+            continue
+        # Extract role name
+        name_match = _AGENT_NAME_RE.search(call_text)
+        role = name_match.group(1) if name_match else "?"
         model_label = model.capitalize()
-        model_counts[model_label] = model_counts.get(model_label, 0) + 1
+        if model_label not in model_roles:
+            model_roles[model_label] = []
+        if role not in model_roles[model_label]:
+            model_roles[model_label].append(role)
 
-    if not model_counts:
+    if not model_roles:
         return ""
-    parts = [f"{model}({count})" for model, count in sorted(model_counts.items())]
-    return ", ".join(parts)
+    parts = []
+    for model in sorted(model_roles):
+        roles = model_roles[model]
+        parts.append(f"{model}({len(roles)}: {', '.join(roles)})")
+    return "Generic: " + ", ".join(parts)
 
 
 # ---------------------------------------------------------------------------
