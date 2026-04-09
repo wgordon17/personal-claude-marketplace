@@ -78,27 +78,27 @@ Code quality agents, development utilities, and orchestration skills: architectu
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| bug-investigation | <small>Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion</small> | — |
-| business-panel | <small>Read, Glob, Grep, WebSearch, WebFetch, Skill</small> | — |
-| deep-research | <small>WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion, context7:resolve-library-id, context7:query-docs</small> | — |
-| file-audit | <small>LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, context7:resolve-library-id, context7:query-docs</small> | — |
-| fix | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch</small> | — |
-| incremental-planning | <small>Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch</small> | — |
-| index-repo | <small>Read, Glob, Grep, Write, Bash</small> | — |
-| lsp-navigation | <small>LSP, Read, Grep, Glob</small> | — |
-| map-reduce | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet</small> | — |
-| plan-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
-| pr-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
-| quality-gate | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill</small> | plan-adherence |
-| reflect | <small>serena:think_about_task_adherence, serena:think_about_collected_information, serena:think_about_whether_you_are_done, serena:summarize_changes, serena:read_memory, serena:write_memory, serena:list_memories, Read, Glob, Grep</small> | — |
-| roadmap | <small>Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, ToolSearch</small> | — |
-| speculative | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill</small> | — |
-| summarize | <small>Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
-| swarm | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill</small> | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
-| test-plan | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Skill</small> | — |
-| test-runner | <small>Bash, Read, Grep, Glob</small> | test-runner |
-| unfuck | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill</small> | test-runner |
-| uv-python | <small>Bash, Read, Write, Edit, Grep, Glob</small> | — |
+| bug-investigation | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>Bash, AskUserQuestion</small> | — |
+| business-panel | <small>Read, Glob, Grep,<br>WebSearch, WebFetch, Skill</small> | — |
+| deep-research | <small>WebSearch, WebFetch, Read,<br>Write, Glob, Grep,<br>Agent, AskUserQuestion, context7:resolve-library-id,<br>context7:query-docs</small> | — |
+| file-audit | <small>LSP, Read, Grep,<br>Glob, Write, Bash,<br>Agent, Skill, AskUserQuestion,<br>context7:resolve-library-id, context7:query-docs</small> | — |
+| fix | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, Skill, AskUserQuestion,<br>WebSearch, WebFetch</small> | — |
+| incremental-planning | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>Bash, AskUserQuestion, LSP,<br>Skill, ToolSearch</small> | — |
+| index-repo | <small>Read, Glob, Grep,<br>Write, Bash</small> | — |
+| lsp-navigation | <small>LSP, Read, Grep,<br>Glob</small> | — |
+| map-reduce | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, CronCreate,<br>CronDelete, SendMessage, TaskCreate,<br>TaskUpdate, TaskList, TaskGet</small> | — |
+| plan-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | — |
+| pr-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | — |
+| quality-gate | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, SendMessage,<br>Skill</small> | plan-adherence |
+| reflect | <small>serena:think_about_task_adherence, serena:think_about_collected_information, serena:think_about_whether_you_are_done,<br>serena:summarize_changes, serena:read_memory, serena:write_memory,<br>serena:list_memories, Read, Glob,<br>Grep</small> | — |
+| roadmap | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>AskUserQuestion, Bash, ToolSearch</small> | — |
+| speculative | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, SendMessage,<br>TaskCreate, TaskUpdate, TaskList,<br>TaskGet, CronCreate, CronDelete,<br>Skill</small> | — |
+| summarize | <small>Read, Edit, Glob,<br>Grep, Bash, Agent,<br>AskUserQuestion</small> | — |
+| swarm | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>TeamDelete, SendMessage, TaskCreate,<br>TaskUpdate, TaskList, TaskGet,<br>CronCreate, CronDelete, Skill</small> | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
+| test-plan | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, Skill</small> | — |
+| test-runner | <small>Bash, Read, Grep,<br>Glob</small> | test-runner |
+| unfuck | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>SendMessage, TaskCreate, TaskUpdate,<br>TaskList, TaskGet, LSP,<br>Skill</small> | test-runner |
+| uv-python | <small>Bash, Read, Write,<br>Edit, Grep, Glob</small> | — |
 
 _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 
@@ -106,14 +106,14 @@ _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 
 | Agent | Model | Tools | Spawned By |
 |-------|-------|-------|------------|
-| architect | opus | <small>Read, Glob, Grep, LSP, WebSearch, WebFetch</small> | swarm |
-| code-reviewer | sonnet | <small>Read, Glob, Grep, LSP</small> | swarm |
-| code-simplifier | sonnet | <small>Read, Glob, Grep, LSP, Edit, Write</small> | swarm |
-| performance | sonnet | <small>Read, Glob, Grep, LSP, Bash, WebSearch</small> | swarm |
-| plan-adherence | opus | <small>Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage</small> | quality-gate, swarm |
-| qa | sonnet | <small>Read, Glob, Grep, LSP, Bash</small> | swarm |
-| security | sonnet | <small>Read, Glob, Grep, LSP, WebSearch</small> | swarm |
-| test-runner | haiku | <small>Bash, Read, Grep, TodoWrite</small> | test-runner, swarm, unfuck |
+| architect | opus | <small>Read, Glob, Grep,<br>LSP, WebSearch, WebFetch</small> | swarm |
+| code-reviewer | sonnet | <small>Read, Glob, Grep,<br>LSP</small> | swarm |
+| code-simplifier | sonnet | <small>Read, Glob, Grep,<br>LSP, Edit, Write</small> | swarm |
+| performance | sonnet | <small>Read, Glob, Grep,<br>LSP, Bash, WebSearch</small> | swarm |
+| plan-adherence | opus | <small>Read, Glob, Grep,<br>Bash, LSP, AskUserQuestion,<br>SendMessage</small> | quality-gate, swarm |
+| qa | sonnet | <small>Read, Glob, Grep,<br>LSP, Bash</small> | swarm |
+| security | sonnet | <small>Read, Glob, Grep,<br>LSP, WebSearch</small> | swarm |
+| test-runner | haiku | <small>Bash, Read, Grep,<br>TodoWrite</small> | test-runner, swarm, unfuck |
 
 **Commands (4)**
 
@@ -204,7 +204,7 @@ Jira integration for issue tracking, querying, and management — OSAC defaults 
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| jira | <small>Read, Bash, Agent, AskUserQuestion, mcp-atlassian-prod:atlassianUserInfo, mcp-atlassian-prod:getAccessibleAtlassianResources, mcp-atlassian-prod:searchJiraIssuesUsingJql, mcp-atlassian-prod:getJiraIssue, mcp-atlassian-prod:editJiraIssue, mcp-atlassian-prod:createJiraIssue, mcp-atlassian-prod:addCommentToJiraIssue, mcp-atlassian-prod:transitionJiraIssue, mcp-atlassian-prod:getTransitionsForJiraIssue, mcp-atlassian-prod:lookupJiraAccountId, mcp-atlassian-prod:getJiraProjectIssueTypesMetadata, mcp-atlassian-prod:getJiraIssueTypeMetaWithFields, mcp-atlassian-prod:createIssueLink, mcp-atlassian-prod:getIssueLinkTypes, mcp-atlassian-prod:addWorklogToJiraIssue, mcp-atlassian-prod:getVisibleJiraProjects, mcp-atlassian-prod:getJiraIssueRemoteIssueLinks, mcp-atlassian-prod:fetchAtlassian, mcp-atlassian-prod:searchAtlassian</small> | — |
+| jira | <small>Read, Bash, Agent,<br>AskUserQuestion, mcp-atlassian-prod:atlassianUserInfo, mcp-atlassian-prod:getAccessibleAtlassianResources,<br>mcp-atlassian-prod:searchJiraIssuesUsingJql, mcp-atlassian-prod:getJiraIssue, mcp-atlassian-prod:editJiraIssue,<br>mcp-atlassian-prod:createJiraIssue, mcp-atlassian-prod:addCommentToJiraIssue, mcp-atlassian-prod:transitionJiraIssue,<br>mcp-atlassian-prod:getTransitionsForJiraIssue, mcp-atlassian-prod:lookupJiraAccountId, mcp-atlassian-prod:getJiraProjectIssueTypesMetadata,<br>mcp-atlassian-prod:getJiraIssueTypeMetaWithFields, mcp-atlassian-prod:createIssueLink, mcp-atlassian-prod:getIssueLinkTypes,<br>mcp-atlassian-prod:addWorklogToJiraIssue, mcp-atlassian-prod:getVisibleJiraProjects, mcp-atlassian-prod:getJiraIssueRemoteIssueLinks,<br>mcp-atlassian-prod:fetchAtlassian, mcp-atlassian-prod:searchAtlassian</small> | — |
 
 _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 
@@ -212,7 +212,7 @@ _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 
 | Agent | Model | Tools | Spawned By |
 |-------|-------|-------|------------|
-| jira-agent | sonnet | <small>Read, Grep, Bash, mcp-atlassian-prod:atlassianUserInfo, mcp-atlassian-prod:getAccessibleAtlassianResources, mcp-atlassian-prod:searchJiraIssuesUsingJql, mcp-atlassian-prod:getJiraIssue, mcp-atlassian-prod:editJiraIssue, mcp-atlassian-prod:createJiraIssue, mcp-atlassian-prod:addCommentToJiraIssue, mcp-atlassian-prod:transitionJiraIssue, mcp-atlassian-prod:getTransitionsForJiraIssue, mcp-atlassian-prod:lookupJiraAccountId, mcp-atlassian-prod:getJiraProjectIssueTypesMetadata, mcp-atlassian-prod:getJiraIssueTypeMetaWithFields, mcp-atlassian-prod:createIssueLink, mcp-atlassian-prod:getIssueLinkTypes, mcp-atlassian-prod:addWorklogToJiraIssue, mcp-atlassian-prod:getVisibleJiraProjects, mcp-atlassian-prod:getJiraIssueRemoteIssueLinks, mcp-atlassian-prod:fetchAtlassian, mcp-atlassian-prod:searchAtlassian</small> | — |
+| jira-agent | sonnet | <small>Read, Grep, Bash,<br>mcp-atlassian-prod:atlassianUserInfo, mcp-atlassian-prod:getAccessibleAtlassianResources, mcp-atlassian-prod:searchJiraIssuesUsingJql,<br>mcp-atlassian-prod:getJiraIssue, mcp-atlassian-prod:editJiraIssue, mcp-atlassian-prod:createJiraIssue,<br>mcp-atlassian-prod:addCommentToJiraIssue, mcp-atlassian-prod:transitionJiraIssue, mcp-atlassian-prod:getTransitionsForJiraIssue,<br>mcp-atlassian-prod:lookupJiraAccountId, mcp-atlassian-prod:getJiraProjectIssueTypesMetadata, mcp-atlassian-prod:getJiraIssueTypeMetaWithFields,<br>mcp-atlassian-prod:createIssueLink, mcp-atlassian-prod:getIssueLinkTypes, mcp-atlassian-prod:addWorklogToJiraIssue,<br>mcp-atlassian-prod:getVisibleJiraProjects, mcp-atlassian-prod:getJiraIssueRemoteIssueLinks, mcp-atlassian-prod:fetchAtlassian,<br>mcp-atlassian-prod:searchAtlassian</small> | — |
 
 _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 

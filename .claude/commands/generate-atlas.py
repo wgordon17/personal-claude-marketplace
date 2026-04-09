@@ -604,12 +604,17 @@ def _shorten_mcp_tool(name: str) -> str:
     return name
 
 
-def _format_tools(tools: list[str]) -> str:
-    """Return tools in <small> text, shortening MCP tool names."""
+def _format_tools(tools: list[str], wrap_after: int = 3) -> str:
+    """Return tools in <small> text, shortening MCP names, with <br> every N items."""
     if not tools:
         return "—"
     display_tools = [_shorten_mcp_tool(t) for t in tools]
-    return "<small>" + ", ".join(display_tools) + "</small>"
+    if len(display_tools) <= wrap_after:
+        return "<small>" + ", ".join(display_tools) + "</small>"
+    chunks = []
+    for i in range(0, len(display_tools), wrap_after):
+        chunks.append(", ".join(display_tools[i : i + wrap_after]))
+    return "<small>" + ",<br>".join(chunks) + "</small>"
 
 
 def _has_mcp_tools(tools: list[str]) -> bool:
