@@ -122,9 +122,6 @@ def seed_decisions_file(path: Path, decisions: list[dict]) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
-_MOD = _load_module()
-
-
 def make_decision_record(
     *,
     file: str = "src/auth.py",
@@ -158,6 +155,10 @@ def setup_project_with_hack(tmp_path: Path, *, with_git: bool = True) -> Path:
     if with_git:
         (tmp_path / ".git").mkdir()
     return tmp_path
+
+
+# ── Module loaded after all helpers to clarify dependency order ────────────────
+_MOD = _load_module()
 
 
 # ── pr-test-8: _find_memory_dir git-root walking ──────────────────────────────
@@ -331,7 +332,7 @@ class TestFingerprint:
 
     def test_fingerprint_length_is_16(self):
         fp = _MOD._fingerprint("src/auth.py", "Security", "42")
-        assert len(fp) == 16
+        assert len(fp) == 32
         assert all(c in "0123456789abcdef" for c in fp)
 
     def test_default_line_argument(self):
@@ -413,20 +414,18 @@ class TestParseMetadata:
 
     def test_file_with_comma_causes_parse_failure(self):
         """File path with comma breaks the parser (known limitation)."""
-        pfx = METADATA_PREFIX
-        text = f"Q {pfx}file=src/file,name.py,line=42,cat=Sec,skill=pr-review"
+
+        text = f"Q {METADATA_PREFIX}file=src/file,name.py,line=42,cat=Sec,skill=pr-review"
         result = _MOD._parse_metadata(text)
         if result is not None:
             assert result.get("file") != "src/file,name.py"
 
     def test_file_with_path_traversal_returns_none(self):
-        pfx = METADATA_PREFIX
-        text = f"Question {pfx}file=../../etc/passwd,line=1,cat=Sec,skill=pr"
+        text = f"Question {METADATA_PREFIX}file=../../etc/passwd,line=1,cat=Sec,skill=pr"
         assert _MOD._parse_metadata(text) is None
 
     def test_whitespace_around_values_stripped(self):
-        pfx = METADATA_PREFIX
-        text = f"Q {pfx}file= src/auth.py ,line= 42 ,cat= Security ,skill= pr "
+        text = f"Q {METADATA_PREFIX}file= src/auth.py ,line= 42 ,cat= Security ,skill= pr "
         result = _MOD._parse_metadata(text)
         assert result is not None
         assert result["file"] == "src/auth.py"
@@ -441,8 +440,9 @@ class TestParseMetadata:
 
     def test_rpartition_handles_double_prefix(self):
         """If ▸dp: appears in description body, rpartition finds the last (real) suffix."""
-        pfx = METADATA_PREFIX
-        text = f"Describes {pfx} injection {pfx}file=src/a.py,line=1,cat=Sec,skill=pr"
+
+        dp = METADATA_PREFIX
+        text = f"Describes {dp} injection {dp}file=src/a.py,line=1,cat=Sec,skill=pr"
         result = _MOD._parse_metadata(text)
         assert result is not None
         assert result["file"] == "src/a.py"
@@ -454,8 +454,8 @@ class TestExtractDescriptionSnippet:
 
     def test_double_prefix_preserves_full_description(self):
         """rsplit on last ▸dp: preserves description containing the prefix."""
-        pfx = METADATA_PREFIX
-        text = f"Describes {pfx} injection {pfx}file=src/a.py,line=1,cat=Sec,skill=pr"
+        dp = METADATA_PREFIX
+        text = f"Describes {dp} injection {dp}file=src/a.py,line=1,cat=Sec,skill=pr"
         snippet = _MOD._extract_description_snippet(text)
         assert "injection" in snippet
 
@@ -594,12 +594,7 @@ class TestPostToolUseAnswerSource:
         q = make_dp_question("XSS vulnerability", file="src/views.py", line="15", cat="Security")
         q_text = q["question"]
 
-        payload = {
-            "hook_event_name": "PostToolUse",
-            "tool_name": "AskUserQuestion",
-            "tool_input": {"questions": [q]},
-            "tool_response": {"answers": {q_text: "Defer"}},
-        }
+        payload = make_post_payload([q], {q_text: "Defer"}, source="tool_response")
         result = run_hook(payload, cwd=project)
 
         assert result.returncode == 0
@@ -776,6 +771,9 @@ class TestHookPassthrough:
         assert "updatedInput" in hook_out
         assert "answers" in hook_out["updatedInput"]
         assert "additionalContext" in hook_out
+        ctx = hook_out["additionalContext"]
+        assert "auto-applying 1 prior" in ctx
+        assert "src/auth.py" in ctx
 
     def test_post_tool_use_no_questions_passthroughs(self, tmp_path):
         payload = {
@@ -813,7 +811,7 @@ class TestComputeCodeHash:
         with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
             h = _MOD._compute_code_hash("src/auth.py", "3")
         assert h is not None
-        assert len(h) == 16
+        assert len(h) == 32
         assert all(c in "0123456789abcdef" for c in h)
 
     def test_hash_changes_when_code_changes(self, tmp_path):
@@ -875,18 +873,6 @@ class TestCodeHashStaleness:
         lines[41] = line_42_content  # line 42 (0-indexed as 41)
         return "\n".join(lines) + "\n"
 
-    def _compute_hash_for_file(self, filepath: Path, line: str) -> str:
-        """Compute the code hash the same way the hook does."""
-        import hashlib as _hl
-
-        lines = filepath.read_text().splitlines()
-        target = int(line) if line.isdigit() else 0
-        center = max(0, target - 1)
-        start = max(0, center - 5)
-        end = min(len(lines), center + 5 + 1)
-        window = "\n".join(lines[start:end])
-        return _hl.sha256(window.encode()).hexdigest()[:16]
-
     def test_stale_decision_not_auto_applied(self, tmp_path):
         """Code changed since decision → decision is stale → passthrough."""
         project = setup_project_with_hack(tmp_path)
@@ -896,7 +882,8 @@ class TestCodeHashStaleness:
         f = src / "auth.py"
         f.write_text(self._make_source_file("original_code"))
 
-        code_hash = self._compute_hash_for_file(f, "42")
+        with patch.object(_MOD, "_find_git_root", return_value=project):
+            code_hash = _MOD._compute_code_hash("src/auth.py", "42")
         record = make_decision_record()
         record["code_hash"] = code_hash
         seed_decisions_file(hack / "review-decisions.json", [record])
@@ -920,7 +907,8 @@ class TestCodeHashStaleness:
         f = src / "auth.py"
         f.write_text(self._make_source_file("original_code"))
 
-        code_hash = self._compute_hash_for_file(f, "42")
+        with patch.object(_MOD, "_find_git_root", return_value=project):
+            code_hash = _MOD._compute_code_hash("src/auth.py", "42")
         record = make_decision_record()
         record["code_hash"] = code_hash
         seed_decisions_file(hack / "review-decisions.json", [record])
@@ -972,7 +960,7 @@ class TestCodeHashStaleness:
         stored = json.loads(decisions_file.read_text())
         assert len(stored["decisions"]) == 1
         assert "code_hash" in stored["decisions"][0]
-        assert len(stored["decisions"][0]["code_hash"]) == 16
+        assert len(stored["decisions"][0]["code_hash"]) == 32
 
     def test_post_tool_use_missing_file_omits_code_hash(self, tmp_path):
         """PostToolUse with non-existent file → code_hash omitted from record."""
@@ -1138,20 +1126,21 @@ class TestExtractDescriptionSnippetBrackets:
     """qa-7: Bracket-stripping coverage."""
 
     def test_single_bracket_prefix_stripped(self):
-        pfx = METADATA_PREFIX
-        text = f"[sec-1] SQL injection {pfx}file=a.py,line=1,cat=Sec,skill=pr"
+        text = f"[sec-1] SQL injection {METADATA_PREFIX}file=a.py,line=1,cat=Sec,skill=pr"
         snippet = _MOD._extract_description_snippet(text)
         assert snippet == "SQL injection"
 
     def test_double_bracket_prefix_stripped(self):
-        pfx = METADATA_PREFIX
-        text = f"[sec-1] [Security] SQL injection {pfx}file=a.py,line=1,cat=Sec,skill=pr"
+        text = (
+            f"[sec-1] [Security] SQL injection {METADATA_PREFIX}file=a.py,line=1,cat=Sec,skill=pr"
+        )
         snippet = _MOD._extract_description_snippet(text)
         assert snippet == "SQL injection"
 
     def test_unclosed_bracket_preserved(self):
-        pfx = METADATA_PREFIX
-        text = f"[broken description without close {pfx}file=a.py,line=1,cat=Sec,skill=pr"
+        text = (
+            f"[broken description without close {METADATA_PREFIX}file=a.py,line=1,cat=Sec,skill=pr"
+        )
         snippet = _MOD._extract_description_snippet(text)
         assert snippet.startswith("[broken")
 
@@ -1184,8 +1173,9 @@ class TestDescriptionSnippetSanitization:
         decisions_file = project / "hack" / "review-decisions.json"
         seed_decisions_file(decisions_file, [])
 
-        pfx = METADATA_PREFIX
-        q_text = f"Desc with\x00null and\ttab {pfx}file=src/a.py,line=1,cat=Sec,skill=pr"
+        q_text = (
+            f"Desc with\x00null and\ttab {METADATA_PREFIX}file=src/a.py,line=1,cat=Sec,skill=pr"
+        )
         q = make_fix_defer_question(q_text)
         payload = make_post_payload([q], {q_text: "Fix"}, source="tool_response")
         result = run_hook(payload, cwd=project)
@@ -1195,3 +1185,164 @@ class TestDescriptionSnippetSanitization:
         snippet = stored["decisions"][0]["description_snippet"]
         assert "\x00" not in snippet
         assert "\t" not in snippet
+
+
+# ── QA domain review coverage gaps ───────────────────────────────────────────
+
+
+class TestStaleHashFileUnreadable:
+    """QA-F1: PreToolUse staleness when current file is unreadable."""
+
+    def test_file_deleted_after_decision_passthroughs(self, tmp_path):
+        """Stored code_hash + current file missing → None != hash → stale → passthrough."""
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        src = project / "src"
+        src.mkdir()
+        f = src / "auth.py"
+        f.write_text("line\n" * 50)
+
+        with patch.object(_MOD, "_find_git_root", return_value=project):
+            code_hash = _MOD._compute_code_hash("src/auth.py", "42")
+        record = make_decision_record()
+        record["code_hash"] = code_hash
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        # Delete the file — _compute_code_hash will return None
+        f.unlink()
+
+        q = make_dp_question("SQL injection")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        assert result.stdout.strip() == "", (
+            "expected passthrough — file deleted, hash mismatch (None != stored)"
+        )
+
+
+class TestPostToolUseMixedBatch:
+    """QA-F2: PostToolUse captures Fix/Defer subset from mixed-type batch."""
+
+    def test_mixed_batch_captures_fix_defer_only(self, tmp_path):
+        """Mixed batch: Fix/Defer captured, non-Fix/Defer skipped."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        q_fixdefer = make_dp_question("SQL injection")
+        q_other = {
+            "question": "Which approach?",
+            "options": [{"label": "Option A"}, {"label": "Option B"}],
+        }
+        q_text = q_fixdefer["question"]
+
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {"questions": [q_fixdefer, q_other]},
+            "tool_response": {"answers": {q_text: "Fix", "Which approach?": "Option A"}},
+        }
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert len(stored["decisions"]) == 1
+        assert stored["decisions"][0]["decision"] == "Fix"
+
+
+class TestMemoryDirCandidates:
+    """QA-F3: scratch/.dev candidates + priority ordering."""
+
+    def test_scratch_dir_found(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".git").mkdir()
+        scratch = project / "scratch"
+        scratch.mkdir()
+        (scratch / "PROJECT.md").write_text("# Project\n")
+        (scratch / "TODO.md").write_text("# TODO\n")
+
+        q = make_dp_question("Finding")
+        record = make_decision_record()
+        seed_decisions_file(scratch / "review-decisions.json", [record])
+
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", "expected auto-answer with scratch/ memory dir"
+
+    def test_dev_dir_found(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".git").mkdir()
+        dev = project / ".dev"
+        dev.mkdir()
+        (dev / "PROJECT.md").write_text("# Project\n")
+        (dev / "TODO.md").write_text("# TODO\n")
+
+        q = make_dp_question("Finding")
+        record = make_decision_record()
+        seed_decisions_file(dev / "review-decisions.json", [record])
+
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", "expected auto-answer with .dev/ memory dir"
+
+    def test_hack_takes_priority_over_local(self, tmp_path):
+        """When both hack/ and .local/ exist, hack/ wins (first in candidates)."""
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".git").mkdir()
+
+        for d in ("hack", ".local"):
+            p = project / d
+            p.mkdir()
+            (p / "PROJECT.md").write_text("# Project\n")
+            (p / "TODO.md").write_text("# TODO\n")
+
+        q = make_dp_question("Finding")
+        record = make_decision_record()
+        # Seed only in hack/ — if .local/ were chosen, no match → passthrough
+        seed_decisions_file(project / "hack" / "review-decisions.json", [record])
+
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", (
+            "expected auto-answer — hack/ should take priority over .local/"
+        )
+
+
+class TestIsFixDeferQuestion:
+    """QA-F5: _is_fix_defer_question contract tests."""
+
+    def test_standard_fix_defer(self):
+        q = {"options": [{"label": "Fix"}, {"label": "Defer"}]}
+        assert _MOD._is_fix_defer_question(q) is True
+
+    def test_three_options_with_fix_defer(self):
+        """3+ options including Fix and Defer → True (by design)."""
+        q = {"options": [{"label": "Fix"}, {"label": "Defer"}, {"label": "Skip"}]}
+        assert _MOD._is_fix_defer_question(q) is True
+
+    def test_non_fix_defer_options(self):
+        q = {"options": [{"label": "Option A"}, {"label": "Option B"}]}
+        assert _MOD._is_fix_defer_question(q) is False
+
+    def test_single_option(self):
+        q = {"options": [{"label": "Fix"}]}
+        assert _MOD._is_fix_defer_question(q) is False
+
+    def test_empty_options(self):
+        q = {"options": []}
+        assert _MOD._is_fix_defer_question(q) is False
+
+    def test_no_options_key(self):
+        q = {"question": "text only"}
+        assert _MOD._is_fix_defer_question(q) is False
+
+    def test_case_insensitive(self):
+        q = {"options": [{"label": "FIX"}, {"label": "defer"}]}
+        assert _MOD._is_fix_defer_question(q) is True

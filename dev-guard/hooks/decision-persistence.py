@@ -34,26 +34,43 @@ _CODE_HASH_WINDOW = 5  # ±N lines around finding location for staleness detecti
 
 # ── Git root detection ──
 
+_cached_git_root: Path | None = None
+
 
 def _find_git_root() -> Path:
-    """Find the git root by walking up from CWD. Falls back to CWD if no .git found."""
+    """Find the git root by walking up from CWD. Falls back to CWD if no .git found.
+
+    Cached per-process — CWD cannot change within a hook subprocess invocation.
+    """
+    global _cached_git_root  # noqa: PLW0603
+    if _cached_git_root is not None:
+        return _cached_git_root
     cwd = Path.cwd()
     git_root = cwd
     while git_root != git_root.parent:
         if (git_root / ".git").exists():
+            _cached_git_root = git_root
             return git_root
         git_root = git_root.parent
+    _cached_git_root = cwd
     return cwd  # no .git found — fall back to CWD
 
 
 # ── Memory directory detection ──
+
+_memory_dir_resolved = False
+_cached_memory_dir: Path | None = None
 
 
 def _find_memory_dir() -> Path | None:
     """Find the project memory directory (hack/, .local/, scratch/, .dev/).
 
     Finds git root by walking up from CWD, then checks for candidates at root level.
+    Cached per-process alongside _find_git_root.
     """
+    global _memory_dir_resolved, _cached_memory_dir  # noqa: PLW0603
+    if _memory_dir_resolved:
+        return _cached_memory_dir
     git_root = _find_git_root()
 
     core_files = ("PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md")
@@ -64,7 +81,10 @@ def _find_memory_dir() -> Path | None:
             core_count = sum(1 for f in core_files if (candidate_path / f).is_file())
             if core_count < 2:
                 continue  # not a validated memory directory
+            _cached_memory_dir = candidate_path
+            _memory_dir_resolved = True
             return candidate_path
+    _memory_dir_resolved = True
     return None
 
 
@@ -115,32 +135,43 @@ def _fingerprint(file: str, category: str, line: str = "0", skill: str = "unknow
     """
     line_window = (int(line) // 10) * 10 if line.isdigit() else 0
     normalized = f"{file}|{category}|{line_window}|{skill}"
-    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+    return hashlib.sha256(normalized.encode()).hexdigest()[:32]
 
 
 def _compute_code_hash(file_path: str, line: str = "0") -> str | None:
     """Hash ±N lines around a finding location for staleness detection.
 
-    Returns a 16-char hex digest, or None if the file can't be read.
-    When the code around a finding changes, the hash changes, invalidating
-    the stored decision so the user is re-prompted.
+    Returns a 32-char hex digest, or None if the file can't be read.
+    Only reads lines in the target window (not the full file).
+    Rejects paths that resolve outside the git root (symlink boundary check).
     """
     git_root = _find_git_root()
     resolved = git_root / file_path
     try:
-        lines = resolved.read_text().splitlines()
-    except (OSError, UnicodeDecodeError):
-        return None
-    if not lines:
+        canonical = resolved.resolve()
+        if not canonical.is_relative_to(git_root.resolve()):
+            return None
+    except (OSError, ValueError):
         return None
 
     target = int(line) if line.isdigit() else 0
-    # 0-indexed target line
     center = max(0, target - 1)  # line numbers are 1-based
     start = max(0, center - _CODE_HASH_WINDOW)
-    end = min(len(lines), center + _CODE_HASH_WINDOW + 1)
-    window = "\n".join(lines[start:end])
-    return hashlib.sha256(window.encode()).hexdigest()[:16]
+    end = center + _CODE_HASH_WINDOW + 1
+
+    try:
+        window_lines: list[str] = []
+        with open(resolved) as f:
+            for i, file_line in enumerate(f):
+                if i >= end:
+                    break
+                if i >= start:
+                    window_lines.append(file_line.rstrip("\n"))
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not window_lines:
+        return None
+    return hashlib.sha256("\n".join(window_lines).encode()).hexdigest()[:32]
 
 
 # ── Metadata parsing ──
@@ -266,6 +297,7 @@ def _handle_pre_tool_use(data: dict) -> None:
     # Try to match each Fix/Defer question
     answers = {}
     all_matched = True
+    code_hash_cache: dict[tuple[str, str], str | None] = {}
 
     for q in fix_defer_questions:
         q_text = q.get("question", "")
@@ -282,7 +314,10 @@ def _handle_pre_tool_use(data: dict) -> None:
             # Staleness check: verify code hasn't changed since decision was made
             stored_hash = prior.get("code_hash")
             if stored_hash is not None:
-                current_hash = _compute_code_hash(meta["file"], meta.get("line", "0"))
+                cache_key = (meta["file"], meta.get("line", "0"))
+                if cache_key not in code_hash_cache:
+                    code_hash_cache[cache_key] = _compute_code_hash(*cache_key)
+                current_hash = code_hash_cache[cache_key]
                 if current_hash != stored_hash:
                     all_matched = False
                     break  # code changed — decision is stale, re-ask
@@ -339,14 +374,14 @@ def _handle_post_tool_use(data: dict) -> None:
     # first would re-capture already-stored decisions with a fresh timestamp,
     # misleading future staleness detection.
     answers = {}
-    answers_from_user = True
+    answers_from_tool_response = True
     if isinstance(tool_response, dict):
         answers = tool_response.get("answers", {})
     if not answers:
         # Fallback: may contain auto-applied answers from PreToolUse updatedInput.
         # Flag so we can skip re-capture of unchanged decisions below.
         answers = tool_input.get("answers", {})
-        answers_from_user = False
+        answers_from_tool_response = False
 
     if not questions or not answers:
         sys.exit(0)
@@ -374,6 +409,7 @@ def _handle_post_tool_use(data: dict) -> None:
     }
 
     mutated = False
+    code_hash_cache: dict[tuple[str, str], str | None] = {}
     for q in questions:
         if not _is_fix_defer_question(q):
             continue
@@ -392,12 +428,15 @@ def _handle_post_tool_use(data: dict) -> None:
 
         # Skip re-capture of auto-applied decisions (prevents timestamp refresh)
         already_stored = fp in stored_by_fp and stored_by_fp[fp].get("decision") == answer
-        if not answers_from_user and already_stored:
+        if not answers_from_tool_response and already_stored:
             continue
 
         snippet = _extract_description_snippet(q_text)
         line_val = re.sub(r"[^\d]", "", meta.get("line", "0"))[:_MAX_FIELD_LEN] or "0"
-        code_hash = _compute_code_hash(meta["file"], meta.get("line", "0"))
+        cache_key = (meta["file"], meta.get("line", "0"))
+        if cache_key not in code_hash_cache:
+            code_hash_cache[cache_key] = _compute_code_hash(*cache_key)
+        code_hash = code_hash_cache[cache_key]
 
         decision_record = {
             "fingerprint": fp,
