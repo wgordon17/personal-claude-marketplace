@@ -722,6 +722,18 @@ This performs a final cross-check against the original cleanup plan, verifying:
 
 If reflection identifies gaps, address them before announcing completion.
 
+### Step 4.6b: Team cleanup
+
+Shut down any remaining teammates and delete the team:
+
+```
+SendMessage(type="shutdown_request", recipient="*", content="Cleanup complete.")
+TeamDelete()
+```
+
+This removes `~/.claude/teams/cleanup-{run_id}/` and associated task files. Without this step,
+each `/unfuck` run leaves an orphaned team directory that is never cleaned up.
+
 ### Step 4.7: Announce completion
 
 Report to the user:

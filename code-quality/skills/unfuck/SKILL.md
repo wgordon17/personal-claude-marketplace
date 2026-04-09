@@ -11,7 +11,7 @@ description: >-
   (file-audit, code-quality:index-repo, code-quality:code-simplifier,
   code-quality:architect, code-quality:security, code-quality:qa, code-quality:code-reviewer,
   code-quality:test-runner) into a unified cleanup workflow.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
 ---
 
 # /unfuck — Comprehensive Repo Cleanup
