@@ -364,33 +364,40 @@ def _analyze_duplication(
 ) -> list[Finding]:
     """Detect semantic duplication among reference docs (one pair per call).
 
-    Compares docs within the same plugin and cross-plugin docs with the same basename.
-    Aborts if cumulative wall-clock time exceeds _WALL_BUDGET.
+    Compares docs within the same skill's references/ directory AND cross-skill
+    docs with the same basename. Aborts if cumulative wall-clock time exceeds
+    _WALL_BUDGET.
     """
     findings: list[Finding] = []
 
-    # Gather all reference docs by plugin
-    plugin_refs: dict[str, list[Path]] = {}
+    # Gather reference docs grouped by directory (within-skill scope)
+    # Each references/ dir is a separate group: {plugin}/references/ and
+    # {plugin}/skills/{skill}/references/
+    all_ref_groups: list[list[Path]] = []
+    all_refs_flat: list[Path] = []
     for plugin in plugins:
         refs = list_reference_docs(plugin.source_path)
-        if refs:
-            plugin_refs[plugin.name] = refs
+        if not refs:
+            continue
+        all_refs_flat.extend(refs)
+        # Group by parent directory (each references/ dir is a scope)
+        by_dir: dict[Path, list[Path]] = {}
+        for ref in refs:
+            by_dir.setdefault(ref.parent, []).append(ref)
+        all_ref_groups.extend(by_dir.values())
 
     # Build pairs to compare
     pairs: list[tuple[Path, Path]] = []
 
-    # Within-plugin pairs
-    for _plugin_name, refs in plugin_refs.items():
-        for i, ref_a in enumerate(refs):
-            for ref_b in refs[i + 1 :]:
+    # Within-directory pairs (within the same skill's or plugin's references/)
+    for group in all_ref_groups:
+        for i, ref_a in enumerate(group):
+            for ref_b in group[i + 1 :]:
                 pairs.append((ref_a, ref_b))
 
-    # Cross-plugin pairs (same basename only)
-    all_refs: list[Path] = []
-    for refs in plugin_refs.values():
-        all_refs.extend(refs)
+    # Cross-skill pairs (same basename only)
     basename_map: dict[str, list[Path]] = {}
-    for ref in all_refs:
+    for ref in all_refs_flat:
         basename_map.setdefault(ref.name, []).append(ref)
     for _basename, paths in basename_map.items():
         if len(paths) > 1:
@@ -461,12 +468,12 @@ def _format_output(findings: list[Finding]) -> tuple[str, int]:
     infos = [f for f in findings if f.severity == "INFO"]
 
     if not findings:
-        return "ATLAS Health Check passed.", 0
+        return "\u2705 ATLAS Health Check passed.", 0
 
     lines: list[str] = []
 
     if criticals:
-        lines.append(f"ATLAS Health Check BLOCKED ({len(criticals)} critical)")
+        lines.append(f"\u274c ATLAS Health Check BLOCKED ({len(criticals)} critical)")
         lines.append("")
         for finding in criticals:
             lines.append(f"[CRITICAL] {finding.component}")
@@ -481,7 +488,7 @@ def _format_output(findings: list[Finding]) -> tuple[str, int]:
         return "\n".join(lines), 1
 
     # Info only
-    lines.append(f"ATLAS Health Check ({len(infos)} info findings)")
+    lines.append(f"\u26a0\ufe0f  ATLAS Health Check ({len(infos)} info findings)")
     lines.append("")
     for finding in infos:
         lines.append(f"[INFO] {finding.component}")
