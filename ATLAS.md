@@ -264,6 +264,12 @@ _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 | WARN | unnamed-agent | skill summarize has 2 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/summarize/SKILL.md |
 | WARN | unnamed-agent | skill test-runner has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/test-runner/SKILL.md |
 | WARN | unnamed-agent | skill unfuck has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/unfuck/SKILL.md |
+| WARN | prose-agent | skill deep-research declares Agent in allowed-tools but has no Agent() call — spawning relies on prose | code-quality/skills/deep-research/SKILL.md |
+| WARN | prose-agent | skill map-reduce declares Agent in allowed-tools but has no Agent() call — spawning relies on prose | code-quality/skills/map-reduce/SKILL.md |
+| WARN | prose-agent | skill roadmap declares Agent in allowed-tools but has no Agent() call — spawning relies on prose | code-quality/skills/roadmap/SKILL.md |
+| WARN | prose-agent | skill speculative declares Agent in allowed-tools but has no Agent() call — spawning relies on prose | code-quality/skills/speculative/SKILL.md |
+| WARN | prose-agent | skill test-plan declares Agent in allowed-tools but has no Agent() call — spawning relies on prose | code-quality/skills/test-plan/SKILL.md |
+| WARN | prose-agent | skill jira declares Agent in allowed-tools but has no Agent() call — spawning relies on prose | jira/skills/jira/SKILL.md |
 | INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |

@@ -628,6 +628,40 @@ def _run_health_checks(
                 )
             )
 
+    # Prose-only agent spawning: Agent in allowed-tools but no Agent() call definition
+    for skill in skills:
+        if "Agent" not in skill.allowed_tools:
+            continue
+        texts: list[str] = []
+        body = skill.body or ""
+        if not body:
+            try:
+                body = skill.path.read_text()
+            except Exception:
+                body = ""
+        texts.append(body)
+        for _pn, paths in ref_docs.items():
+            for ref_path in paths:
+                parts = ref_path.parts
+                for i, part in enumerate(parts):
+                    if part == "skills" and i + 1 < len(parts) and parts[i + 1] == skill.name:
+                        with contextlib.suppress(Exception):
+                            texts.append(ref_path.read_text())
+                        break
+        full_text = "\n".join(texts)
+        if not _AGENT_ANY_CALL_RE.search(full_text):
+            findings.append(
+                HealthFinding(
+                    severity="WARN",
+                    category="prose-agent",
+                    message=(
+                        f"skill {skill.name} declares Agent in allowed-tools "
+                        f"but has no Agent() call — spawning relies on prose"
+                    ),
+                    file_path=str(skill.path),
+                )
+            )
+
     # Tool frontmatter validation: compare allowed-tools vs tools mentioned in skill body
     _KNOWN_TOOLS = {
         "Read",
