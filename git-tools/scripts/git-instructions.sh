@@ -313,34 +313,48 @@ cat <<PR_WORKFLOW
 
 2. **Push to origin**:
    \`\`\`bash
-   git push -u origin <branch-name>
+   git push -u origin HEAD
    \`\`\`
 
-3. **Create PR** via \`gh\` CLI:
+3. **Create PR** via \`gh\` CLI — always pass \`--title\`, \`--body\`, and \`--head\` (no interactive prompts):
 
 PR_WORKFLOW
 
 if [ "$IS_FORK" -eq 1 ]; then
+    # Resolve OWNER/REPO from upstream, and fork owner from origin
+    UPSTREAM_REPO=$(git remote get-url upstream 2>/dev/null | sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
+    ORIGIN_OWNER=$(git remote get-url origin 2>/dev/null | sed -E 's|.*[:/]([^/]+)/[^/]+?$|\1|')
     cat <<FORK_PR
-   **Fork repo — PR targets upstream:**
-   \`gh pr create --repo ${UPSTREAM_OWNER}/<repo-name>\`
+   **Fork repo — \`upstream\` = PR target, \`origin\` = PR head (your fork).**
+   Use a multiline double-quoted string for \`--body\`. Never use HEREDOC, \`--body-file\`, or pipes.
+   \`\`\`bash
+   BRANCH=\$(git branch --show-current)
+   git push -u origin HEAD
+   gh pr create --repo ${UPSTREAM_REPO} --head "${ORIGIN_OWNER}:\$BRANCH" \\
+     --title "type(scope): description" \\
+     --body "## Summary
+   - What changed and why"
+   \`\`\`
 
 FORK_PR
 else
     cat <<'NONFORK_PR'
-   `gh pr create`
+   **Push first, then create with explicit `--head`.**
+   Use a multiline double-quoted string for `--body`. Never use HEREDOC, `--body-file`, or pipes.
+   ```bash
+   BRANCH=$(git branch --show-current)
+   git push -u origin HEAD
+   gh pr create --head "$BRANCH" \
+     --title "type(scope): description" \
+     --body "## Summary
+   - What changed and why"
+   ```
 
 NONFORK_PR
 fi
 
 cat <<'PR_FORMAT'
-**PR body format — strictly follow this structure:**
-```
-## Summary
-- What changed and why (1-3 bullets)
-- Second bullet if needed
-- Third bullet if needed
-```
+**PR body rules:** Max 3 bullets under `## Summary`.
 
 **NEVER include in PR descriptions:**
 - "Test plan" sections
