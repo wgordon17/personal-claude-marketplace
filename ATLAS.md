@@ -4,7 +4,7 @@
 
 # Recommended Skill Workflow
 
-This guide describes the recommended sequence of skills for common development workflows in this marketplace. Skills are invoked as `/skill-name` in Claude Code.
+This guide describes the recommended sequence of skills and commands for common development workflows in this marketplace. Both are invoked as `/plugin:name` in Claude Code (e.g., `/code-quality:swarm`, `/git-tools:review-commits`).
 
 ---
 
