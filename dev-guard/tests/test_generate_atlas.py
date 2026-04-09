@@ -140,16 +140,25 @@ class TestFullGeneration:
                 f"Agent '{agent_name}' not found in ATLAS.md agent table"
             )
 
-    def test_tool_list_truncation(self, tmp_path):
-        """Tool lists with more than 2 tools are shown as 'Read, Glob +N' plain text."""
+    def test_tool_list_full_no_truncation(self, tmp_path):
+        """Tool lists show all tools comma-separated with no +N truncation."""
         atlas = tmp_path / "ATLAS.md"
         result = _run_generate(atlas_path=atlas, repo_root=REPO_ROOT)
         assert result.returncode == 0, f"Generation failed:\n{result.stderr}"
         content = atlas.read_text()
-        # Skills with many tools (e.g., swarm) should use "+N" notation
-        assert " +" in content, "No '+N' tool truncation found in ATLAS.md"
         # No HTML abbr tags should appear
         assert "<abbr" not in content, "HTML <abbr> tags should not appear in ATLAS.md"
+        # Skills with many tools should show all of them (e.g., swarm uses Agent, Read, etc.)
+        # Find the swarm row that contains the tools list (has both Agent and Read in the same line)
+        swarm_tool_rows = [
+            line
+            for line in content.splitlines()
+            if line.startswith("| swarm |") and "Agent" in line and "Read" in line
+        ]
+        assert swarm_tool_rows, (
+            "swarm skill tools row not found in ATLAS.md — "
+            "expected a row with both 'Agent' and 'Read' for swarm"
+        )
 
     def test_cross_reference_section_exists(self, tmp_path):
         """Cross-reference tables are populated."""

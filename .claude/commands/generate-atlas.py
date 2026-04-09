@@ -213,13 +213,30 @@ def _list_reference_docs(plugins: list[Plugin]) -> dict[str, list[Path]]:
 _SUBAGENT_TYPE_RE = re.compile(r'subagent_type\s*[=:]\s*["\']([^"\']+)["\']')
 
 
-def _build_spawn_graph(agents: list[Agent], skills: list[Skill]) -> dict[str, list[str]]:
+def _build_spawn_graph(
+    agents: list[Agent], skills: list[Skill], ref_docs: dict[str, list[Path]] | None = None
+) -> dict[str, list[str]]:
     """Return {agent_name: [skill_name, ...]} — which skills spawn each agent.
 
     Matches via subagent_type= patterns and backtick-quoted agent names in skill bodies.
     Handles both bare names ('architect') and plugin-qualified names ('code-quality:architect').
+    Also scans reference doc content and attributes matches to the owning skill.
     """
     spawn_graph: dict[str, list[str]] = {a.name: [] for a in agents}
+
+    # Build a lookup: ref_doc_path -> skill_name (owner)
+    # A ref doc is owned by a skill if it lives under skills/{skill_name}/references/
+    ref_doc_owner: dict[Path, str] = {}
+    if ref_docs:
+        for _plugin_name, paths in ref_docs.items():
+            for ref_path in paths:
+                # Check if path is under skills/{skill_name}/references/
+                parts = ref_path.parts
+                for i, part in enumerate(parts):
+                    if part == "skills" and i + 2 < len(parts):
+                        skill_name = parts[i + 1]
+                        ref_doc_owner[ref_path] = skill_name
+                        break
 
     for agent in agents:
         # Normalize agent name: strip plugin prefix
@@ -245,6 +262,26 @@ def _build_spawn_graph(agents: list[Agent], skills: list[Skill]) -> dict[str, li
             # Match backtick-quoted agent names
             if re.search(backtick_pattern, body) and skill.name not in spawn_graph[agent.name]:
                 spawn_graph[agent.name].append(skill.name)
+
+        # Second pass: scan reference docs owned by each skill
+        if ref_docs:
+            for ref_path, owning_skill_name in ref_doc_owner.items():
+                if owning_skill_name not in spawn_graph[agent.name]:
+                    try:
+                        ref_body = ref_path.read_text()
+                    except Exception:
+                        continue
+                    # Match subagent_type patterns in ref doc
+                    for match in _SUBAGENT_TYPE_RE.finditer(ref_body):
+                        captured = match.group(1)
+                        captured_bare = captured.split(":", 1)[-1]
+                        if captured_bare == bare:
+                            spawn_graph[agent.name].append(owning_skill_name)
+                            break
+                    else:
+                        # Match backtick-quoted agent names in ref doc
+                        if re.search(backtick_pattern, ref_body):
+                            spawn_graph[agent.name].append(owning_skill_name)
 
     return spawn_graph
 
@@ -411,6 +448,66 @@ def _run_health_checks(
                 )
             )
 
+    # Tool frontmatter validation: compare allowed-tools vs tools mentioned in skill body
+    _KNOWN_TOOLS = {
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "Bash",
+        "Agent",
+        "LSP",
+        "AskUserQuestion",
+        "SendMessage",
+        "WebSearch",
+        "WebFetch",
+        "Skill",
+        "ToolSearch",
+        "TaskCreate",
+        "TaskUpdate",
+        "TaskList",
+        "TaskGet",
+        "CronCreate",
+        "CronDelete",
+        "NotebookEdit",
+        "TeamCreate",
+        "TeamDelete",
+    }
+    for skill in skills:
+        body = skill.body or ""
+        if not body:
+            try:
+                body = skill.path.read_text()
+            except Exception:
+                continue
+        # Normalize allowed_tools: strip Jira prefix for comparison
+        allowed_set = {
+            t[len(_JIRA_MCP_PREFIX) :] if t.startswith(_JIRA_MCP_PREFIX) else t
+            for t in skill.allowed_tools
+        }
+        for tool in sorted(_KNOWN_TOOLS):
+            in_body = bool(re.search(r"\b" + re.escape(tool) + r"\b", body))
+            in_allowed = tool in allowed_set
+            if in_body and not in_allowed:
+                findings.append(
+                    HealthFinding(
+                        severity="INFO",
+                        category="tool-frontmatter",
+                        message=f"tool {tool} used in body but not in allowed-tools",
+                        file_path=str(skill.path),
+                    )
+                )
+            elif in_allowed and not in_body:
+                findings.append(
+                    HealthFinding(
+                        severity="INFO",
+                        category="tool-frontmatter",
+                        message=f"tool {tool} in allowed-tools but not found in body",
+                        file_path=str(skill.path),
+                    )
+                )
+
     return findings
 
 
@@ -422,23 +519,14 @@ def _run_health_checks(
 _JIRA_MCP_PREFIX = "mcp__plugin_jira_mcp-atlassian-prod__"
 
 
-def _short_tools(tools: list[str], max_show: int = 2) -> str:
-    """Abbreviate a long tool list as plain text: 'Read, Glob +4'."""
+def _format_tools(tools: list[str]) -> str:
+    """Return all tools comma-separated, stripping the verbose Jira MCP prefix."""
     if not tools:
         return "—"
-    display_tools = [_strip_jira_prefix(t) for t in tools]
-    if len(display_tools) <= max_show:
-        return ", ".join(display_tools)
-    shown = ", ".join(display_tools[:max_show])
-    remaining = len(display_tools) - max_show
-    return f"{shown} +{remaining}"
-
-
-def _strip_jira_prefix(tool: str) -> str:
-    """Strip the verbose Jira MCP prefix from tool names."""
-    if tool.startswith(_JIRA_MCP_PREFIX):
-        return tool[len(_JIRA_MCP_PREFIX) :]
-    return tool
+    display_tools = [
+        t[len(_JIRA_MCP_PREFIX) :] if t.startswith(_JIRA_MCP_PREFIX) else t for t in tools
+    ]
+    return ", ".join(display_tools)
 
 
 def _has_jira_tools(tools: list[str]) -> bool:
@@ -529,6 +617,8 @@ def _render_plugin_section(
     hooks: list[Hook],
     mcp_servers: list[McpServer],
     spawn_graph: dict[str, list[str]],
+    ref_docs: list[Path] | None = None,
+    ref_consumption: dict[str, list[str]] | None = None,
 ) -> str:
     """Render the full markdown section for one non-LSP plugin."""
     lines: list[str] = []
@@ -544,7 +634,7 @@ def _render_plugin_section(
         lines.append("| Skill | Tools | Agents |")
         lines.append("|-------|-------|--------|")
         for skill in skills:
-            tools_str = _short_tools(skill.allowed_tools)
+            tools_str = _format_tools(skill.allowed_tools)
             spawned = _skill_spawns(skill, agents, spawn_graph)
             spawns_str = ", ".join(spawned) if spawned else "—"
             lines.append(f"| {skill.name} | {tools_str} | {spawns_str} |")
@@ -559,7 +649,7 @@ def _render_plugin_section(
         lines.append("|-------|-------|-------|------------|")
         for agent in agents:
             model_str = agent.model if agent.model else "—"
-            tools_str = _short_tools(agent.tools)
+            tools_str = _format_tools(agent.tools)
             spawned_by = spawn_graph.get(agent.name, [])
             spawned_by_str = ", ".join(spawned_by) if spawned_by else "—"
             lines.append(f"| {agent.name} | {model_str} | {tools_str} | {spawned_by_str} |")
@@ -599,16 +689,33 @@ def _render_plugin_section(
             lines.append(f"| `{mcp.server_name}` | {mcp.server_type} | `{mcp.url}` |")
         lines.append("")
 
+    # References table (per-plugin, deduplicated by filename)
+    if ref_docs:
+        seen: set[str] = set()
+        unique_refs: list[Path] = []
+        for ref_path in sorted(ref_docs, key=lambda p: p.name):
+            if ref_path.name not in seen:
+                seen.add(ref_path.name)
+                unique_refs.append(ref_path)
+        lines.append(f"**References ({len(unique_refs)})**")
+        lines.append("")
+        lines.append("| Reference | Consumed By |")
+        lines.append("|-----------|-------------|")
+        for ref_path in unique_refs:
+            fn = ref_path.name
+            consumers = (ref_consumption or {}).get(fn, [])
+            consumers_str = ", ".join(consumers) if consumers else "—"
+            lines.append(f"| {fn} | {consumers_str} |")
+        lines.append("")
+
     return "\n".join(lines)
 
 
 def _render_cross_references(
     agents: list[Agent],
     spawn_graph: dict[str, list[str]],
-    ref_consumption: dict[str, list[str]],
-    ref_docs: dict[str, list[Path]],
 ) -> str:
-    """Render the cross-reference section."""
+    """Render the cross-reference section (Agent Spawn Graph only)."""
     lines: list[str] = []
     lines.append("## Cross-References")
     lines.append("")
@@ -623,35 +730,6 @@ def _render_cross_references(
         spawned_by_str = ", ".join(spawned_by) if spawned_by else "—"
         lines.append(f"| {agent.name} | {spawned_by_str} |")
     lines.append("")
-
-    # Unified references table (replaces per-plugin References tables + Reference Consumption)
-    # Build plugin lookup: filename -> plugin_name
-    filename_to_plugin: dict[str, str] = {}
-    for plugin_name, paths in ref_docs.items():
-        for ref_path in paths:
-            filename_to_plugin[ref_path.name] = plugin_name
-
-    # Collect all unique reference filenames across all plugins
-    all_ref_filenames: list[str] = []
-    seen_fns: set[str] = set()
-    for paths in ref_docs.values():
-        for ref_path in paths:
-            if ref_path.name not in seen_fns:
-                seen_fns.add(ref_path.name)
-                all_ref_filenames.append(ref_path.name)
-    all_ref_filenames.sort()
-
-    if all_ref_filenames:
-        lines.append("### References")
-        lines.append("")
-        lines.append("| Reference | Plugin | Consumed By |")
-        lines.append("|-----------|--------|-------------|")
-        for fn in all_ref_filenames:
-            plugin_name = filename_to_plugin.get(fn, "—")
-            consumers = ref_consumption.get(fn, [])
-            consumers_str = ", ".join(consumers) if consumers else "—"
-            lines.append(f"| {fn} | {plugin_name} | {consumers_str} |")
-        lines.append("")
 
     return "\n".join(lines)
 
@@ -698,7 +776,7 @@ def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
     mcp_servers = _parse_mcp_servers(plugins)
     ref_docs = _list_reference_docs(plugins)
 
-    spawn_graph = _build_spawn_graph(agents, skills)
+    spawn_graph = _build_spawn_graph(agents, skills, ref_docs)
     ref_consumption = _build_reference_consumption(skills, agents, ref_docs)
     health_findings = _run_health_checks(
         plugins, skills, agents, commands, hooks, ref_docs, ref_consumption
@@ -749,6 +827,8 @@ def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
             [h for h in hooks if h.plugin == plugin.name],
             [m for m in mcp_servers if m.plugin == plugin.name],
             spawn_graph,
+            ref_docs=ref_docs.get(plugin.name),
+            ref_consumption=ref_consumption,
         )
         parts.append(section)
 
@@ -756,7 +836,7 @@ def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
     parts.append("")
 
     # Cross-references
-    parts.append(_render_cross_references(agents, spawn_graph, ref_consumption, ref_docs))
+    parts.append(_render_cross_references(agents, spawn_graph))
 
     parts.append("---")
     parts.append("")

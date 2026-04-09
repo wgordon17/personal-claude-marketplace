@@ -78,40 +78,40 @@ Code quality agents, development utilities, and orchestration skills: architectu
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| bug-investigation | Read, Write +6 | — |
-| business-panel | Read, Glob +4 | — |
-| deep-research | WebSearch, WebFetch +8 | — |
-| file-audit | LSP, Read +9 | — |
-| fix | Read, Write +9 | — |
-| incremental-planning | Read, Write +9 | — |
-| index-repo | Read, Glob +3 | — |
-| lsp-navigation | LSP, Read +2 | — |
-| map-reduce | Read, Write +13 | — |
-| plan-review | Read, Glob +4 | plan-adherence |
-| pr-review | Read, Glob +4 | — |
-| quality-gate | Read, Write +8 | plan-adherence |
-| reflect | mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information +8 | — |
-| roadmap | Read, Write +7 | — |
-| speculative | Read, Write +14 | — |
-| summarize | Read, Edit +5 | — |
-| swarm | Read, Write +16 | — |
-| test-plan | Read, Write +7 | — |
-| test-runner | Bash, Read +2 | test-runner |
-| unfuck | Read, Write +14 | — |
-| uv-python | Bash, Read +4 | — |
+| bug-investigation | Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion | — |
+| business-panel | Read, Glob, Grep, WebSearch, WebFetch, Skill | — |
+| deep-research | WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs | — |
+| file-audit | LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs | — |
+| fix | Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch | — |
+| incremental-planning | Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch | — |
+| index-repo | Read, Glob, Grep, Write, Bash | — |
+| lsp-navigation | LSP, Read, Grep, Glob | — |
+| map-reduce | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet | — |
+| plan-review | Read, Glob, Grep, Bash, Agent, AskUserQuestion | plan-adherence |
+| pr-review | Read, Glob, Grep, Bash, Agent, AskUserQuestion | — |
+| quality-gate | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill | plan-adherence |
+| reflect | mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information, mcp__serena__think_about_whether_you_are_done, mcp__serena__summarize_changes, mcp__serena__read_memory, mcp__serena__write_memory, mcp__serena__list_memories, Read, Glob, Grep | — |
+| roadmap | Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, ToolSearch | — |
+| speculative | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill | — |
+| summarize | Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion | — |
+| swarm | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
+| test-plan | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Skill | — |
+| test-runner | Bash, Read, Grep, Glob | test-runner |
+| unfuck | Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill | security, test-runner |
+| uv-python | Bash, Read, Write, Edit, Grep, Glob | — |
 
 **Agents (8)**
 
 | Agent | Model | Tools | Spawned By |
 |-------|-------|-------|------------|
-| architect | opus | Read, Glob +4 | — |
-| code-reviewer | sonnet | Read, Glob +2 | — |
-| code-simplifier | sonnet | Read, Glob +4 | — |
-| performance | sonnet | Read, Glob +4 | — |
-| plan-adherence | opus | Read, Glob +5 | plan-review, quality-gate |
-| qa | sonnet | Read, Glob +3 | — |
-| security | sonnet | Read, Glob +3 | — |
-| test-runner | haiku | Bash, Read +2 | test-runner |
+| architect | opus | Read, Glob, Grep, LSP, WebSearch, WebFetch | swarm |
+| code-reviewer | sonnet | Read, Glob, Grep, LSP | swarm |
+| code-simplifier | sonnet | Read, Glob, Grep, LSP, Edit, Write | swarm |
+| performance | sonnet | Read, Glob, Grep, LSP, Bash, WebSearch | swarm |
+| plan-adherence | opus | Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage | plan-review, quality-gate, swarm |
+| qa | sonnet | Read, Glob, Grep, LSP, Bash | swarm |
+| security | sonnet | Read, Glob, Grep, LSP, WebSearch | swarm, unfuck |
+| test-runner | haiku | Bash, Read, Grep, TodoWrite | test-runner, swarm, unfuck |
 
 **Commands (4)**
 
@@ -121,6 +121,39 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | review-project | Comprehensive project review with TODO validation and claim verification |
 | session-end | Sync project memory and update hack/ files before ending session |
 | session-start | Start a session by loading project context or initializing new project |
+
+**References (28)**
+
+| Reference | Consumed By |
+|-----------|-------------|
+| agent-prompts.md | map-reduce, speculative, swarm |
+| ai-slop-checklist.md | unfuck |
+| analyzer-prompt.md | — |
+| artifact-formats.md | summarize |
+| command-mappings.md | uv-python |
+| communication-schema.md | map-reduce, speculative, swarm |
+| cynefin-reference.md | swarm |
+| dependency-evaluation.md | quality-gate, swarm, architect, code-simplifier |
+| discovery-agents.md | unfuck |
+| documentation-taxonomy.md | incremental-planning, quality-gate |
+| external-tools.md | unfuck |
+| fidelity-guide.md | map-reduce |
+| finding-classification.md | bug-investigation, fix, plan-review, pr-review, quality-gate, swarm, unfuck, architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
+| implementation-agents.md | unfuck |
+| inventory-schema.json | — |
+| investigator-prompt.md | fix |
+| issue-types.md | — |
+| lens-rubrics.md | quality-gate |
+| lessons-template.md | swarm |
+| orchestration-playbook.md | swarm, unfuck |
+| pep723-examples.md | uv-python |
+| phase-schema.md | roadmap |
+| pipeline-model.md | swarm |
+| project-memory-reference.md | bug-investigation, deep-research, file-audit, fix, incremental-planning, index-repo, map-reduce, plan-review, pr-review, quality-gate, roadmap, speculative, summarize, swarm, test-plan, unfuck |
+| reviewer-prompts.md | plan-review, pr-review |
+| simplification-checklist.md | quality-gate, code-simplifier |
+| subagent-prompts.md | quality-gate |
+| task-reviewer-prompt.md | incremental-planning |
 
 ### git-tools (v2.1.0)
 
@@ -169,13 +202,13 @@ Jira integration for issue tracking, querying, and management — OSAC defaults 
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| jira | Read, Bash +21 | — |
+| jira | Read, Bash, Agent, AskUserQuestion, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian | — |
 
 **Agents (1)**
 
 | Agent | Model | Tools | Spawned By |
 |-------|-------|-------|------------|
-| jira-agent | sonnet | Read, Grep +20 | — |
+| jira-agent | sonnet | Read, Grep, Bash, atlassianUserInfo, getAccessibleAtlassianResources, searchJiraIssuesUsingJql, getJiraIssue, editJiraIssue, createJiraIssue, addCommentToJiraIssue, transitionJiraIssue, getTransitionsForJiraIssue, lookupJiraAccountId, getJiraProjectIssueTypesMetadata, getJiraIssueTypeMetaWithFields, createIssueLink, getIssueLinkTypes, addWorklogToJiraIssue, getVisibleJiraProjects, getJiraIssueRemoteIssueLinks, fetchAtlassian, searchAtlassian | — |
 
 _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without prefix._
 
@@ -193,48 +226,15 @@ _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without p
 
 | Agent | Spawned By |
 |-------|------------|
-| architect | — |
-| code-reviewer | — |
-| code-simplifier | — |
-| performance | — |
-| plan-adherence | plan-review, quality-gate |
-| qa | — |
-| security | — |
-| test-runner | test-runner |
+| architect | swarm |
+| code-reviewer | swarm |
+| code-simplifier | swarm |
+| performance | swarm |
+| plan-adherence | plan-review, quality-gate, swarm |
+| qa | swarm |
+| security | swarm, unfuck |
+| test-runner | test-runner, swarm, unfuck |
 | jira-agent | — |
-
-### References
-
-| Reference | Plugin | Consumed By |
-|-----------|--------|-------------|
-| agent-prompts.md | code-quality | map-reduce, speculative, swarm |
-| ai-slop-checklist.md | code-quality | unfuck |
-| analyzer-prompt.md | code-quality | — |
-| artifact-formats.md | code-quality | summarize |
-| command-mappings.md | code-quality | uv-python |
-| communication-schema.md | code-quality | map-reduce, speculative, swarm |
-| cynefin-reference.md | code-quality | swarm |
-| dependency-evaluation.md | code-quality | quality-gate, swarm, architect, code-simplifier |
-| discovery-agents.md | code-quality | unfuck |
-| documentation-taxonomy.md | code-quality | incremental-planning, quality-gate |
-| external-tools.md | code-quality | unfuck |
-| fidelity-guide.md | code-quality | map-reduce |
-| finding-classification.md | code-quality | bug-investigation, fix, plan-review, pr-review, quality-gate, swarm, unfuck, architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
-| implementation-agents.md | code-quality | unfuck |
-| inventory-schema.json | code-quality | — |
-| investigator-prompt.md | code-quality | fix |
-| issue-types.md | code-quality | — |
-| lens-rubrics.md | code-quality | quality-gate |
-| lessons-template.md | code-quality | swarm |
-| orchestration-playbook.md | code-quality | swarm, unfuck |
-| pep723-examples.md | code-quality | uv-python |
-| phase-schema.md | code-quality | roadmap |
-| pipeline-model.md | code-quality | swarm |
-| project-memory-reference.md | code-quality | bug-investigation, deep-research, file-audit, fix, incremental-planning, index-repo, map-reduce, plan-review, pr-review, quality-gate, roadmap, speculative, summarize, swarm, test-plan, unfuck |
-| reviewer-prompts.md | code-quality | plan-review, pr-review |
-| simplification-checklist.md | code-quality | quality-gate, code-simplifier |
-| subagent-prompts.md | code-quality | quality-gate |
-| task-reviewer-prompt.md | code-quality | incremental-planning |
 
 ---
 
@@ -254,4 +254,100 @@ _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without p
 | INFO | orphan-agent | agent qa has no 'Spawned By' entries in skill spawn graph | code-quality/agents/qa.md |
 | INFO | orphan-agent | agent security has no 'Spawned By' entries in skill spawn graph | code-quality/agents/security.md |
 | INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in skill spawn graph | jira/agents/jira-agent.md |
+| INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
+| INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
+| INFO | tool-frontmatter | tool Write in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/business-panel/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/business-panel/SKILL.md |
+| INFO | tool-frontmatter | tool WebFetch in allowed-tools but not found in body | code-quality/skills/business-panel/SKILL.md |
+| INFO | tool-frontmatter | tool WebSearch in allowed-tools but not found in body | code-quality/skills/business-panel/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/deep-research/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/deep-research/SKILL.md |
+| INFO | tool-frontmatter | tool Skill used in body but not in allowed-tools | code-quality/skills/deep-research/SKILL.md |
+| INFO | tool-frontmatter | tool WebFetch in allowed-tools but not found in body | code-quality/skills/deep-research/SKILL.md |
+| INFO | tool-frontmatter | tool WebSearch in allowed-tools but not found in body | code-quality/skills/deep-research/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/file-audit/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/file-audit/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/file-audit/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/fix/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/fix/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/fix/SKILL.md |
+| INFO | tool-frontmatter | tool WebFetch in allowed-tools but not found in body | code-quality/skills/fix/SKILL.md |
+| INFO | tool-frontmatter | tool Write in allowed-tools but not found in body | code-quality/skills/fix/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/incremental-planning/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/incremental-planning/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/incremental-planning/SKILL.md |
+| INFO | tool-frontmatter | tool LSP in allowed-tools but not found in body | code-quality/skills/incremental-planning/SKILL.md |
+| INFO | tool-frontmatter | tool ToolSearch in allowed-tools but not found in body | code-quality/skills/incremental-planning/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/index-repo/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/index-repo/SKILL.md |
+| INFO | tool-frontmatter | tool Read in allowed-tools but not found in body | code-quality/skills/index-repo/SKILL.md |
+| INFO | tool-frontmatter | tool Read in allowed-tools but not found in body | code-quality/skills/lsp-navigation/SKILL.md |
+| INFO | tool-frontmatter | tool Agent in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool Read in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool SendMessage in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool TaskGet in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool TaskUpdate in allowed-tools but not found in body | code-quality/skills/map-reduce/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/plan-review/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/plan-review/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/plan-review/SKILL.md |
+| INFO | tool-frontmatter | tool Skill used in body but not in allowed-tools | code-quality/skills/plan-review/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/pr-review/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/pr-review/SKILL.md |
+| INFO | tool-frontmatter | tool Skill used in body but not in allowed-tools | code-quality/skills/pr-review/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/quality-gate/SKILL.md |
+| INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/quality-gate/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/quality-gate/SKILL.md |
+| INFO | tool-frontmatter | tool Write in allowed-tools but not found in body | code-quality/skills/quality-gate/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/reflect/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/reflect/SKILL.md |
+| INFO | tool-frontmatter | tool Write used in body but not in allowed-tools | code-quality/skills/reflect/SKILL.md |
+| INFO | tool-frontmatter | tool Agent in allowed-tools but not found in body | code-quality/skills/roadmap/SKILL.md |
+| INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/roadmap/SKILL.md |
+| INFO | tool-frontmatter | tool ToolSearch in allowed-tools but not found in body | code-quality/skills/roadmap/SKILL.md |
+| INFO | tool-frontmatter | tool Agent in allowed-tools but not found in body | code-quality/skills/speculative/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/speculative/SKILL.md |
+| INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/speculative/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/speculative/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/speculative/SKILL.md |
+| INFO | tool-frontmatter | tool TaskGet in allowed-tools but not found in body | code-quality/skills/speculative/SKILL.md |
+| INFO | tool-frontmatter | tool TaskUpdate in allowed-tools but not found in body | code-quality/skills/speculative/SKILL.md |
+| INFO | tool-frontmatter | tool Skill used in body but not in allowed-tools | code-quality/skills/summarize/SKILL.md |
+| INFO | tool-frontmatter | tool Write used in body but not in allowed-tools | code-quality/skills/summarize/SKILL.md |
+| INFO | tool-frontmatter | tool TaskGet in allowed-tools but not found in body | code-quality/skills/swarm/SKILL.md |
+| INFO | tool-frontmatter | tool TaskUpdate in allowed-tools but not found in body | code-quality/skills/swarm/SKILL.md |
+| INFO | tool-frontmatter | tool WebSearch used in body but not in allowed-tools | code-quality/skills/swarm/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/test-plan/SKILL.md |
+| INFO | tool-frontmatter | tool Agent used in body but not in allowed-tools | code-quality/skills/test-runner/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/test-runner/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/test-runner/SKILL.md |
+| INFO | tool-frontmatter | tool Read in allowed-tools but not found in body | code-quality/skills/test-runner/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool Read in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool SendMessage in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool TaskCreate in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool TaskGet in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool TaskUpdate in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool Write in allowed-tools but not found in body | code-quality/skills/unfuck/SKILL.md |
+| INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/uv-python/SKILL.md |
+| INFO | tool-frontmatter | tool Glob in allowed-tools but not found in body | code-quality/skills/uv-python/SKILL.md |
+| INFO | tool-frontmatter | tool Grep in allowed-tools but not found in body | code-quality/skills/uv-python/SKILL.md |
+| INFO | tool-frontmatter | tool LSP used in body but not in allowed-tools | code-quality/skills/uv-python/SKILL.md |
+| INFO | tool-frontmatter | tool Read in allowed-tools but not found in body | code-quality/skills/uv-python/SKILL.md |
+| INFO | tool-frontmatter | tool Write in allowed-tools but not found in body | code-quality/skills/uv-python/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | git-tools/skills/git-history/SKILL.md |
+| INFO | tool-frontmatter | tool Agent in allowed-tools but not found in body | jira/skills/jira/SKILL.md |
+| INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | jira/skills/jira/SKILL.md |
+| INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | jira/skills/jira/SKILL.md |
+| INFO | tool-frontmatter | tool Glob used in body but not in allowed-tools | jira/skills/jira/SKILL.md |
+| INFO | tool-frontmatter | tool Skill used in body but not in allowed-tools | jira/skills/jira/SKILL.md |
 
