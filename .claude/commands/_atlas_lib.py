@@ -63,6 +63,7 @@ class Agent:
     color: str
     body: str = ""
     path: Path = field(default_factory=Path)
+    spawned_by: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -194,6 +195,13 @@ def parse_agents(plugin_path: Path, plugin_name: str = "") -> list[Agent]:
             tools = [str(t) for t in raw_tools]
         else:
             tools = []
+        raw_spawned_by = post.get("spawned-by", [])
+        if isinstance(raw_spawned_by, str):
+            spawned_by = [s.strip() for s in raw_spawned_by.split(",") if s.strip()]
+        elif isinstance(raw_spawned_by, list):
+            spawned_by = [str(s) for s in raw_spawned_by]
+        else:
+            spawned_by = []
         agents.append(
             Agent(
                 name=post.get("name", af.stem),
@@ -204,6 +212,7 @@ def parse_agents(plugin_path: Path, plugin_name: str = "") -> list[Agent]:
                 color=post.get("color", ""),
                 body=post.content,
                 path=af,
+                spawned_by=spawned_by,
             )
         )
     return agents

@@ -471,6 +471,53 @@ def _run_health_checks(
                 )
             )
 
+    # Bidirectional spawn validation: compare spawn graph against agent spawned-by frontmatter
+    for agent in agents:
+        graph_spawners = set(spawn_graph_with_refs.get(agent.name, []))
+        declared_spawners = set(agent.spawned_by)
+        if not declared_spawners and not graph_spawners:
+            continue  # no data either way — skip
+        if declared_spawners:
+            # Spawners in frontmatter but not detected by scanner
+            for skill_name in sorted(declared_spawners - graph_spawners):
+                findings.append(
+                    HealthFinding(
+                        severity="WARN",
+                        category="spawn-mismatch",
+                        message=(
+                            f"agent {agent.name} declares spawned-by: {skill_name} "
+                            f"but no subagent_type match found in that skill"
+                        ),
+                        file_path=str(agent.path),
+                    )
+                )
+            # Spawners detected by scanner but not in frontmatter
+            for skill_name in sorted(graph_spawners - declared_spawners):
+                findings.append(
+                    HealthFinding(
+                        severity="INFO",
+                        category="spawn-mismatch",
+                        message=(
+                            f"agent {agent.name} is spawned by {skill_name} "
+                            f"but not listed in spawned-by frontmatter"
+                        ),
+                        file_path=str(agent.path),
+                    )
+                )
+        elif graph_spawners:
+            # No spawned-by frontmatter at all — suggest adding it
+            findings.append(
+                HealthFinding(
+                    severity="INFO",
+                    category="spawn-mismatch",
+                    message=(
+                        f"agent {agent.name} has no spawned-by frontmatter — "
+                        f"add spawned-by: [{', '.join(sorted(graph_spawners))}]"
+                    ),
+                    file_path=str(agent.path),
+                )
+            )
+
     # Tool frontmatter validation: compare allowed-tools vs tools mentioned in skill body
     _KNOWN_TOOLS = {
         "Read",
