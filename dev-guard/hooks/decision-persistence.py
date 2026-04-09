@@ -126,15 +126,15 @@ def _save_decisions(path: Path, data: dict) -> None:
 def _fingerprint(file: str, category: str, line: str = "0", skill: str = "unknown") -> str:
     """Create a stable fingerprint for a finding.
 
-    Uses file + category + line_window + skill. All fields come from
-    deterministic ▸dp: metadata, not LLM prose. The line_window groups
-    nearby lines so minor line shifts don't invalidate a decision
-    (e.g., line 42 and 47 both map to window 40). The skill field
-    prevents cross-skill collisions (e.g., pr-review and quality-gate
-    both reporting Security findings on the same file/line window).
+    Uses file + category + line_number + skill. All fields come from
+    deterministic ▸dp: metadata, not LLM prose. Uses exact line numbers
+    (not windowed) to prevent collisions between distinct findings at
+    nearby lines. Code-hash staleness handles minor line shifts caused
+    by edits above the finding — the hash changes, the decision is
+    invalidated, and the user is re-prompted.
     """
-    line_window = (int(line) // 10) * 10 if line.isdigit() else 0
-    normalized = f"{file}|{category}|{line_window}|{skill}"
+    line_num = int(line) if line.isdigit() else 0
+    normalized = f"{file}|{category}|{line_num}|{skill}"
     return hashlib.sha256(normalized.encode()).hexdigest()[:32]
 
 

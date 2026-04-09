@@ -21,8 +21,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 SCRIPT = Path(__file__).parent.parent / "hooks" / "decision-persistence.py"
 
 METADATA_PREFIX = "▸dp:"
@@ -287,35 +285,32 @@ class TestSaveDecisionsOSError:
 
 
 class TestFingerprint:
-    """Unit tests for _fingerprint windowing behavior."""
+    """Unit tests for _fingerprint exact-line behavior."""
 
-    @pytest.mark.parametrize(
-        "line_a,line_b,same_window",
-        [
-            ("42", "47", True),  # same window: 40
-            ("40", "49", True),  # boundary edges, same window: 40
-            ("39", "40", False),  # cross-window: 30 vs 40
-            ("49", "50", False),  # cross-window: 40 vs 50
-            ("0", "9", True),  # window 0
-            ("10", "19", True),  # window 10
-        ],
-    )
-    def test_line_windowing(self, line_a, line_b, same_window):
-        fp_a = _MOD._fingerprint("src/auth.py", "Security", line_a)
-        fp_b = _MOD._fingerprint("src/auth.py", "Security", line_b)
-        if same_window:
-            assert fp_a == fp_b, f"lines {line_a} and {line_b} should map to the same window"
-        else:
-            assert fp_a != fp_b, f"lines {line_a} and {line_b} should map to different windows"
+    def test_same_line_same_fingerprint(self):
+        fp_a = _MOD._fingerprint("src/auth.py", "Security", "42")
+        fp_b = _MOD._fingerprint("src/auth.py", "Security", "42")
+        assert fp_a == fp_b
 
-    def test_non_digit_line_uses_zero_window(self):
-        """Non-digit line string falls back to window 0."""
+    def test_different_lines_different_fingerprints(self):
+        """Exact line numbers — nearby lines produce different fingerprints."""
+        fp_a = _MOD._fingerprint("src/auth.py", "Security", "42")
+        fp_b = _MOD._fingerprint("src/auth.py", "Security", "45")
+        assert fp_a != fp_b, "lines 42 and 45 must produce different fingerprints"
+
+    def test_adjacent_lines_different_fingerprints(self):
+        fp_a = _MOD._fingerprint("src/auth.py", "Security", "42")
+        fp_b = _MOD._fingerprint("src/auth.py", "Security", "43")
+        assert fp_a != fp_b
+
+    def test_non_digit_line_uses_zero(self):
+        """Non-digit line string falls back to 0."""
         fp_non_digit = _MOD._fingerprint("src/auth.py", "Security", "N/A")
         fp_zero = _MOD._fingerprint("src/auth.py", "Security", "0")
         assert fp_non_digit == fp_zero
 
-    def test_empty_string_line_uses_zero_window(self):
-        """Empty string line is non-digit → window 0."""
+    def test_empty_string_line_uses_zero(self):
+        """Empty string line is non-digit → 0."""
         fp_empty = _MOD._fingerprint("src/auth.py", "Security", "")
         fp_zero = _MOD._fingerprint("src/auth.py", "Security", "0")
         assert fp_empty == fp_zero
@@ -330,7 +325,7 @@ class TestFingerprint:
         fp_b = _MOD._fingerprint("src/other.py", "Security", "42")
         assert fp_a != fp_b
 
-    def test_fingerprint_length_is_16(self):
+    def test_fingerprint_length_is_32(self):
         fp = _MOD._fingerprint("src/auth.py", "Security", "42")
         assert len(fp) == 32
         assert all(c in "0123456789abcdef" for c in fp)
