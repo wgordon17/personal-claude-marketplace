@@ -78,17 +78,17 @@ Code quality agents, development utilities, and orchestration skills: architectu
 
 | Skill | Tools | Agents |
 |-------|-------|--------|
-| bug-investigation | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>Bash, AskUserQuestion</small> | — |
+| bug-investigation | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>Bash, AskUserQuestion</small> | Generic: ?(1: ?) |
 | business-panel | <small>Read, Glob, Grep,<br>WebSearch, WebFetch, Skill</small> | — |
 | deep-research | <small>WebSearch, WebFetch, Read,<br>Write, Glob, Grep,<br>Agent, AskUserQuestion, context7:resolve-library-id,<br>context7:query-docs</small> | — |
-| file-audit | <small>LSP, Read, Grep,<br>Glob, Write, Bash,<br>Agent, Skill, AskUserQuestion,<br>context7:resolve-library-id, context7:query-docs</small> | — |
-| fix | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, Skill, AskUserQuestion,<br>WebSearch, WebFetch</small> | Generic: Sonnet(1: ?) |
+| file-audit | <small>LSP, Read, Grep,<br>Glob, Write, Bash,<br>Agent, Skill, AskUserQuestion,<br>context7:resolve-library-id, context7:query-docs</small> | Generic: ?(1: ?) |
+| fix | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, Skill, AskUserQuestion,<br>WebSearch, WebFetch</small> | Generic: ?(1: ?), Sonnet(1: ?) |
 | incremental-planning | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>Bash, AskUserQuestion, LSP,<br>Skill, ToolSearch</small> | Generic: Sonnet(1: ?) |
 | index-repo | <small>Read, Glob, Grep,<br>Write, Bash</small> | — |
 | lsp-navigation | <small>LSP, Read, Grep,<br>Glob</small> | — |
 | map-reduce | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, CronCreate,<br>CronDelete, SendMessage, TaskCreate,<br>TaskUpdate, TaskList, TaskGet</small> | — |
 | plan-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | Generic: Opus(1: ?), Sonnet(1: ?) |
-| pr-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | Generic: Opus(1: ?), Sonnet(1: ?) |
+| pr-review | <small>Read, Glob, Grep,<br>Bash, Agent, AskUserQuestion</small> | Generic: ?(1: ?), Opus(1: ?), Sonnet(1: ?) |
 | quality-gate | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, SendMessage,<br>Skill</small> | plan-adherence, Generic: Opus(1: ?), Sonnet(1: ?) |
 | reflect | <small>serena:think_about_task_adherence, serena:think_about_collected_information, serena:think_about_whether_you_are_done,<br>serena:summarize_changes, serena:read_memory, serena:write_memory,<br>serena:list_memories, Read, Glob,<br>Grep</small> | — |
 | roadmap | <small>Read, Write, Edit,<br>Glob, Grep, Agent,<br>AskUserQuestion, Bash, ToolSearch</small> | — |
@@ -97,7 +97,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | swarm | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>TeamDelete, SendMessage, TaskCreate,<br>TaskUpdate, TaskList, TaskGet,<br>CronCreate, CronDelete, Skill</small> | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner, Generic: Opus(5: speculative-judge, reduction-analyst, reviewer, structural-concurrency, structural-integration), Sonnet(16: competitor-1, competitor-2, implementer, test-writer, bdd-step-writer, ui-reviewer, api-reviewer, db-reviewer, plugin-validator, skill-reviewer, fixer, test-coverage-agent, plan-file-updater, docs, docs-reviewer, lessons-extractor) |
 | test-plan | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, Skill</small> | — |
 | test-runner | <small>Bash, Read, Grep,<br>Glob</small> | test-runner |
-| unfuck | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>SendMessage, TaskCreate, TaskUpdate,<br>TaskList, TaskGet, LSP,<br>Skill</small> | test-runner, Generic: Opus(3: ai-slop-detector, synthesis-planner, impl-qa), Sonnet(9: dead-code-hunter, duplicate-detector, security-auditor, architecture-reviewer, complexity-auditor, documentation-auditor, impl-writer, impl-tester, impl-docs) |
+| unfuck | <small>Read, Write, Edit,<br>Glob, Grep, Bash,<br>Agent, AskUserQuestion, TeamCreate,<br>SendMessage, TaskCreate, TaskUpdate,<br>TaskList, TaskGet, LSP,<br>Skill</small> | test-runner, Generic: ?(2: ?, quality-review), Opus(3: ai-slop-detector, synthesis-planner, impl-qa), Sonnet(9: dead-code-hunter, duplicate-detector, security-auditor, architecture-reviewer, complexity-auditor, documentation-auditor, impl-writer, impl-tester, impl-docs) |
 | uv-python | <small>Bash, Read, Write,<br>Edit, Grep, Glob</small> | — |
 
 _MCP tools shown as `server:function` (full: `mcp__server__function`)._
@@ -254,12 +254,16 @@ _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 | INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in spawn graph | jira/agents/jira-agent.md |
 | INFO | subagent-consistency | skill swarm spawns agents via reference docs (architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/swarm/SKILL.md |
 | INFO | subagent-consistency | skill unfuck spawns agents via reference docs (test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/unfuck/SKILL.md |
-| WARN | unnamed-agent | skill fix has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/fix/SKILL.md |
+| WARN | unnamed-agent | skill bug-investigation has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/bug-investigation/SKILL.md |
+| WARN | unnamed-agent | skill file-audit has 3 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/file-audit/SKILL.md |
+| WARN | unnamed-agent | skill fix has 2 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/fix/SKILL.md |
 | WARN | unnamed-agent | skill incremental-planning has 2 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/incremental-planning/SKILL.md |
 | WARN | unnamed-agent | skill plan-review has 7 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/plan-review/SKILL.md |
-| WARN | unnamed-agent | skill pr-review has 7 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/pr-review/SKILL.md |
+| WARN | unnamed-agent | skill pr-review has 8 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/pr-review/SKILL.md |
 | WARN | unnamed-agent | skill quality-gate has 9 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/quality-gate/SKILL.md |
 | WARN | unnamed-agent | skill summarize has 2 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/summarize/SKILL.md |
+| WARN | unnamed-agent | skill test-runner has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/test-runner/SKILL.md |
+| WARN | unnamed-agent | skill unfuck has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/unfuck/SKILL.md |
 | INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |

@@ -326,11 +326,10 @@ def _skill_spawns(
     return result
 
 
-# Regex to match Agent( calls and extract model and subagent_type
-_AGENT_CALL_RE = re.compile(r"Agent\([^)]*?model\s*=\s*[\"'](\w+)[\"']", re.DOTALL)
-_AGENT_SUBTYPE_IN_CALL_RE = re.compile(
-    r"Agent\([^)]*?subagent_type\s*=\s*[\"']([^\"']+)[\"']", re.DOTALL
-)
+# Regex to match Agent( calls
+_AGENT_ANY_CALL_RE = re.compile(r"Agent\(")  # any Agent( call
+_AGENT_SUBTYPE_IN_CALL_RE = re.compile(r"subagent_type\s*=\s*[\"']([^\"']+)[\"']")
+_AGENT_MODEL_IN_CALL_RE = re.compile(r"model\s*=\s*[\"'](\w+)[\"']")
 _AGENT_NAME_RE = re.compile(r'name\s*=\s*["\']([^"\']+)["\']')
 
 
@@ -363,20 +362,22 @@ def _count_agent_spawns(skill: Skill, ref_docs: dict[str, list[Path]]) -> str:
 
     # {model: [role_name, ...]}
     model_roles: dict[str, list[str]] = {}
-    for match in _AGENT_CALL_RE.finditer(full_text):
-        model = match.group(1)
+    for match in _AGENT_ANY_CALL_RE.finditer(full_text):
         start = match.start()
         paren_end = full_text.find(")", start)
         if paren_end <= 0:
             continue
         call_text = full_text[start : paren_end + 1]
+        # Skip named plugin agents (non-general-purpose subagent_type)
         subtype_match = _AGENT_SUBTYPE_IN_CALL_RE.search(call_text)
         if subtype_match and subtype_match.group(1) != "general-purpose":
             continue
+        # Extract model (default to "?" if not specified)
+        model_match = _AGENT_MODEL_IN_CALL_RE.search(call_text)
+        model_label = model_match.group(1).capitalize() if model_match else "?"
         # Extract role name
         name_match = _AGENT_NAME_RE.search(call_text)
         role = name_match.group(1) if name_match else "?"
-        model_label = model.capitalize()
         if model_label not in model_roles:
             model_roles[model_label] = []
         if role not in model_roles[model_label]:
@@ -606,7 +607,7 @@ def _run_health_checks(
                         break
         full_text = "\n".join(texts)
         unnamed_count = 0
-        for match in _AGENT_CALL_RE.finditer(full_text):
+        for match in _AGENT_ANY_CALL_RE.finditer(full_text):
             start = match.start()
             paren_end = full_text.find(")", start)
             if paren_end <= 0:
