@@ -75,20 +75,31 @@ class TestFullGeneration:
                 break
 
     def test_plugin_count_matches_marketplace(self, tmp_path):
-        """Count ### plugin_name headers in output vs marketplace.json plugin count."""
+        """LSP plugins in compact table + non-LSP plugins as individual headers."""
         atlas = tmp_path / "ATLAS.md"
         result = _run_generate(atlas_path=atlas, repo_root=REPO_ROOT)
         assert result.returncode == 0, f"Generation failed:\n{result.stderr}"
         content = atlas.read_text()
-        # Count level-3 headers in the Plugin Inventory section
+        # LSP plugins render in one table under "### LSP Plugins"
+        assert "### LSP Plugins" in content
+        # Non-LSP plugins still get individual ### headers with (v...)
         plugin_headers = [line for line in content.splitlines() if line.startswith("### ")]
-        # Should have exactly 10 plugin headers (one per plugin)
-        # Note: Cross-References section uses ### for sub-sections too, so filter by (v
         inventory_headers = [h for h in plugin_headers if "(v" in h]
-        assert len(inventory_headers) == 10, (
-            f"Expected 10 plugin inventory headers, got {len(inventory_headers)}: "
+        # 5 non-LSP plugins: dev-guard, code-quality, git-tools, github-mcp, jira
+        assert len(inventory_headers) == 5, (
+            f"Expected 5 non-LSP plugin inventory headers, got {len(inventory_headers)}: "
             f"{inventory_headers}"
         )
+        # LSP plugin names appear in the LSP table (as rows, not headers)
+        lsp_names = [
+            "pyright-uvx",
+            "vtsls-npx",
+            "gopls-go",
+            "vscode-html-css-npx",
+            "rust-analyzer-rustup",
+        ]
+        for lsp_name in lsp_names:
+            assert lsp_name in content, f"LSP plugin {lsp_name!r} not found in ATLAS.md"
 
     def test_skill_count_matches_filesystem(self, tmp_path):
         """Skill count in output matches actual SKILL.md files in code-quality."""
@@ -96,10 +107,10 @@ class TestFullGeneration:
         result = _run_generate(atlas_path=atlas, repo_root=REPO_ROOT)
         assert result.returncode == 0, f"Generation failed:\n{result.stderr}"
         content = atlas.read_text()
-        # Find the "#### Skills (N)" header in code-quality section
+        # Find the "**Skills (N)**" bold header in code-quality section (h4 replaced with bold)
         import re
 
-        skill_section = re.search(r"#### Skills \((\d+)\)", content)
+        skill_section = re.search(r"\*\*Skills \((\d+)\)\*\*", content)
         assert skill_section is not None, "Skills section not found in ATLAS.md"
         declared = int(skill_section.group(1))
         actual = len(list((REPO_ROOT / "code-quality").glob("skills/*/SKILL.md")))
@@ -129,15 +140,16 @@ class TestFullGeneration:
                 f"Agent '{agent_name}' not found in ATLAS.md agent table"
             )
 
-    def test_abbr_tags_in_tool_lists(self, tmp_path):
-        """<abbr title="..."> wraps truncated tool lists."""
+    def test_tool_list_truncation(self, tmp_path):
+        """Tool lists with more than 2 tools are shown as 'Read, Glob +N' plain text."""
         atlas = tmp_path / "ATLAS.md"
         result = _run_generate(atlas_path=atlas, repo_root=REPO_ROOT)
         assert result.returncode == 0, f"Generation failed:\n{result.stderr}"
         content = atlas.read_text()
-        # Skills with many tools (e.g., swarm) should have abbr tags
-        assert '<abbr title="' in content, "No <abbr> tags found in ATLAS.md"
-        assert "title=" in content
+        # Skills with many tools (e.g., swarm) should use "+N" notation
+        assert " +" in content, "No '+N' tool truncation found in ATLAS.md"
+        # No HTML abbr tags should appear
+        assert "<abbr" not in content, "HTML <abbr> tags should not appear in ATLAS.md"
 
     def test_cross_reference_section_exists(self, tmp_path):
         """Cross-reference tables are populated."""
@@ -158,26 +170,32 @@ class TestFullGeneration:
         assert "## Health Report" in content
         assert "### Structural Findings" in content
 
-    def test_empty_plugin_renders_header_only(self, tmp_path):
-        """LSP plugin with no components renders only the header line."""
+    def test_lsp_plugins_in_compact_table(self, tmp_path):
+        """LSP plugins render in one compact table with Plugin/Version/Description columns."""
         atlas = tmp_path / "ATLAS.md"
         result = _run_generate(atlas_path=atlas, repo_root=REPO_ROOT)
         assert result.returncode == 0, f"Generation failed:\n{result.stderr}"
         content = atlas.read_text()
-        # pyright-uvx is an LSP plugin — it should appear as a header with no sub-sections
-        assert "### pyright-uvx" in content
-        # There should be no "#### Skills" immediately following the LSP plugin header
-        lines = content.splitlines()
-        for i, line in enumerate(lines):
-            if line.startswith("### pyright-uvx"):
-                # Look ahead: next non-empty line should not be a sub-section
-                for j in range(i + 1, min(i + 10, len(lines))):
-                    if lines[j].strip():
-                        assert not lines[j].startswith("####"), (
-                            f"LSP plugin pyright-uvx unexpectedly has a sub-section: {lines[j]!r}"
-                        )
-                        break
-                break
+        # LSP plugins render under a single ### LSP Plugins header, not individual headers
+        assert "### LSP Plugins" in content
+        # Table header present
+        assert "| Plugin | Version | Description |" in content
+        # pyright-uvx appears as a table row, not a heading
+        assert "| pyright-uvx |" in content
+        assert "### pyright-uvx" not in content, (
+            "pyright-uvx should be a table row, not an individual ### header"
+        )
+        # No LSP plugin should have **Skills** or **Agents** sub-sections
+        assert "### LSP Plugins" in content
+        lsp_section_start = content.index("### LSP Plugins")
+        # Find the next ### after LSP Plugins
+        next_h3 = content.find("\n### ", lsp_section_start + 1)
+        if next_h3 != -1:
+            lsp_section = content[lsp_section_start:next_h3]
+        else:
+            lsp_section = content[lsp_section_start:]
+        assert "**Skills" not in lsp_section, "LSP table should not contain Skills sub-section"
+        assert "**Agents" not in lsp_section, "LSP table should not contain Agents sub-section"
 
     def test_generation_summary_printed(self, tmp_path):
         """Default mode prints summary with plugin/skill/agent counts."""

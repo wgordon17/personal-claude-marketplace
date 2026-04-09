@@ -290,23 +290,6 @@ def _build_reference_consumption(
     return consumption
 
 
-def _skill_ref_count(skill: Skill, ref_docs: dict[str, list[Path]]) -> int:
-    """Count how many reference docs this skill body mentions."""
-    body = skill.body or ""
-    if not body:
-        try:
-            body = skill.path.read_text()
-        except Exception:
-            return 0
-    count = 0
-    for paths in ref_docs.values():
-        for ref_path in paths:
-            pattern = r"references/" + re.escape(ref_path.name)
-            if re.search(pattern, body):
-                count += 1
-    return count
-
-
 def _skill_spawns(
     skill: Skill, agents: list[Agent], spawn_graph: dict[str, list[str]]
 ) -> list[str]:
@@ -415,6 +398,19 @@ def _run_health_checks(
                 )
             )
 
+    # Orphaned agents: not spawned by any skill (INFO — may be spawned programmatically)
+    spawn_graph = _build_spawn_graph(agents, skills)
+    for agent in agents:
+        if not spawn_graph.get(agent.name):
+            findings.append(
+                HealthFinding(
+                    severity="INFO",
+                    category="orphan-agent",
+                    message=f"agent {agent.name} has no 'Spawned By' entries in skill spawn graph",
+                    file_path=str(agent.path),
+                )
+            )
+
     return findings
 
 
@@ -423,16 +419,46 @@ def _run_health_checks(
 # ---------------------------------------------------------------------------
 
 
-def _abbr_tools(tools: list[str], max_show: int = 2) -> str:
-    """Abbreviate a long tool list with <abbr> hover."""
+_JIRA_MCP_PREFIX = "mcp__plugin_jira_mcp-atlassian-prod__"
+
+
+def _short_tools(tools: list[str], max_show: int = 2) -> str:
+    """Abbreviate a long tool list as plain text: 'Read, Glob +4'."""
     if not tools:
         return "—"
-    if len(tools) <= max_show:
-        return ", ".join(tools)
-    shown = ", ".join(tools[:max_show])
-    full = ", ".join(tools)
-    remaining = len(tools) - max_show
-    return f'<abbr title="{full}">{shown} +{remaining}</abbr>'
+    display_tools = [_strip_jira_prefix(t) for t in tools]
+    if len(display_tools) <= max_show:
+        return ", ".join(display_tools)
+    shown = ", ".join(display_tools[:max_show])
+    remaining = len(display_tools) - max_show
+    return f"{shown} +{remaining}"
+
+
+def _strip_jira_prefix(tool: str) -> str:
+    """Strip the verbose Jira MCP prefix from tool names."""
+    if tool.startswith(_JIRA_MCP_PREFIX):
+        return tool[len(_JIRA_MCP_PREFIX) :]
+    return tool
+
+
+def _has_jira_tools(tools: list[str]) -> bool:
+    """Return True if any tool has the Jira MCP prefix."""
+    return any(t.startswith(_JIRA_MCP_PREFIX) for t in tools)
+
+
+def _compact_description(desc: str) -> str:
+    """Truncate description to first sentence or 100 chars, whichever is shorter."""
+    if not desc:
+        return desc
+    # First sentence: split on '. ' or end with '.'
+    first_sentence = desc.strip()
+    dot_idx = first_sentence.find(". ")
+    if dot_idx != -1:
+        first_sentence = first_sentence[: dot_idx + 1]
+    # Apply 100-char cap
+    if len(first_sentence) > 100:
+        first_sentence = first_sentence[:100].rstrip() + "..."
+    return first_sentence
 
 
 def _description_first_line(desc: str) -> str:
@@ -457,6 +483,44 @@ def _short_path(path: str, repo_root: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _render_lsp_table(plugins: list[Plugin]) -> str:
+    """Render all LSP plugins in a single compact table."""
+    lines: list[str] = []
+    lines.append("### LSP Plugins")
+    lines.append("")
+    lines.append("| Plugin | Version | Description |")
+    lines.append("|--------|---------|-------------|")
+    for plugin in plugins:
+        desc = _compact_description(plugin.description)
+        lines.append(f"| {plugin.name} | {plugin.version} | {desc} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _render_hooks_aggregated(hooks: list[Hook]) -> str:
+    """Render hooks aggregated by script, sorted by event then matcher."""
+    # Sort hooks by event then matcher for deterministic output
+    sorted_hooks = sorted(hooks, key=lambda h: (h.event, h.matcher))
+
+    # Group by script (command stripped of ${CLAUDE_PLUGIN_ROOT}/)
+    script_matchers: dict[str, list[str]] = {}
+    for hook in sorted_hooks:
+        script = hook.command.replace("${CLAUDE_PLUGIN_ROOT}/", "")
+        if script not in script_matchers:
+            script_matchers[script] = []
+        event_matcher = f"{hook.event}(`{hook.matcher}`)" if hook.matcher else hook.event
+        if event_matcher not in script_matchers[script]:
+            script_matchers[script].append(event_matcher)
+
+    lines: list[str] = []
+    lines.append("| Script | Events |")
+    lines.append("|--------|--------|")
+    for script in sorted(script_matchers):
+        events_str = ", ".join(script_matchers[script])
+        lines.append(f"| `{script}` | {events_str} |")
+    return "\n".join(lines)
+
+
 def _render_plugin_section(
     plugin: Plugin,
     skills: list[Skill],
@@ -464,67 +528,59 @@ def _render_plugin_section(
     commands: list[Command],
     hooks: list[Hook],
     mcp_servers: list[McpServer],
-    ref_docs: dict[str, list[Path]],
     spawn_graph: dict[str, list[str]],
-    ref_consumption: dict[str, list[str]],
 ) -> str:
-    """Render the full markdown section for one plugin."""
+    """Render the full markdown section for one non-LSP plugin."""
     lines: list[str] = []
     lines.append(f"### {plugin.name} (v{plugin.version})")
     lines.append("")
-    lines.append(plugin.description)
+    lines.append(_compact_description(plugin.description))
     lines.append("")
-
-    # LSP plugins: stop here (no sub-sections)
-    if plugin.is_lsp:
-        return "\n".join(lines)
-
-    plugin_refs = ref_docs.get(plugin.name, [])
 
     # Skills table
     if skills:
-        lines.append(f"#### Skills ({len(skills)})")
+        lines.append(f"**Skills ({len(skills)})**")
         lines.append("")
-        lines.append("| Skill | Tools | Refs | Spawns |")
-        lines.append("|-------|-------|------|--------|")
+        lines.append("| Skill | Tools | Agents |")
+        lines.append("|-------|-------|--------|")
         for skill in skills:
-            tools_str = _abbr_tools(skill.allowed_tools)
-            ref_count = _skill_ref_count(skill, ref_docs)
-            refs_str = str(ref_count) if ref_count else "—"
+            tools_str = _short_tools(skill.allowed_tools)
             spawned = _skill_spawns(skill, agents, spawn_graph)
             spawns_str = ", ".join(spawned) if spawned else "—"
-            lines.append(f"| {skill.name} | {tools_str} | {refs_str} | {spawns_str} |")
+            lines.append(f"| {skill.name} | {tools_str} | {spawns_str} |")
         lines.append("")
 
     # Agents table
     if agents:
-        lines.append(f"#### Agents ({len(agents)})")
+        lines.append(f"**Agents ({len(agents)})**")
         lines.append("")
+        jira_note = any(_has_jira_tools(a.tools) for a in agents)
         lines.append("| Agent | Model | Tools | Spawned By |")
         lines.append("|-------|-------|-------|------------|")
         for agent in agents:
             model_str = agent.model if agent.model else "—"
-            tools_str = _abbr_tools(agent.tools)
+            tools_str = _short_tools(agent.tools)
             spawned_by = spawn_graph.get(agent.name, [])
             spawned_by_str = ", ".join(spawned_by) if spawned_by else "—"
             lines.append(f"| {agent.name} | {model_str} | {tools_str} | {spawned_by_str} |")
+        if jira_note:
+            lines.append("")
+            lines.append(
+                "_Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__`"
+                " are shown without prefix._"
+            )
         lines.append("")
 
     # Hooks table
     if hooks:
-        lines.append("#### Hooks")
+        lines.append("**Hooks**")
         lines.append("")
-        lines.append("| Event | Matcher | Script |")
-        lines.append("|-------|---------|--------|")
-        for hook in hooks:
-            matcher_str = hook.matcher if hook.matcher else "(any)"
-            cmd_display = hook.command.replace("${CLAUDE_PLUGIN_ROOT}/", "")
-            lines.append(f"| {hook.event} | `{matcher_str}` | `{cmd_display}` |")
+        lines.append(_render_hooks_aggregated(hooks))
         lines.append("")
 
     # Commands table
     if commands:
-        lines.append(f"#### Commands ({len(commands)})")
+        lines.append(f"**Commands ({len(commands)})**")
         lines.append("")
         lines.append("| Command | Description |")
         lines.append("|---------|-------------|")
@@ -535,31 +591,12 @@ def _render_plugin_section(
 
     # MCP servers table
     if mcp_servers:
-        lines.append("#### MCP Servers")
+        lines.append("**MCP Servers**")
         lines.append("")
         lines.append("| Server | Type | URL |")
         lines.append("|--------|------|-----|")
         for mcp in mcp_servers:
             lines.append(f"| `{mcp.server_name}` | {mcp.server_type} | `{mcp.url}` |")
-        lines.append("")
-
-    # References table — deduplicate by filename for display
-    if plugin_refs:
-        seen: set[str] = set()
-        unique_refs: list[Path] = []
-        for ref_path in plugin_refs:
-            if ref_path.name not in seen:
-                seen.add(ref_path.name)
-                unique_refs.append(ref_path)
-        lines.append(f"#### References ({len(unique_refs)})")
-        lines.append("")
-        lines.append("| Reference | Consumed By |")
-        lines.append("|-----------|-------------|")
-        for ref_path in unique_refs:
-            fn = ref_path.name
-            consumers = ref_consumption.get(fn, [])
-            consumers_str = ", ".join(consumers) if consumers else "—"
-            lines.append(f"| {fn} | {consumers_str} |")
         lines.append("")
 
     return "\n".join(lines)
@@ -569,6 +606,7 @@ def _render_cross_references(
     agents: list[Agent],
     spawn_graph: dict[str, list[str]],
     ref_consumption: dict[str, list[str]],
+    ref_docs: dict[str, list[Path]],
 ) -> str:
     """Render the cross-reference section."""
     lines: list[str] = []
@@ -586,15 +624,33 @@ def _render_cross_references(
         lines.append(f"| {agent.name} | {spawned_by_str} |")
     lines.append("")
 
-    # Reference consumption
-    if ref_consumption:
-        lines.append("### Reference Consumption")
+    # Unified references table (replaces per-plugin References tables + Reference Consumption)
+    # Build plugin lookup: filename -> plugin_name
+    filename_to_plugin: dict[str, str] = {}
+    for plugin_name, paths in ref_docs.items():
+        for ref_path in paths:
+            filename_to_plugin[ref_path.name] = plugin_name
+
+    # Collect all unique reference filenames across all plugins
+    all_ref_filenames: list[str] = []
+    seen_fns: set[str] = set()
+    for paths in ref_docs.values():
+        for ref_path in paths:
+            if ref_path.name not in seen_fns:
+                seen_fns.add(ref_path.name)
+                all_ref_filenames.append(ref_path.name)
+    all_ref_filenames.sort()
+
+    if all_ref_filenames:
+        lines.append("### References")
         lines.append("")
-        lines.append("| Reference | Consumed By |")
-        lines.append("|-----------|-------------|")
-        for fn in sorted(ref_consumption):
-            consumers = ref_consumption[fn]
-            lines.append(f"| {fn} | {', '.join(consumers)} |")
+        lines.append("| Reference | Plugin | Consumed By |")
+        lines.append("|-----------|--------|-------------|")
+        for fn in all_ref_filenames:
+            plugin_name = filename_to_plugin.get(fn, "—")
+            consumers = ref_consumption.get(fn, [])
+            consumers_str = ", ".join(consumers) if consumers else "—"
+            lines.append(f"| {fn} | {plugin_name} | {consumers_str} |")
         lines.append("")
 
     return "\n".join(lines)
@@ -675,7 +731,16 @@ def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
     # Plugin Inventory
     parts.append("## Plugin Inventory")
     parts.append("")
+
+    # Render all LSP plugins in one compact table
+    lsp_plugins = [p for p in plugins if p.is_lsp]
+    if lsp_plugins:
+        parts.append(_render_lsp_table(lsp_plugins))
+
+    # Render non-LSP plugins individually
     for plugin in plugins:
+        if plugin.is_lsp:
+            continue
         section = _render_plugin_section(
             plugin,
             [s for s in skills if s.plugin == plugin.name],
@@ -683,9 +748,7 @@ def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
             [c for c in commands if c.plugin == plugin.name],
             [h for h in hooks if h.plugin == plugin.name],
             [m for m in mcp_servers if m.plugin == plugin.name],
-            ref_docs,
             spawn_graph,
-            ref_consumption,
         )
         parts.append(section)
 
@@ -693,7 +756,7 @@ def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
     parts.append("")
 
     # Cross-references
-    parts.append(_render_cross_references(agents, spawn_graph, ref_consumption))
+    parts.append(_render_cross_references(agents, spawn_graph, ref_consumption, ref_docs))
 
     parts.append("---")
     parts.append("")
