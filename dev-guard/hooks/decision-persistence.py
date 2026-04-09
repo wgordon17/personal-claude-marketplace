@@ -183,7 +183,7 @@ def _sanitize_path_field(value: str) -> str:
     Rejects path traversal sequences and absolute paths. Strips
     non-path characters and enforces a length limit.
     """
-    if ".." in value or value.startswith("/"):
+    if any(part == ".." for part in Path(value).parts) or value.startswith("/"):
         return "<invalid>"
     clean = re.sub(r"[^\w./_-]", "_", value)
     return clean[:_MAX_FIELD_LEN]

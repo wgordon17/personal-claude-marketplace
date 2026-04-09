@@ -360,6 +360,14 @@ class TestSanitizePathField:
     def test_absolute_path_root_rejected(self):
         assert _MOD._sanitize_path_field("/") == "<invalid>"
 
+    def test_double_dot_in_filename_accepted(self):
+        """foo..bar.py is a valid filename — not a traversal."""
+        assert _MOD._sanitize_path_field("foo..bar.py") == "foo..bar.py"
+
+    def test_double_dot_in_directory_accepted(self):
+        """pkg..v2/ is a valid directory name — not a traversal."""
+        assert _MOD._sanitize_path_field("pkg..v2/file.py") == "pkg..v2/file.py"
+
     def test_valid_relative_path_accepted(self):
         assert _MOD._sanitize_path_field("src/auth.py") == "src/auth.py"
 
