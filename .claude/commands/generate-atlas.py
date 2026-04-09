@@ -239,9 +239,7 @@ def _build_spawn_graph(
                         break
 
     for agent in agents:
-        # Normalize agent name: strip plugin prefix
         bare = agent.name.split(":", 1)[-1]
-        backtick_pattern = r"`" + re.escape(bare) + r"`"
 
         for skill in skills:
             body = skill.body
@@ -251,17 +249,11 @@ def _build_spawn_graph(
                 except Exception:
                     continue
 
-            # Match subagent_type patterns
             for match in _SUBAGENT_TYPE_RE.finditer(body):
                 captured = match.group(1)
-                # Normalize captured value
                 captured_bare = captured.split(":", 1)[-1]
                 if captured_bare == bare and skill.name not in spawn_graph[agent.name]:
                     spawn_graph[agent.name].append(skill.name)
-
-            # Match backtick-quoted agent names
-            if re.search(backtick_pattern, body) and skill.name not in spawn_graph[agent.name]:
-                spawn_graph[agent.name].append(skill.name)
 
         # Second pass: scan reference docs owned by each skill
         if ref_docs:
@@ -271,17 +263,12 @@ def _build_spawn_graph(
                         ref_body = ref_path.read_text()
                     except Exception:
                         continue
-                    # Match subagent_type patterns in ref doc
                     for match in _SUBAGENT_TYPE_RE.finditer(ref_body):
                         captured = match.group(1)
                         captured_bare = captured.split(":", 1)[-1]
                         if captured_bare == bare:
                             spawn_graph[agent.name].append(owning_skill_name)
                             break
-                    else:
-                        # Match backtick-quoted agent names in ref doc
-                        if re.search(backtick_pattern, ref_body):
-                            spawn_graph[agent.name].append(owning_skill_name)
 
     return spawn_graph
 

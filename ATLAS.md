@@ -87,7 +87,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | index-repo | <small>Read, Glob, Grep, Write, Bash</small> | — |
 | lsp-navigation | <small>LSP, Read, Grep, Glob</small> | — |
 | map-reduce | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet</small> | — |
-| plan-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | plan-adherence |
+| plan-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
 | pr-review | <small>Read, Glob, Grep, Bash, Agent, AskUserQuestion</small> | — |
 | quality-gate | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill</small> | plan-adherence |
 | reflect | <small>mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information, mcp__serena__think_about_whether_you_are_done, mcp__serena__summarize_changes, mcp__serena__read_memory, mcp__serena__write_memory, mcp__serena__list_memories, Read, Glob, Grep</small> | — |
@@ -97,7 +97,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | swarm | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill</small> | architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner |
 | test-plan | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Skill</small> | — |
 | test-runner | <small>Bash, Read, Grep, Glob</small> | test-runner |
-| unfuck | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill</small> | security, test-runner |
+| unfuck | <small>Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill</small> | test-runner |
 | uv-python | <small>Bash, Read, Write, Edit, Grep, Glob</small> | — |
 
 **Agents (8)**
@@ -108,9 +108,9 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | code-reviewer | sonnet | <small>Read, Glob, Grep, LSP</small> | swarm |
 | code-simplifier | sonnet | <small>Read, Glob, Grep, LSP, Edit, Write</small> | swarm |
 | performance | sonnet | <small>Read, Glob, Grep, LSP, Bash, WebSearch</small> | swarm |
-| plan-adherence | opus | <small>Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage</small> | plan-review, quality-gate, swarm |
+| plan-adherence | opus | <small>Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage</small> | quality-gate, swarm |
 | qa | sonnet | <small>Read, Glob, Grep, LSP, Bash</small> | swarm |
-| security | sonnet | <small>Read, Glob, Grep, LSP, WebSearch</small> | swarm, unfuck |
+| security | sonnet | <small>Read, Glob, Grep, LSP, WebSearch</small> | swarm |
 | test-runner | haiku | <small>Bash, Read, Grep, TodoWrite</small> | test-runner, swarm, unfuck |
 
 **Commands (4)**
@@ -230,9 +230,9 @@ _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without p
 | code-reviewer | swarm |
 | code-simplifier | swarm |
 | performance | swarm |
-| plan-adherence | plan-review, quality-gate, swarm |
+| plan-adherence | quality-gate, swarm |
 | qa | swarm |
-| security | swarm, unfuck |
+| security | swarm |
 | test-runner | test-runner, swarm, unfuck |
 | jira-agent | — |
 
@@ -255,7 +255,7 @@ _Tool names prefixed `mcp__plugin_jira_mcp-atlassian-prod__` are shown without p
 | INFO | orphan-agent | agent security has no 'Spawned By' entries in skill spawn graph | code-quality/agents/security.md |
 | INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in skill spawn graph | jira/agents/jira-agent.md |
 | INFO | subagent-consistency | skill swarm spawns agents via reference docs (architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/swarm/SKILL.md |
-| INFO | subagent-consistency | skill unfuck spawns agents via reference docs (security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/unfuck/SKILL.md |
+| INFO | subagent-consistency | skill unfuck spawns agents via reference docs (test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/unfuck/SKILL.md |
 | INFO | tool-frontmatter | tool AskUserQuestion in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Bash in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
 | INFO | tool-frontmatter | tool Edit in allowed-tools but not found in body | code-quality/skills/bug-investigation/SKILL.md |
