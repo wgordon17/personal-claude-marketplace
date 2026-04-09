@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import subprocess
@@ -323,6 +324,68 @@ def _skill_spawns(
         if skill.name in spawn_graph.get(agent.name, []):
             result.append(agent.name)
     return result
+
+
+# Regex to match Agent( calls and extract model and subagent_type
+_AGENT_CALL_RE = re.compile(r"Agent\([^)]*?model\s*=\s*[\"'](\w+)[\"']", re.DOTALL)
+_AGENT_SUBTYPE_IN_CALL_RE = re.compile(
+    r"Agent\([^)]*?subagent_type\s*=\s*[\"']([^\"']+)[\"']", re.DOTALL
+)
+
+
+def _count_agent_spawns(skill: Skill, ref_docs: dict[str, list[Path]]) -> str:
+    """Count anonymous and named agent spawns, return display string.
+
+    Returns strings like: "architect, Sonnet(2), Opus(1)" or "—"
+    Named agents (non-general-purpose subagent_type) are excluded since they
+    appear in the spawn graph. Only general-purpose agents are counted by model.
+    """
+    # Collect all text bodies to scan (skill body + owned reference docs)
+    texts: list[str] = []
+    body = skill.body or ""
+    if not body:
+        try:
+            body = skill.path.read_text()
+        except Exception:
+            body = ""
+    texts.append(body)
+
+    # Add reference doc content owned by this skill
+    for _plugin_name, paths in ref_docs.items():
+        for ref_path in paths:
+            parts = ref_path.parts
+            for i, part in enumerate(parts):
+                if part == "skills" and i + 1 < len(parts) and parts[i + 1] == skill.name:
+                    with contextlib.suppress(Exception):
+                        texts.append(ref_path.read_text())
+                    break
+
+    full_text = "\n".join(texts)
+
+    # Find all Agent( calls with model=
+    model_counts: dict[str, int] = {}
+    for match in _AGENT_CALL_RE.finditer(full_text):
+        model = match.group(1)
+        # Check if this same Agent( call has a non-general-purpose subagent_type
+        call_text = match.group(0)
+        # Expand to capture full Agent(...) call for subtype check
+        start = match.start()
+        paren_end = full_text.find(")", start)
+        if paren_end > 0:
+            call_text = full_text[start : paren_end + 1]
+        subtype_match = _AGENT_SUBTYPE_IN_CALL_RE.search(call_text)
+        if subtype_match:
+            subtype = subtype_match.group(1)
+            if subtype != "general-purpose":
+                continue  # Named agent — already in spawn graph
+        # Count this anonymous/general-purpose agent by model
+        model_label = model.capitalize()
+        model_counts[model_label] = model_counts.get(model_label, 0) + 1
+
+    if not model_counts:
+        return ""
+    parts = [f"{model}({count})" for model, count in sorted(model_counts.items())]
+    return ", ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +768,7 @@ def _render_plugin_section(
     hooks: list[Hook],
     mcp_servers: list[McpServer],
     spawn_graph: dict[str, list[str]],
+    all_ref_docs: dict[str, list[Path]],
     ref_docs: list[Path] | None = None,
     ref_consumption: dict[str, list[str]] | None = None,
 ) -> str:
@@ -724,7 +788,11 @@ def _render_plugin_section(
         for skill in skills:
             tools_str = _format_tools(skill.allowed_tools)
             spawned = _skill_spawns(skill, agents, spawn_graph)
-            spawns_str = ", ".join(spawned) if spawned else "—"
+            anon = _count_agent_spawns(skill, all_ref_docs)
+            parts = list(spawned)
+            if anon:
+                parts.append(anon)
+            spawns_str = ", ".join(parts) if parts else "—"
             lines.append(f"| {skill.name} | {tools_str} | {spawns_str} |")
         if any(_has_mcp_tools(s.allowed_tools) for s in skills):
             lines.append("")
@@ -915,6 +983,7 @@ def generate(repo_root: Path, today: str) -> tuple[str, dict[str, int]]:
             [h for h in hooks if h.plugin == plugin.name],
             [m for m in mcp_servers if m.plugin == plugin.name],
             spawn_graph,
+            all_ref_docs=ref_docs,
             ref_docs=ref_docs.get(plugin.name),
             ref_consumption=ref_consumption,
         )
