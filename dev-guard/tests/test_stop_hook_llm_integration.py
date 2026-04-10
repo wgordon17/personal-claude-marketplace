@@ -233,8 +233,8 @@ def test_stop_directive_passes(user_msg: str, assistant_msg: str) -> None:
         # User corrects tool usage — assistant already switched (completed action)
         pytest.param(
             "stop using sed and use the Edit tool instead",
-            "Right, switched to Edit. The changes are applied.",
-            ["Edit"],
+            "Right, switched to Edit. Applied the refactor and tests pass.",
+            ["Edit", "Bash"],
             id="stop-using-sed",
         ),
         # User redirects — assistant already fixed the import
