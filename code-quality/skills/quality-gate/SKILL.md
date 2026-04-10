@@ -39,7 +39,7 @@ digraph quality_gate {
   layer1_5 [label="Layer 1.5: Domain Expert Review\n4 parallel reviewers (code/mixed only)"];
   layer1_75 [label="Layer 1.75: Plan Adherence Review\n(BLOCKING when plan file found)"];
   layer2 [label="Layer 2: Fresh-Context Subagents\n2 subagents x 2 passes"];
-  lifecycle [label="Lifecycle Gate"];
+  lifecycle [label="Lifecycle Gate (BLOCKING)"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
   docs [label="Documentation Gate (BLOCKING)"];
@@ -488,10 +488,11 @@ not re-running them.
 
 ---
 
-## Lifecycle Gate
+## Lifecycle Gate (BLOCKING)
 
-Validates artifact lifecycle counters on the plan file. Runs BEFORE the Memory Gate to ensure
-the plan file still exists (Memory Gate may delete completed plans).
+Validates artifact lifecycle counters on the plan file. Cannot proceed past this gate without
+completing all applicable checks. Runs BEFORE the Memory Gate to ensure the plan file still
+exists (Memory Gate may delete completed plans).
 
 **Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0. If no plan file was
 discovered, skip entire gate with `SKIP (no plan)`.
@@ -508,8 +509,9 @@ plans created before this feature existed.
 
 **Classification:** Structural failures are `needs-fix` (blocking).
 
-**Remediation:** Missing individual counters → add missing counters at 0, re-run structural
-checks. Non-integer values → report FAIL, do not auto-fix (data corruption).
+**Remediation:** Missing individual counters → add missing counters at 0, re-read the plan
+file from disk, then re-run structural checks. Non-integer values → report FAIL, do not
+auto-fix (data corruption).
 
 ### Logical Checks (advisory — WARN, not blocking)
 
@@ -709,6 +711,7 @@ Layer 2 — Subagent Reviews:
   (Layer 2 MUST show agent IDs. "SUBSTITUTED" or "N/A" is NEVER valid here.)
 
 Lifecycle Gate: [PASS / FAIL / SKIP (no plan) / SKIP (pre-feature plan)]
+  Counters: review-cycle=[N] | fix-cycle=[N] | pr-review-cycle=[N] | pr-fix-cycle=[N] | quality-gate=[N]
   Structural: [block present, all 5 counters, valid integers]
   Logical (advisory): [review>0 or pr-review>0 — WARN only]
   Behavioral (advisory): [markers vs counters — WARN only]
