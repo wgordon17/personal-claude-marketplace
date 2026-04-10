@@ -38,7 +38,7 @@ Detect the review source using these rules in order:
 
 | Detection Method | Fix Target | Extraction |
 |---|---|---|
-| Session output contains `PLAN REVIEW —` | Plan file | Extract path from the header line: `PLAN REVIEW — {plan_file_path}` |
+| Session output contains `PLAN REVIEW —` | Plan file | Extract path from the header line: `PLAN REVIEW — {plan_file_path}`. Store as `{plan_file_path_plan}` for counter increment. |
 | Session output contains `CODE REVIEW — PR #` | Code (PR diff) | Extract PR number from the header line: `CODE REVIEW — PR #{number}` |
 | File `{memory_dir}/BUGS.md` exists on disk | Bug resolutions | Read BUGS.md; extract entries with `**Status:** Root Cause Found` |
 
@@ -94,7 +94,9 @@ test plan. This follows the same branch-header matching algorithm as /swarm Phas
 1. Get the current branch: `git branch --show-current`
 2. Search `{memory_dir}/plans/` for plan files whose `**Branch:**` header field matches the
    current branch. Fall back to branch-slug prefix matching if no header match is found.
-   Use the most recent by unix timestamp if multiple match.
+   Use the most recent by unix timestamp if multiple match. Store the discovered plan file
+   path as `{plan_file_path_pr}` for counter increment. If no plan file is found,
+   `{plan_file_path_pr}` is empty string.
 3. If a plan file is found and it contains a `## Test Plan` section, extract the `**Test Plan:**`
    path annotation from that section.
 4. Normalize the path (resolve `..` components) and verify it falls within
@@ -586,6 +588,23 @@ After the report, print context-appropriate suggestions (show all that apply, on
 | Plan-only changes | `Plan updated. Consider running /plan-review to verify the changes.` |
 | Spikes invalidated assumptions | `Spikes invalidated {N} assumption(s). Review updated plan sections carefully — consider /plan-review to verify.` |
 | BUGS.md was updated | `Bug fixes applied. BUGS.md entries updated to 'Fix Ready'. Verify manually and update to 'Fixed' when confirmed.` |
+
+### Counter Increment
+
+After the Post-Fix Suggestion, increment the appropriate lifecycle counter on the plan file.
+
+1. Determine the source that was fixed (already known from Phase 0 Context Detection):
+   - If source was `PLAN REVIEW —` → increment `fix-cycle`
+   - If source was `CODE REVIEW — PR #` → increment `pr-fix-cycle`
+   - If source was BUGS.md → skip counter increment (no plan file linkage)
+2. Locate the plan file — reuse the path already discovered, do not re-run discovery:
+   - For plan-review source: use `{plan_file_path_plan}` stored in Phase 0
+   - For pr-review source: use `{plan_file_path_pr}` stored in Phase 0.5
+   - If the relevant variable is empty, skip counter increment silently
+3. Re-read the plan file, find the `**Iterations:**` block
+4. Increment the appropriate counter by 1: use Edit to replace `- <counter>: {N}` with
+   `- <counter>: {N+1}`, where `{N}` is the actual integer read from the file
+5. If no `**Iterations:**` block found, skip silently
 
 ---
 
