@@ -1,5 +1,5 @@
 {
-  "description": "Global hooks: git safety, commit validation, pre-push review, tool selection, quality stop gate, subagent completion verification",
+  "description": "Global hooks: git safety, commit validation, pre-push review, tool selection, quality stop gate, subagent completion verification, shared behavioral feedback",
   "hooks": {
     "SessionStart": [
       {
@@ -8,6 +8,15 @@
           {
             "type": "command",
             "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --validate"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/shared-feedback.sh"
           }
         ]
       }
