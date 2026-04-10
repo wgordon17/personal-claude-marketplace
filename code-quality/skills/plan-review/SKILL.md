@@ -6,7 +6,7 @@ description: |
   Spawns 6 parallel specialized reviewers (feasibility, scope, dependencies, unknown unknowns,
   architect, security), verifies findings by re-reading the plan, and prints a structured
   terminal report. Designed for cross-session use: write a plan in session A, review in session B.
-allowed-tools: [Read, Glob, Grep, Bash, Agent, AskUserQuestion]
+allowed-tools: [Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # Plan Review Skill
@@ -16,7 +16,7 @@ scope & completeness, dependency ordering, unknown unknowns/spike detection, arc
 — each required to read and analyze the plan independently. A verification agent then cross-checks
 findings against plan content. Results are categorized and printed as a structured terminal report.
 
-**Never modifies plan files.** Output is terminal-only.
+**Never modifies plan content.** Exception: increments the `review-cycle` lifecycle counter after review completes.
 
 ## Usage
 
@@ -466,6 +466,20 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 | Verification JSON parse fails | All findings get `unverified` verdict, routed to Needs Context section; `{verification_note}` warns in output |
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
 | AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
+
+### Counter Increment
+
+After producing the Phase 4 terminal output, increment the `review-cycle` lifecycle counter
+on the plan file. This is the only plan file modification plan-review makes.
+
+1. Re-read the plan file using `{plan_file_path}` stored in Phase 0 (do not re-discover)
+2. Find the `**Iterations:**` block
+3. Read the current `review-cycle` value N from the line matching `- review-cycle: {N}`
+4. Verify N is a non-negative integer (digits only, e.g. `0`, `1`, `12`). If N is not a valid
+   integer, skip the increment silently
+5. Increment `review-cycle` by 1: use Edit to replace `- review-cycle: {N}` with
+   `- review-cycle: {N+1}`, where `{N}` is the actual integer read in step 3
+6. If no plan file or no `**Iterations:**` block found, skip silently
 
 ---
 

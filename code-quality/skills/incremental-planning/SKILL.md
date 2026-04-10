@@ -260,6 +260,17 @@ Write the plan file with a header containing:
   plan is written before branching. Example: `**Branch:** feat/my-feature`
   The `**Branch:**` field is used by the plan-adherence agent for cross-session plan discovery.
   Always populate it, even if the branch doesn't exist yet — update it when the branch is created.
+- **Iterations:** — Lifecycle counters tracking review/fix/gate iterations. Initialize all 5
+  counters at 0 when the plan is created. Include for both light and full planning.
+  Format:
+  ```
+  **Iterations:**
+  - review-cycle: 0
+  - fix-cycle: 0
+  - pr-review-cycle: 0
+  - pr-fix-cycle: 0
+  - quality-gate: 0
+  ```
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
