@@ -6,9 +6,11 @@ Verifies that:
 3. Both files stay in sync — drift is detected immediately.
 4. Version numbers in each plugin's plugin.json match the entry in marketplace.json.
 5. Every marketplace.json entry has a corresponding plugin.json on disk.
+6. Shared reference files (github-label-definitions.md, tracker-field-spec.md) exist
+   on disk and are referenced by their consumer SKILL.md files.
 
 These are grep-based and JSON-parse lint tests — no LLM calls, no subprocess execution.
-They guard against accidental deletion of the URL rule and against
+They guard against accidental deletion of rules and references, and against
 version drift between plugin manifests.
 """
 
@@ -57,6 +59,61 @@ class TestJiraPluginIntegrity:
         assert OLD_PHRASE not in content, (
             f"{JIRA_AGENT} still contains the old phrase '{OLD_PHRASE}'. "
             "The URL presentation rule may have been reverted."
+        )
+
+
+INCREMENTAL_PLANNING_SKILL = (
+    REPO_ROOT / "code-quality" / "skills" / "incremental-planning" / "SKILL.md"
+)
+SWARM_SKILL = REPO_ROOT / "code-quality" / "skills" / "swarm" / "SKILL.md"
+LABEL_DEFINITIONS = REPO_ROOT / "code-quality" / "references" / "github-label-definitions.md"
+TRACKER_FIELD_SPEC = REPO_ROOT / "code-quality" / "references" / "tracker-field-spec.md"
+
+
+class TestCodeQualityReferenceIntegrity:
+    """Verify that shared reference files exist and are referenced by their consumers."""
+
+    def test_label_definitions_exists(self):
+        assert LABEL_DEFINITIONS.exists(), (
+            f"{LABEL_DEFINITIONS} does not exist on disk. "
+            "Both incremental-planning and swarm SKILL.md reference this file."
+        )
+
+    def test_label_definitions_referenced_by_incremental_planning(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "github-label-definitions.md" in content, (
+            "incremental-planning/SKILL.md does not reference github-label-definitions.md"
+        )
+
+    def test_label_definitions_referenced_by_swarm(self):
+        content = SWARM_SKILL.read_text()
+        assert "github-label-definitions.md" in content, (
+            "swarm/SKILL.md does not reference github-label-definitions.md"
+        )
+
+    def test_tracker_field_spec_exists(self):
+        assert TRACKER_FIELD_SPEC.exists(), (
+            f"{TRACKER_FIELD_SPEC} does not exist on disk. "
+            "incremental-planning, swarm, and git-instructions reference this file."
+        )
+
+    def test_tracker_field_spec_referenced_by_incremental_planning(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "tracker-field-spec.md" in content, (
+            "incremental-planning/SKILL.md does not reference tracker-field-spec.md"
+        )
+
+    def test_tracker_field_spec_referenced_by_swarm(self):
+        content = SWARM_SKILL.read_text()
+        assert "tracker-field-spec.md" in content, (
+            "swarm/SKILL.md does not reference tracker-field-spec.md"
+        )
+
+    def test_tracker_field_spec_referenced_by_git_instructions(self):
+        git_instructions = REPO_ROOT / "git-tools" / "scripts" / "git-instructions.sh"
+        content = git_instructions.read_text()
+        assert "tracker-field-spec.md" in content, (
+            "git-instructions.sh does not reference tracker-field-spec.md"
         )
 
 

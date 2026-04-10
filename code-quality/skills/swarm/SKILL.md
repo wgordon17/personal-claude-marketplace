@@ -64,6 +64,12 @@ specialist agent.
 | Plugin Validator | general-purpose | sonnet | `Glob("**/.claude-plugin/plugin.json")` finds results |
 | Skill Reviewer | general-purpose | sonnet | `Glob("**/skills/*/SKILL.md")` finds results |
 
+### Phase 7 Conditional Agents
+
+| Phase | Role | Agent Type | Model | Can Edit | Purpose |
+|-------|------|------------|-------|----------|---------|
+| 7 | Jira Agent | jira:jira-agent | — | No | (conditional) Verify and transition Jira card to In Progress |
+
 ### Phase 3.5 Pipeline Agent
 
 | Phase | Role | Agent Type | Model | Can Edit | Purpose |
@@ -103,10 +109,20 @@ record the install command. Store the plan file path for Phase 4 Plan Adherence 
 Plan Reconciliation to reuse (both phases skip re-discovery when the path is already known).
 
 **Tracker Extraction:** If a plan file is found, extract `{tracker}` — the value of the
-`**Tracker:**` field from the plan file header. Phase 7 references `{tracker}` without
-re-reading the plan file. This keeps plan file parsing centralized at Phase 0, consistent
-with the existing `{TEST_PLAN}` pattern. If the `**Tracker:**` field is absent from the
-plan file header (pre-feature plans), set `{tracker}` to `none`.
+`**Tracker:**` field from the plan file header (see
+`code-quality/references/tracker-field-spec.md` for field values and parsing spec).
+Phase 7 references `{tracker}` without re-reading the plan file. This keeps plan file
+parsing centralized at Phase 0, consistent with the existing `{TEST_PLAN}` pattern. If
+the `**Tracker:**` field is absent from the plan file header (pre-feature plans), set
+`{tracker}` to `none`.
+
+**Tracker validation:** After extraction, verify `{tracker}` is a terminal state
+(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) per `code-quality/references/tracker-field-spec.md`
+Finalization Constraint section. If `{tracker}` is a non-terminal state (`github:pending`,
+`github:linked#N`, or `jira:pending`), warn via `AskUserQuestion`: "Plan file has unresolved
+tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or set to 'none'
+to skip issue tracking." Do not proceed to Phase 1 until the tracker is resolved or set to
+`none`.
 
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
@@ -608,8 +624,8 @@ catch any issues introduced at scale.
 **Issue Tracking (before completion announcement):**
 
 If `{tracker}` matches `github:owner/repo#N`:
-1. Validate format before interpolation: owner/repo matches
-   `^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$` and N matches `^[0-9]+$`. Skip if invalid.
+1. Validate format before interpolation per `code-quality/references/tracker-field-spec.md`
+   Validation Regex section. Skip if invalid.
 2. Add the `in-progress` label to the linked GH issue (best-effort — if the command
    fails, log a warning in the completion announcement and continue):
    `gh label create in-progress --repo <owner/repo> --description 'Work actively underway' --color 'fbca04' 2>/dev/null || true`

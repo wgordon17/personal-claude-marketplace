@@ -161,7 +161,7 @@ Present these 5 options:
 1. **Create GitHub issue** — "Create a new GH issue in the detected repo with a sanitized summary"
 2. **Link existing GitHub issue** — "Link to an existing GH issue by number (e.g., #42)"
 3. **Create Jira card** — "Create a new Jira card via the jira-agent with a sanitized summary"
-4. **Link existing Jira card** — "Link to an existing Jira card by key (e.g., PROJ-123) and transition to In Progress"
+4. **Link existing Jira card** — "Link to an existing Jira card by key (e.g., PROJ-123)"
 5. **None** — "No external issue tracking for this plan"
 
 If the user selects "Link existing" for either GH or Jira, follow up with an
@@ -290,19 +290,9 @@ Write the plan file with a header containing:
   - pr-fix-cycle: 0
   - quality-gate: 0
   ```
-- **Tracker:** — The issue tracking selection from Phase 2's Tracker Question. Possible values:
-  - `github:pending` (create new — will become `github:owner/repo#N` after Phase 6)
-  - `github:linked#N` (link existing — stores user-provided issue number; Phase 6 does
-    repo detection and resolves to `github:owner/repo#N`)
-  - `github:owner/repo#N` (fully resolved — after Phase 6 creation or linking)
-  - `jira:pending` (create new — will become `jira:PROJ-N` after Phase 6)
-  - `jira:PROJ-N` (linked existing or after creation)
-  - `none`
-
-  The GitHub tracker encodes the full `owner/repo#N` so downstream consumers
-  (git-instructions.sh, /swarm) can parse the repo directly without re-detecting
-  from git remotes. Parsing spec: extract owner/repo (everything between `github:`
-  and `#`) and issue number (digits after `#`).
+- **Tracker:** — The issue tracking selection from Phase 2's Tracker Question. See
+  `code-quality/references/tracker-field-spec.md` for the full field value table, parsing
+  spec, validation regex, and finalization constraint.
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
@@ -531,13 +521,15 @@ If no flags remain: "No open flags. Plan is ready for implementation via `/swarm
 
 ### Repo Detection
 
-When `**Tracker:**` is `github:pending`, `github:linked#N`, or `github:owner/repo#N`,
+When `**Tracker:**` is `github:pending` or `github:linked#N`,
 detect the target repo for GH issue creation:
 
 1. Check for `upstream` remote: `git remote get-url upstream`
 2. If no upstream, check `origin`: `git remote get-url origin`
 3. If neither exists or CWD is not a git repo, skip GH issue creation
 4. Extract owner/repo from the remote URL (handles both HTTPS and SSH formats)
+5. Validate: owner/repo must match the regex in `code-quality/references/tracker-field-spec.md`.
+   If validation fails, skip GH issue creation and warn the user.
 
 If repo detection fails (no remote found), warn the user via `AskUserQuestion` and
 offer to set Tracker to `none` or provide a repo manually.
@@ -577,21 +569,10 @@ Example: `TITLE="..."; BODY="..."; gh issue create --title "$TITLE" --body "$BOD
 
 ### GitHub Label Definitions
 
-Label definitions are maintained in `code-quality/references/github-label-definitions.md`.
-The canonical label table for reference:
-
-| Label | Description | Color (bare hex) | Maps from |
-|-------|-------------|------------------|-----------|
-| `enhancement` | New feature or capability | `a2eeef` | `feat` branch prefix or Cynefin Complicated/Complex |
-| `bug` | Something isn't working | `d73a4a` | `fix` branch prefix |
-| `documentation` | Documentation improvement | `0075ca` | `docs` branch prefix |
-| `refactor` | Code restructure, no behavior change | `d4c5f9` | `refactor` branch prefix |
-| `chore` | Maintenance or config | `ededed` | `chore` branch prefix |
-| `in-progress` | Work actively underway | `fbca04` | Applied at PR creation |
-
-**Fallback for unrecognized branch prefixes:** If the branch prefix does not match any
-row in the table (e.g., `test/`, `perf/`, `ci/`, `style/`, or freeform branch names),
-create the issue without a label — skip the label creation step entirely.
+Label definitions (names, colors, branch-prefix mappings) are maintained in
+`code-quality/references/github-label-definitions.md`. Read that file for the full table
+and the create-if-missing pattern. If the branch prefix does not match any row in the
+table, create the issue without a label.
 
 ### Issue Creation
 
@@ -632,10 +613,13 @@ where `upstream` is the target but `origin` is the fork.
 **If Tracker is `github:linked#N` (linked existing, pre-repo-detection):**
 
 a. Detect repo (per Repo Detection rules) — same as the create path
-b. Validate: `gh issue view N --repo <owner/repo> --json title,state` — if non-zero exit,
-   inform user the issue doesn't exist and ask for a corrected issue number via
+b. Validate N is a pure integer: N must match `^[0-9]+$` (per
+   `code-quality/references/tracker-field-spec.md`). If not, re-prompt the user via
+   `AskUserQuestion` for a corrected issue number.
+c. Validate existence: `gh issue view N --repo <owner/repo> --json title,state` — if non-zero
+   exit, inform user the issue doesn't exist and ask for a corrected issue number via
    `AskUserQuestion`. Repeat until validation passes or user selects "set Tracker to none".
-c. Update the plan file: change `**Tracker:** github:linked#N` → `**Tracker:** github:owner/repo#N`
+d. Update the plan file: change `**Tracker:** github:linked#N` → `**Tracker:** github:owner/repo#N`
 
 **If Tracker is `jira:pending`:**
 
@@ -652,18 +636,20 @@ e. Parse the card key from the jira-agent's response. Extract using these patter
    2. Markdown link: `\(https://[^)]+/browse/([A-Z]+-[0-9]+)\)`
    3. Key-only fallback: `[A-Z]+-[0-9]+` (unambiguous Jira key format)
    If none match, treat as a creation failure and fall into the error handling path below.
-f. Spawn `jira:jira-agent` to transition the newly created card to "In Progress"
-g. Update the plan file: change `**Tracker:** jira:pending` → `**Tracker:** jira:PROJ-N`
-h. **Error handling:** If `jira:jira-agent` fails to create the card, inform the user via
+f. Update the plan file: change `**Tracker:** jira:pending` → `**Tracker:** jira:PROJ-N`
+g. **Error handling:** If `jira:jira-agent` fails to create the card, inform the user via
    `AskUserQuestion` and offer: (1) retry (max 3 attempts total — after 3 failures,
    remove retry option), (2) set Tracker to `none`, (3) provide a manually-created Jira key.
-   Do not leave `jira:pending` in the plan file after Phase 6 completes. If card creation
-   succeeds but the transition to "In Progress" fails, proceed with the created card
-   (transition is best-effort — swarm completion will retry).
+   Do not leave `jira:pending` in the plan file after Phase 6 completes.
+
+Note: The card is NOT transitioned to "In Progress" at plan time. Transition happens at
+swarm completion (Phase 7) — consistent with GitHub's `in-progress` label timing. See
+`code-quality/references/tracker-field-spec.md` Lifecycle section.
 
 **If Tracker is `jira:PROJ-N` (linked existing):**
 
-a. Spawn `jira:jira-agent` to verify the issue exists and transition to "In Progress"
+a. Spawn `jira:jira-agent` to verify the issue exists (do NOT transition to "In Progress"
+   — transition happens at swarm completion, Phase 7)
 b. If the agent reports the key is invalid, inform the user via `AskUserQuestion`
    and ask for a corrected Jira key. Update the `**Tracker:**` field with the corrected
    key. Repeat until validation passes or user selects "set Tracker to none".
@@ -672,11 +658,10 @@ b. If the agent reports the key is invalid, inform the user via `AskUserQuestion
 
 Skip issue creation entirely.
 
-**Tracker finalization constraint:** The `**Tracker:**` field must be finalized (no
-`pending` state remaining) before `/swarm` is invoked. Phase 6 issue creation must
-complete — including error handling resolution — before the plan is handed off to /swarm.
-Do NOT modify the `**Tracker:**` field once a swarm is active, as swarm Phase 5.5's
-plan file updater may be concurrently modifying other fields in the same file.
+**Tracker finalization constraint:** See `code-quality/references/tracker-field-spec.md`
+Finalization Constraint section. The `**Tracker:**` field must reach a terminal state
+(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) before `/swarm` is invoked — no
+`pending` or `linked#N` states may remain.
 
 ### Phase 6 Chat Output
 

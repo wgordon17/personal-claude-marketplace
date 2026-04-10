@@ -12,12 +12,12 @@ Colors are bare hex (no `#` prefix) for direct use with `gh label create --color
 
 | Label | Description | Color (bare hex) | Maps from |
 |-------|-------------|------------------|-----------|
-| `enhancement` | New feature or capability | `a2eeef` | `feat` branch prefix or Cynefin Complicated/Complex |
+| `enhancement` | New feature or capability | `a2eeef` | `feat` branch prefix |
 | `bug` | Something isn't working | `d73a4a` | `fix` branch prefix |
 | `documentation` | Documentation improvement | `0075ca` | `docs` branch prefix |
 | `refactor` | Code restructure, no behavior change | `d4c5f9` | `refactor` branch prefix |
 | `chore` | Maintenance or config | `ededed` | `chore` branch prefix |
-| `in-progress` | Work actively underway | `fbca04` | Applied at PR creation |
+| `in-progress` | Work actively underway | `fbca04` | Applied at swarm completion (Phase 7) |
 
 ## Usage
 
