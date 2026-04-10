@@ -537,8 +537,8 @@ from early output may be outside the active context window. Failures are advisor
 
 ### Counter Increment (runs AFTER Lifecycle Gate, only on PASS)
 
-Only proceed if the Lifecycle Gate result is PASS. For FAIL, SKIP (no plan), and SKIP
-(pre-feature plan), do not increment.
+Only proceed if the Lifecycle Gate result is PASS (including PASS after successful
+remediation). For FAIL, SKIP (no plan), and SKIP (pre-feature plan), do not increment.
 
 1. Re-read the plan file from disk using `{plan_file_path}` from Step 0
 2. Find the `**Iterations:**` block
