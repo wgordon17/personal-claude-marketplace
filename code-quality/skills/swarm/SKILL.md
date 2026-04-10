@@ -618,7 +618,7 @@ If `{tracker}` matches `github:owner/repo#N`:
    using create-if-missing without `--force` to avoid overwriting existing repo customizations)
 3. Include in the completion announcement: "Include `Closes #N` in the PR body
    to auto-close the linked GH issue when merged. After merge, remove the
-   `in-progress` label: `gh issue edit N --remove-label 'in-progress'`."
+   `in-progress` label: `gh issue edit N --repo <owner/repo> --remove-label 'in-progress'`."
 
 If `{tracker}` matches `jira:PROJ-N`:
 1. Spawn `jira:jira-agent` to check the card's current status. If NOT already
