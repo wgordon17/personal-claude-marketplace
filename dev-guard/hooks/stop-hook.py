@@ -914,20 +914,6 @@ def main() -> None:
     current_diff_hash = _git_diff_hash(cwd)
     diff_changed = bool(current_diff_hash and current_diff_hash != last_diff_hash)
 
-    # ── Fast-exit: AskUserQuestion is last tool call ─────────────────────
-    # Agent's final action was asking the user — legitimate pause for context.
-    # Only fast-exit when no write activity occurred this turn. If the agent
-    # made changes AND asked a question, still route through the LLM evaluator.
-    if new_tool_calls and new_tool_calls[-1] == _QUESTION_TOOL:
-        _pre_write = _detect_write_signals(new_tool_calls)
-        if not _pre_write and not diff_changed:
-            _log_stop_event(session_id, "ask_user_question")
-            state = _update_session_state(
-                state, session_id, current_diff_hash, len(all_tool_calls), file_size
-            )
-            _save_state(state)
-            _exit_pass()
-
     # ── Detect signals ───────────────────────────────────────────────────────
     write_signals = _detect_write_signals(new_tool_calls)
     completion_claim = _detect_completion_claim(last_assistant_message)
@@ -939,11 +925,29 @@ def main() -> None:
     # in early messages while the final message claims completion. The 10-message window
     # (recent_assistant_limit=10) is an accepted trade-off: skill enforcement catches
     # deferral at creation time; the stop hook is a backstop for near-completion deferral.
+    # Must run BEFORE the AskUserQuestion fast-exit so deferral language in the assistant
+    # message is not silently bypassed when the final tool call is a question.
     if recent_assistant_messages:
         scan_text = "\n".join(recent_assistant_messages + [last_assistant_message])
     else:
         scan_text = last_assistant_message
     deferral_signals = _detect_deferral_patterns(scan_text)
+
+    # ── Fast-exit: AskUserQuestion is last tool call ─────────────────────
+    # Agent's final action was asking the user — legitimate pause for context.
+    # Only fast-exit when no write activity occurred this turn. If the agent
+    # made changes AND asked a question, still route through the LLM evaluator.
+    # Also skip this fast-exit when deferral language is present — the LLM must
+    # evaluate whether the question itself is a deferral tactic.
+    if new_tool_calls and new_tool_calls[-1] == _QUESTION_TOOL:
+        _pre_write = _detect_write_signals(new_tool_calls)
+        if not _pre_write and not diff_changed and not deferral_signals:
+            _log_stop_event(session_id, "ask_user_question")
+            state = _update_session_state(
+                state, session_id, current_diff_hash, len(all_tool_calls), file_size
+            )
+            _save_state(state)
+            _exit_pass()
 
     # ── Question classification ──────────────────────────────────────────────
     question_type = _classify_question(latest_user_message)
