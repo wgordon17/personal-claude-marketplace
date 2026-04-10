@@ -1,13 +1,13 @@
 ---
 name: incremental-planning
 description: >-
-  Incremental planning workflow that replaces native plan mode. Use when Claude tries to enter
-  plan mode (EnterPlanMode is denied by hook), when asked to "plan", "design an approach",
-  "how should we implement", or before any multi-file implementation task. Asks clarifying
-  questions first, writes plan to file incrementally with file structure mapping, per-task
-  quality review (sonnet subagent), tiered breakpoints for scope vs detail ambiguity, and
-  assumption surfacing in Phase 6. Provides research context and summaries in chat for
-  feedback. Never displays full plan content in chat.
+  Incremental planning workflow that replaces native plan mode with issue tracking integration
+  (GH issues, Jira cards). Use when Claude tries to enter plan mode (EnterPlanMode is denied
+  by hook), when asked to "plan", "design an approach", "how should we implement", or before
+  any multi-file implementation task. Asks clarifying questions first, writes plan to file
+  incrementally with file structure mapping, per-task quality review (sonnet subagent), tiered
+  breakpoints for scope vs detail ambiguity, and assumption surfacing in Phase 6. Provides
+  research context and summaries in chat for feedback. Never displays full plan content in chat.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
 ---
 
@@ -148,6 +148,23 @@ ANY plan content to a file. No exceptions.**
 "Simple" tasks are where unexamined assumptions cause the most wasted work. If the task is
 truly simple, the questions will be quick to answer.
 
+### Tracker Question
+
+After the Hard Gate minimum of 3 clarification rounds is satisfied — as the final
+question before the Exit Condition check — ask the user about issue tracking via
+`AskUserQuestion`. This question does NOT count toward the 3-round minimum.
+
+Present these 5 options:
+
+1. **Create GitHub issue** — "Create a new GH issue in the detected repo with a sanitized summary"
+2. **Link existing GitHub issue** — "Link to an existing GH issue by number (e.g., #42)"
+3. **Create Jira card** — "Create a new Jira card via the jira-agent with a sanitized summary"
+4. **Link existing Jira card** — "Link to an existing Jira card by key (e.g., PROJ-123) and transition to In Progress"
+5. **None** — "No external issue tracking for this plan"
+
+If the user selects "Link existing" for either GH or Jira, follow up with an
+`AskUserQuestion` asking for the issue number/key.
+
 ### Exit Condition
 
 You can proceed to Phase 3 (or Phase 4 directly for light planning) when you can articulate ALL of:
@@ -271,6 +288,19 @@ Write the plan file with a header containing:
   - pr-fix-cycle: 0
   - quality-gate: 0
   ```
+- **Tracker:** — The issue tracking selection from Phase 2's Tracker Question. Possible values:
+  - `github:pending` (create new — will become `github:owner/repo#N` after Phase 6)
+  - `github:linked#N` (link existing — stores user-provided issue number; Phase 6 does
+    repo detection and resolves to `github:owner/repo#N`)
+  - `github:owner/repo#N` (fully resolved — after Phase 6 creation or linking)
+  - `jira:pending` (create new — will become `jira:PROJ-N` after Phase 6)
+  - `jira:PROJ-N` (linked existing or after creation)
+  - `none`
+
+  The GitHub tracker encodes the full `owner/repo#N` so downstream consumers
+  (git-instructions.sh, /swarm) can parse the repo directly without re-detecting
+  from git remotes. Parsing spec: extract owner/repo (everything between `github:`
+  and `#`) and issue number (digits after `#`).
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
@@ -504,9 +534,9 @@ If no flags remain: "No open flags. Plan is ready for implementation via `/swarm
 ### Flow
 ```
 Phase 0: Assess depth → Phase 1: Explore (findings in chat) →
-Phase 2: Clarify (min 3 questions) → Phase 3: Consult (complex only) →
+Phase 2: Clarify (min 3 questions + tracker question) → Phase 3: Consult (complex only) →
 Phase 4: Write incrementally (summaries in chat, content to file) →
-Phase 5: Validate → Phase 6: Complete
+Phase 5: Validate → Phase 6: Complete (issue creation + completion report)
 ```
 
 ### What Goes Where
