@@ -134,7 +134,7 @@ class TestLifecycleCounterIntegrity:
         )
 
     def test_each_writer_skill_references_its_counters(self):
-        """Every writer skill must reference the exact counter name(s) it increments."""
+        """Every writer skill must reference the exact counter name(s) it writes."""
         failures: list[str] = []
         for skill_path, counter_names in COUNTER_WRITERS.items():
             assert skill_path.exists(), f"Expected skill not found: {skill_path}"
@@ -157,6 +157,33 @@ class TestLifecycleCounterIntegrity:
                 f"{skill_path.relative_to(REPO_ROOT)} does not reference counters:\n"
                 + "\n".join(f"  - {name}" for name in missing)
             )
+
+    def test_lifecycle_counter_names_list_matches_canonical_source(self):
+        """LIFECYCLE_COUNTER_NAMES must match the counters defined in incremental-planning."""
+        import re
+
+        skill = CODE_QUALITY_SKILLS / "incremental-planning" / "SKILL.md"
+        content = skill.read_text()
+        # Extract counter names from the Iterations block (lines like "- review-cycle: 0")
+        # Only match lines inside a code fence that follows **Iterations:**
+        in_block = False
+        on_disk: list[str] = []
+        for line in content.splitlines():
+            if "**Iterations:**" in line:
+                in_block = True
+                continue
+            if in_block:
+                m = re.match(r"^  - ([a-z-]+): 0$", line)
+                if m:
+                    on_disk.append(m.group(1))
+                elif on_disk:
+                    break  # end of counter block
+        assert sorted(on_disk) == sorted(LIFECYCLE_COUNTER_NAMES), (
+            f"LIFECYCLE_COUNTER_NAMES in test file does not match counters in "
+            f"incremental-planning/SKILL.md.\n"
+            f"  On disk: {sorted(on_disk)}\n"
+            f"  In test: {sorted(LIFECYCLE_COUNTER_NAMES)}"
+        )
 
     def test_counter_names_use_hyphens_not_underscores(self):
         """No skill uses underscore variants of the counter names."""
