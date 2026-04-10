@@ -39,12 +39,13 @@ digraph quality_gate {
   layer1_5 [label="Layer 1.5: Domain Expert Review\n4 parallel reviewers (code/mixed only)"];
   layer1_75 [label="Layer 1.75: Plan Adherence Review\n(BLOCKING when plan file found)"];
   layer2 [label="Layer 2: Fresh-Context Subagents\n2 subagents x 2 passes"];
+  lifecycle [label="Lifecycle Gate"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
   docs [label="Documentation Gate (BLOCKING)"];
   nodataloss [label="No Data Loss Gate (BLOCKING)"];
   final [label="Final Verification"];
-  detect -> layer1 -> layer1_5 -> layer1_75 -> layer2 -> memory -> artifact -> docs -> nodataloss -> final;
+  detect -> layer1 -> layer1_5 -> layer1_75 -> layer2 -> lifecycle -> memory -> artifact -> docs -> nodataloss -> final;
 }
 ```
 
@@ -69,7 +70,9 @@ Select the lens set for the detected type (see `references/lens-rubrics.md`).
 discover the plan file using branch-header matching (same algorithm as Layer
 1.75: search `{memory_dir}/plans/` for files whose `**Branch:**` header matches the current git
 branch; fallback to branch slug prefix matching; use most recent by unix timestamp if multiple
-match). If a plan file is found and it contains a `## Test Plan` section, read the `**Test Plan:**`
+match). If a plan file is found, store its absolute path as `{plan_file_path}` and its content
+as `{plan_content}`. These are consumed by Layer 1.75 and the Lifecycle Gate. If a plan file
+is found and it contains a `## Test Plan` section, read the `**Test Plan:**`
 path annotation from that section. Normalize the path (resolve any `..` components, strip
 trailing slashes) and verify it falls within `{memory_dir}/test-plans/`. If the path escapes
 that directory, set `{plan_test_plan}` to empty string and log a warning:
@@ -335,10 +338,8 @@ or "findings noted for later," stop. Fix the needs-fix findings now.
 
 ## Layer 1.75: Plan Adherence Review
 
-**Trigger:** Detect plan file. Search `{memory_dir}/plans/` for files whose `**Branch:**` header
-matches the current git branch (exact string match). Fallback: match plan filenames where the
-branch slug prefix matches the current branch slug. If multiple match, use the most recent by
-unix timestamp. If none found, skip Layer 1.75 with note: "No plan file found — skipping plan
+**Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0. If Step 0 did not
+discover a plan file, skip Layer 1.75 with note: "No plan file found — skipping plan
 adherence check."
 
 **Gate behavior:** When a plan IS found, Layer 1.75 is BLOCKING — cannot proceed to Layer 2
@@ -484,6 +485,65 @@ PASS 2 (MANDATORY — do not skip):
 issues, and the subagent's first pass always misses something (fresh eyes still have blind
 spots). Pass 2 catches both. Skipping it is like running tests once, making changes, and
 not re-running them.
+
+---
+
+## Lifecycle Gate
+
+Validates artifact lifecycle counters on the plan file. Runs BEFORE the Memory Gate to ensure
+the plan file still exists (Memory Gate may delete completed plans).
+
+**Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0. If no plan file was
+discovered, skip entire gate with `SKIP (no plan)`.
+
+**Backward compatibility:** If the plan file exists but has no `**Iterations:**` block
+(pre-feature plan), skip with `SKIP (pre-feature plan)`. Do NOT fail structural checks on
+plans created before this feature existed.
+
+### Structural Checks
+
+- `**Iterations:**` heading present in plan file → PASS/FAIL
+- All 5 counters present (review-cycle, fix-cycle, pr-review-cycle, pr-fix-cycle, quality-gate) → PASS/FAIL
+- All values are integers >= 0 → PASS/FAIL
+
+**Classification:** Structural failures are `needs-fix` (blocking).
+
+**Remediation:** Missing individual counters → add missing counters at 0, re-run structural
+checks. Non-integer values → report FAIL, do not auto-fix (data corruption).
+
+### Logical Checks (advisory — WARN, not blocking)
+
+- At least one review counter > 0 (`review-cycle` > 0 OR `pr-review-cycle` > 0) → WARN if
+  neither is > 0 (suggests reviewing before claiming done, but does not block — common workflow
+  runs quality-gate immediately after incremental-planning before any review has occurred)
+
+### Behavioral Checks (advisory — WARN, not blocking)
+
+Session transcript markers verify a minimum floor: "a review/fix occurred in this session."
+They prove "this happened at some point" — NOT "this happened after the most recent change."
+
+**Reliability caveat:** Behavioral checks are advisory for two reasons: (1) cross-session
+workflows — markers from session A are absent in session B, and (2) LLM recall limits — markers
+from early output may be outside the active context window. Failures are advisory warnings only.
+
+- If session contains `PLAN REVIEW —` marker: verify `review-cycle` > 0 → WARN if mismatch
+- If session contains `CODE REVIEW — PR #` marker: verify `pr-review-cycle` > 0 → WARN if mismatch
+- If session contains `FIX REPORT` marker: parse the `Source:` line to determine fix source.
+  If source was `plan-review` → verify `fix-cycle` > 0. If source was `pr-review` → verify
+  `pr-fix-cycle` > 0. If source was `bug-investigation` → skip this check.
+  WARN if mismatch.
+
+### Counter Increment (runs AFTER Lifecycle Gate, only on PASS)
+
+Only proceed if the Lifecycle Gate result is PASS. For FAIL, SKIP (no plan), and SKIP
+(pre-feature plan), do not increment.
+
+1. Re-read the plan file from disk using `{plan_file_path}` from Step 0
+2. Find the `**Iterations:**` block
+3. Read the current `quality-gate` value N from the line matching `- quality-gate: {N}`
+4. Increment `quality-gate` by 1: use Edit to replace `- quality-gate: {N}` with
+   `- quality-gate: {N+1}`, where `{N}` is the actual integer read in the previous step
+5. If no plan file or no block, skip silently
 
 ---
 
@@ -647,6 +707,11 @@ Layer 2 — Subagent Reviews:
   Subagent A (Completeness): [count] findings across 2 passes — agent ID: [id]
   Subagent B (Adversarial): [count] findings across 2 passes — agent ID: [id]
   (Layer 2 MUST show agent IDs. "SUBSTITUTED" or "N/A" is NEVER valid here.)
+
+Lifecycle Gate: [PASS / FAIL / SKIP (no plan) / SKIP (pre-feature plan)]
+  Structural: [block present, all 5 counters, valid integers]
+  Logical (advisory): [review>0 or pr-review>0 — WARN only]
+  Behavioral (advisory): [markers vs counters — WARN only]
 
 Memory Gate: [PASS / UPDATED]
   hack/ files: [updated / N/A]
