@@ -6,7 +6,7 @@ description: |
   reviewers (security, QA, performance, code quality, correctness, plan adherence),
   verifies findings by investigating source code, categorizes by type, and prints a
   structured report to the terminal. Never comments on GitHub PRs.
-allowed-tools: [Read, Glob, Grep, Bash, Agent, AskUserQuestion]
+allowed-tools: [Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # PR Review Skill
@@ -483,9 +483,25 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
+### Counter Increment
+
+After producing the Phase 4 terminal output, increment the `pr-review-cycle` lifecycle counter
+on the plan file. This is the only plan file modification pr-review makes. The counter increments
+only after successful review completion (Phase 4 terminal output produced). Error paths that
+exit before Phase 4 do not increment the counter.
+
+1. If a plan file was discovered in Phase 0 (via branch-header matching), re-read it using the
+   stored `{plan_file_path}` absolute path from Phase 0 (do not re-discover — the working
+   directory may differ after worktree alignment)
+2. Find the `**Iterations:**` block
+3. Read the current `pr-review-cycle` value N from the line matching `- pr-review-cycle: {N}`
+4. Increment `pr-review-cycle` by 1: use Edit to replace `- pr-review-cycle: {N}` with
+   `- pr-review-cycle: {N+1}`, where `{N}` is the actual integer read in the previous step
+5. If no plan file was discovered in Phase 0, or no `**Iterations:**` block found, skip silently
+
 ### Cleanup
 
-After output, return to the original branch or worktree recorded in Phase 0.
+After output and counter increment, return to the original branch or worktree recorded in Phase 0.
 
 ---
 
