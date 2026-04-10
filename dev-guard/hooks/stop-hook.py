@@ -118,6 +118,43 @@ _COMPLETION_CLAIM_PATTERNS = [
     ),
 ]
 
+# Maximum bytes to scan for deferral patterns (bounds regex execution time)
+_MAX_DEFERRAL_SCAN_BYTES = 50_000
+
+# Self-scoping deferral patterns (contextual — version label + deferral term)
+_DEFERRAL_SCOPE_PATTERNS = [
+    # version-then-deferral: "v2 enhancements", "v1 iteration deferred"
+    re.compile(
+        r"\bv[123](?!\.\d)\b.*?\b(?:deferred|future|enhancements?|iteration|out of scope)",
+        re.IGNORECASE,
+    ),
+    # deferral-then-version: "deferred to v2", "out of scope for v1"
+    re.compile(r"\b(?:deferred|out of scope)\b.*?\bv[123](?!\.\d)\b", re.IGNORECASE),
+    # standalone deferral phrases (no version label needed)
+    re.compile(
+        r"\b(?:future iteration|future enhancement|next version"
+        r"|deferred to future|out of scope for this implementation)\b",
+        re.IGNORECASE,
+    ),
+    # markdown headings with deferral framing
+    re.compile(
+        r"###?\s*(?:V[123]\s+Enhancements?|Scope:\s*v[12]\s+vs|Deferred\s*\(out of scope)",
+        re.IGNORECASE,
+    ),
+    # phase N enhancement(s)
+    re.compile(r"\bphase\s+\d+\s+enhancements?\b", re.IGNORECASE),
+]
+
+# Fabricated user-deferral claim patterns — requires "explicitly" to match intent
+# (catches "user explicitly deferred" and "explicitly user-deferred" but NOT
+# "the user deferred this" which may be a legitimate description of actual deferral)
+_FABRICATED_DEFERRAL_PATTERNS = [
+    re.compile(
+        r"\b(?:user\s+explicitly\s+deferred|explicitly\s+user[- ]deferred)\b",
+        re.IGNORECASE,
+    ),
+]
+
 
 # Research tool names (native)
 _RESEARCH_TOOLS = frozenset({"WebSearch", "WebFetch"})
@@ -539,6 +576,56 @@ def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:
     return result
 
 
+def _detect_deferral_patterns(text: str) -> list[str]:
+    """Detect self-scoping deferral and fabricated user-deferral patterns in assistant output.
+
+    Scans per-line to bound regex backtracking — the `.*?` patterns in
+    _DEFERRAL_SCOPE_PATTERNS can exhibit O(n²) behavior on long single-line inputs.
+    Splitting on newlines limits each match attempt to a single line.
+
+    False-positive-by-design: this deterministic layer is intentionally over-inclusive.
+    Patterns will match when the assistant *quotes or discusses* deferral language (e.g.,
+    in a plan-review finding or skill documentation reference). The LLM evaluator
+    receives the full assistant message context and distinguishes active deferral from
+    quoted/discussed deferral. This trade-off is accepted — the regex triggers LLM
+    evaluation; the LLM makes the final pass/fail decision.
+
+    Args:
+        text: Joined assistant message text to scan. Will be truncated to the last
+              _MAX_DEFERRAL_SCAN_BYTES bytes to bound execution time.
+
+    Returns:
+        List of matched signal names (may contain 'self_scoping_deferral',
+        'fabricated_user_deferral', or both). Empty list if no patterns matched.
+    """
+    # Truncate to last _MAX_DEFERRAL_SCAN_BYTES — keeps newest content since join
+    # order puts oldest messages first and last_assistant_message at the end
+    text = text[-_MAX_DEFERRAL_SCAN_BYTES:]
+
+    signals: list[str] = []
+    found_scope = False
+    found_fabricated = False
+
+    for line in text.split("\n"):
+        if not found_scope:
+            for pattern in _DEFERRAL_SCOPE_PATTERNS:
+                if pattern.search(line):
+                    signals.append("self_scoping_deferral")
+                    found_scope = True
+                    break
+        if not found_fabricated:
+            for pattern in _FABRICATED_DEFERRAL_PATTERNS:
+                if pattern.search(line):
+                    signals.append("fabricated_user_deferral")
+                    found_fabricated = True
+                    break
+        # Short-circuit: both signals found
+        if found_scope and found_fabricated:
+            break
+
+    return signals
+
+
 # ── Question Classification ──────────────────────────────────────────────────
 
 
@@ -847,11 +934,22 @@ def main() -> None:
     research_used = _detect_research_tools(new_tool_calls)
     hack_modified = _check_hack_dir_modified(cwd)
 
+    # Deferral scan — session-scoped (intentionally differs from turn-scoped siblings
+    # like _detect_completion_claim and _detect_write_signals). Deferral patterns appear
+    # in early messages while the final message claims completion. The 10-message window
+    # (recent_assistant_limit=10) is an accepted trade-off: skill enforcement catches
+    # deferral at creation time; the stop hook is a backstop for near-completion deferral.
+    if recent_assistant_messages:
+        scan_text = "\n".join(recent_assistant_messages + [last_assistant_message])
+    else:
+        scan_text = last_assistant_message
+    deferral_signals = _detect_deferral_patterns(scan_text)
+
     # ── Question classification ──────────────────────────────────────────────
     question_type = _classify_question(latest_user_message)
 
     # ── Fast-exit 4: META question ───────────────────────────────────────────
-    if question_type == "meta" and not write_signals and not diff_changed:
+    if question_type == "meta" and not write_signals and not diff_changed and not deferral_signals:
         state = _update_session_state(
             state, session_id, current_diff_hash, len(all_tool_calls), file_size
         )
@@ -859,7 +957,12 @@ def main() -> None:
         _exit_pass()
 
     # ── Fast-exit 5: OPINION question ────────────────────────────────────────
-    if question_type == "opinion" and not write_signals and not diff_changed:
+    if (
+        question_type == "opinion"
+        and not write_signals
+        and not diff_changed
+        and not deferral_signals
+    ):
         state = _update_session_state(
             state, session_id, current_diff_hash, len(all_tool_calls), file_size
         )
@@ -877,6 +980,7 @@ def main() -> None:
         and not diff_changed
         and not has_question_in_message
         and not user_requested_action
+        and not deferral_signals
     ):
         state = _update_session_state(
             state, session_id, current_diff_hash, len(all_tool_calls), file_size
@@ -885,7 +989,13 @@ def main() -> None:
         _exit_pass()
 
     # ── Fast-exit: Research + short response ────────────────────────────────
-    if research_used and response_is_short and not write_signals and not diff_changed:
+    if (
+        research_used
+        and response_is_short
+        and not write_signals
+        and not diff_changed
+        and not deferral_signals
+    ):
         state = _update_session_state(
             state, session_id, current_diff_hash, len(all_tool_calls), file_size
         )
@@ -900,6 +1010,7 @@ def main() -> None:
         and question_type in ("factual",)
         and not new_tool_calls
         and has_question_in_message
+        and not deferral_signals
     ):
         state = _update_session_state(
             state, session_id, current_diff_hash, len(all_tool_calls), file_size
@@ -926,6 +1037,8 @@ def main() -> None:
     diff_names = _git_diff_names(cwd) if diff_changed else []
     if diff_names and _detect_doc_gap(diff_names):
         trigger_reasons.append("doc_gap")
+    if deferral_signals:
+        trigger_reasons.extend(deferral_signals)
 
     # ── Fast-exit 7: No triggers at all ─────────────────────────────────────
     if not trigger_reasons:

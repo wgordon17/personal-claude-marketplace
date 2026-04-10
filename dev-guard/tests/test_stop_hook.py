@@ -1762,3 +1762,240 @@ class TestBuildPromptCriteria:
         ctx["work_type"] = "code_config"
         prompt = mod._build_prompt(ctx)
         assert "SUBAGENT WAIT" not in prompt
+
+
+# ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
+
+
+class TestDetectDeferralPatterns:
+    """Unit tests for _detect_deferral_patterns — imported directly via _load_stop_hook_module."""
+
+    def setup_method(self):
+        self.mod = _load_stop_hook_module()
+
+    def test_v2_enhancements_heading_returns_self_scoping(self):
+        """Markdown heading '### V2 Enhancements' → self_scoping_deferral (heading pattern)."""
+        result = self.mod._detect_deferral_patterns("### V2 Enhancements\n- Feature X")
+        assert result == ["self_scoping_deferral"]
+
+    def test_deferred_to_v2_returns_self_scoping(self):
+        """'Deferred to v2' — reverse order (deferral-then-version) → self_scoping_deferral."""
+        result = self.mod._detect_deferral_patterns("Deferred to v2")
+        assert result == ["self_scoping_deferral"]
+
+    def test_phase_2_enhancements_plural_returns_self_scoping(self):
+        """'Phase 2 Enhancements' — phase pattern (plural) → self_scoping_deferral."""
+        result = self.mod._detect_deferral_patterns("Phase 2 Enhancements")
+        assert result == ["self_scoping_deferral"]
+
+    def test_v1_iteration_deferred_returns_self_scoping(self):
+        """'v1 iteration deferred' — version-then-deferral → self_scoping_deferral."""
+        result = self.mod._detect_deferral_patterns("v1 iteration deferred")
+        assert result == ["self_scoping_deferral"]
+
+    def test_user_explicitly_deferred_returns_fabricated(self):
+        """'The user explicitly deferred this' → fabricated_user_deferral."""
+        result = self.mod._detect_deferral_patterns("The user explicitly deferred this")
+        assert result == ["fabricated_user_deferral"]
+
+    def test_user_deferred_without_explicitly_returns_empty(self):
+        """'The user deferred this to later' — no 'explicitly' → [] (legitimate description)."""
+        result = self.mod._detect_deferral_patterns("The user deferred this to later")
+        assert result == []
+
+    def test_pydantic_v2_no_deferral_returns_empty(self):
+        """'Using Pydantic v2 for validation' — no adjacent deferral term → []."""
+        result = self.mod._detect_deferral_patterns("Using Pydantic v2 for validation")
+        assert result == []
+
+    def test_claude_code_version_with_future_improvements_returns_empty(self):
+        """'Claude Code v2.1.85 has future improvements' — negative lookahead blocks v2.1 match.
+
+        The version string 'v2.1.85' matches v[123] up to 'v2' but the negative lookahead
+        (?!\\d) prevents matching since '.' follows. Additionally 'improvements' does not
+        match any standalone deferral phrase.
+        """
+        result = self.mod._detect_deferral_patterns("Claude Code v2.1.85 has future improvements")
+        assert result == []
+
+    def test_no_deferral_signals_returns_empty(self):
+        """'Implemented all features' — no deferral language → []."""
+        result = self.mod._detect_deferral_patterns("Implemented all features")
+        assert result == []
+
+    def test_next_version_standalone_known_false_positive(self):
+        """'The next version of the library supports streaming' → self_scoping_deferral.
+
+        Known false positive: 'next version' is a standalone phrase that matches regardless
+        of context. LLM evaluator is the backstop for distinguishing library references
+        from self-scoping deferral.
+        """
+        result = self.mod._detect_deferral_patterns(
+            "The next version of the library supports streaming"
+        )
+        assert result == ["self_scoping_deferral"]
+
+
+# ── Integration tests for deferral detection → LLM pipeline ──────────────────
+
+
+class TestDeferralIntegration:
+    """Integration tests verifying deferral_signals prevents fast-exits and reaches LLM."""
+
+    def _setup_transcript(
+        self,
+        tmp_path: Path,
+        *,
+        tool_names: list[str] | None = None,
+        assistant_msg: str = "",
+        user_msg: str = "Implement the feature.",
+    ) -> tuple[str, Path]:
+        """Build a transcript and seed state. Returns (session_id, transcript_path)."""
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries: list[dict] = [{"role": "user", "content": user_msg}]
+        for name in tool_names or []:
+            entries.append({"type": "tool_use", "name": name, "id": str(uuid.uuid4())})
+        entries.append({"role": "assistant", "content": assistant_msg})
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        return session_id, transcript
+
+    def test_v2_enhancements_with_completion_claim_invokes_llm(self, tmp_path):
+        """last_assistant_message containing '### V2 Enhancements' + completion claim → LLM invoked.
+
+        Verifies: hook does not fast-exit; self_scoping_deferral reaches LLM (mock LLM fails
+        → block returned, proving LLM was called rather than fast-exited).
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Self-scoping detected."])
+        msg = "### V2 Enhancements\n- Feature X\n\nThe implementation is complete."
+        session_id, transcript = self._setup_transcript(tmp_path, assistant_msg=msg)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message=msg,
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Self-scoping" in output["reason"]
+
+    def test_fabricated_user_deferral_with_completion_claim_invokes_llm(self, tmp_path):
+        """'user explicitly deferred' + completion claim → fabricated_user_deferral in triggers.
+
+        Verifies the signal reaches LLM (mock fail → block).
+        """
+        write_mock_llm(
+            tmp_path / "plugin", decision="fail", findings=["Fabricated deferral detected."]
+        )
+        msg = "The user explicitly deferred the auth module. The remaining work is complete."
+        session_id, transcript = self._setup_transcript(tmp_path, assistant_msg=msg)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message=msg,
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Fabricated" in output["reason"]
+
+    def test_short_deferral_message_does_not_fast_exit_6(self, tmp_path):
+        """Short message (<200 chars) with 'Deferred to v2' and no tool calls — deferral_signals
+        prevents fast-exit 6 (short response with no signals).
+
+        Fast-exit 6 requires: short + no new_tool_calls + no diff + no '?' in user msg +
+        no action words in user msg. The user message here has no action words, no '?',
+        and no meta/opinion keywords. Without deferral_signals guard, this would fast-exit
+        at exit 6. With the guard, the hook proceeds to LLM evaluation.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Deferral detected."])
+        msg = "Deferred to v2."  # <200 chars, no tool calls
+        session_id, transcript = self._setup_transcript(
+            tmp_path,
+            assistant_msg=msg,
+            # Neutral user message: no action words, no '?', no meta/opinion patterns
+            user_msg="Noted.",
+        )
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message=msg,
+            cwd=str(tmp_path),
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # hook did NOT fast-exit — LLM was invoked and returned block
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_research_short_response_with_future_iteration_does_not_fast_exit(self, tmp_path):
+        """Research tool used + short response containing 'future iteration' → deferral_signals
+        prevents the 'Research + short response' fast-exit.
+
+        Without deferral_signals guard, WebSearch + short response would fast-exit.
+        With it, the hook reaches LLM evaluation.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Deferral in research."])
+        msg = "Found results. future iteration improvements noted."  # short
+        session_id, transcript = self._setup_transcript(
+            tmp_path,
+            tool_names=["WebSearch"],
+            assistant_msg=msg,
+            user_msg="Research Python packaging.",
+        )
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message=msg,
+            cwd=str(tmp_path),
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # deferral_signals prevents Research + short response fast-exit → LLM invoked
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_factual_question_with_out_of_scope_does_not_fast_exit(self, tmp_path):
+        """Factual question + no tools + 'out of scope for this implementation' in message →
+        deferral_signals prevents the 'Read-only + factual question' fast-exit.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Out-of-scope deferral."])
+        msg = "The authentication module is out of scope for this implementation."
+        session_id, transcript = self._setup_transcript(
+            tmp_path,
+            assistant_msg=msg,
+            user_msg="What is the Python version requirement?",
+        )
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message=msg,
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # deferral_signals prevents factual fast-exit → LLM invoked
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
