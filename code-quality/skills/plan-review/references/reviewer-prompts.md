@@ -138,6 +138,15 @@ CHECKLIST:
    actually produce? Are there files listed with no task that creates or modifies them?
 5. Edge cases and error handling: for the stated goal, what obvious edge cases exist? Are they
    addressed, explicitly deferred, or silently ignored?
+6. **Self-scoping detection:** Does the plan introduce artificial version boundaries
+   (v1/v2, "future iteration," "future enhancement," "next version," "phase N
+   enhancement," "deferred to future," "out of scope for this implementation")
+   for work that falls within the stated goal? The model should present scope
+   options to the user via AskUserQuestion, not make unilateral scope decisions
+   by labeling work as a future version. Flag plans with "Non-scope" items that
+   reference the plan's own goal — those are scope reductions, not scope boundaries.
+   If the plan claims work was "explicitly user-deferred," verify the claim references
+   a specific user decision from the open questions or Phase 2 answers.
 
 For each finding, report:
 - Description: what the scope or completeness concern is
@@ -474,7 +483,7 @@ Assign each finding to the category that best describes its nature:
 |----------|-------------|
 | Research Gaps | Unvalidated assumptions, missing spikes, unverified external dependencies |
 | Feasibility | Steps that cannot be implemented as described, missing prerequisites |
-| Scope | Missing requirements, scope creep, goal not fully addressed |
+| Scope | Missing requirements, scope creep, goal not fully addressed, artificial version boundaries, fabricated user deferral |
 | Dependencies | Wrong task ordering, implicit dependencies, circular dependencies |
 | Architecture | Design issues, pattern violations, unnecessary abstractions |
 | Security | Missing security considerations, auth gaps, sensitive data handling |
