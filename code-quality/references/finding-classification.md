@@ -11,6 +11,12 @@ ALL of them. Your assessment of a finding's importance is not a valid reason to 
 valid reasons to not address a finding are: (1) a specific, documented technical blocker you cannot
 resolve, or (2) the user explicitly excluded it via AskUserQuestion.
 
+## Anti-Fabrication Principle
+
+No fabricated findings. Reporting no findings after thorough review is not deferral — it is the
+correct outcome when nothing is wrong. Inventing findings to appear thorough violates review
+integrity. Anti-deferral means do the work that exists, not invent work that doesn't.
+
 ## Finding Classification
 
 Two-tier taxonomy:
