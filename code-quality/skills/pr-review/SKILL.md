@@ -495,9 +495,11 @@ exit before Phase 4 do not increment the counter.
    directory may differ after worktree alignment)
 2. Find the `**Iterations:**` block
 3. Read the current `pr-review-cycle` value N from the line matching `- pr-review-cycle: {N}`
-4. Increment `pr-review-cycle` by 1: use Edit to replace `- pr-review-cycle: {N}` with
-   `- pr-review-cycle: {N+1}`, where `{N}` is the actual integer read in the previous step
-5. If no plan file was discovered in Phase 0, or no `**Iterations:**` block found, skip silently
+4. Verify N is a non-negative integer (digits only, e.g. `0`, `1`, `12`). If N is not a valid
+   integer, skip the increment silently
+5. Increment `pr-review-cycle` by 1: use Edit to replace `- pr-review-cycle: {N}` with
+   `- pr-review-cycle: {N+1}`, where `{N}` is the actual integer read in step 3
+6. If no plan file was discovered in Phase 0, or no `**Iterations:**` block found, skip silently
 
 ### Cleanup
 

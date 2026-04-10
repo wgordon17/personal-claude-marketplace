@@ -503,14 +503,14 @@ plans created before this feature existed.
 
 ### Structural Checks
 
-- `**Iterations:**` heading present in plan file → PASS/FAIL
 - All 5 counters present (review-cycle, fix-cycle, pr-review-cycle, pr-fix-cycle, quality-gate) → PASS/FAIL
 - All values are integers >= 0 → PASS/FAIL
 
 **Classification:** Structural failures are `needs-fix` (blocking).
 
 **Remediation:** Missing individual counters → add missing counters at 0, re-read the plan
-file from disk, then re-run structural checks. Non-integer values → report FAIL, do not
+file from disk, then re-run structural checks. If structural checks still fail after one
+remediation attempt, report FAIL (do not loop). Non-integer values → report FAIL, do not
 auto-fix (data corruption).
 
 ### Logical Checks (advisory — WARN, not blocking)
@@ -543,9 +543,11 @@ remediation). For FAIL, SKIP (no plan), and SKIP (pre-feature plan), do not incr
 1. Re-read the plan file from disk using `{plan_file_path}` from Step 0
 2. Find the `**Iterations:**` block
 3. Read the current `quality-gate` value N from the line matching `- quality-gate: {N}`
-4. Increment `quality-gate` by 1: use Edit to replace `- quality-gate: {N}` with
-   `- quality-gate: {N+1}`, where `{N}` is the actual integer read in the previous step
-5. If no plan file or no block, skip silently
+4. Verify N is a non-negative integer (digits only, e.g. `0`, `1`, `12`). If N is not a valid
+   integer, skip the increment silently
+5. Increment `quality-gate` by 1: use Edit to replace `- quality-gate: {N}` with
+   `- quality-gate: {N+1}`, where `{N}` is the actual integer read in step 3
+6. If no plan file or no block, skip silently
 
 ---
 
@@ -711,8 +713,9 @@ Layer 2 — Subagent Reviews:
   (Layer 2 MUST show agent IDs. "SUBSTITUTED" or "N/A" is NEVER valid here.)
 
 Lifecycle Gate: [PASS / FAIL / SKIP (no plan) / SKIP (pre-feature plan)]
-  Counters: review-cycle=[N] | fix-cycle=[N] | pr-review-cycle=[N] | pr-fix-cycle=[N] | quality-gate=[N]
-  Structural: [block present, all 5 counters, valid integers]
+  (For SKIP variants, omit the sub-lines below — show only the top-level result)
+  Counters (pre-increment): review-cycle=[N] | fix-cycle=[N] | pr-review-cycle=[N] | pr-fix-cycle=[N] | quality-gate=[N]
+  Structural: [all 5 counters, valid integers]
   Logical (advisory): [review>0 or pr-review>0 — WARN only]
   Behavioral (advisory): [markers vs counters — WARN only]
 

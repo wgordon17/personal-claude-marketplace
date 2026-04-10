@@ -475,9 +475,11 @@ on the plan file. This is the only plan file modification plan-review makes.
 1. Re-read the plan file using `{plan_file_path}` stored in Phase 0 (do not re-discover)
 2. Find the `**Iterations:**` block
 3. Read the current `review-cycle` value N from the line matching `- review-cycle: {N}`
-4. Increment `review-cycle` by 1: use Edit to replace `- review-cycle: {N}` with
-   `- review-cycle: {N+1}`, where `{N}` is the actual integer read in the previous step
-5. If no plan file or no `**Iterations:**` block found, skip silently
+4. Verify N is a non-negative integer (digits only, e.g. `0`, `1`, `12`). If N is not a valid
+   integer, skip the increment silently
+5. Increment `review-cycle` by 1: use Edit to replace `- review-cycle: {N}` with
+   `- review-cycle: {N+1}`, where `{N}` is the actual integer read in step 3
+6. If no plan file or no `**Iterations:**` block found, skip silently
 
 ---
 
