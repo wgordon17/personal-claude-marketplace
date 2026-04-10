@@ -153,6 +153,8 @@ truly simple, the questions will be quick to answer.
 After the Hard Gate minimum of 3 clarification rounds is satisfied — as the final
 question before the Exit Condition check — ask the user about issue tracking via
 `AskUserQuestion`. This question does NOT count toward the 3-round minimum.
+For light planning (1-2 questions), ask the Tracker Question after the clarification
+questions are complete, regardless of round count.
 
 Present these 5 options:
 
@@ -603,7 +605,9 @@ The full Phase 6 ordering is:
 
 a. Detect repo (per Repo Detection rules above)
 b. LLM-summarize the plan per the sanitization rules in Issue Body Sanitization above
-c. Map branch prefix to label name (per label definitions table)
+c. Map branch prefix to label name (per label definitions table). If no mapping exists
+   (unrecognized prefix), skip steps e and the `--label` flag in step f — create the
+   issue without a label.
 d. Present the draft title and body via `AskUserQuestion` for user approval
 e. Auto-create the label if it doesn't exist (label values are from the static definitions
    table — standard quoting is sufficient):
@@ -611,6 +615,7 @@ e. Auto-create the label if it doesn't exist (label values are from the static d
    (create-if-missing without `--force` — avoids overwriting existing repo label customizations)
 f. Create the issue (title and body are LLM-generated — use variable assignment):
    `TITLE="..."; BODY="..."; gh issue create --repo <owner/repo> --title "$TITLE" --body "$BODY" --label "<label>"`
+   (omit `--label` if step c found no mapping)
    (`gh issue create` outputs a URL like `https://github.com/owner/repo/issues/N`)
 g. Extract the issue number from the URL (last path segment)
 h. Update the plan file: change `**Tracker:** github:pending` → `**Tracker:** github:owner/repo#N`
@@ -660,8 +665,8 @@ h. **Error handling:** If `jira:jira-agent` fails to create the card, inform the
 
 a. Spawn `jira:jira-agent` to verify the issue exists and transition to "In Progress"
 b. If the agent reports the key is invalid, inform the user via `AskUserQuestion`
-   and ask for a corrected Jira key. Repeat until validation passes or user selects
-   "set Tracker to none".
+   and ask for a corrected Jira key. Update the `**Tracker:**` field with the corrected
+   key. Repeat until validation passes or user selects "set Tracker to none".
 
 **If Tracker is `none`:**
 
