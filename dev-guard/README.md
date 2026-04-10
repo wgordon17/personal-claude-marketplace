@@ -1,6 +1,6 @@
 # Dev Guard Plugin
 
-Development environment policy enforcement: tool selection guard, commit validation, pre-push review, and subagent completion verification.
+Development environment policy enforcement: tool selection guard, commit validation, pre-push review, subagent completion verification, and anti-deferral enforcement.
 
 ## Hooks
 
@@ -37,6 +37,7 @@ Development environment policy enforcement: tool selection guard, commit validat
 **stop-hook.py** — Fires on every Stop event, performing deterministic triage (loop guard, transcript parsing, git diff, signal detection, question classification) and delegating to an LLM evaluator when quality checks are warranted.
 - **Zero-dependency fast triage** — Per-session state, transcript tail-read, git diff hash comparison
 - **LLM delegation** — Only invokes LLM when write signals, completion claims, or research activity detected
+- **Deferral detection** — Regex patterns scan recent assistant messages for self-scoping deferral (`v1/v2` framing, "future iteration," "out of scope") and fabricated user-deferral claims; LLM evaluator distinguishes active deferral from quoted references
 - **Fail-open** — All errors exit 0 (allow stop) to avoid blocking legitimate exits
 
 ### SubagentStop: FixSummary Validation
