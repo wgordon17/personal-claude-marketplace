@@ -102,6 +102,12 @@ normalize and validate it falls within `{memory_dir}/test-plans/`. If `**BDD Set
 record the install command. Store the plan file path for Phase 4 Plan Adherence and Phase 5.5
 Plan Reconciliation to reuse (both phases skip re-discovery when the path is already known).
 
+**Tracker Extraction:** If a plan file is found, extract `{tracker}` — the value of the
+`**Tracker:**` field from the plan file header. Phase 7 references `{tracker}` without
+re-reading the plan file. This keeps plan file parsing centralized at Phase 0, consistent
+with the existing `{TEST_PLAN}` pattern. If the `**Tracker:**` field is absent from the
+plan file header (pre-feature plans), set `{tracker}` to `none`.
+
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
 Use `AskUserQuestion` to resolve any ambiguity in the task before spawning agents. Auto-detect
@@ -116,6 +122,11 @@ Announce BDD-Step-Writer as part of the composition if Phase 0 discovered a plan
 `**Feature Files:**` path in its `## Test Plan` section. BDD-Step-Writer is a Phase 3.5 pipeline
 agent with write access — it is distinct from read-only optional domain reviewers and does not
 run in Phase 4. Include it in the composition count presented to the user.
+
+**jira:jira-agent** (conditional) — Spawned at Phase 7 completion when `{tracker}` contains
+`jira:PROJ-N`. Verifies card status and transitions to In Progress. Cross-plugin agent
+spawning is validated: jira-agent.md explicitly lists "swarm implementers, quality-gate
+verifiers, or any agent" as valid spawners.
 
 ### Phase 2: Architect (opus)
 
@@ -592,7 +603,30 @@ same terms as unit test failures. After Verifier reports green, invoke the `qual
 for automated multi-pass review with rotating adversarial lenses, fresh-context subagent reviews,
 and blocking memory/artifact gates.
 If there are 20 or more modified files, run an `/unfuck` sweep to
-catch any issues introduced at scale. Generate the final audit report at
+catch any issues introduced at scale.
+
+**Issue Tracking (before completion announcement):**
+
+If `{tracker}` matches `github:owner/repo#N`:
+1. Validate format before interpolation: owner/repo matches
+   `^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$` and N matches `^[0-9]+$`. Skip if invalid.
+2. Add the `in-progress` label to the linked GH issue (best-effort — if the command
+   fails, log a warning in the completion announcement and continue):
+   `gh label create in-progress --repo <owner/repo> --description 'Work actively underway' --color 'fbca04' 2>/dev/null || true`
+   `gh issue edit N --repo <owner/repo> --add-label 'in-progress'`
+   (auto-create the label first per `code-quality/references/github-label-definitions.md`,
+   using create-if-missing without `--force` to avoid overwriting existing repo customizations)
+3. Include in the completion announcement: "Include `Closes #N` in the PR body
+   to auto-close the linked GH issue when merged. After merge, remove the
+   `in-progress` label: `gh issue edit N --remove-label 'in-progress'`."
+
+If `{tracker}` matches `jira:PROJ-N`:
+1. Spawn `jira:jira-agent` to check the card's current status. If NOT already
+   "In Progress", transition it. (Jira transitions are not idempotent — attempting
+   to transition from "In Progress" to "In Progress" will fail on most workflows.)
+2. Include in the completion announcement: "Linked Jira card PROJ-N is In Progress."
+
+Generate the final audit report at
 `{run_dir}/swarm-report.md`. Announce completion with a summary and report path.
 Shut down all teammates via `SendMessage(type="shutdown_request")` and call `TeamDelete`.
 
@@ -609,6 +643,7 @@ Phase 0: Pre-flight
   +-- Git branch check/create
   +-- Generate run-ID, create {memory_dir}/swarm/{run-id}/
   +-- TeamCreate + TaskGraph
+  +-- Extract {tracker} from plan file (default: none)
      |
      v
 Phase 1: Clarify & Checkpoint <-- AskUserQuestion (ambiguity resolution)
@@ -701,6 +736,7 @@ Phase 7: Verification & Completion
   +-- Verifier: full test + lint
   +-- quality-gate skill
   +-- /unfuck sweep (if 20+ files changed)
+  +-- Issue tracking: add in-progress label (GH) or transition card (Jira)
   +-- Generate {run_dir}/swarm-report.md
   +-- Shutdown all teammates, TeamDelete
 ```
