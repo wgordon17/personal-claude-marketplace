@@ -44,9 +44,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no issues
-under your lens, say "No security findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No security findings."
 ```
 
 ### Domain Reviewer: QA
@@ -84,9 +82,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested test approach (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no issues
-under your lens, say "No QA findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No QA findings."
 ```
 
 ### Domain Reviewer: Performance
@@ -124,9 +120,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no issues
-under your lens, say "No performance findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No performance findings."
 ```
 
 ### Domain Reviewer: Code-Reviewer
@@ -165,9 +159,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested improvement (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no issues
-under your lens, say "No code quality findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No code quality findings."
 ```
 
 ---

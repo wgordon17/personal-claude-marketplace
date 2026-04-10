@@ -1839,6 +1839,20 @@ class TestBuildPromptCriteria:
         prompt = mod._build_prompt(ctx)
         assert "FABRICATED USER DEFERRAL" not in prompt
 
+    def test_closing_xml_tag_in_assistant_message_is_escaped(self):
+        """Closing XML tag in last_assistant_message is escaped by _sanitize.
+
+        Content containing '</assistant-message>' would break the XML delimiter structure.
+        _build_prompt applies _sanitize() which replaces it with '</assistant-message (escaped)>'.
+        """
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["last_assistant_message"] = "See </assistant-message> for details."
+        prompt = mod._build_prompt(ctx)
+        assert "</assistant-message (escaped)>" in prompt
+        # The raw form within content is gone — only the structural closing tag remains
+        assert "See </assistant-message> for details." not in prompt
+
 
 # ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
 
@@ -1953,6 +1967,21 @@ class TestDetectDeferralPatterns:
         )
         assert set(result) == {"self_scoping_deferral", "fabricated_user_deferral"}
         assert len(result) == 2
+
+    def test_deferral_in_long_line_skipped_by_contextual_patterns(self):
+        """A line >500 chars with 'Deferred to v2' is skipped by patterns 0-1 (.*? guard).
+
+        Pattern 1 (deferral-then-version) would match 'Deferred to v2' if the line were
+        short, but _MAX_LINE_SCAN_CHARS (500) causes patterns 0-1 to be skipped for long lines.
+        Patterns 2-4 (no .*?) do not match 'Deferred to v2', so the result is [].
+        This documents the intentional behavior: long lines are data, not prose.
+        """
+        # Verify short form is matched (pattern 1 catches it on a normal-length line)
+        assert self.mod._detect_deferral_patterns("Deferred to v2") == ["self_scoping_deferral"]
+        # Embed the same phrase in a line > _MAX_LINE_SCAN_CHARS (500 chars)
+        long_line = "x" * 480 + " Deferred to v2 " + "x" * 30  # ~526 chars total
+        result = self.mod._detect_deferral_patterns(long_line)
+        assert result == []
 
 
 # ── Integration tests for deferral detection → LLM pipeline ──────────────────
@@ -2178,6 +2207,41 @@ class TestDeferralIntegration:
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output["decision"] == "block"
+
+    def test_opinion_question_with_deferral_language_invokes_llm(self, tmp_path):
+        """Opinion question + deferral in assistant output → deferral_signals blocks fast-exit 5.
+
+        Without the 'not deferral_signals' guard at fast-exit 5 (opinion question),
+        this scenario would fast-exit 0 (no write signals, no diff change, opinion classified).
+        With the guard, deferral_signals is non-empty → the fast-exit is skipped
+        and the LLM evaluator is invoked.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Deferral detected."])
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        msg = "The auth module is out of scope for this implementation. Use SQLite for simplicity."
+        entries = [
+            {"role": "user", "content": "Should I use PostgreSQL or SQLite?"},
+            {"role": "assistant", "content": msg},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message=msg,
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # deferral_signals present → opinion fast-exit 5 skipped → LLM invoked
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Deferral" in output["reason"]
 
 
 # ── shared-feedback.sh hook ───────────────────────────────────────────────────

@@ -62,9 +62,7 @@ For each finding, report:
 - Evidence: the specific code or configuration that demonstrates the issue
 - Suggested fix (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no
-security issues, say "No security findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no security issues, say "No security findings."
 ```
 
 ---
@@ -130,9 +128,7 @@ For each finding, report:
 - Evidence: the specific code path or condition that is not covered
 - Suggested test approach (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no
-QA issues, say "No QA findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no QA issues, say "No QA findings."
 ```
 
 ---
@@ -189,9 +185,7 @@ For each finding, report:
 - Evidence: the specific code that demonstrates the issue, with expected impact (scale at which it matters, latency/throughput effect)
 - Suggested fix (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no
-performance issues, say "No performance findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no performance issues, say "No performance findings."
 ```
 
 ---
@@ -254,9 +248,7 @@ For each finding, report:
 - Evidence: the specific code or doc text that demonstrates the issue
 - Suggested improvement (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no
-code quality issues, say "No code quality findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no code quality issues, say "No code quality findings."
 ```
 
 ---
@@ -334,9 +326,7 @@ For each finding, report:
 - Evidence: the specific code that demonstrates the issue, with the expected vs actual behavior
 - Suggested fix (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If you genuinely find no
-correctness issues, say "No correctness findings."
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no correctness issues, say "No correctness findings."
 ```
 
 ---
@@ -401,9 +391,7 @@ INSTRUCTIONS:
    - Evidence: the specific plan text and the diff/code that shows the mismatch
    - Suggested action (brief)
 
-An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
-thorough. False positives waste more time than missed issues. If the implementation faithfully
-follows the plan, say "No plan adherence findings."
+Do not fabricate findings — false positives cost more than missed issues. If the implementation faithfully follows the plan, say "No plan adherence findings."
 ```
 
 ---

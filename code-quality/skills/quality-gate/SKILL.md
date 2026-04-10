@@ -285,8 +285,8 @@ the correct result when the work is sound.
 
 If rounds 1-4 collectively produced fewer than 2 needs-fix findings, rounds 5-6 shift to
 **scan-only mode**: run the lens as analysis but report findings for Layer 2 subagent
-verification instead of applying "fix immediately." This respects the Yang et al. convergence
-ceiling (75% of improvement in rounds 1-2) while preserving lens diversity.
+verification instead of applying "fix immediately." This respects the empirical observation that
+most improvement occurs in early rounds, while preserving lens diversity.
 
 In scan-only mode:
 - Still apply the full lens checklist — do not skip the analysis
