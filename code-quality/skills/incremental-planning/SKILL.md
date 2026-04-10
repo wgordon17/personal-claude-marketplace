@@ -527,6 +527,158 @@ The plan is the deliverable. Present the completion report.
 
 If no flags remain: "No open flags. Plan is ready for implementation via `/swarm`."
 
+### Repo Detection
+
+When `**Tracker:**` is `github:pending`, `github:linked#N`, or `github:owner/repo#N`,
+detect the target repo for GH issue creation:
+
+1. Check for `upstream` remote: `git remote get-url upstream`
+2. If no upstream, check `origin`: `git remote get-url origin`
+3. If neither exists or CWD is not a git repo, skip GH issue creation
+4. Extract owner/repo from the remote URL (handles both HTTPS and SSH formats)
+
+If repo detection fails (no remote found), warn the user via `AskUserQuestion` and
+offer to set Tracker to `none` or provide a repo manually.
+
+### Issue Body Sanitization
+
+When generating the GH or Jira issue summary, follow these sanitization rules:
+
+**Strip (never include in issue body):**
+- Plan file paths (e.g., `hack/plans/...`, `~/.claude/plans/...`)
+- Agent/subagent references (swarm, subagent, Claude, Opus, Sonnet, Haiku)
+- Internal skill names (`/fix`, `/swarm`, `/quality-gate`, `/plan-review`)
+- Hook names, guard names, plugin infrastructure
+- Model names or AI tooling references
+- PII (names, emails, internal URLs)
+- Cynefin domain classification (internal methodology)
+- Iteration counters, review cycles
+
+**Keep (include in issue body):**
+- High-level goal (1 sentence)
+- 2-4 feature highlights (user-facing behavior, not implementation steps)
+- Tech stack if relevant to the issue
+- Breaking changes if any
+
+**Post-generation forbidden-term check:** After generating the draft issue body, scan it
+for any of the following terms (case-insensitive): `swarm`, `subagent`, `Claude`, `Opus`,
+`Sonnet`, `Haiku`, `/fix`, `/swarm`, `/quality-gate`, `/plan-review`, `/incremental-planning`,
+`hack/plans`, `SKILL.md`, `Cynefin`, `review-cycle`, `fix-cycle`. If any match is found,
+flag the specific terms in the AskUserQuestion approval text so the user can see what leaked
+before approving. This is a two-pass process: generate → check → present with flags.
+
+**Shell safety for `gh` commands:** The `--title` and `--body` values are LLM-generated
+and may contain shell metacharacters (quotes, backticks, `$`, newlines). Do NOT interpolate
+them directly into command strings. Assign them to shell variables first and pass with proper
+quoting. Do NOT use `--body-file` (prohibited by project policy).
+Example: `TITLE="..."; BODY="..."; gh issue create --title "$TITLE" --body "$BODY"`.
+
+### GitHub Label Definitions
+
+Label definitions are maintained in `code-quality/references/github-label-definitions.md`.
+The canonical label table for reference:
+
+| Label | Description | Color (bare hex) | Maps from |
+|-------|-------------|------------------|-----------|
+| `enhancement` | New feature or capability | `a2eeef` | `feat` branch prefix or Cynefin Complicated/Complex |
+| `bug` | Something isn't working | `d73a4a` | `fix` branch prefix |
+| `documentation` | Documentation improvement | `0075ca` | `docs` branch prefix |
+| `refactor` | Code restructure, no behavior change | `d4c5f9` | `refactor` branch prefix |
+| `chore` | Maintenance or config | `ededed` | `chore` branch prefix |
+| `in-progress` | Work actively underway | `fbca04` | Applied at PR creation |
+
+**Fallback for unrecognized branch prefixes:** If the branch prefix does not match any
+row in the table (e.g., `test/`, `perf/`, `ci/`, `style/`, or freeform branch names),
+create the issue without a label — skip the label creation step entirely.
+
+### Issue Creation
+
+The full Phase 6 ordering is:
+1. Resolve flags and open questions (existing steps above)
+2. Issue creation (this section)
+3. Chat output with tracker result
+4. Terminator (do not offer execution)
+
+**If Tracker is `github:pending`:**
+
+a. Detect repo (per Repo Detection rules above)
+b. LLM-summarize the plan per the sanitization rules in Issue Body Sanitization above
+c. Map branch prefix to label name (per label definitions table)
+d. Present the draft title and body via `AskUserQuestion` for user approval
+e. Auto-create the label if it doesn't exist (label values are from the static definitions
+   table — standard quoting is sufficient):
+   `gh label create <name> --description "<desc>" --color "<hex>" --repo <owner/repo> 2>/dev/null || true`
+   (create-if-missing without `--force` — avoids overwriting existing repo label customizations)
+f. Create the issue (title and body are LLM-generated — use variable assignment):
+   `TITLE="..."; BODY="..."; gh issue create --repo <owner/repo> --title "$TITLE" --body "$BODY" --label "<label>"`
+   (`gh issue create` outputs a URL like `https://github.com/owner/repo/issues/N`)
+g. Extract the issue number from the URL (last path segment)
+h. Update the plan file: change `**Tracker:** github:pending` → `**Tracker:** github:owner/repo#N`
+i. **Error handling:** If `gh issue create` returns non-zero, inform the user via
+   `AskUserQuestion` with the exit code and a short error reason (do not surface the
+   full stderr/API response) and offer: (1) retry (max 3 attempts total — after 3 failures,
+   remove retry option), (2) set Tracker to `none`, (3) provide a manually-created issue
+   number. For rate-limit errors (HTTP 429), suggest waiting before retry.
+   Do not leave `github:pending` in the plan file after Phase 6 completes.
+
+All `gh` commands use `--repo <owner/repo>` (from repo detection) to handle fork scenarios
+where `upstream` is the target but `origin` is the fork.
+
+**If Tracker is `github:linked#N` (linked existing, pre-repo-detection):**
+
+a. Detect repo (per Repo Detection rules) — same as the create path
+b. Validate: `gh issue view N --repo <owner/repo> --json title,state` — if non-zero exit,
+   inform user the issue doesn't exist and ask for a corrected issue number via
+   `AskUserQuestion`. Repeat until validation passes or user selects "set Tracker to none".
+c. Update the plan file: change `**Tracker:** github:linked#N` → `**Tracker:** github:owner/repo#N`
+
+**If Tracker is `jira:pending`:**
+
+a. **Jira project key:** Present an `AskUserQuestion` asking for the target Jira
+   project key. If the jira plugin's OSAC conventions are detected (e.g., CLAUDE.md
+   mentions OSAC/MGMT), default to `MGMT`. Otherwise, require the user to provide
+   the project key.
+b. LLM-summarize the plan per the sanitization rules in Issue Body Sanitization above
+c. Present the draft via `AskUserQuestion` for user approval
+d. Spawn `jira:jira-agent` with the approved summary and target project key to create
+   the card. Pass the project key in the spawn prompt.
+e. Parse the card key from the jira-agent's response. Extract using these patterns in order:
+   1. Bare URL: `https://[^/]+/browse/([A-Z]+-[0-9]+)`
+   2. Markdown link: `\(https://[^)]+/browse/([A-Z]+-[0-9]+)\)`
+   3. Key-only fallback: `[A-Z]+-[0-9]+` (unambiguous Jira key format)
+   If none match, treat as a creation failure and fall into the error handling path below.
+f. Spawn `jira:jira-agent` to transition the newly created card to "In Progress"
+g. Update the plan file: change `**Tracker:** jira:pending` → `**Tracker:** jira:PROJ-N`
+h. **Error handling:** If `jira:jira-agent` fails to create the card, inform the user via
+   `AskUserQuestion` and offer: (1) retry (max 3 attempts total — after 3 failures,
+   remove retry option), (2) set Tracker to `none`, (3) provide a manually-created Jira key.
+   Do not leave `jira:pending` in the plan file after Phase 6 completes. If card creation
+   succeeds but the transition to "In Progress" fails, proceed with the created card
+   (transition is best-effort — swarm completion will retry).
+
+**If Tracker is `jira:PROJ-N` (linked existing):**
+
+a. Spawn `jira:jira-agent` to verify the issue exists and transition to "In Progress"
+b. If the agent reports the key is invalid, inform the user via `AskUserQuestion`
+   and ask for a corrected Jira key. Repeat until validation passes or user selects
+   "set Tracker to none".
+
+**If Tracker is `none`:**
+
+Skip issue creation entirely.
+
+**Tracker finalization constraint:** The `**Tracker:**` field must be finalized (no
+`pending` state remaining) before `/swarm` is invoked. Phase 6 issue creation must
+complete — including error handling resolution — before the plan is handed off to /swarm.
+Do NOT modify the `**Tracker:**` field once a swarm is active, as swarm Phase 5.5's
+plan file updater may be concurrently modifying other fields in the same file.
+
+### Phase 6 Chat Output
+
+After issue creation completes, include in the chat output:
+- "**Tracker:** Created GH issue #N in owner/repo" (or "Linked to GH #N" / "Created Jira PROJ-N" / etc.)
+- The issue URL for easy access
+
 **Do NOT offer execution options. Do NOT ask "should I implement this?"**
 
 ## Quick Reference
