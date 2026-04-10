@@ -489,8 +489,6 @@ def _run_health_checks(
                 )
             )
 
-    # Build spawn graphs: body-only (for consistency check) and full (for orphan/mismatch)
-    spawn_graph = _build_spawn_graph(agents, skills)
     spawn_graph_with_refs = _build_spawn_graph(agents, skills, ref_docs)
 
     # Orphaned agents: not spawned by any skill even with ref doc scanning
@@ -502,41 +500,6 @@ def _run_health_checks(
                     category="orphan-agent",
                     message=f"agent {agent.name} has no 'Spawned By' entries in spawn graph",
                     file_path=str(agent.path),
-                )
-            )
-
-    # subagent_type consistency: flag skills that spawn agents (per ref doc scan)
-    # but don't have subagent_type in their SKILL.md body
-    for skill in skills:
-        body = skill.body or ""
-        if not body:
-            try:
-                body = skill.path.read_text()
-            except Exception:
-                body = ""
-        has_subagent_in_body = bool(_SUBAGENT_TYPE_RE.search(body))
-        # Check if this skill spawns agents via ref doc scanning
-        spawns_via_refs = []
-        for agent in agents:
-            if skill.name in spawn_graph_with_refs.get(agent.name, []):
-                spawns_via_refs.append(agent.name)
-        # Only spawns via reference docs (not in body)
-        spawns_via_body = []
-        for agent in agents:
-            if skill.name in spawn_graph.get(agent.name, []):
-                spawns_via_body.append(agent.name)
-        only_in_refs = set(spawns_via_refs) - set(spawns_via_body)
-        if only_in_refs and not has_subagent_in_body:
-            findings.append(
-                HealthFinding(
-                    severity="INFO",
-                    category="subagent-consistency",
-                    message=(
-                        f"skill {skill.name} spawns agents via reference docs "
-                        f"({', '.join(sorted(only_in_refs))}) but has no subagent_type "
-                        f"in SKILL.md body — add subagent_type for consistency"
-                    ),
-                    file_path=str(skill.path),
                 )
             )
 

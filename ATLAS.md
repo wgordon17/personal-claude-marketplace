@@ -252,8 +252,6 @@ _MCP tools shown as `server:function` (full: `mcp__server__function`)._
 | WARN | orphan | Not referenced by any skill or agent | code-quality/skills/file-audit/references/inventory-schema.json |
 | WARN | orphan | Not referenced by any skill or agent | code-quality/skills/file-audit/references/issue-types.md |
 | INFO | orphan-agent | agent jira-agent has no 'Spawned By' entries in spawn graph | jira/agents/jira-agent.md |
-| INFO | subagent-consistency | skill swarm spawns agents via reference docs (architect, code-reviewer, code-simplifier, performance, plan-adherence, qa, security, test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/swarm/SKILL.md |
-| INFO | subagent-consistency | skill unfuck spawns agents via reference docs (test-runner) but has no subagent_type in SKILL.md body — add subagent_type for consistency | code-quality/skills/unfuck/SKILL.md |
 | WARN | unnamed-agent | skill bug-investigation has 1 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/bug-investigation/SKILL.md |
 | WARN | unnamed-agent | skill file-audit has 3 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/file-audit/SKILL.md |
 | WARN | unnamed-agent | skill fix has 2 Agent() call(s) without name= — add name= for inventory tracking | code-quality/skills/fix/SKILL.md |
