@@ -706,6 +706,30 @@ class TestPostToolUseAnswerSource:
         # Timestamp should NOT be refreshed — re-capture was skipped
         assert stored["decisions"][0]["decided_at"] == original_time
 
+    def test_changed_decision_via_tool_input_still_captured(self, tmp_path):
+        """Different decision from stored via tool_input fallback IS captured (not skipped).
+
+        The guard skips re-capture only when the incoming answer matches the
+        stored decision (already_stored is True). A changed answer (Fix → Defer)
+        must not be silently dropped.
+        """
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        original_time = datetime.now(UTC).isoformat()
+        record = make_decision_record(decision="Fix", decided_at=original_time)
+        seed_decisions_file(decisions_file, [record])
+
+        # Send a DIFFERENT decision via tool_input (fallback path)
+        q = make_dp_question("SQL injection")
+        q_text = q["question"]
+        payload = make_post_payload([q], {q_text: "Defer"})  # tool_input, changed decision
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert len(stored["decisions"]) == 1
+        assert stored["decisions"][0]["decision"] == "Defer"
+
 
 # ── pr-test-1: General hook passthrough cases ────────────────────────────────
 
@@ -806,7 +830,7 @@ class TestHookPassthrough:
 class TestComputeCodeHash:
     """Unit tests for _compute_code_hash."""
 
-    def test_hash_returns_16_hex_chars(self, tmp_path):
+    def test_hash_returns_32_hex_chars(self, tmp_path):
         (tmp_path / ".git").mkdir()
         src = tmp_path / "src"
         src.mkdir()
@@ -864,6 +888,33 @@ class TestComputeCodeHash:
             h1 = _MOD._compute_code_hash("src/f.py", "N/A")
             h2 = _MOD._compute_code_hash("src/f.py", "0")
         assert h1 == h2
+
+    def test_symlink_outside_git_root_returns_none(self, tmp_path):
+        """Symlink that resolves outside git root → boundary check returns None."""
+        (tmp_path / ".git").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        # Target outside the git root
+        outside = tmp_path.parent / "outside_secret.py"
+        outside.write_text("secret\n")
+        link = src / "escape.py"
+        link.symlink_to(outside)
+        try:
+            with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+                h = _MOD._compute_code_hash("src/escape.py", "1")
+            assert h is None
+        finally:
+            outside.unlink(missing_ok=True)
+
+    def test_binary_file_returns_none(self, tmp_path):
+        """File with non-UTF-8 bytes raises UnicodeDecodeError → returns None."""
+        (tmp_path / ".git").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "binary.bin").write_bytes(bytes([0xFF, 0xFE, 0x00, 0x01]))
+        with patch.object(_MOD, "_find_git_root", return_value=tmp_path):
+            h = _MOD._compute_code_hash("src/binary.bin", "1")
+        assert h is None
 
 
 class TestCodeHashStaleness:
@@ -1043,6 +1094,21 @@ class TestPreToolUseCorruptedRecord:
         assert result.returncode == 0
         assert result.stdout.strip() == "", "expected passthrough for corrupted decision value"
 
+    def test_missing_decision_key_passthroughs(self, tmp_path):
+        """Record with fingerprint but no 'decision' key → passthrough (not crash)."""
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        record = make_decision_record()
+        del record["decision"]
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        q = make_dp_question("SQL injection")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0, "hook must not crash on missing decision key"
+        assert result.stdout.strip() == "", "expected passthrough for record missing decision key"
+
 
 class TestPostToolUseCoverageGaps:
     """qa-3, qa-6: PostToolUse coverage gaps."""
@@ -1074,6 +1140,30 @@ class TestPostToolUseCoverageGaps:
         result = run_hook(payload, cwd=project)
         assert result.returncode == 0
         assert result.stdout.strip() == ""
+
+    def test_invalid_answer_preserves_existing_records(self, tmp_path):
+        """'no mutations' exit path preserves pre-existing records.
+
+        Sends an invalid answer (not in VALID_DECISIONS) when the decisions file
+        already contains a valid record. The hook must exit without writing,
+        preserving the original record exactly.
+        """
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        existing_record = make_decision_record(file="src/auth.py", decision="Fix")
+        seed_decisions_file(decisions_file, [existing_record])
+
+        q = make_dp_question("Some finding", file="src/other.py", line="10", cat="Quality")
+        q_text = q["question"]
+        payload = make_post_payload([q], {q_text: "Skip"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        # File must be unchanged: still exactly one record (the original)
+        assert len(stored["decisions"]) == 1
+        assert stored["decisions"][0]["file"] == "src/auth.py"
+        assert stored["decisions"][0]["decision"] == "Fix"
 
 
 class TestLoadDecisionsRecovery:

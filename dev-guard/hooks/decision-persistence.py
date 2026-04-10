@@ -7,7 +7,7 @@
 PreToolUse: checks stored decisions and auto-answers AskUserQuestion via updatedInput.
 PostToolUse: captures Fix/Defer decisions to {memory_dir}/review-decisions.json.
 
-Decisions are persisted as fingerprinted records (file + category + line window) so
+Decisions are persisted as fingerprinted records (file + category + line + skill) so
 that repeated reviews of the same finding auto-apply the prior Fix/Defer decision
 without re-prompting the user.
 """
@@ -118,7 +118,7 @@ def _save_decisions(path: Path, data: dict) -> None:
     except OSError as exc:
         tmp.unlink(missing_ok=True)
         print(
-            f"[decision-persistence] WARNING: failed to save decisions to {path}: {exc}",
+            f"[decision-persistence] WARNING: failed to save decisions to {path.name}: {exc}",
             file=sys.stderr,
         )
 
@@ -161,7 +161,7 @@ def _compute_code_hash(file_path: str, line: str = "0") -> str | None:
 
     try:
         window_lines: list[str] = []
-        with open(resolved) as f:
+        with open(canonical) as f:
             for i, file_line in enumerate(f):
                 if i >= end:
                     break
@@ -307,7 +307,7 @@ def _handle_pre_tool_use(data: dict) -> None:
 
         if fp in stored:
             prior = stored[fp]
-            decision = prior["decision"]
+            decision = prior.get("decision")
             if decision not in VALID_DECISIONS:
                 all_matched = False
                 break  # corrupted/unexpected stored value — re-ask
@@ -339,9 +339,9 @@ def _handle_pre_tool_use(data: dict) -> None:
     for q_text, decision in answers.items():
         meta = parsed.get(q_text)
         if meta is not None:
-            context_lines.append(
-                f"  {meta['file']}:{meta.get('line', '?')} [{meta['cat']}] → {decision}"
-            )
+            safe_line = re.sub(r"[^\w./_-]", "_", str(meta.get("line", "?")))
+            safe_cat = re.sub(r"[^\w./_-]", "_", meta["cat"])
+            context_lines.append(f"  {meta['file']}:{safe_line} [{safe_cat}] → {decision}")
 
     output = {
         "hookSpecificOutput": {
@@ -374,14 +374,16 @@ def _handle_post_tool_use(data: dict) -> None:
     # first would re-capture already-stored decisions with a fresh timestamp,
     # misleading future staleness detection.
     answers = {}
-    answers_from_tool_response = True
+    answers_from_tool_response = False
     if isinstance(tool_response, dict):
-        answers = tool_response.get("answers", {})
+        tool_response_answers = tool_response.get("answers", {})
+        if tool_response_answers:
+            answers = tool_response_answers
+            answers_from_tool_response = True
     if not answers:
         # Fallback: may contain auto-applied answers from PreToolUse updatedInput.
         # Flag so we can skip re-capture of unchanged decisions below.
         answers = tool_input.get("answers", {})
-        answers_from_tool_response = False
 
     if not questions or not answers:
         sys.exit(0)
