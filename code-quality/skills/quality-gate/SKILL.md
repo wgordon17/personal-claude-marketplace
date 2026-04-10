@@ -192,6 +192,7 @@ Execute this protocol for EVERY round:
    - "should be verified" / "needs to be confirmed" / "you should check"
    - "verify against your" / "please verify" / "you may want to update"
    - Any issue described without a corresponding fix
+   - "v1" / "v2" / "future iteration" / "future enhancement" / "next version" / "phase N enhancement" / "deferred to future" / "out of scope for this implementation" (when used as self-scoping — legitimate software version references like "API v1" or "Pydantic v2" are not deferral)
 
    THE "DEFERRAL-TO-USER" TRAP:
    Saying "should be verified" or "you should check" is an admission that
@@ -218,6 +219,20 @@ Execute this protocol for EVERY round:
      concrete follow-up task, not a hand-wave.
    "4 pre-existing test failures" repeated without investigation is
    the same as ignoring 4 bugs.
+
+   THE "SELF-SCOPING" TRAP:
+   Labeling work as "v1" and deferring to "v2" is creating a permission
+   gradient — the model decides what is "in scope" and uses version
+   boundaries to justify skipping work. Scope decisions belong to the
+   user via AskUserQuestion, not to the model via self-invented
+   version labels.
+   - "V2 Enhancements: [list]" → implement them or ask the user
+   - "Scope: v1 vs. Deferred" → present as AskUserQuestion options
+   - "Deferred (out of scope for v1)" → ask the user what to defer
+   - "Future iteration: [feature]" → add it as a task or ask the user
+   If the model claims "the user explicitly deferred this," verify the
+   claim — cite the user's actual message. Fabricated user deferral
+   is a violation.
 
    For EACH identified-but-unactioned item:
    - Can fix now? → Fix it.
