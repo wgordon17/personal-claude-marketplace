@@ -159,6 +159,18 @@ You can proceed to Phase 3 (or Phase 4 directly for light planning) when you can
 
 If you can't articulate all four, ask another question.
 
+### Non-Scope Validation
+
+Before finalizing the Non-scope section, verify each item is genuinely unrelated to
+the user's stated goals. Items that address the user's goals but are labeled as
+"future version," "v2," or "next iteration" are scope reduction, not scope management —
+move them into the task list or present them to the user as an explicit scope question
+via `AskUserQuestion`.
+
+The model does not decide what is in scope. If prioritization is needed, present
+options: "This plan could include [X] (adds ~N tasks) or defer it. Which do you prefer?"
+Do not silently exclude work by relabeling it as out of scope.
+
 ### Question Design
 
 - Use `AskUserQuestion` with structured options when possible (easier to answer)
