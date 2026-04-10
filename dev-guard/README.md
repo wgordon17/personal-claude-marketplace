@@ -47,6 +47,10 @@ Development environment policy enforcement: tool selection guard, commit validat
 - **Loop guard** — After 3 consecutive blocks for the same subagent, fails open (approves) to prevent infinite retries
 - **Fail-open** — All errors exit 0 (approve stop); best-effort enforcement only
 
+### SessionStart: Shared Behavioral Feedback
+
+**shared-feedback.sh** — Injects cross-project behavioral rules from `references/shared-feedback.md` into every session. Rules include anti-deferral guidance (no v1/v2 self-scoping, no fabricated user deferral, scope decisions belong to user).
+
 ## How Hooks Work
 
 Hooks execute automatically when enabled:
