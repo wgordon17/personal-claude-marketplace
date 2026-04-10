@@ -88,7 +88,9 @@ test environment it implicitly requires is not set up.
 
 If no test plan is provided (empty string), skip this check.
 
-If the plan is feasible as written, say "No feasibility findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If the plan is feasible as
+written, say "No feasibility findings."
 ```
 
 ---
@@ -171,7 +173,9 @@ which means the goal cannot be confirmed as complete.
 
 If no test plan is provided (empty string), skip this check.
 
-If scope and completeness are good, say "No scope findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If scope and completeness are
+good, say "No scope findings."
 ```
 
 ---
@@ -232,7 +236,9 @@ For each finding, report:
 - Evidence: the specific task descriptions that show the ordering issue
 - Suggested reordering or restructure (brief)
 
-If ordering is correct, say "No dependency findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If ordering is correct, say
+"No dependency findings."
 ```
 
 ---
@@ -316,8 +322,10 @@ For each finding, report:
 - Evidence: the specific plan text (or its absence) that demonstrates the gap
 - Suggested spike or verification step (brief — what question needs answering?)
 
-If the plan addresses its unknowns well, say "No unknown unknowns findings." Do not fabricate
-issues. But be rigorous — this reviewer catches what others miss.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If the plan addresses its
+unknowns well, say "No unknown unknowns findings." But be rigorous — this reviewer catches
+what others miss.
 ```
 
 ---
@@ -381,7 +389,9 @@ For each finding, report:
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested architectural adjustment (brief)
 
-If the architecture is sound, say "No architecture findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If the architecture is sound,
+say "No architecture findings."
 ```
 
 ---
@@ -442,7 +452,9 @@ For each finding, report:
 - Evidence: the specific plan text that demonstrates the concern or its absence
 - Suggested security requirement or design change (brief)
 
-If no security concerns are found, say "No security findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If no security concerns are
+found, say "No security findings."
 ```
 
 ---
@@ -538,4 +550,7 @@ Verdicts:
 - "false_positive": The finding misread the plan or the concern is already addressed elsewhere
 - "needs_context": The finding may be valid but cannot be confirmed without information not
   in the plan (external context, team decisions, production environment details)
+
+An honest "false_positive" verdict is more valuable than a fabricated "verified" one. Do not
+confirm findings that your investigation does not support. If the plan is correct, say so.
 ```

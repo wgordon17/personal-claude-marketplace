@@ -62,7 +62,9 @@ For each finding, report:
 - Evidence: the specific code or configuration that demonstrates the issue
 - Suggested fix (brief)
 
-If no issues found, say "No security findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If you genuinely find no
+security issues, say "No security findings."
 ```
 
 ---
@@ -128,7 +130,9 @@ For each finding, report:
 - Evidence: the specific code path or condition that is not covered
 - Suggested test approach (brief)
 
-If coverage is adequate, say "No QA findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If you genuinely find no
+QA issues, say "No QA findings."
 ```
 
 ---
@@ -185,7 +189,9 @@ For each finding, report:
 - Evidence: the specific code that demonstrates the issue, with expected impact (scale at which it matters, latency/throughput effect)
 - Suggested fix (brief)
 
-If no performance issues found, say "No performance findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If you genuinely find no
+performance issues, say "No performance findings."
 ```
 
 ---
@@ -248,7 +254,9 @@ For each finding, report:
 - Evidence: the specific code or doc text that demonstrates the issue
 - Suggested improvement (brief)
 
-If code quality is good, say "No code quality findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If you genuinely find no
+code quality issues, say "No code quality findings."
 ```
 
 ---
@@ -326,7 +334,9 @@ For each finding, report:
 - Evidence: the specific code that demonstrates the issue, with the expected vs actual behavior
 - Suggested fix (brief)
 
-If the code is correct, say "No correctness findings." Do not fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If you genuinely find no
+correctness issues, say "No correctness findings."
 ```
 
 ---
@@ -391,8 +401,9 @@ INSTRUCTIONS:
    - Evidence: the specific plan text and the diff/code that shows the mismatch
    - Suggested action (brief)
 
-If the implementation faithfully follows the plan, say "No plan adherence findings." Do not
-fabricate issues.
+An empty findings list is a valid and expected outcome. Do not fabricate findings to appear
+thorough. False positives waste more time than missed issues. If the implementation faithfully
+follows the plan, say "No plan adherence findings."
 ```
 
 ---
@@ -492,4 +503,7 @@ Verdicts:
 - "false_positive": You investigated and disproved the finding — the code is actually correct
 - "needs_context": You investigated but cannot confirm or deny — requires human judgment or
   production context you don't have access to
+
+An honest "false_positive" verdict is more valuable than a fabricated "verified" one. Do not
+confirm findings that your investigation does not support. If the code is correct, say so.
 ```
