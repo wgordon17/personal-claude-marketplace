@@ -121,6 +121,11 @@ _COMPLETION_CLAIM_PATTERNS = [
 # Maximum bytes to scan for deferral patterns (bounds regex execution time)
 _MAX_DEFERRAL_SCAN_BYTES = 50_000
 
+# Maximum line length for contextual (.*?) patterns — guards against O(n²)
+# backtracking on long single-line inputs (code blocks, JSON, changelogs).
+# Deferral prose is always under 500 chars; longer lines are data, not prose.
+_MAX_LINE_SCAN_CHARS = 500
+
 # Self-scoping deferral patterns (contextual — version label + deferral term)
 _DEFERRAL_SCOPE_PATTERNS = [
     # version-then-deferral: "v2 enhancements", "v1 iteration deferred"
@@ -138,7 +143,7 @@ _DEFERRAL_SCOPE_PATTERNS = [
     ),
     # markdown headings with deferral framing
     re.compile(
-        r"###?\s*(?:V[123]\s+Enhancements?|Scope:\s*v[12]\s+vs|Deferred\s*\(out of scope)",
+        r"###?\s*(?:V[123]\s+Enhancements?|Scope:\s*v[123]\s+vs|Deferred\s*\(out of scope)",
         re.IGNORECASE,
     ),
     # phase N enhancement(s)
@@ -591,8 +596,10 @@ def _detect_deferral_patterns(text: str) -> list[str]:
     evaluation; the LLM makes the final pass/fail decision.
 
     Args:
-        text: Joined assistant message text to scan. Will be truncated to the last
-              _MAX_DEFERRAL_SCAN_BYTES bytes to bound execution time.
+        text: Assistant message text to scan — either joined recent transcript
+              messages or the hook payload's last_assistant_message as a fallback
+              when the transcript yields no messages. Will be truncated to the
+              last _MAX_DEFERRAL_SCAN_BYTES bytes to bound execution time.
 
     Returns:
         List of matched signal names (may contain 'self_scoping_deferral',
@@ -608,7 +615,10 @@ def _detect_deferral_patterns(text: str) -> list[str]:
 
     for line in text.split("\n"):
         if not found_scope:
-            for pattern in _DEFERRAL_SCOPE_PATTERNS:
+            for i, pattern in enumerate(_DEFERRAL_SCOPE_PATTERNS):
+                # Patterns 0-1 use .*? — skip long lines to prevent O(n²) backtracking
+                if i < 2 and len(line) > _MAX_LINE_SCAN_CHARS:
+                    continue
                 if pattern.search(line):
                     signals.append("self_scoping_deferral")
                     found_scope = True
@@ -928,7 +938,7 @@ def main() -> None:
     # Must run BEFORE the AskUserQuestion fast-exit so deferral language in the assistant
     # message is not silently bypassed when the final tool call is a question.
     if recent_assistant_messages:
-        scan_text = "\n".join(recent_assistant_messages + [last_assistant_message])
+        scan_text = "\n".join(recent_assistant_messages)
     else:
         scan_text = last_assistant_message
     deferral_signals = _detect_deferral_patterns(scan_text)
@@ -939,15 +949,19 @@ def main() -> None:
     # made changes AND asked a question, still route through the LLM evaluator.
     # Also skip this fast-exit when deferral language is present — the LLM must
     # evaluate whether the question itself is a deferral tactic.
-    if new_tool_calls and new_tool_calls[-1] == _QUESTION_TOOL:
-        _pre_write = _detect_write_signals(new_tool_calls)
-        if not _pre_write and not diff_changed and not deferral_signals:
-            _log_stop_event(session_id, "ask_user_question")
-            state = _update_session_state(
-                state, session_id, current_diff_hash, len(all_tool_calls), file_size
-            )
-            _save_state(state)
-            _exit_pass()
+    if (
+        new_tool_calls
+        and new_tool_calls[-1] == _QUESTION_TOOL
+        and not write_signals
+        and not diff_changed
+        and not deferral_signals
+    ):
+        _log_stop_event(session_id, "ask_user_question")
+        state = _update_session_state(
+            state, session_id, current_diff_hash, len(all_tool_calls), file_size
+        )
+        _save_state(state)
+        _exit_pass()
 
     # ── Question classification ──────────────────────────────────────────────
     question_type = _classify_question(latest_user_message)

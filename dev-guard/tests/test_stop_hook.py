@@ -499,6 +499,47 @@ class TestAskUserQuestionFastExit:
         assert output["decision"] == "block"
         assert "Tests not run" in output["reason"]
 
+    def test_ask_user_question_last_with_deferral_language_invokes_llm(self, tmp_path):
+        """AskUserQuestion as last tool + deferral language in assistant message → LLM invoked.
+
+        Without the 'not deferral_signals' guard at the AskUserQuestion fast-exit,
+        this scenario would fast-exit 0 (no write signals, no diff change).
+        With the guard, deferral_signals is non-empty → the fast-exit is skipped
+        and the LLM evaluator is invoked.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Deferral detected."])
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        deferral_msg = (
+            "The user explicitly deferred the auth module. "
+            "Should I proceed with the remaining items?"
+        )
+        entries = [
+            {"role": "user", "content": "Fix the authentication bug."},
+            {"type": "tool_use", "name": "Read", "id": "t1"},
+            {"type": "tool_use", "name": "AskUserQuestion", "id": "t2"},
+            {"role": "assistant", "content": deferral_msg},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            cwd=str(tmp_path),
+            last_assistant_message=deferral_msg,
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        # deferral_signals present → AskUserQuestion fast-exit skipped → LLM invoked
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert "Deferral" in output["reason"]
+
 
 # ── Signal detection: write tools ─────────────────────────────────────────────
 
@@ -1763,6 +1804,41 @@ class TestBuildPromptCriteria:
         prompt = mod._build_prompt(ctx)
         assert "SUBAGENT WAIT" not in prompt
 
+    def test_assistant_message_xml_delimiters_present(self):
+        mod = self._load_llm_module()
+        prompt = mod._build_prompt(self._minimal_ctx())
+        assert "<assistant-message>" in prompt
+        assert "</assistant-message>" in prompt
+        assert "END OF ASSISTANT MESSAGE DATA" in prompt
+
+    def test_self_scoping_deferral_criterion_present_when_triggered(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["self_scoping_deferral"]
+        prompt = mod._build_prompt(ctx)
+        assert "SELF-SCOPING DEFERRAL" in prompt
+
+    def test_self_scoping_deferral_criterion_absent_without_trigger(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["completion_claim"]
+        prompt = mod._build_prompt(ctx)
+        assert "SELF-SCOPING DEFERRAL" not in prompt
+
+    def test_fabricated_user_deferral_criterion_present_when_triggered(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["fabricated_user_deferral"]
+        prompt = mod._build_prompt(ctx)
+        assert "FABRICATED USER DEFERRAL" in prompt
+
+    def test_fabricated_user_deferral_criterion_absent_without_trigger(self):
+        mod = self._load_llm_module()
+        ctx = self._minimal_ctx()
+        ctx["trigger_reasons"] = ["completion_claim"]
+        prompt = mod._build_prompt(ctx)
+        assert "FABRICATED USER DEFERRAL" not in prompt
+
 
 # ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
 
@@ -1798,6 +1874,16 @@ class TestDetectDeferralPatterns:
         result = self.mod._detect_deferral_patterns("The user explicitly deferred this")
         assert result == ["fabricated_user_deferral"]
 
+    def test_explicitly_user_deferred_hyphenated_returns_fabricated(self):
+        """'explicitly user-deferred' (hyphenated variant) → fabricated_user_deferral."""
+        result = self.mod._detect_deferral_patterns("This work is explicitly user-deferred")
+        assert result == ["fabricated_user_deferral"]
+
+    def test_explicitly_user_deferred_space_variant_returns_fabricated(self):
+        """'explicitly user deferred' (space variant) → fabricated_user_deferral."""
+        result = self.mod._detect_deferral_patterns("This work is explicitly user deferred")
+        assert result == ["fabricated_user_deferral"]
+
     def test_user_deferred_without_explicitly_returns_empty(self):
         """'The user deferred this to later' — no 'explicitly' → [] (legitimate description)."""
         result = self.mod._detect_deferral_patterns("The user deferred this to later")
@@ -1812,8 +1898,9 @@ class TestDetectDeferralPatterns:
         """'Claude Code v2.1.85 has future improvements' — negative lookahead blocks v2.1 match.
 
         The version string 'v2.1.85' matches v[123] up to 'v2' but the negative lookahead
-        (?!\\d) prevents matching since '.' follows. Additionally 'improvements' does not
-        match any standalone deferral phrase.
+        (?!\\.\\d) prevents matching since '.1' (dot + digit) follows. Additionally
+        'improvements' is not a standalone deferral keyword ('enhancement' is, but
+        'improvement' is not in the pattern list).
         """
         result = self.mod._detect_deferral_patterns("Claude Code v2.1.85 has future improvements")
         assert result == []
@@ -1834,6 +1921,38 @@ class TestDetectDeferralPatterns:
             "The next version of the library supports streaming"
         )
         assert result == ["self_scoping_deferral"]
+
+    def test_truncation_deferral_at_end_of_60kb_detected(self):
+        """Deferral phrase at the end of a 60KB string → detected (within 50KB window)."""
+        filler = "x" * (60_000 - 20)
+        text = filler + "\nDeferred to v2.\n"
+        result = self.mod._detect_deferral_patterns(text)
+        assert result == ["self_scoping_deferral"]
+
+    def test_truncation_deferral_only_in_first_2kb_of_60kb_not_detected(self):
+        """Deferral phrase only in the first 2KB of a 60KB string → not detected (truncated away).
+
+        _detect_deferral_patterns keeps only the last 50KB. A deferral phrase at the very
+        start of a 60KB string falls outside the retained window and is intentionally missed.
+        """
+        deferral = "Deferred to v2.\n"
+        filler = "Nothing to see here.\n" * 2900
+        text = deferral + filler
+        assert len(text.encode()) > 50_000
+        result = self.mod._detect_deferral_patterns(text)
+        assert result == []
+
+    def test_both_signals_simultaneously_returned(self):
+        """Text with both a self-scoping heading and fabricated user deferral → both signals.
+
+        Verifies that when both _DEFERRAL_SCOPE_PATTERNS and _FABRICATED_DEFERRAL_PATTERNS
+        match in the same scan, the returned list contains both signals.
+        """
+        result = self.mod._detect_deferral_patterns(
+            "### V2 Enhancements\nThe user explicitly deferred the rest."
+        )
+        assert set(result) == {"self_scoping_deferral", "fabricated_user_deferral"}
+        assert len(result) == 2
 
 
 # ── Integration tests for deferral detection → LLM pipeline ──────────────────
@@ -1999,3 +2118,111 @@ class TestDeferralIntegration:
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output["decision"] == "block"
+
+    def test_deferral_in_earlier_message_with_clean_final_invokes_llm(self, tmp_path):
+        """Deferral in an earlier assistant message, clean completion in last → LLM invoked.
+
+        This exercises the session-scoped multi-message scan: deferral patterns appear
+        in early messages while the final message claims completion.
+        """
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Deferral in earlier msg."])
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        entries = [
+            {"role": "user", "content": "Implement the auth module."},
+            {
+                "role": "assistant",
+                "content": "I'll scope this as v1. Future iteration will cover OAuth.",
+            },
+            {"role": "user", "content": "Continue."},
+            {"role": "assistant", "content": "The implementation is complete."},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message="The implementation is complete.",
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+    def test_meta_question_with_deferral_language_invokes_llm(self, tmp_path):
+        """Meta question + deferral in assistant output → deferral_signals blocks fast-exit 4."""
+        write_mock_llm(tmp_path / "plugin", decision="fail", findings=["Deferral detected."])
+        transcript = tmp_path / "transcript.jsonl"
+        session_id = str(uuid.uuid4())
+        msg = "Proceeding. V2 enhancements deferred to future iteration."
+        entries = [
+            {"role": "user", "content": "Looks good, proceed."},
+            {"role": "assistant", "content": msg},
+        ]
+        write_transcript(transcript, entries)
+        seed_state(tmp_path / "state.json", session_id)
+        payload = make_payload(
+            session_id=session_id,
+            transcript_path=str(transcript),
+            last_assistant_message=msg,
+        )
+        result = run_hook(
+            payload,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+
+
+# ── shared-feedback.sh hook ───────────────────────────────────────────────────
+
+
+SHARED_FEEDBACK_SCRIPT = Path(__file__).parent.parent / "hooks" / "shared-feedback.sh"
+
+
+class TestSharedFeedbackHook:
+    """Black-box subprocess tests for shared-feedback.sh SessionStart hook.
+
+    Tests invoke the shell script directly via subprocess.run. No stdin is needed
+    — the hook takes no input, only reads an environment variable.
+    """
+
+    def _run_hook(self, env: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", str(SHARED_FEEDBACK_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_plugin_root_unset_exits_0_with_empty_stdout(self):
+        """CLAUDE_PLUGIN_ROOT unset → graceful degradation: exit 0, no output."""
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PLUGIN_ROOT"}
+        result = self._run_hook(env)
+        assert result.returncode == 0
+        assert result.stdout == ""
+
+    def test_plugin_root_set_file_present_exits_0_with_contents(self, tmp_path):
+        """CLAUDE_PLUGIN_ROOT set, shared-feedback.md present → exit 0, stdout = file contents."""
+        refs_dir = tmp_path / "references"
+        refs_dir.mkdir()
+        feedback_file = refs_dir / "shared-feedback.md"
+        feedback_file.write_text("# Feedback rules\nDo not defer.\n")
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(tmp_path)}
+        result = self._run_hook(env)
+        assert result.returncode == 0
+        assert "# Feedback rules" in result.stdout
+        assert "Do not defer." in result.stdout
+
+    def test_plugin_root_set_file_missing_exits_0_with_empty_stdout(self, tmp_path):
+        """CLAUDE_PLUGIN_ROOT set but shared-feedback.md absent → exit 0, no output."""
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(tmp_path)}
+        result = self._run_hook(env)
+        assert result.returncode == 0
+        assert result.stdout == ""
