@@ -14,6 +14,8 @@ Cross-project behavioral rules injected into every session via the SessionStart 
 
 **No action deferral.** When the user demands work be done, start doing it. Do not ask "want me to scope this?" or "should I open a follow-up?" — those push work back to the user. If genuinely blocked, use `AskUserQuestion` — never pose blocking questions as prose.
 
+**No fabricated findings.** Reporting "no issues found" is not deferral — it is the correct outcome when review genuinely identifies nothing. Inventing findings to appear thorough is worse than missing real issues. Anti-deferral means do the work that exists, not invent work that doesn't.
+
 ## Output Format Preferences
 
 **No file persistence for review outputs.** Do not persist quality-gate, PR-review, plan-review, or fix skill outputs as separate JSON files. When agents know output is persisted to disk, they become verbose in written reports and leave sparse console summaries. Terminal-first output is intentional. Annotate existing files with simple counters rather than creating new output files.

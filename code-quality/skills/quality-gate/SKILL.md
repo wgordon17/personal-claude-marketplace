@@ -246,7 +246,16 @@ Execute this protocol for EVERY round:
    - Cross-reference against actual edits made
    - The delta is "identified-but-unactioned" — fix or justify each one
 
-6. serena::think_about_whether_you_are_done
+6. FINDING COUNT TRACKING (after step 5)
+   Count the needs-fix findings identified and fixed in this round.
+   Record as finding_count[round_N].
+   If N >= 3 and finding_count[round_N] > finding_count[round_N-1]:
+     Print: "⚠ Oscillation signal: round N produced more findings than
+     round N-1. Verify late-round findings are genuine, not artifacts
+     of over-review."
+   This is a WARNING, not a blocker — continue the round.
+
+7. serena::think_about_whether_you_are_done
    "Did I genuinely address everything this lens covers?"
    If no → fix remaining items before proceeding to next round.
 ```
@@ -263,6 +272,29 @@ targets code architecture integration.
 
 Do NOT exit early because a round "produced zero findings." Each lens catches categorically
 different issues. The next round will find what this round cannot see.
+
+### Valid Zero Findings
+
+Reporting zero findings for a round is a valid outcome — it means this lens found nothing
+wrong, not that you didn't look hard enough. Do not fabricate findings to satisfy the "do not
+exit early" instruction. "Do not exit early" means run the lens thoroughly — it does not mean
+you must find something. An honest "no issues under this lens" after genuine investigation is
+the correct result when the work is sound.
+
+### Adaptive Rounds 5-6
+
+If rounds 1-4 collectively produced fewer than 2 needs-fix findings, rounds 5-6 shift to
+**scan-only mode**: run the lens as analysis but report findings for Layer 2 subagent
+verification instead of applying "fix immediately." This respects the Yang et al. convergence
+ceiling (75% of improvement in rounds 1-2) while preserving lens diversity.
+
+In scan-only mode:
+- Still apply the full lens checklist — do not skip the analysis
+- Record findings with `[scan-only]` prefix
+- Do NOT apply step 4 (FIX ALL FINDINGS IMMEDIATELY) — instead, carry findings to Layer 2
+- Layer 2 subagents receive scan-only findings as additional context for verification
+- If a scan-only finding is clearly critical (security vulnerability, data loss), override
+  scan-only and fix immediately — use judgment, not a blanket rule
 
 ---
 
