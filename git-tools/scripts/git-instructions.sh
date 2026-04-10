@@ -368,6 +368,10 @@ cat <<'PR_FORMAT'
 - Meta-commentary ("This PR is a work in progress...")
 - More than 3 bullet points under Summary
 
+**Issue linking:** If the current branch has a plan file with a `**Tracker:**` field, follow
+the parsing, validation, and linking rules in `code-quality/references/tracker-field-spec.md`.
+Use `--repo <owner/repo>` parsed from the Tracker field value (not from git remotes).
+
 PR_FORMAT
 
 # Before PR: rebase instructions

@@ -1,13 +1,13 @@
 ---
 name: incremental-planning
 description: >-
-  Incremental planning workflow that replaces native plan mode. Use when Claude tries to enter
-  plan mode (EnterPlanMode is denied by hook), when asked to "plan", "design an approach",
-  "how should we implement", or before any multi-file implementation task. Asks clarifying
-  questions first, writes plan to file incrementally with file structure mapping, per-task
-  quality review (sonnet subagent), tiered breakpoints for scope vs detail ambiguity, and
-  assumption surfacing in Phase 6. Provides research context and summaries in chat for
-  feedback. Never displays full plan content in chat.
+  Incremental planning workflow that replaces native plan mode with issue tracking integration
+  (GH issues, Jira cards). Use when Claude tries to enter plan mode (EnterPlanMode is denied
+  by hook), when asked to "plan", "design an approach", "how should we implement", or before
+  any multi-file implementation task. Asks clarifying questions first, writes plan to file
+  incrementally with file structure mapping, per-task quality review (sonnet subagent), tiered
+  breakpoints for scope vs detail ambiguity, and assumption surfacing in Phase 6. Provides
+  research context and summaries in chat for feedback. Never displays full plan content in chat.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
 ---
 
@@ -148,6 +148,25 @@ ANY plan content to a file. No exceptions.**
 "Simple" tasks are where unexamined assumptions cause the most wasted work. If the task is
 truly simple, the questions will be quick to answer.
 
+### Tracker Question
+
+After the Hard Gate minimum of 3 clarification rounds is satisfied — as the final
+question before the Exit Condition check — ask the user about issue tracking via
+`AskUserQuestion`. This question does NOT count toward the 3-round minimum.
+For light planning (1-2 questions), ask the Tracker Question after the clarification
+questions are complete, regardless of round count.
+
+Present these 5 options:
+
+1. **Create GitHub issue** — "Create a new GH issue in the detected repo with a sanitized summary"
+2. **Link existing GitHub issue** — "Link to an existing GH issue by number (e.g., #42)"
+3. **Create Jira card** — "Create a new Jira card via the jira-agent with a sanitized summary"
+4. **Link existing Jira card** — "Link to an existing Jira card by key (e.g., PROJ-123)"
+5. **None** — "No external issue tracking for this plan"
+
+If the user selects "Link existing" for either GH or Jira, follow up with an
+`AskUserQuestion` asking for the issue number/key.
+
 ### Exit Condition
 
 You can proceed to Phase 3 (or Phase 4 directly for light planning) when you can articulate ALL of:
@@ -271,6 +290,9 @@ Write the plan file with a header containing:
   - pr-fix-cycle: 0
   - quality-gate: 0
   ```
+- **Tracker:** — The issue tracking selection from Phase 2's Tracker Question. See
+  `code-quality/references/tracker-field-spec.md` for the full field value table, parsing
+  spec, validation regex, and finalization constraint.
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
@@ -497,6 +519,156 @@ The plan is the deliverable. Present the completion report.
 
 If no flags remain: "No open flags. Plan is ready for implementation via `/swarm`."
 
+### Repo Detection
+
+When `**Tracker:**` is `github:pending` or `github:linked#N`,
+detect the target repo for GH issue creation:
+
+1. Check for `upstream` remote: `git remote get-url upstream`
+2. If no upstream, check `origin`: `git remote get-url origin`
+3. If neither exists or CWD is not a git repo, skip GH issue creation
+4. Extract owner/repo from the remote URL (handles both HTTPS and SSH formats)
+5. Validate: owner/repo must match the regex in `code-quality/references/tracker-field-spec.md`.
+   If validation fails, skip GH issue creation and warn the user.
+
+If repo detection fails (no remote found), warn the user via `AskUserQuestion` and
+offer to set Tracker to `none` or provide a repo manually.
+
+### Issue Body Sanitization
+
+When generating the GH or Jira issue summary, follow these sanitization rules:
+
+**Strip (never include in issue body):**
+- Plan file paths (e.g., `hack/plans/...`, `~/.claude/plans/...`)
+- Agent/subagent references (swarm, subagent, Claude, Opus, Sonnet, Haiku)
+- Internal skill names (`/fix`, `/swarm`, `/quality-gate`, `/plan-review`)
+- Hook names, guard names, plugin infrastructure
+- Model names or AI tooling references
+- PII (names, emails, internal URLs)
+- Cynefin domain classification (internal methodology)
+- Iteration counters, review cycles
+
+**Keep (include in issue body):**
+- High-level goal (1 sentence)
+- 2-4 feature highlights (user-facing behavior, not implementation steps)
+- Tech stack if relevant to the issue
+- Breaking changes if any
+
+**Post-generation forbidden-term check:** After generating the draft issue body, scan it
+for any of the following terms (case-insensitive): `swarm`, `subagent`, `Claude`, `Opus`,
+`Sonnet`, `Haiku`, `/fix`, `/swarm`, `/quality-gate`, `/plan-review`, `/incremental-planning`,
+`hack/plans`, `SKILL.md`, `Cynefin`, `review-cycle`, `fix-cycle`. If any match is found,
+flag the specific terms in the AskUserQuestion approval text so the user can see what leaked
+before approving. This is a two-pass process: generate → check → present with flags.
+
+**Shell safety for `gh` commands:** The `--title` and `--body` values are LLM-generated
+and may contain shell metacharacters (quotes, backticks, `$`, newlines). Do NOT interpolate
+them directly into command strings. Assign them to shell variables first and pass with proper
+quoting. Do NOT use `--body-file` (prohibited by project policy).
+Example: `TITLE="..."; BODY="..."; gh issue create --title "$TITLE" --body "$BODY"`.
+
+### GitHub Label Definitions
+
+Label definitions (names, colors, branch-prefix mappings) are maintained in
+`code-quality/references/github-label-definitions.md`. Read that file for the full table
+and the create-if-missing pattern. If the branch prefix does not match any row in the
+table, create the issue without a label.
+
+### Issue Creation
+
+The full Phase 6 ordering is:
+1. Resolve flags and open questions (existing steps above)
+2. Issue creation (this section)
+3. Chat output with tracker result
+4. Terminator (do not offer execution)
+
+**If Tracker is `github:pending`:**
+
+a. Detect repo (per Repo Detection rules above)
+b. LLM-summarize the plan per the sanitization rules in Issue Body Sanitization above
+c. Map branch prefix to label name (per label definitions table). If no mapping exists
+   (unrecognized prefix), skip steps e and the `--label` flag in step f — create the
+   issue without a label.
+d. Present the draft title and body via `AskUserQuestion` for user approval
+e. Auto-create the label if it doesn't exist (label values are from the static definitions
+   table — standard quoting is sufficient):
+   `gh label create <name> --description "<desc>" --color "<hex>" --repo <owner/repo> 2>/dev/null || true`
+   (create-if-missing without `--force` — avoids overwriting existing repo label customizations)
+f. Create the issue (title and body are LLM-generated — use variable assignment):
+   `TITLE="..."; BODY="..."; gh issue create --repo <owner/repo> --title "$TITLE" --body "$BODY" --label "<label>"`
+   (omit `--label` if step c found no mapping)
+   (`gh issue create` outputs a URL like `https://github.com/owner/repo/issues/N`)
+g. Extract the issue number from the URL (last path segment)
+h. Update the plan file: change `**Tracker:** github:pending` → `**Tracker:** github:owner/repo#N`
+i. **Error handling:** If `gh issue create` returns non-zero, inform the user via
+   `AskUserQuestion` with the exit code and a short error reason (do not surface the
+   full stderr/API response) and offer: (1) retry (max 3 attempts total — after 3 failures,
+   remove retry option), (2) set Tracker to `none`, (3) provide a manually-created issue
+   number. For rate-limit errors (HTTP 429), suggest waiting before retry.
+   Do not leave `github:pending` in the plan file after Phase 6 completes.
+
+All `gh` commands use `--repo <owner/repo>` (from repo detection) to handle fork scenarios
+where `upstream` is the target but `origin` is the fork.
+
+**If Tracker is `github:linked#N` (linked existing, pre-repo-detection):**
+
+a. Detect repo (per Repo Detection rules) — same as the create path
+b. Validate N is a pure integer: N must match `^[0-9]+$` (per
+   `code-quality/references/tracker-field-spec.md`). If not, re-prompt the user via
+   `AskUserQuestion` for a corrected issue number.
+c. Validate existence: `gh issue view N --repo <owner/repo> --json title,state` — if non-zero
+   exit, inform user the issue doesn't exist and ask for a corrected issue number via
+   `AskUserQuestion`. Repeat until validation passes or user selects "set Tracker to none".
+d. Update the plan file: change `**Tracker:** github:linked#N` → `**Tracker:** github:owner/repo#N`
+
+**If Tracker is `jira:pending`:**
+
+a. **Jira project key:** Present an `AskUserQuestion` asking for the target Jira
+   project key. If the jira plugin's OSAC conventions are detected (e.g., CLAUDE.md
+   mentions OSAC/MGMT), default to `MGMT`. Otherwise, require the user to provide
+   the project key.
+b. LLM-summarize the plan per the sanitization rules in Issue Body Sanitization above
+c. Present the draft via `AskUserQuestion` for user approval
+d. Spawn `jira:jira-agent` with the approved summary and target project key to create
+   the card. Pass the project key in the spawn prompt.
+e. Parse the card key from the jira-agent's response. Extract using these patterns in order:
+   1. Bare URL: `https://[^/]+/browse/([A-Z]+-[0-9]+)`
+   2. Markdown link: `\(https://[^)]+/browse/([A-Z]+-[0-9]+)\)`
+   3. Key-only fallback: `[A-Z]+-[0-9]+` (unambiguous Jira key format)
+   If none match, treat as a creation failure and fall into the error handling path below.
+f. Update the plan file: change `**Tracker:** jira:pending` → `**Tracker:** jira:PROJ-N`
+g. **Error handling:** If `jira:jira-agent` fails to create the card, inform the user via
+   `AskUserQuestion` and offer: (1) retry (max 3 attempts total — after 3 failures,
+   remove retry option), (2) set Tracker to `none`, (3) provide a manually-created Jira key.
+   Do not leave `jira:pending` in the plan file after Phase 6 completes.
+
+Note: The card is NOT transitioned to "In Progress" at plan time. Transition happens at
+swarm completion (Phase 7) — consistent with GitHub's `in-progress` label timing. See
+`code-quality/references/tracker-field-spec.md` Lifecycle section.
+
+**If Tracker is `jira:PROJ-N` (linked existing):**
+
+a. Spawn `jira:jira-agent` to verify the issue exists (do NOT transition to "In Progress"
+   — transition happens at swarm completion, Phase 7)
+b. If the agent reports the key is invalid, inform the user via `AskUserQuestion`
+   and ask for a corrected Jira key. Update the `**Tracker:**` field with the corrected
+   key. Repeat until validation passes or user selects "set Tracker to none".
+
+**If Tracker is `none`:**
+
+Skip issue creation entirely.
+
+**Tracker finalization constraint:** See `code-quality/references/tracker-field-spec.md`
+Finalization Constraint section. The `**Tracker:**` field must reach a terminal state
+(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) before `/swarm` is invoked — no
+`pending` or `linked#N` states may remain.
+
+### Phase 6 Chat Output
+
+After issue creation completes, include in the chat output:
+- "**Tracker:** Created GH issue #N in owner/repo" (or "Linked to GH #N" / "Created Jira PROJ-N" / etc.)
+- The issue URL for easy access
+
 **Do NOT offer execution options. Do NOT ask "should I implement this?"**
 
 ## Quick Reference
@@ -504,9 +676,9 @@ If no flags remain: "No open flags. Plan is ready for implementation via `/swarm
 ### Flow
 ```
 Phase 0: Assess depth → Phase 1: Explore (findings in chat) →
-Phase 2: Clarify (min 3 questions) → Phase 3: Consult (complex only) →
+Phase 2: Clarify (min 3 questions + tracker question) → Phase 3: Consult (complex only) →
 Phase 4: Write incrementally (summaries in chat, content to file) →
-Phase 5: Validate → Phase 6: Complete
+Phase 5: Validate → Phase 6: Complete (issue creation + completion report)
 ```
 
 ### What Goes Where
