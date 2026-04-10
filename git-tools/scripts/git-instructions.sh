@@ -368,6 +368,18 @@ cat <<'PR_FORMAT'
 - Meta-commentary ("This PR is a work in progress...")
 - More than 3 bullet points under Summary
 
+**Issue linking:** If the current branch has a plan file in `hack/plans/` (or the project's
+memory directory) with a `**Tracker:** github:owner/repo#N` field:
+1. Include `Closes #N` on a new line after the Summary section in the PR body
+2. Add the `in-progress` label to the issue: `gh issue edit N --add-label 'in-progress'` (use `--repo` from current git remote)
+3. After merge, remove the `in-progress` label: `gh issue edit N --remove-label 'in-progress'`
+Parsing: extract owner/repo (everything between `github:` and `#`) and issue number (digits after `#`).
+Before interpolating into `gh` commands, validate: owner/repo matches `^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$` and N matches `^[0-9]+$`.
+If `**Branch:**` is `not yet created`, update the Branch field with the current branch name first.
+If the `**Tracker:**` field is `jira:PROJ-N`, do NOT include `Closes #N`. Instead, include
+`Jira: PROJ-N` in the PR body and remind to transition the Jira card after merge.
+If the `**Tracker:**` field is `none` or absent, skip issue linking entirely.
+
 PR_FORMAT
 
 # Before PR: rebase instructions
