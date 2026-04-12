@@ -44,7 +44,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-If no issues found, say "No security findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No security findings."
 ```
 
 ### Domain Reviewer: QA
@@ -82,7 +82,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested test approach (brief)
 
-If coverage is adequate, say "No QA findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No QA findings."
 ```
 
 ### Domain Reviewer: Performance
@@ -120,7 +120,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-If no performance issues found, say "No performance findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No performance findings."
 ```
 
 ### Domain Reviewer: Code-Reviewer
@@ -159,7 +159,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested improvement (brief)
 
-If code quality is good, say "No code quality findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No code quality findings."
 ```
 
 ---
@@ -265,7 +265,8 @@ For each issue found, report:
   situations — pick the better option and classify as needs-fix.
 - LoE: trivial | moderate | significant
 
-Be thorough. Assume at least 2 completeness gaps exist. Find them.
+Be thorough but honest. An empty findings list is a valid outcome — do not fabricate
+completeness gaps to appear thorough. False positives waste more time than missed issues.
 ```
 
 ### Pass 2 Prompt (Resume)
@@ -339,7 +340,9 @@ For each issue found, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-This work has at least 3 real issues. Find them.
+Be thorough but honest. An empty findings list is a valid outcome — do not fabricate issues
+to appear thorough. False positives waste more time than missed issues. Find real problems,
+not imagined ones.
 ```
 
 ### Pass 2 Prompt (Resume)

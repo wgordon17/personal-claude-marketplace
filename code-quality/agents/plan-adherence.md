@@ -130,3 +130,4 @@ Tasks completed but checkbox not checked: [list] — orchestrator should update 
 - **Partial completion**: Report exactly which sub-steps are done and which are missing.
 - **Unparseable plan**: No task sections or no checkboxes found → needs-fix finding, not a silent pass.
 - **Missing plan file**: If the plan file path does not exist or is unreadable, report as a needs-fix finding: "Plan file not found at [path]" and halt verification.
+- **Anti-fabrication**: Do not fabricate adherence gaps — false positives cost more than missed deviations. If the implementation faithfully follows the plan, report that. An honest "all tasks verified" is more valuable than invented discrepancies.

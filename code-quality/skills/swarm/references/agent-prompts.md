@@ -7,6 +7,12 @@ the relevant prompt section into each spawned agent's Task prompt parameter.
 
 ---
 
+## Anti-Fabrication Principle
+
+Applies to ALL finding-producing agents (Reviewer, Security, QA, Code-Reviewer, Performance,
+Completeness, Adversarial): Do not fabricate findings — false positives cost more than missed
+issues. An empty findings list is a valid outcome. Report real problems, not imagined ones.
+
 ## Context Bundle Template
 
 Prepend this to EVERY agent prompt. The lead fills in all `{placeholder}` values before spawning.

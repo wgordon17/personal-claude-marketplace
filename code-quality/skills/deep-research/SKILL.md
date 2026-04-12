@@ -166,6 +166,14 @@ Include viewpoints from:
    - Applicability: which external findings are directly usable vs. require adaptation?
    - Adaptation needed: what changes would be required to adopt external recommendations in this codebase?
 
+7. **No versioned recommendations**
+   - Do not frame recommendations as versioned deliverables (v1/v2, "phase 1/phase 2")
+   - Present all findings as unconditional recommendations
+   - If prioritization is needed, use "immediate / short-term / long-term" without
+     inventing version boundaries
+   - Do not create sections titled "V2 Enhancements," "Future Iteration," or
+     "Scope: v1 vs. Deferred"
+
 ## Output Format
 
 ### Output Location
@@ -282,6 +290,8 @@ If no memory directory exists, deliver the report in the conversation only.
 
 ### Not Recommended
 - [Option W] because [reason]
+
+**Do not add "V2 Enhancements," "Future Scope," or "Deferred" sections. All recommendations are unconditional. Use "immediate / short-term / long-term" for prioritization, never version labels.**
 
 ## Next Steps
 1. [Immediate action]

@@ -97,6 +97,15 @@ For each finding wrapped in `<finding-data>` tags above:
    - trivial: one-liner or mechanical change, no judgment required
    - moderate: multi-file or requires reading context, some judgment
    - significant: architectural impact or cross-cutting concern, substantial judgment
+9. **Scope anchoring (code findings only):** Everything introduced by the PR is in scope for
+   this investigation. Do not dismiss a finding as "out of scope" because the upstream review
+   didn't catch it — the review is not the scope boundary, the PR diff is. If the code under
+   investigation was added or modified by the PR, issues in that code are in scope regardless
+   of whether the original review identified them. Only code that predates the PR and was not
+   modified by it can be considered out of scope.
+10. Do not fabricate findings or inflate finding severity. If a finding is genuinely invalid
+   after investigation, verdict `invalid` is the correct and expected outcome. False positives
+   cost more than missed issues.
 
 ---
 
@@ -221,7 +230,10 @@ SPIKE EXECUTION INSTRUCTIONS:
 4. If a `## UAT Context` section is present above: the finding has UAT validation context.
    Use the test plan scenarios in that section to cross-check whether the spike question is
    consistent with what the test plan expects. Note any contradictions in your Evidence section.
-5. Return the structured result below. Do not add prose outside the result block.
+5. Do not fabricate evidence or inflate confidence. If the spike cannot confirm or deny the
+   assumption, verdict `spike_partial` with honest evidence gaps is the correct outcome. False
+   confidence costs more than acknowledged uncertainty.
+6. Return the structured result below. Do not add prose outside the result block.
 
 ---
 

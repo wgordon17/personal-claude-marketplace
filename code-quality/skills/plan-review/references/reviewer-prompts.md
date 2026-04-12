@@ -88,7 +88,7 @@ test environment it implicitly requires is not set up.
 
 If no test plan is provided (empty string), skip this check.
 
-If the plan is feasible as written, say "No feasibility findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If the plan is feasible as written, say "No feasibility findings."
 ```
 
 ---
@@ -138,6 +138,15 @@ CHECKLIST:
    actually produce? Are there files listed with no task that creates or modifies them?
 5. Edge cases and error handling: for the stated goal, what obvious edge cases exist? Are they
    addressed, explicitly deferred, or silently ignored?
+6. **Self-scoping detection:** Does the plan introduce artificial version boundaries
+   (v1/v2, "future iteration," "future enhancement," "next version," "phase N
+   enhancement," "deferred to future," "out of scope for this implementation")
+   for work that falls within the stated goal? The model should present scope
+   options to the user via AskUserQuestion, not make unilateral scope decisions
+   by labeling work as a future version. Flag plans with "Non-scope" items that
+   reference the plan's own goal — those are scope reductions, not scope boundaries.
+   If the plan claims work was "explicitly user-deferred," verify the claim references
+   a specific user decision from the open questions or Phase 2 answers.
 
 For each finding, report:
 - Description: what the scope or completeness concern is
@@ -162,7 +171,7 @@ which means the goal cannot be confirmed as complete.
 
 If no test plan is provided (empty string), skip this check.
 
-If scope and completeness are good, say "No scope findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If scope and completeness are good, say "No scope findings."
 ```
 
 ---
@@ -223,7 +232,7 @@ For each finding, report:
 - Evidence: the specific task descriptions that show the ordering issue
 - Suggested reordering or restructure (brief)
 
-If ordering is correct, say "No dependency findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If ordering is correct, say "No dependency findings."
 ```
 
 ---
@@ -307,8 +316,7 @@ For each finding, report:
 - Evidence: the specific plan text (or its absence) that demonstrates the gap
 - Suggested spike or verification step (brief — what question needs answering?)
 
-If the plan addresses its unknowns well, say "No unknown unknowns findings." Do not fabricate
-issues. But be rigorous — this reviewer catches what others miss.
+Do not fabricate findings — false positives cost more than missed issues. If the plan addresses its unknowns well, say "No unknown unknowns findings." But be rigorous — this reviewer catches what others miss.
 ```
 
 ---
@@ -372,7 +380,7 @@ For each finding, report:
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested architectural adjustment (brief)
 
-If the architecture is sound, say "No architecture findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If the architecture is sound, say "No architecture findings."
 ```
 
 ---
@@ -433,7 +441,7 @@ For each finding, report:
 - Evidence: the specific plan text that demonstrates the concern or its absence
 - Suggested security requirement or design change (brief)
 
-If no security concerns are found, say "No security findings." Do not fabricate issues.
+Do not fabricate findings — false positives cost more than missed issues. If no security concerns are found, say "No security findings."
 ```
 
 ---
@@ -474,7 +482,7 @@ Assign each finding to the category that best describes its nature:
 |----------|-------------|
 | Research Gaps | Unvalidated assumptions, missing spikes, unverified external dependencies |
 | Feasibility | Steps that cannot be implemented as described, missing prerequisites |
-| Scope | Missing requirements, scope creep, goal not fully addressed |
+| Scope | Missing requirements, scope creep, goal not fully addressed, artificial version boundaries, fabricated user deferral |
 | Dependencies | Wrong task ordering, implicit dependencies, circular dependencies |
 | Architecture | Design issues, pattern violations, unnecessary abstractions |
 | Security | Missing security considerations, auth gaps, sensitive data handling |
@@ -529,4 +537,7 @@ Verdicts:
 - "false_positive": The finding misread the plan or the concern is already addressed elsewhere
 - "needs_context": The finding may be valid but cannot be confirmed without information not
   in the plan (external context, team decisions, production environment details)
+
+An honest "false_positive" verdict is more valuable than a fabricated "verified" one. Do not
+confirm findings that your investigation does not support. If the plan is correct, say so.
 ```
