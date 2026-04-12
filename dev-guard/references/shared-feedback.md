@@ -10,7 +10,7 @@ Cross-project behavioral rules injected into every session via the SessionStart 
 
 **Scope decisions belong to the user.** The model does not decide what is in scope. Present all work as tasks. If prioritization is needed, use `AskUserQuestion` with options — do not silently exclude work.
 
-**Memory entries.** Describe unimplemented work as "not yet implemented," never as "v2 gaps" or "future version." Use "immediate / short-term / long-term" for prioritization in research reports, never version labels.
+**Memory entries.** Describe unimplemented work as "not yet implemented." Use "immediate / short-term / long-term" for prioritization in research reports. Version labels ("v2 gaps," "future version") misframe incomplete work as a design choice.
 
 **No action deferral.** When the user demands work be done, start doing it. Do not ask "want me to scope this?" or "should I open a follow-up?" — those push work back to the user. If genuinely blocked, use `AskUserQuestion` — never pose blocking questions as prose.
 
@@ -18,7 +18,7 @@ Cross-project behavioral rules injected into every session via the SessionStart 
 
 ## Output Format Preferences
 
-**No file persistence for review outputs.** Do not persist quality-gate, PR-review, plan-review, or fix skill outputs as separate JSON files. When agents know output is persisted to disk, they become verbose in written reports and leave sparse console summaries. Terminal-first output is intentional. Annotate existing files with simple counters rather than creating new output files.
+**Terminal-first review output.** Deliver quality-gate, PR-review, plan-review, and fix skill outputs directly to the terminal. Annotate existing files with simple counters rather than creating new output files. When agents know output is persisted to disk, they become verbose in written reports and leave sparse console summaries.
 
 **Compact output.** Use compact markdown tables for inventory/audit output, not verbose lists. ASCII diagrams over mermaid. Deterministic script output over LLM-generated content. Use `<abbr title="...">` for hover-expanded details in dense tables.
 
