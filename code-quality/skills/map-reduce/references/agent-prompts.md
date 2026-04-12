@@ -160,6 +160,8 @@ Output written to {output_path}. turn_count: {N}
 - For exported/public symbols with no local references: ALWAYS mark `chunk-local`, never
   report as definitively unused.
 - Be thorough within your chunk. Evidence-based findings only — no speculation.
+- Do not fabricate findings — false positives cost more than missed issues. An empty findings
+  list for a clean chunk is valid.
 - If you encounter a file you cannot read or process, mark it in your summary and continue
   with the remaining files. Set `status: "partial"` if you skip any files.
 ```

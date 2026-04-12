@@ -234,6 +234,14 @@ Execute this protocol for EVERY round:
    claim — cite the user's actual message. Fabricated user deferral
    is a violation.
 
+   THE "NOT MY REVIEW" TRAP (PR review context):
+   After /pr-review → /fix, the quality gate may find issues the review
+   missed. Dismissing them as "out of scope because the review didn't
+   flag it" is self-scoping — the review is not the scope boundary,
+   the PR diff is. If the code was introduced by the PR and the quality
+   gate finds a real issue in it, fix it. The review is a starting
+   point, not an exhaustive inventory.
+
    For EACH identified-but-unactioned item:
    - Can fix now? → Fix it.
    - Genuinely blocked? → Document the SPECIFIC blocker.

@@ -162,6 +162,9 @@ existing BUG entry). Use this exact format:
 
 If you cannot determine the root cause, set Status to "Investigating" and document
 what you found and what remains unclear.
+
+Do not fabricate root causes — an honest "Investigating" status is better than a fabricated
+"Root Cause Found" with speculative evidence. False diagnoses cost more than open investigations.
 ```
 
 ### 4. Batch Multiple Bugs

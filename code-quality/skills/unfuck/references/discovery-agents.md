@@ -4,6 +4,11 @@ Seven self-contained prompt templates for Phase 1 discovery agents. Each is spaw
 
 All agents share the same output JSON schema (see [Shared Output Schema](#shared-output-schema) at the bottom).
 
+**Anti-fabrication principle (applies to all 7 agents):** Include this instruction in the
+`{context_bundle}` prepended to each agent prompt: "Do not fabricate findings — false positives
+cost more than missed issues. Reporting zero findings in a clean codebase is the correct outcome,
+not a sign of insufficient analysis."
+
 ---
 
 ## Agent 1: Dead Code Hunter

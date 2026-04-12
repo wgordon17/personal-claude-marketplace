@@ -222,6 +222,16 @@ Assess each finding and assign a triage label:
 | UAT validation | `{plan_test_plan}` is non-empty AND finding's `category` is one of `TESTING GAPS`, `CORRECTNESS`, or `SCOPE` | Queue for Phase 2 — investigator receives `{plan_test_plan}` context to check implementation against UAT scenarios |
 | Unverified | `verifier_verdict == "needs_context"` | Queue for Phase 2 — investigator will attempt to verify before fixing |
 
+### PR Scope Anchoring (pr-review source only)
+
+"Out of scope" applies ONLY to paths outside CWD (Step 1a). It does NOT apply to findings
+about code introduced by the PR. The scope boundary is the PR diff, not the upstream review's
+finding list. If the review missed an issue but the code was introduced by the PR, it is in
+scope for /fix. Investigators who discover additional issues during investigation in
+PR-introduced code should report them as `resolution` — not dismiss them as "out of scope
+because the review didn't flag it." The review is not exhaustive; that is why investigation
+exists.
+
 ### Step 1c: Triage Summary
 
 Present the triage summary to the user before proceeding:
