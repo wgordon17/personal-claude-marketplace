@@ -42,10 +42,11 @@ digraph quality_gate {
   lifecycle [label="Lifecycle Gate (BLOCKING)"];
   memory [label="Memory Gate (BLOCKING)"];
   artifact [label="Artifact Gate (BLOCKING)"];
+  bugs [label="BUGS.md Gate (CONDITIONAL)"];
   docs [label="Documentation Gate (BLOCKING)"];
   nodataloss [label="No Data Loss Gate (BLOCKING)"];
   final [label="Final Verification"];
-  detect -> layer1 -> layer1_5 -> layer1_75 -> layer2 -> lifecycle -> memory -> artifact -> docs -> nodataloss -> final;
+  detect -> layer1 -> layer1_5 -> layer1_75 -> layer2 -> lifecycle -> memory -> artifact -> bugs -> docs -> nodataloss -> final;
 }
 ```
 
@@ -662,6 +663,41 @@ Do not assume prior pushes landed or that the PR is still open. Verify:
 
 ---
 
+## BUGS.md Verification Gate (CONDITIONAL)
+
+Ensures bug tracking stays current as work progresses. This gate only runs when a
+`{memory_dir}/BUGS.md` file exists — skip entirely if no memory directory is found or
+no BUGS.md exists.
+
+**Branch prerequisite:** Run `git diff --name-only origin/main...HEAD`. If the output is
+empty (e.g., running on main itself, or no commits ahead of origin/main), skip the
+Stale Tracked In and PR detection checks silently — there are no branch-specific changes
+to match against. The Merged detection and Stale entries checks still apply (they operate
+on BUGS.md state alone, not branch context).
+
+| Check | Action |
+|-------|--------|
+| **Stale Tracked In** | *Requires non-empty git diff (skip if on main or no ahead commits).* For each entry with `**Status:** Fix Ready` and `**Tracked In:** —` (or missing field): check if the current branch's changed files (from `git diff --name-only origin/main...HEAD`) overlap with the entry's `### Files Involved` paths. Path matching: strip `:NN` line number suffixes, then match by exact file path OR common directory prefix of at least 3 components — prefixes of 1 or 2 components are too broad and do not count. If overlap exists, update `**Tracked In:**` with the current PR number (via `gh pr view --json number`) or branch name if no PR exists. |
+| **PR detection** | *Requires non-empty git diff (skip if on main or no ahead commits).* For entries with `**Tracked In:** Plan: ...`, `**Tracked In:** Roadmap: ...`, or `**Tracked In:** Branch: ...`: check if a PR now exists for the current branch that addresses those files. If so, update to `**Tracked In:** PR: #N`. |
+| **Merged detection** | For entries with `**Tracked In:** PR: #N`: check PR status via `mcp__github__pull_request_read` or `gh pr view #N --json state,mergedAt`. If merged, update to `**Tracked In:** PR: #N (merged YYYY-MM-DD)` and set `**Status:** Fixed` if still at `Fix Ready`. |
+| **Stale entries** | Flag any entry with `**Status:** Root Cause Found` and `**Reported:**` date older than 14 days with no `**Tracked In:**` reference. Report in gate output as informational (not blocking). |
+
+**Backward compatibility:** Entries created before the `Tracked In` field was added may lack
+the field entirely. Treat a missing `**Tracked In:**` line the same as `**Tracked In:** —`
+for all checks. If updating such an entry, insert `**Tracked In:** {value}` after the
+`**Impact:**` or `**Severity:**` line.
+
+**Gate behavior:** This gate is CONDITIONAL, not BLOCKING. It performs best-effort updates
+and reports findings, but does not prevent proceeding to the Documentation Gate. Bugs that
+can't be matched are noted, not escalated.
+
+**Chat output:** If any updates were made, report:
+> "BUGS.md: Updated N entries (M to PR status, K to Merged). L stale entries flagged."
+
+If no BUGS.md exists or no updates needed: omit from gate output entirely.
+
+---
+
 ## Documentation Gate (BLOCKING)
 
 Ensures documentation accurately reflects the current state of the codebase after all changes.
@@ -783,6 +819,10 @@ Memory Gate: [PASS / UPDATED]
 Artifact Gate: [PASS / N/A]
   [work-type-specific status]
 
+BUGS.md Gate: [PASS / UPDATED / SKIP (no BUGS.md)]
+  Entries updated: [count] ([PR status / Merged / Tracked In set])
+  Stale entries flagged: [count]
+
 Documentation Gate: [PASS / SKIP / N/A]
   Components on disk: [count] | Documented: [count]
   Surfaces checked: [list]
@@ -814,6 +854,9 @@ Overall: [PASS / NEEDS WORK]
 | `session-end` | Complementary — quality-gate reviews accuracy; session-end does final save. |
 | `swarm` Phase 7 | Invokes quality-gate as the final validation step. |
 | `code-quality:fix` | Standalone finding fixer for non-swarm workflows. Not a source — quality-gate fixes findings inline. Suggest /quality-gate after /fix for verification. |
+| `code-quality:bug-investigation` | BUGS.md Verification Gate updates `Tracked In` field for entries created by `/bug-investigation`. |
+| `code-quality:incremental-planning` | Producer: sets `Tracked In: Plan: ...` on overlapping BUGS.md entries when a plan is created. quality-gate verifies and advances those references. |
+| `code-quality:roadmap` | Producer: sets `Tracked In: Roadmap: plans/{filename}.md (Phase N)` on overlapping BUGS.md entries during roadmap generation. quality-gate verifies and advances those references. |
 
 ---
 
