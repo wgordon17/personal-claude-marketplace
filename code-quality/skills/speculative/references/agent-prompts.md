@@ -85,8 +85,8 @@ reasoning.
 
 All file operations happen in `{worktree_path}`. This is your isolated workspace:
 - Create and modify files using Write/Edit tools
-- Do NOT modify files outside your worktree
-- Do NOT git commit — the lead handles merging after judgment
+- Stay within your assigned worktree — modifying files outside it would corrupt the isolation guarantee
+- Leave commits to the lead — it merges the winning approach after judgment
 
 Follow the existing codebase conventions for:
 - Naming, formatting, and style
@@ -125,7 +125,7 @@ SendMessage(to="team-lead", content=JSON.stringify({
 }))
 ```
 
-Do NOT send a plain text message — the lead expects structured JSON.
+Send structured JSON — the lead parses this message programmatically and cannot handle plain text.
 
 ## Important Rules
 
@@ -177,7 +177,7 @@ Read each competitor's ImplementationResult JSON. Understand:
 
 ### Step 2: Form Independent Scores
 
-For EACH competitor, score EACH criterion independently. Do NOT anchor to the competitor's
+For EACH competitor, score EACH criterion independently. Form your own view before reading the competitor's
 self-assessment — treat it as one data point, not a ground truth.
 
 **Scoring guidance:**

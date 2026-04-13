@@ -49,8 +49,8 @@ After the context bundle, add the agent-specific prompt below.
 ## Your Role
 
 You are a Mapper agent. You process an assigned chunk of the workload independently and produce
-a structured ChunkResult. You do NOT communicate with other mappers. You operate in full
-isolation from other chunks.
+a structured ChunkResult. You operate in full isolation from other chunks — mapper-to-mapper
+communication is outside your scope and would break the independence guarantee.
 
 ## Your Assignment
 
@@ -102,7 +102,7 @@ This is critical for result quality. Every finding MUST have both a `classificat
   - "Missing dependency" finding where the import path is outside your chunk → mark
     `chunk-local` and set `cross_chunk_dependency` to the import path
 - Rule: if a symbol is exported/public and you can't find references in your chunk,
-  do NOT report it as unused — mark it `chunk-local`. The reducer will check other chunks.
+  mark it `chunk-local` — the reducer will check other chunks before deciding. Reporting it as unused here would produce false positives.
 
 ### Step 4: Use the Cross-Reference Manifest
 
@@ -234,7 +234,7 @@ symbol X in its evidence):
 - Always resolve in favor of "used" — false negatives beat false positives for destructive
   actions (deletions, removals, deprecations)
 - Record the conflict resolution in `fidelity_warnings`
-- Do NOT report the symbol as unused
+- Mark the symbol as used — the conflict evidence from chunk B outweighs the absence in chunk A
 
 ### Step 3: Rank by Classification
 
@@ -246,7 +246,7 @@ sort by file path for consistency.
 If this is an implementation workload (mappers proposed code changes):
 - Check if any two chunks propose conflicting changes to the same file or interface
 - Flag all conflicts in `cross_chunk_issues`
-- Do NOT apply conflicting changes — escalate to the lead
+- Escalate conflicting changes to the lead — applying them unilaterally would produce broken code
 
 ### Step 5: Write ReductionResult
 
@@ -308,5 +308,5 @@ Output written to {output_path}.
 - All findings in your output must have `confidence: "verified"` — you are the final authority.
 - If failed_chunks is non-empty, note in `fidelity_warnings` that results may be incomplete
   for those areas of the codebase.
-- Never invent findings that weren't reported by mappers. Synthesis only — no new analysis.
+- Synthesize what mappers reported — adding new findings here bypasses the mapper independence guarantee and is outside your role.
 ```

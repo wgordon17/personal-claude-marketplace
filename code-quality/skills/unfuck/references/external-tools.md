@@ -305,9 +305,9 @@ src/models.py:15: unused import 'typing.Optional' (90% confidence)
 
 The orchestrator detects tools during Phase 0 using **individual Bash version checks** (not a monolithic script). Each tool is checked with a simple version command — if exit code is 0, the tool is available.
 
-**Do NOT use `|| echo` or `&& echo` patterns** — these are blocked by the tool-selection-guard hook. Instead, run each version command independently and check its exit code.
+**Use semicolons or individual Bash calls, not `|| echo` or `&& echo`** — those patterns are blocked by the tool-selection-guard hook. Run each version command independently and check its exit code.
 
-**Do NOT use `env -u` for proxy workarounds** — this does not reliably fix semgrep proxy issues. If a tool fails, mark it as unavailable and fall back to agent analysis.
+**Use `unset` for proxy workarounds, not `env -u`** — `env -u` does not reliably fix semgrep proxy issues. If a tool fails, mark it as unavailable and fall back to agent analysis.
 
 ### Detection approach
 

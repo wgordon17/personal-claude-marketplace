@@ -993,7 +993,7 @@ Frequent `as` casts and non-null assertions indicate the types don't match reali
 
 ## FALSE POSITIVE AWARENESS
 
-Do NOT flag these as slop — they are legitimate patterns:
+These are legitimate patterns — verify before flagging:
 
 1. **Dependency injection for testability** — interfaces with one production implementation but used for test mocking are justified.
 2. **Error handling at actual system boundaries** — try/catch at API endpoints, file I/O, network calls, and database operations is correct.
@@ -1379,7 +1379,7 @@ For every markdown file found in Step 1:
    - Remove punctuation except hyphens
    - `## My Section!` becomes `#my-section`
 
-4. **Do NOT check external URLs** (https://...) — we cannot verify these without network access and it's out of scope.
+4. **Skip external URLs** (https://...) — network access is not available in this context and URL checking is out of scope.
 
 ### Step 4: API Documentation Drift
 

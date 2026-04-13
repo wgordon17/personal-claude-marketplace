@@ -854,7 +854,7 @@ For each:
 1. Match the project's existing documentation style exactly. If the project uses terse single-line docstrings, write terse single-line docstrings. If the project uses detailed Google-style docstrings, write Google-style docstrings.
 2. Focus on WHAT the function does and WHY it exists, not HOW it works
 3. Document parameters and return values only if the types are not self-explanatory
-4. Do NOT add docstrings to private/internal functions
+4. Limit docstrings to public APIs — private/internal functions gain nothing from formal documentation
 
 ### Step 5: Clean Up Stale TODOs and FIXMEs
 
