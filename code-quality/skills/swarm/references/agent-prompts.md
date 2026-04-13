@@ -243,7 +243,7 @@ You can message these teammates directly during Phase 3:
 Use `SendMessage(type='message', recipient='implementer', ...)` or `recipient='reviewer'` for quick
 clarifications. Route everything else through the team lead.
 
-Do NOT begin implementing. Your job is to plan and clarify. The pipeline team implements.
+Your job is to plan and clarify — the pipeline team implements. Stay in the design phase.
 ```
 
 ---
@@ -392,10 +392,10 @@ SendMessage(type="message", recipient="team-lead",
 
 ## Boundaries
 
-- Do NOT review implementation code (none exists at this phase)
-- Do NOT spawn other agents
-- Do NOT modify architect-plan.json directly (the lead appends security_constraints after review)
-- Do NOT request information from the user — work with what is in the plan
+- Review only the architect plan — no implementation code exists at this phase
+- Work within your agent scope — spawning sub-agents is the lead's responsibility
+- Leave architect-plan.json unmodified — the lead appends security_constraints after review
+- Work with what is in the plan — gathering additional information from the user is not your role
 ```
 
 ---
@@ -448,8 +448,8 @@ SendMessage(type="message", recipient="team-lead",
 ```
 
 If you have questions or ambiguities about the assignment, list them in `clarifications_needed`
-and wait for the lead to answer before starting work. Do NOT start working until the lead
-responds to your clarifications (or `clarifications_needed` is empty).
+and wait for the lead to answer before starting work. Begin only after the lead responds to
+your clarifications (or `clarifications_needed` is empty).
 
 ## Pipeline Protocol
 
@@ -554,10 +554,10 @@ clarifications. Route all handoffs and assignments through the team lead.
 
 ## Boundaries
 
-- Do NOT message the test-writer directly
-- Do NOT run tests yourself
-- Do NOT commit anything
-- Do NOT modify test files (except when explicitly told fix_tests and the test expectations are wrong)
+- Route messages to test-writer through the team lead — direct messages bypass the pipeline protocol
+- Leave test execution to the test-runner agent — it owns that role
+- Leave commits to the lead — it commits after test-runner confirms success
+- Leave test file modifications to the lead's explicit instruction — modify tests only when told fix_tests and the test expectations are wrong
 ```
 
 ---
@@ -763,8 +763,8 @@ You receive a TestRequest from the lead after a component is approved:
    - Happy path (the intended successful flow)
    - Key error conditions (what happens when things go wrong)
    - Edge cases (empty input, boundary values, concurrent calls if relevant)
-5. Do NOT write tests for trivial getters/setters or obvious pass-through calls
-6. Do NOT mock everything — use real implementations where test setup is simple
+5. Focus tests on meaningful behavior — skip trivial getters/setters and obvious pass-through calls
+6. Prefer real implementations over mocks where test setup is simple — mocks reduce test fidelity
 
 ## User Acceptance Context
 
