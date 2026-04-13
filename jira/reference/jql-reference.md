@@ -129,7 +129,9 @@ Common orderings:
 
 ## MGMT Custom Fields
 
-These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
+These IDs are point-in-time snapshots (verified 2026-04-08). Use `--parent` for Epic Link on
+classic project non-subtask types (automatically sets customfield_10014 via epic.link config).
+Use `--custom` flag only for truly custom fields not covered by built-in flags.
 
 | Field | Custom Field ID | JQL Usage |
 |-------|-----------------|-----------|
@@ -193,20 +195,6 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 
 - `cascadeOption(parentValue[, childValue])` — Cascading select custom field matching
 
-## Discovering Custom JQL Functions
-
-Marketplace apps installed on redhat.atlassian.net may provide additional JQL functions.
-To discover all available functions (built-in + app-provided), use the JQL autocomplete
-endpoint via `fetchAtlassian`:
-
-```
-fetchAtlassian with ARI: ari:cloud:jira::site/<cloudId>
-GET /rest/api/3/jql/autocompletedata
-```
-
-The response includes a `jqlReservedWords` array and `visibleFunctionNames` listing all
-available JQL functions including any from installed apps.
-
 ## ScriptRunner Functions — NOT Available on Cloud
 
 The following functions existed on Jira Server but are **absent on Atlassian Cloud**. Do not use them — they return zero results or errors:
@@ -219,11 +207,14 @@ The following functions existed on Jira Server but are **absent on Atlassian Clo
 - `epicsOf()` / `issuesInEpics()` — epic hierarchy
 - `portfolioChildrenOf()` / `portfolioParentsOf()` — Advanced Roadmaps hierarchy
 
-For link traversal on Cloud, use `linkedIssues()` function in JQL, or `getJiraIssueRemoteIssueLinks` and `getIssueLinkTypes` MCP tools for programmatic access.
+For link traversal on Cloud, use `linkedIssues()` function in JQL. `getJiraIssueRemoteIssueLinks`
+(remote links) has no CLI equivalent. For link types, use known types (Blocks, Clones,
+Duplicate, Relates) or discover via `jira issue link` error output.
 
 ## OSAC Query Patterns
 
-Pre-built JQL scoped to the OSAC component in MGMT project:
+Pre-built JQL scoped to the OSAC component in MGMT project. Use with
+`jira issue list -q "<JQL>" --plain --columns KEY,SUMMARY,STATUS,TYPE`:
 
 ### My Open OSAC Work
 
@@ -276,7 +267,7 @@ project = MGMT AND component = OSAC AND labels = "gori-ga" AND statusCategory !=
 5. **Use parentheses for OR groups** — `(A OR B) AND C`
 6. **Use `statusCategory` for cross-project queries** — avoid workflow-specific status names
 7. **Test in Jira UI** — validate at https://redhat.atlassian.net/jira before coding into plans
-8. **Prefer typed MCP tools** — use `searchJiraIssuesUsingJql` over `searchAtlassian` for Jira-only queries
+8. **Use `jira issue list -q`** for JQL queries via CLI
 
 ## Troubleshooting
 

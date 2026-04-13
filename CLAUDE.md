@@ -46,7 +46,7 @@ Personal Claude Code plugin marketplace with 10 plugins. Master registry: `.clau
 - **code-quality/** — Agents (architect, security, QA, performance, test-runner, code-reviewer, code-simplifier), skills (20), commands (4), and orchestration
 - **git-tools/** — Git history, hooks, commit review, contributing guide; SessionStart git instructions
 - **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
-- **jira/** — Jira integration via Atlassian Rovo MCP; OSAC defaults (project=MGMT, component=OSAC); skill (`/jira:jira`) and spawnable agent (`jira:jira-agent`)
+- **jira/** — Jira integration via jira CLI (MCP temporarily disabled); OSAC defaults (project=MGMT, component=OSAC); skill (`/jira:jira`) and spawnable agent (`jira:jira-agent`)
 
 Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 
