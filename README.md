@@ -85,9 +85,9 @@ Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__gith
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| jira | Jira integration for issue tracking, querying, and management — OSAC defaults with full redhat.atlassian.net support | 1 skill, 1 agent, 3 reference files | [README](jira/README.md) |
+| jira | Jira integration via jira CLI — OSAC defaults with full redhat.atlassian.net support (MCP temporarily disabled) | 1 skill, 1 agent, 3 reference files | [README](jira/README.md) |
 
-Enables `mcp__plugin_jira_mcp-atlassian-prod__*` tools via Atlassian Rovo MCP server. Defaults to OSAC scope (project=MGMT, component=OSAC). Operates across any project on request.
+Uses `jira` CLI (ankitpokhrel/jira-cli) for all Jira operations. Defaults to OSAC scope (project=MGMT, component=OSAC). Operates across any project on request.
 
 **Skill:** `/jira:jira` — Interactive Jira queries, issue management, and CRUD
 
@@ -139,10 +139,11 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 - **GITHUB_PERSONAL_ACCESS_TOKEN**: Set in your environment — Required for MCP server authentication. Needs `repo`, `workflow`, `read:org` scopes (or broader) depending on toolsets used.
 
-### For Jira MCP
+### For Jira CLI
 
-- **Atlassian Rovo OAuth**: Run `/mcp` and authenticate the `mcp-atlassian-prod` server on first use. OAuth credentials are keyed by plugin name — must re-authenticate even if previously authenticated via `hcm-jira-administrator-agent` (the `jira` plugin uses a separate credential entry).
-- **Optional write-tool approval**: Add desired write tools to `~/.claude/settings.local.json` under `permissions.allow` to skip per-use prompts. See [jira/README.md](jira/README.md) for the full JSON snippet.
+- **jira CLI**: `brew install jira-cli` — run `jira init` to configure (server: redhat.atlassian.net, project: MGMT)
+- **API token**: Export `JIRA_API_TOKEN` and `JIRA_AUTH_TYPE` in your shell environment
+- **Optional write-command approval**: Add `Bash(jira issue create:*)`, `Bash(jira issue edit:*)`, `Bash(jira issue move:*)`, `Bash(jira issue comment add:*)`, `Bash(jira issue worklog add:*)`, `Bash(jira issue link:*)`, `Bash(jira epic create:*)`, `Bash(jira epic add:*)`, `Bash(jira sprint add:*)` to `~/.claude/settings.local.json` under `permissions.allow`. For read operations, also add `Bash(jira issue list:*)`, `Bash(jira issue view:*)`, `Bash(jira project:*)`. See [jira/README.md](jira/README.md) for the full JSON snippet.
 
 ### For LSP Plugins
 
@@ -232,7 +233,7 @@ These MCP servers enhance functionality but are not required for core operation 
 | MCP Server | Plugin | Dependency | Purpose |
 |------------|--------|------------|---------|
 | **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
-| **[Atlassian Rovo MCP](https://mcp.atlassian.com/v1/mcp)** | jira | **Hard** (plugin is the server) | Full Jira API: issue query, create, update, transitions, comments, worklogs via `mcp__plugin_jira_mcp-atlassian-prod__*` tools. |
+| **[jira CLI](https://github.com/ankitpokhrel/jira-cli)** | jira | **Hard** (CLI must be installed) | Full Jira API: issue query, create, update, transitions, comments, worklogs via `jira` CLI commands. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
 | **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode. Alternative tools work. |
@@ -257,8 +258,8 @@ No hard dependencies on external plugins remain. All previously referenced exter
 
 Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** = degraded without it.
 
-| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | Atlassian Rovo |
-|--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|----------------|
+| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | jira CLI |
+|--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|----------|
 | **code-quality** | soft | HARD | soft | soft | soft | soft | -- | -- | -- |
 | **git-tools** | -- | soft | -- | -- | -- | HARD | soft | HARD | -- |
 | **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |

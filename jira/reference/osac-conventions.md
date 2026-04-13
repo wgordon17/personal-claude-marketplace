@@ -20,7 +20,9 @@ Epic
 - **Bug** — Defects; uses the Bugzilla-legacy workflow (see Status Workflows)
 - **Sub-task** — Rarely used; child of Story/Task
 
-**Epic Link:** Stories, Tasks, and Bugs are linked to their parent Epic via `customfield_10014` (`"Epic Link"`). Set this field when creating issues under an existing epic.
+**Epic Link:** Stories, Tasks, and Bugs are linked to their parent Epic via `--parent MGMT-12345`
+(automatically sets customfield_10014 from `epic.link` config for classic project non-subtask types).
+Do NOT use `--custom customfield_10014=...` as a workaround (would double-set the field).
 
 ## Status Workflows
 
@@ -59,7 +61,8 @@ statusCategory = "In Progress"
 statusCategory = Done
 ```
 
-Always validate available transitions with `getTransitionsForJiraIssue` before calling `transitionJiraIssue` — not all transitions are available from every state.
+Use `jira issue move KEY STATE` for transitions. If the state name is wrong, the CLI returns
+valid transitions in the error output. No separate discovery step needed.
 
 ## Description Templates
 
@@ -117,7 +120,8 @@ What should happen instead.
 - Component B: version
 ```
 
-Always use `contentFormat: "markdown"` when writing descriptions via MCP tools. The server converts markdown to Atlassian Document Format (ADF). See `jira/reference/jira-formatting.md` for markdown guidance.
+The jira CLI accepts markdown natively for `-b` body text. No format parameter needed.
+See `jira/reference/jira-formatting.md` for markdown guidance.
 
 ## Sprint, Labels, and Defaults
 
@@ -126,7 +130,8 @@ Always use `contentFormat: "markdown"` when writing descriptions via MCP tools. 
 - **Naming pattern:** `OSAC Sprint <N>` (sequential integers, e.g., `OSAC Sprint 42`)
 - **Board ID:** 4269
 - **Custom field:** `customfield_10020` (alias `sprint` may work in `fields` arrays; use the custom field ID in JQL for reliability)
-- **Assignment:** Set sprint on creation for in-sprint work; omit for backlog items
+- **Assignment:** Sprint requires post-creation step: `jira sprint add SPRINT_ID ISSUE-KEY`
+  (no `--sprint` flag on `jira issue create`). Omit for backlog items.
 
 ### Labels
 
@@ -153,11 +158,15 @@ Do not set these fields when creating OSAC issues unless specifically requested.
 
 ## Custom Field IDs
 
-These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
+These IDs are point-in-time snapshots (verified 2026-04-08). Use `--parent` for Epic Link on
+classic project non-subtask types (automatically sets customfield_10014 via epic.link config).
+Use `--custom` flag only for truly custom fields not covered by built-in flags (e.g.,
+`--custom customfield_10016=5` for Story Points). No runtime field discovery available via
+CLI — use the documented field IDs.
 
 | Field | Custom Field ID | Notes |
 |-------|-----------------|-------|
-| Epic Link | `customfield_10014` | Links issues to their parent Epic |
+| Epic Link | `customfield_10014` | Use `--parent` flag instead of `--custom` |
 | Sprint | `customfield_10020` | Sprint assignment |
 | Story Points | `customfield_10016` | Present but unused in OSAC |
 

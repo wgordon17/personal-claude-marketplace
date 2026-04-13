@@ -1,6 +1,17 @@
 # jira
 
-Jira integration plugin for Claude Code. Provides issue tracking, querying, and management for redhat.atlassian.net, with OSAC-focused defaults and full cross-project capability.
+Jira integration plugin for Claude Code via the `jira` CLI. MCP server access (Atlassian Rovo)
+is temporarily disabled — revert this commit to restore it.
+
+## Prerequisites
+
+1. Install jira CLI: `brew install jira-cli`
+2. Run `jira init` to configure (server: `https://redhat.atlassian.net`, project: `MGMT`)
+3. Set up API token:
+   - Generate at https://id.atlassian.com/manage-profile/security/api-tokens
+   - Export `JIRA_API_TOKEN` in your shell environment
+   - Export `JIRA_AUTH_TYPE=basic` (for Personal Access Tokens) or `JIRA_AUTH_TYPE=bearer` (for OAuth tokens)
+4. Verify: `jira issue list -q "project = MGMT" --plain --paginate 0:1`
 
 ## Interfaces
 
@@ -24,73 +35,46 @@ Spawn jira:jira-agent to create a MGMT task for X under epic MGMT-YYYYY
 
 The agent carries full OSAC conventions and returns the created issue URL.
 
-## MCP Server Setup
+## Write Command Approval
 
-This plugin uses the Atlassian Rovo MCP server (`mcp-atlassian-prod`).
-
-**First-time setup:**
-1. Run `/mcp` in Claude Code
-2. Authenticate the `mcp-atlassian-prod` server via Atlassian Rovo OAuth
-3. Complete the OAuth flow in your browser
-
-**Important:** OAuth credentials are keyed by plugin name. Even if you previously authenticated via `hcm-jira-administrator-agent`, you must re-authenticate for the `jira` plugin — it uses a separate credential entry (`plugin:jira:mcp-atlassian-prod`).
-
-## Capabilities
-
-| Category | Operations |
-|----------|-----------|
-| **Query** | JQL search, issue fetch, epic/sprint queries, cross-project search |
-| **Create** | New issues (Task, Story, Bug, Epic, Sub-task) with OSAC defaults |
-| **Update** | Field edits, status transitions, comment, worklog |
-| **Link** | Issue linking with configurable link types |
-| **Discover** | Project metadata, issue type fields, workflow transitions |
-
-## Integration with Existing Skills
-
-Plan tasks can reference the jira agent directly. No changes to existing skills are needed — the integration is plan-driven:
-
-```
-## Task: Create MGMT tracking issue
-Spawn jira:jira-agent to create a MGMT Story under epic MGMT-12345 with summary "X" and description per osac-conventions.md templates.
-```
-
-When using `/incremental-planning` for OSAC work, include Jira card creation as plan tasks to keep Jira synchronized with implementation.
-
-## Write Tool Approval
-
-The dev-guard auto-approves Jira READ-ONLY tools. Write tools prompt for permission on each use unless you add them to `~/.claude/settings.local.json`.
-
-To auto-approve write operations, add to your existing `permissions.allow` array:
+CLI write commands prompt for permission on each use unless you add them to
+`~/.claude/settings.local.json`. To auto-approve, add to your existing `permissions.allow` array:
 
 ```json
 {
   "permissions": {
     "allow": [
-      "mcp__plugin_jira_mcp-atlassian-prod__editJiraIssue",
-      "mcp__plugin_jira_mcp-atlassian-prod__createJiraIssue",
-      "mcp__plugin_jira_mcp-atlassian-prod__transitionJiraIssue",
-      "mcp__plugin_jira_mcp-atlassian-prod__addCommentToJiraIssue",
-      "mcp__plugin_jira_mcp-atlassian-prod__createIssueLink",
-      "mcp__plugin_jira_mcp-atlassian-prod__addWorklogToJiraIssue"
+      "Bash(jira issue create:*)",
+      "Bash(jira issue edit:*)",
+      "Bash(jira issue move:*)",
+      "Bash(jira issue comment add:*)",
+      "Bash(jira issue worklog add:*)",
+      "Bash(jira issue link:*)",
+      "Bash(jira epic create:*)",
+      "Bash(jira epic add:*)",
+      "Bash(jira sprint add:*)"
     ]
   }
 }
 ```
 
-The most commonly needed are `editJiraIssue`, `createJiraIssue`, `transitionJiraIssue`, and `addCommentToJiraIssue`. Add individual entries as needed — you need not auto-approve all six.
+For read operations, also consider adding:
 
-## HCM Plugin Migration
+```json
+"Bash(jira issue list:*)",
+"Bash(jira issue view:*)",
+"Bash(jira project:*)"
+```
 
-If you are migrating from the old `hcm-jira-administrator-agent` plugin:
+## Restoring MCP Access
 
-1. Install and authenticate this plugin first (run `/mcp` → auth `mcp-atlassian-prod`)
-2. Verify `/jira:jira` works for your common queries
-3. Uninstall the old plugin:
-   ```bash
-   claude plugin uninstall hcm-jira-administrator-agent@rosa-claude-plugins
-   ```
-4. Clean up `~/.claude/settings.local.json` — remove any `mcp__plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__*` entries from `permissions.allow`
-5. Optionally remove the HCM entry from dev-guard's `mcp_constants.py` (the old key is harmless but dead)
+To restore Atlassian Rovo MCP access, revert this commit:
+
+```bash
+git revert <commit-hash>
+```
+
+Then re-authenticate via `/mcp` in Claude Code.
 
 ## Installation
 
