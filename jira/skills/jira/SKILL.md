@@ -55,7 +55,8 @@ Unless the user asks about other projects, apply these defaults to all queries a
 - `project = MGMT`
 - `component = OSAC`
 - Label: `OSAC`
-- Sprint naming: `OSAC Sprint <N>` (sequential numbering; use current open sprint when creating in-sprint issues)
+- Sprint naming: `OSAC Sprint <N>` (sequential numbering; sprint assignment is a post-creation
+  step — see Creating Issues below)
 - Board: `4269`
 
 When the user says "my work" without project context, use OSAC defaults.

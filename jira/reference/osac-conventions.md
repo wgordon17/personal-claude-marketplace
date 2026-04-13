@@ -130,7 +130,8 @@ See `jira/reference/jira-formatting.md` for markdown guidance.
 - **Naming pattern:** `OSAC Sprint <N>` (sequential integers, e.g., `OSAC Sprint 42`)
 - **Board ID:** 4269
 - **Custom field:** `customfield_10020` (alias `sprint` may work in `fields` arrays; use the custom field ID in JQL for reliability)
-- **Assignment:** Set sprint on creation for in-sprint work; omit for backlog items
+- **Assignment:** Sprint requires post-creation step: `jira sprint add SPRINT_ID ISSUE-KEY`
+  (no `--sprint` flag on `jira issue create`). Omit for backlog items.
 
 ### Labels
 
