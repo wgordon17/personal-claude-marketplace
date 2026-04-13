@@ -66,6 +66,8 @@ When the user asks about another project or "everything", drop the OSAC filter.
 - `--plain` for human-readable tables
 - `--raw` for JSON output
 - `--columns KEY,SUMMARY,STATUS,TYPE` for specific columns
+- Always include `--plain` or `--raw` in Bash calls. Without these flags, jira commands launch
+  an interactive TUI that hangs in non-interactive contexts.
 
 ### Pagination
 
@@ -109,7 +111,9 @@ When creating Stories/Tasks/Bugs under an epic, use `--parent MGMT-12345` to set
 `--parent` automatically sets customfield_10014 (from `epic.link` config) for classic project
 non-subtask types — do NOT use `--custom customfield_10014=...` (would double-set the field).
 
-When creating an in-sprint issue, set the sprint field to the current `OSAC Sprint <N>`.
+When creating an in-sprint issue, sprint assignment requires a separate step after creation:
+discover the sprint ID with `jira sprint list --table --plain --state active`, then
+`jira sprint add SPRINT_ID ISSUE-KEY`. There is no `--sprint` flag on `jira issue create`.
 
 Before writing descriptions, read `jira/reference/osac-conventions.md` for the appropriate
 template (Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to write markdown correctly.

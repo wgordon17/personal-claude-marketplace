@@ -4,16 +4,15 @@ Markdown style guide for writing Jira issue descriptions and comments via the ji
 
 ## How Formatting Works
 
-The jira CLI supports both GitHub-flavored markdown and Jira wiki markup for `-b` body text
-and `--template` input. The CLI handles conversion to the format required by the Jira API
-internally. Write standard CommonMark markdown — the CLI handles the rest.
+The jira CLI accepts `-b` body text and `--template` input, handling conversion to the Jira
+API format internally. Write standard CommonMark markdown — the CLI handles the rest.
 
 The CLI does not require format parameters. Use `--plain` for readable output and `--raw`
 for JSON.
 
 ## Write Standard Markdown
 
-Write standard CommonMark markdown. Do NOT write Jira wiki markup (`h1.`, `*bold*`, `{{monospace}}`, `{code}`). The wiki markup syntax is the wrong format for CLI-based writes.
+Write standard CommonMark markdown. Do NOT write Jira wiki markup (`h1.`, `*bold*`, `{{monospace}}`, `{code}`). While the CLI may accept wiki markup, prefer CommonMark for consistency and portability.
 
 **Wrong (wiki markup — do not use):**
 ```

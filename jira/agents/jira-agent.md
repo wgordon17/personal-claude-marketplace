@@ -112,11 +112,14 @@ When the spawning task involves OSAC/MGMT work, apply these defaults:
 - **Project:** `MGMT`
 - **Component:** `OSAC`
 - **Label:** `OSAC` (always add to newly created issues)
-- **Sprint:** current `OSAC Sprint <N>` (sequential numbering) when instructed
+- **Sprint:** current `OSAC Sprint <N>` (sequential numbering) when instructed — requires
+  post-creation step: `jira sprint add SPRINT_ID ISSUE-KEY` (see Sprint Operations below)
 - **Board:** 4269
 
 Use `--plain` for human-readable output and `--raw` for JSON output.
 Use `--columns KEY,SUMMARY,STATUS,TYPE` for specific column selection.
+Always include `--plain` or `--raw` in Bash calls. Without these flags, jira commands launch
+an interactive TUI that hangs in non-interactive contexts.
 
 Before creating any OSAC issue, read:
 - `jira/reference/osac-conventions.md` — description templates, field conventions, label usage
