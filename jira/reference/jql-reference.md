@@ -207,9 +207,9 @@ The following functions existed on Jira Server but are **absent on Atlassian Clo
 - `epicsOf()` / `issuesInEpics()` — epic hierarchy
 - `portfolioChildrenOf()` / `portfolioParentsOf()` — Advanced Roadmaps hierarchy
 
-For link traversal on Cloud, use `linkedIssues()` function in JQL. `getJiraIssueRemoteIssueLinks`
-(remote links) has no CLI equivalent. For link types, use known types (Blocks, Clones,
-Duplicate, Relates) or discover via `jira issue link` error output.
+For link traversal on Cloud, use `linkedIssues()` function in JQL. Remote issue links
+(cross-instance links) have no CLI equivalent. For link types, use known types (Blocks,
+Clones, Duplicate, Relates) or discover via `jira issue link` error output.
 
 ## OSAC Query Patterns
 

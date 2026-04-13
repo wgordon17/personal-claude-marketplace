@@ -4,9 +4,9 @@ Markdown style guide for writing Jira issue descriptions and comments via the ji
 
 ## How Formatting Works
 
-The jira CLI automatically converts CommonMark markdown to Jira wiki markup for `-b` body
-text (via the Jira REST API v2 endpoint, which accepts wiki markup natively). Write standard
-CommonMark markdown — the CLI handles the conversion.
+The jira CLI supports both GitHub-flavored markdown and Jira wiki markup for `-b` body text
+and `--template` input. The CLI handles conversion to the format required by the Jira API
+internally. Write standard CommonMark markdown — the CLI handles the rest.
 
 The CLI does not require format parameters. Use `--plain` for readable output and `--raw`
 for JSON.

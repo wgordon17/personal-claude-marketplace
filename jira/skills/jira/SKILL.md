@@ -118,6 +118,10 @@ template (Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to writ
 jira issue create -p MGMT -t Task -s "Summary" -b "Description" -l OSAC -C OSAC --no-input --raw
 ```
 
+Note: `-b` and `--template` are mutually exclusive — `-b` takes precedence. Use `-b` for
+short inline text. Use `--template -` (without `-b`) for multi-line or LLM-generated content
+via stdin.
+
 Parse key from JSON output: `jq -r '.key'`
 
 Fallback (if `--raw` returns non-JSON output or is unsupported): run without `--raw` and
