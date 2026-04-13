@@ -677,7 +677,7 @@ on BUGS.md state alone, not branch context).
 
 | Check | Action |
 |-------|--------|
-| **Stale Tracked In** | *Requires non-empty git diff (skip if on main or no ahead commits).* For each entry with `**Status:** Fix Ready` and `**Tracked In:** —` (or missing field): check if the current branch's changed files (from `git diff --name-only origin/main...HEAD`) overlap with the entry's `### Files Involved` paths. Path matching: strip `:NN` line number suffixes, then match by exact file path OR common directory prefix of at least 3 components — prefixes of 1 or 2 components are too broad and do not count. If overlap exists, update `**Tracked In:**` with the current PR number (via `gh pr view --json number`) or branch name if no PR exists. |
+| **Stale Tracked In** | *Requires non-empty git diff (skip if on main or no ahead commits).* For each entry with `**Status:** Fix Ready` and `**Tracked In:** —` (or missing field): check if the current branch's changed files (from `git diff --name-only origin/main...HEAD`) overlap with the entry's `### Files Involved` paths. Path matching: strip `:NN` line number suffixes, then match by exact file path OR common directory prefix of at least 3 components — prefixes of 1 or 2 components are too broad and do not count. If overlap exists, update `**Tracked In:**` to `PR: #N` (via `gh pr view --json number`) or `Branch: {branch-name}` if no PR exists. |
 | **PR detection** | *Requires non-empty git diff (skip if on main or no ahead commits).* For entries with `**Tracked In:** Plan: ...`, `**Tracked In:** Roadmap: ...`, or `**Tracked In:** Branch: ...`: check if a PR now exists for the current branch that addresses those files. If so, update to `**Tracked In:** PR: #N`. |
 | **Merged detection** | For entries with `**Tracked In:** PR: #N`: check PR status via `mcp__github__pull_request_read` or `gh pr view #N --json state,mergedAt`. If merged, update to `**Tracked In:** PR: #N (merged YYYY-MM-DD)` and set `**Status:** Fixed` if still at `Fix Ready`. |
 | **Stale entries** | Flag any entry with `**Status:** Root Cause Found` and `**Reported:**` date older than 14 days with no `**Tracked In:**` reference. Report in gate output as informational (not blocking). |
@@ -819,7 +819,7 @@ Memory Gate: [PASS / UPDATED]
 Artifact Gate: [PASS / N/A]
   [work-type-specific status]
 
-BUGS.md Gate: [PASS / UPDATED / SKIP (no BUGS.md)]
+BUGS.md Gate: [PASS / UPDATED / SKIP (no BUGS.md)] (omit if no BUGS.md or no updates)
   Entries updated: [count] ([PR status / Merged / Tracked In set])
   Stale entries flagged: [count]
 

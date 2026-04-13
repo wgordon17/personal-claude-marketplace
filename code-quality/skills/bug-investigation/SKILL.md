@@ -311,7 +311,7 @@ Mitigation strategies:
 1. Remove Fixed entries
 2. Verify Fix Ready entries
 3. Keep Investigating/Root Cause Found entries
-4. Migrate pre-existing entries missing `Tracked In:` → add `**Tracked In:** —` after Impact/Severity
+4. Migrate pre-existing entries missing `Tracked In:` → add `**Tracked In:** —` after Impact or Severity line
 ```
 
 After bugs are documented with "Root Cause Found" status, run `/fix` to implement resolution

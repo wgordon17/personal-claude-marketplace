@@ -5,9 +5,10 @@ description: >-
   (GH issues, Jira cards). Use when Claude tries to enter plan mode (EnterPlanMode is denied
   by hook), when asked to "plan", "design an approach", "how should we implement", or before
   any multi-file implementation task. Asks clarifying questions first, writes plan to file
-  incrementally with file structure mapping, per-task quality review (sonnet subagent), tiered
-  breakpoints for scope vs detail ambiguity, and assumption surfacing in Phase 6. Provides
-  research context and summaries in chat for feedback. Never displays full plan content in chat.
+  incrementally with file structure mapping, BUGS.md cross-referencing (sets Tracked In for
+  overlapping bug entries), per-task quality review (sonnet subagent), tiered breakpoints for
+  scope vs detail ambiguity, and assumption surfacing in Phase 6. Provides research context
+  and summaries in chat for feedback. Never displays full plan content in chat.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
 ---
 
@@ -107,8 +108,8 @@ specific questions — not generic ones.
   lessons — especially Architecture and Planning categories — into your approach without
   announcing each one. Do not quote lessons verbatim in chat.
 - Check `{memory_dir}/BUGS.md` (if it exists) for open bug entries whose `### Files Involved`
-  paths overlap with the areas being planned. Note any overlaps — these inform Phase 4's
-  BUGS.md cross-reference step.
+  paths overlap with the areas being planned. Note any overlaps — these inform Phase 4
+  (section 2.5. BUGS.md Cross-Reference).
 - Search **claude-mem** MCP for relevant past work, decisions, and learnings
 - Use **Serena** MCP `get_symbols_overview` for component-level understanding (if applicable)
 - Use **sequential-thinking** MCP to reason about scope boundaries
