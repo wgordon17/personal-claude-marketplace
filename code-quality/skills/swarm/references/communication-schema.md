@@ -106,7 +106,7 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
 same agents and protocol — just no parallelism. See `references/pipeline-model.md`.
 
 **Note:** If `questions` is non-empty, the Lead MUST present every question to the user via
-`AskUserQuestion` before proceeding to Phase 3. Resolve all open questions before implementation begins.
+`AskUserQuestion` before proceeding to Phase 3. Do NOT start implementation with unresolved questions.
 
 ---
 
