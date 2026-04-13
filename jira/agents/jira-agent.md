@@ -116,6 +116,12 @@ create/update confirmations, and any context where an issue is referenced. URLs 
 
 ### Create Issue
 
+If the spawning prompt provides an exact summary, description, and issue type (e.g.,
+from `/incremental-planning`), use them verbatim — skip template application from
+osac-conventions.md and use the provided issue type for the `issuetype` field. The
+spawner has already applied formatting and sanitization.
+
+Otherwise:
 1. Read `jira/reference/osac-conventions.md` for the appropriate description template
 2. Read `jira/reference/jira-formatting.md` for markdown guidance
 3. Build the fields payload (project, components, summary, issuetype, labels, epicLink if applicable)

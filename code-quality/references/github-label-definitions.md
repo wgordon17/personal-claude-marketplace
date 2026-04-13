@@ -29,3 +29,8 @@ gh label create <name> --description "<desc>" --color "<hex>" --repo <owner/repo
 **Fallback for unrecognized branch prefixes:** If the branch prefix does not match any
 row in the table (e.g., `test/`, `perf/`, `ci/`, `style/`, or freeform branch names),
 create the issue without a label — skip the label creation step entirely.
+
+**Labels categorize, titles describe.** The label handles issue triage and filtering.
+The issue title describes the problem or goal in plain language. Do not use the label
+name or branch prefix as a title prefix — `enhancement: ...` or `refactor: ...` in an
+issue title is a commit-message convention, not an issue convention.
