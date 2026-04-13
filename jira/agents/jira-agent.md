@@ -46,7 +46,7 @@ Run autonomously on first operation — do not wait for prompting:
 
 1. Verify `JIRA_API_TOKEN` and `JIRA_AUTH_TYPE` env vars are present in the shell environment
 2. CLI config at `~/.config/.jira/.config.yml` (server: redhat.atlassian.net, project: MGMT)
-3. Pre-flight validation: run `jira issue list -q 'project = MGMT' --plain --paginate 0:1` — a successful
+3. Pre-flight validation: run `jira issue list -q "project = MGMT" --plain --paginate 0:1` — a successful
    response confirms both auth and API connectivity. Do NOT use `jira me` for auth
    validation — it reads local config only and succeeds even with an invalid token.
 4. Auth type warning: `JIRA_AUTH_TYPE` env var and `auth_type` in config can conflict.
