@@ -106,6 +106,9 @@ specific questions — not generic ones.
 - Read `LESSONS.md` (if exists) from the memory directory for relevant past lessons. Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without
   announcing each one. Do not quote lessons verbatim in chat.
+- Check `{memory_dir}/BUGS.md` (if it exists) for open bug entries whose `### Files Involved`
+  paths overlap with the areas being planned. Note any overlaps — these inform Phase 4's
+  BUGS.md cross-reference step.
 - Search **claude-mem** MCP for relevant past work, decisions, and learnings
 - Use **Serena** MCP `get_symbols_overview` for component-level understanding (if applicable)
 - Use **sequential-thinking** MCP to reason about scope boundaries
@@ -356,6 +359,39 @@ Create a `## File Structure` section in the plan file, placed between the header
 - In existing codebases, follow established patterns (check adjacent files before choosing placement)
 
 This step writes to the plan file only. **Chat output:** "Wrote file structure. N files mapped."
+
+#### 2.5. BUGS.md Cross-Reference
+
+After writing the File Structure section, check if this plan addresses any open bugs:
+
+1. Detect the memory directory and check if `{memory_dir}/BUGS.md` exists
+2. If it exists, read it and extract all entries with `**Status:**` of `Investigating`,
+   `Root Cause Found`, or `Fix Ready`
+3. For each open bug entry that has a `### Files Involved` section, compare those paths
+   against the plan's `## File Structure` paths. Skip entries without a `### Files Involved`
+   section (investigation may not be complete).
+4. Path comparison: strip line number suffixes (`:NN`) from BUGS.md paths before comparing
+   (e.g., `src/auth/login.ts:42` becomes `src/auth/login.ts`). Then match using this
+   precedence:
+   - **Exact file match** (after stripping): always counts, strongest signal.
+   - **Common directory prefix of at least 3 components** (e.g., `code-quality/skills/fix/`
+     matches `code-quality/skills/fix/SKILL.md`; `src/auth/handlers/` matches
+     `src/auth/handlers/login.ts`): counts as overlap. Prefixes of 1 or 2 components
+     (e.g., `code-quality/` or `code-quality/skills/`) are too broad and do not count.
+   Rationale: depth-1 and depth-2 prefixes cover entire plugins or categories (20+ files
+   each), producing false positives. Depth-3 is the capability level — the smallest
+   meaningful unit of work.
+5. If any overlap is found and the entry's `**Tracked In:**` is currently `—` (or the field
+   is missing entirely — backward compatibility), update it to
+   `Plan: plans/{plan-filename}.md` (relative path from the memory directory, e.g.,
+   `Plan: plans/feat-xyz-1234567890.md`). If a missing field, insert the line after
+   `**Impact:**` or `**Severity:**`. If `**Tracked In:**` already has a non-dash value
+   (PR, another plan, etc.), skip it — do not overwrite existing tracking references.
+
+If no BUGS.md exists or no overlaps are found, skip silently — do not mention it in chat.
+
+If overlaps ARE found, announce in chat:
+> "Updated Tracked In for N BUGS.md entries that overlap with this plan: BUG-001, BUG-003."
 
 #### 3. Write Each Task
 
