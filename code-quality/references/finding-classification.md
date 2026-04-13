@@ -51,11 +51,11 @@ Two-tier taxonomy:
   says Cucumber.js but the project uses Vitest") — user-confirmed decision, must escalate not auto-fix
 
 **What is NOT `needs-input`:**
-- "I'm not sure if this is worth fixing" → `needs-fix`. Your opinion of worth is irrelevant.
-- "This is a documented accepted risk" → `needs-fix` if it has a clear resolution, or don't report it.
-- "This could go either way" → `needs-fix`. Pick the better option and explain why.
-- "This is stylistic" → `needs-fix`. Apply the project's conventions.
-- "The risk is low" → `needs-fix` if there's a fix, or don't report it. Risk assessment is not input.
+- "I'm not sure if this is worth fixing" → Classify as `needs-fix` and apply the fix — because the agent's opinion of a finding's worth is not a valid deferral reason.
+- "This is a documented accepted risk" → Classify as `needs-fix` if a clear resolution exists, otherwise skip reporting — because documented risk acceptance is not the same as requesting user input.
+- "This could go either way" → Classify as `needs-fix` and pick the better option with an explanation — because the agent resolving ambiguity is faster than escalating every judgment call.
+- "This is stylistic" → Classify as `needs-fix` and apply project conventions — because style inconsistency is a real cost, not a subjective preference.
+- "The risk is low" → Classify as `needs-fix` if a fix exists, or skip reporting — because risk assessment is not the same as requesting user input.
 
 **Post-triage states** (assigned after user interaction via AskUserQuestion, not by reviewers):
 
