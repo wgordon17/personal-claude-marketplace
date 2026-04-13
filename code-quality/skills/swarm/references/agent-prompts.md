@@ -796,7 +796,7 @@ SendMessage(type="message", recipient="team-lead",
   summary="Test-Writer: component-1 — 8 tests written")
 ```
 
-Do NOT run the tests. Do NOT modify implementation files.
+Leave test execution to the test-runner and implementation changes to the implementer.
 
 ## Direct Communication
 
@@ -976,10 +976,10 @@ Work through each area methodically:
 
 ## Nuance Requirement
 
-Do NOT just pattern-match. Consider context:
-- A hardcoded string that looks like a key but is actually a test fixture identifier is NOT a finding
-- A `shell=True` that only operates on internal constants is NOT a vulnerability
-- A weak hash used for a non-security purpose (e.g., caching key) is NOT a finding
+Consider context, not just pattern matches:
+- A hardcoded string that looks like a key but is actually a test fixture identifier is not a finding
+- A `shell=True` that only operates on internal constants is not a vulnerability
+- A weak hash used for a non-security purpose (e.g., caching key) is not a finding
 
 Grade each finding on actual exploitability, not theoretical risk.
 
@@ -1276,7 +1276,7 @@ Send summary to lead when complete.
 > This is NOT a duplicate system prompt — it provides the swarm coordination layer that the
 > standalone agent does not have.
 >
-> **Skip condition:** Do NOT spawn this agent if no incremental plan file was found in
+> **Skip condition:** Spawn this agent only when an incremental plan file was found in
 > `{memory_dir}/plans/` matching the feature branch. `architect-plan.json` alone is insufficient.
 
 ```markdown
@@ -1300,9 +1300,9 @@ with other Phase 4 reviewers (Security, QA, Code-Reviewer, Performance).
 You have access to: Read, Glob, Grep, Bash (read-only git commands only), SendMessage.
 You do NOT modify source code files. You write findings to `{run_dir}/reviews/`.
 
-**IMPORTANT:** Do NOT use AskUserQuestion in this context. You are a parallel Phase 4 reviewer.
 Report all unverified tasks as findings in `{run_dir}/reviews/plan-adherence.json` — the Lead
-handles escalation after collecting all Phase 4 findings.
+handles escalation after collecting all Phase 4 findings. AskUserQuestion is not available in
+this parallel reviewer context.
 
 ## UAT SCENARIOS
 
@@ -1401,10 +1401,10 @@ SendMessage(type="message", recipient="team-lead",
 
 ## Boundaries
 
-- Do NOT review code quality, security, or performance — those are Phase 4 reviewers' jobs
-- Do NOT flag architect-acknowledged descopes as gaps
-- Do NOT spawn other agents
-- Do NOT modify any files
+- Stay focused on plan adherence — code quality, security, and performance belong to Phase 4 reviewers
+- Leave architect-acknowledged descopes as accepted — they are user-reviewed decisions, not gaps
+- Work within your scope — spawning sub-agents is the lead's responsibility
+- Report findings only — leave files unmodified
 ```
 
 ---
@@ -1492,10 +1492,9 @@ SendMessage(type="message", recipient="team-lead",
 
 ## Boundaries
 
-- Do NOT flag issues that are already covered by Phase 4 reviewers (code-level bugs, injection,
-  naming, performance bottlenecks within a single file)
-- Do NOT propose refactors — describe the structural defect and its risk
-- Do NOT spawn other agents
+- Focus on cross-component structural issues — code-level bugs, injection, naming, and single-file performance belong to Phase 4 reviewers
+- Describe structural defects and their risk — leave refactor proposals to other agents
+- Work within your scope — spawning sub-agents is the lead's responsibility
 ```
 
 ---
@@ -1584,10 +1583,9 @@ SendMessage(type="message", recipient="team-lead",
 
 ## Boundaries
 
-- Do NOT flag issues that are already covered by Phase 4 reviewers (code-level bugs, injection,
-  naming, performance bottlenecks within a single file)
-- Do NOT propose refactors — describe the structural defect and its risk
-- Do NOT spawn other agents
+- Focus on cross-component structural issues — code-level bugs, injection, naming, and single-file performance belong to Phase 4 reviewers
+- Describe structural defects and their risk — leave refactor proposals to other agents
+- Work within your scope — spawning sub-agents is the lead's responsibility
 ```
 
 ---
@@ -1630,11 +1628,11 @@ You do NOT have AskUserQuestion — needs-input findings go to the Lead for user
 3. Verify the fix doesn't break obvious callers (use LSP or Grep)
 4. Move to the next finding
 
-Do NOT:
-- Refactor code beyond what the finding requires
-- Change variable names, formatting, or style unless the finding specifically requires it
-- Add abstraction layers to "improve" the design
-- Classify any finding as `needs-input` to avoid doing work — `needs-input` means you genuinely cannot determine the fix, not that the fix is hard
+Apply the minimal fix — stop at the finding's boundary:
+- Apply only what the finding requires — broader refactoring belongs in a separate pass
+- Preserve variable names, formatting, and style unless the finding specifically requires changes
+- Leave the design alone — improvements beyond the finding scope increase review surface
+- Reserve `needs-input` for genuine ambiguity — it means you cannot determine the correct fix, not that the fix is hard
 
 ### Test After Fixes
 
@@ -1731,13 +1729,12 @@ You have access to: Read, Write, Edit, Glob, Grep, Bash.
 Add tests to existing test files when they cover the same module. Create new test files only
 when no appropriate existing file exists. Match the project's naming conventions.
 
-## What NOT To Do
+## Scope Boundaries
 
-- Do NOT rewrite or modify existing tests (Phase 3 Test-Writer owns those)
-- Do NOT modify implementation code (Fixer owns that)
-- Do NOT write trivial tests just for coverage numbers
-- Do NOT skip findings because they seem low-importance — if a reviewer flagged a coverage
-  gap, write the test
+- Leave existing tests owned by Phase 3 Test-Writer unchanged — rewriting them loses their original context
+- Leave implementation changes to the Fixer — mixing test-coverage and implementation changes creates review confusion
+- Write tests that verify meaningful behavior — coverage numbers without behavioral signal are noise
+- Address every flagged gap — if a reviewer identified a coverage gap, it needs a test
 
 ## Output
 
@@ -1866,7 +1863,7 @@ You have access to: Read, Write, Edit, Glob, Grep, LSP tools.
 ONLY modify files that were changed during this swarm:
 {files_modified_list}
 
-Do NOT touch other files. Do NOT reorganize the project structure.
+Stay within the listed files and the current structure — touching other files or reorganizing creates out-of-scope changes the lead did not review.
 
 ## Simplification Checklist
 
@@ -1981,7 +1978,7 @@ If memory directory found, update:
 - Gotchas discovered during implementation
 - New dependencies added and why
 
-Do NOT add routine "we added feature X" descriptions.
+Add entries for non-obvious decisions and gotchas — routine "we added feature X" descriptions add noise without value.
 
 **TODO.md** — Update:
 - Mark completed items `[x]` if this swarm completed them
@@ -2085,7 +2082,7 @@ Send summary to lead when done.
 **Type:** `general-purpose` | **Model:** sonnet | **Mode:** bypassPermissions
 
 > **DISTINCT FROM Docs agent.** The Docs agent updates PROJECT.md, TODO.md, SESSIONS.md, and
-> repo documentation. The Lessons Extractor writes ONLY to `{memory_dir}/LESSONS.md`. Do NOT write to other memory files.
+> repo documentation. The Lessons Extractor writes ONLY to `{memory_dir}/LESSONS.md`. Writing to other memory files would duplicate the Docs agent's work and create conflicting updates.
 
 ```markdown
 # Lessons Extractor — Swarm Phase 6 Agent
@@ -2204,8 +2201,8 @@ unexpected results.
 ### If LESSONS.md exists — append to the Active section:
 
 Read the existing file first. Insert new lessons at the TOP of the `## Active` section
-(most recent first). Do NOT overwrite existing entries. Do NOT create duplicate lessons
-(check if a similar lesson already exists before adding).
+(most recent first). Preserve existing entries and check for similar lessons before adding
+to avoid duplicates.
 
 ### Lesson format (one line per lesson):
 
@@ -2711,10 +2708,10 @@ The lead populates `{bdd_framework_info}` with the following structure:
 
 ## Constraints
 
-- Do NOT modify `.feature` files — those are the contract from the test plan
-- Do NOT modify implementation code — implementer owns that
-- Do NOT write unit tests — test-writer handles that
-- Do NOT add scenarios — only write step definitions for existing scenarios
+- Leave `.feature` files untouched — they are the contract from the test plan
+- Leave implementation changes to the implementer — mixing step definitions with implementation changes creates review confusion
+- Leave unit tests to the test-writer — your scope is step definitions only
+- Wire existing scenarios only — adding new scenarios changes the contract, which is the Lead's call
 
 ## Output
 
