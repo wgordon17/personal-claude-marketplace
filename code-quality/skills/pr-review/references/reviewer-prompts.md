@@ -30,7 +30,7 @@ PROJECT RULES (CLAUDE.md):
 PROJECT RULES (CONTRIBUTING.md):
 {contributing_md_rules}
 
-FOCUS: Security vulnerabilities only — do not report style, performance, or completeness issues.
+FOCUS: Security vulnerabilities only. Stay within this lens — style, performance, and completeness issues belong to other reviewers.
 
 INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it before reporting. Read the
 actual source files (not just the diff) to confirm the issue exists. Trace call chains to verify
@@ -448,7 +448,7 @@ Default classification to `needs-fix`. The reviewer already applied "default to 
 preserve the reviewer's classification unless your investigation reveals a NEW decision point
 the reviewer missed (e.g., you discovered two mutually exclusive fixes with different tradeoffs).
 
-Do NOT reclassify a finding to `needs-input` because:
+Reclassify a finding to `needs-input` only when your investigation surfaced a specific decision point. Leave the classification as `needs-fix` in these cases:
 - You are uncertain whether the finding is valid — use verdict `needs_context` instead
 - The finding seems hard to fix — that is an LoE concern, not a classification concern
 - The category is "Decisions Needed" — category describes the finding's nature, not its classification

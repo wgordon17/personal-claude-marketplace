@@ -154,7 +154,7 @@ Always include the `OSAC` label on creation.
 | Security Level | Not set |
 | Due Date | Not used |
 
-Do not set these fields when creating OSAC issues unless specifically requested.
+Leave these fields unset unless specifically requested — because OSAC convention omits them by default.
 
 ### Self-Assignment Rule
 

@@ -63,7 +63,7 @@ git log --oneline <base>..<current-branch>
 
 ### Step 2: Careful Analysis of Each Commit
 
-**CRITICAL:** Do NOT use scripts or automation. You MUST manually review each commit individually.
+Review each commit individually by reading the diff — because automated scanning misses semantic issues that manual review catches.
 
 For each commit:
 
@@ -86,9 +86,9 @@ For each commit:
 
 ### Step 2.5: Detect and Flag AI Slop Commit Messages
 
-**CRITICAL:** These patterns indicate AI-generated meta-commentary instead of meaningful descriptions:
+These patterns indicate AI-generated meta-commentary instead of meaningful descriptions — flag them for rewriting:
 
-**FORBIDDEN PATTERNS (flag immediately):**
+**Patterns to flag (rewrite these commit messages):**
 - "addresses PR review feedback"
 - "addresses review feedback"
 - "addresses feedback"
@@ -320,7 +320,7 @@ Present your analysis and ask:
 - **Check CONTRIBUTING.md first:** Understand project conventions before analyzing
 - **No automation:** Every commit requires your thoughtful analysis
 - **Context matters:** Read the actual code changes, not just messages
-- **Explain reasoning:** Don't just say "squash these"—explain why
+- **Explain reasoning:** Explain the rationale for squash recommendations — because the committer needs context to judge whether the advice applies
 - **User decides:** You provide analysis, user makes final decision
 - **Rewriting history is fine:** These are pre-PR commits on a feature branch
 

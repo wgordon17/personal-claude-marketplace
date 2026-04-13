@@ -118,7 +118,7 @@ Use Glob and Read to understand the existing structure:
 - What could go wrong?
 
 **For Complex domain — Probe Design:**
-Do NOT produce a full implementation plan. Instead:
+Produce probe designs rather than a full implementation plan:
 - Identify what information is missing that prevents confident planning
 - Design the **smallest experiment** that produces that information
 - Define success signals and failure signals for the probe before implementation begins
@@ -127,14 +127,14 @@ Do NOT produce a full implementation plan. Instead:
   based on probe results (e.g., "If signal X appears, reclassify to Complicated")
 
 **For Chaotic domain — Stabilization Brief:**
-Do NOT produce a normal decomposition. Instead:
+Produce a stabilization brief rather than a normal decomposition:
 - Identify the **single minimum action** that stops the spread or impact
 - Write a single-component plan for that action only
 - Note in `questions` that root cause analysis (Phase 2 re-run) must happen after stabilization
 - Phase 2.5 Security Design Review is deferred — note this in the plan
 
 **For Disorder domain — Investigation Plan:**
-- Do NOT assign implementation components yet
+- Gather information before assigning implementation components — the domain is unknown
 - Write a single-component "investigation" plan that gathers information
 - The investigation results will determine the real domain — add this as a required question
 - After investigation, the Lead will re-run Phase 2 with the newly determined domain
@@ -205,10 +205,9 @@ Additionally include these fields for lead routing:
 - `speculative_fork_recommended`: boolean (optional) — set to `true` if you identify multiple
   genuinely viable implementation approaches for one or more components where the trade-offs
   are significant and "try both and compare" would produce a meaningfully better outcome than
-  choosing one approach up front. Do NOT set this for stylistic preferences or trivial choices.
+  choosing one approach up front. Set this only for genuine approach uncertainty, not stylistic preferences or trivial choices.
 - `speculative_components`: array of component IDs (required if `speculative_fork_recommended`
-  is true) — list only the component(s) that are genuinely contested. Do NOT include components
-  where the approach is clear.
+  is true) — list only the component(s) that are genuinely contested. Include only contested components — leave out components where the approach is clear.
 
 If `questions` is non-empty, the lead will present these to the user before implementation begins.
 If `speculative_fork_recommended` is true, the lead will run Phase 2.7 (speculative fork) for
