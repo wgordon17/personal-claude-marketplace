@@ -46,7 +46,7 @@ Run autonomously on first operation — do not wait for prompting:
 
 1. Verify `JIRA_API_TOKEN` and `JIRA_AUTH_TYPE` env vars are present in the shell environment
 2. CLI config at `~/.config/.jira/.config.yml` (server: redhat.atlassian.net, project: MGMT)
-3. Pre-flight validation: run `jira issue list --plain --paginate 0:1` — a successful
+3. Pre-flight validation: run `jira issue list -q 'project = MGMT' --plain --paginate 0:1` — a successful
    response confirms both auth and API connectivity. Do NOT use `jira me` for auth
    validation — it reads local config only and succeeds even with an invalid token.
 4. Auth type warning: `JIRA_AUTH_TYPE` env var and `auth_type` in config can conflict.
@@ -80,12 +80,11 @@ BODY=$(cat <<'BODYEOF'
 ...LLM body text...
 BODYEOF
 )
-jira issue create -s "$SUMMARY" --template - <<< "$BODY" -p MGMT -t Task -l OSAC -C OSAC --no-input --raw
+printf '%s\n' "$BODY" | jira issue create -s "$SUMMARY" --template - -p MGMT -t Task -l OSAC -C OSAC --no-input --raw
 ```
 
 The single-quoted `'SUMEOF'` delimiter prevents variable/backtick expansion in the heredoc body.
-
-For multi-line descriptions, prefer piping: `printf '%s\n' "$BODY" | jira issue create -s "$SUMMARY" --template - -p MGMT -t Task -l OSAC -C OSAC --no-input --raw`
+Use `printf '%s\n' "$BODY" | jira issue create ...` to pipe the body via stdin — more portable than herestring and handles all body content uniformly.
 
 For comment bodies with special characters, use `printf '%s' "$BODY" | jira issue comment add MGMT-123 --template - --no-input`
 rather than passing body as a positional argument.
@@ -152,7 +151,7 @@ Otherwise:
 jira issue create -p MGMT -t Task -s "Summary" -b "Description" -l OSAC -C OSAC --no-input --raw
 ```
 
-Note: `-b` and `--template` are mutually exclusive — `-b` takes precedence. Use `-b` for
+Note: `-b` takes precedence over `--template` — if both are provided, `-b` wins. Use `-b` for
 short inline text. Use `--template -` (without `-b`) for multi-line or LLM-generated content
 via stdin (see Shell Safety section above).
 
@@ -251,8 +250,11 @@ To discover the sprint ID needed for `jira sprint add`, use `jira sprint list --
 ### Project List
 
 ```bash
-jira project list
+PAGER=cat jira project list
 ```
+
+Note: `jira project list` has no `--plain` or `--raw` flag and uses a pager by default.
+`PAGER=cat` defeats the pager to prevent hanging in non-interactive contexts.
 
 ## Custom Field Validation
 
@@ -287,7 +289,7 @@ Do NOT use `${CLAUDE_PLUGIN_ROOT}` in Read calls — it only expands in hook com
 
 When spawned for non-OSAC work, drop the MGMT/OSAC defaults:
 
-1. Use `jira project list` to discover available projects (limited compared to MCP metadata)
+1. Use `PAGER=cat jira project list` to discover available projects (limited compared to MCP metadata)
 2. Use `--custom` flag for project-specific custom fields not covered by built-in flags
 3. Use `statusCategory` for cross-project status queries (avoids workflow-specific status names)
 4. Note: OSAC conventions in `jira/reference/osac-conventions.md` do not apply outside MGMT/OSAC

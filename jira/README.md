@@ -5,13 +5,13 @@ is temporarily disabled — revert this commit to restore it.
 
 ## Prerequisites
 
-1. Install jira CLI: `brew install ankitpokhrel/jira-cli/jira`
+1. Install jira CLI: `brew install jira-cli`
 2. Run `jira init` to configure (server: `https://redhat.atlassian.net`, project: `MGMT`)
 3. Set up API token:
    - Generate at https://id.atlassian.com/manage-profile/security/api-tokens
    - Export `JIRA_API_TOKEN` in your shell environment
    - Export `JIRA_AUTH_TYPE=basic` (for Personal Access Tokens) or `JIRA_AUTH_TYPE=bearer` (for OAuth tokens)
-4. Verify: `jira issue list --plain --paginate 0:1`
+4. Verify: `jira issue list -q "project = MGMT" --plain --paginate 0:1`
 
 ## Interfaces
 

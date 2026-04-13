@@ -141,7 +141,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ### For Jira CLI
 
-- **jira CLI**: `brew install ankitpokhrel/jira-cli/jira` — run `jira init` to configure (server: redhat.atlassian.net, project: MGMT)
+- **jira CLI**: `brew install jira-cli` — run `jira init` to configure (server: redhat.atlassian.net, project: MGMT)
 - **API token**: Export `JIRA_API_TOKEN` and `JIRA_AUTH_TYPE` in your shell environment
 - **Optional write-command approval**: Add `Bash(jira issue create:*)`, `Bash(jira issue edit:*)`, `Bash(jira issue move:*)`, `Bash(jira issue comment add:*)`, `Bash(jira issue worklog add:*)`, `Bash(jira issue link:*)`, `Bash(jira epic create:*)`, `Bash(jira epic add:*)`, `Bash(jira sprint add:*)` to `~/.claude/settings.local.json` under `permissions.allow`. For read operations, also add `Bash(jira issue list:*)`, `Bash(jira issue view:*)`, `Bash(jira project:*)`. See [jira/README.md](jira/README.md) for the full JSON snippet.
 
