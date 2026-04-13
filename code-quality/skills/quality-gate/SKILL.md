@@ -373,7 +373,7 @@ After all 4 reviewers complete, synthesize findings by classification
 (see `code-quality/references/finding-classification.md`):
 
 1. Collect all findings across the 4 reviewers
-2. Fix all `needs-fix` findings immediately. Do not carry them forward.
+2. Fix all `needs-fix` findings immediately — resolve all conflicts during synthesis, because carrying forward unresolved issues defers work.
 3. For `needs-input` findings: present each individually via AskUserQuestion (one question
    per finding, batch up to 4 per call). Each question includes full context:
    `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`
@@ -478,8 +478,8 @@ Collect:
 
 ### Subagent Execution (2 passes each — BOTH mandatory)
 
-Each subagent runs TWO passes. Pass 2 is NOT optional — it catches issues the subagent
-missed on Pass 1 and verifies your fixes didn't introduce new problems.
+Each subagent runs TWO passes. Execute Pass 2 for every Layer 2 subagent — because Pass 1
+always misses something, and fixes can introduce new issues that Pass 2 catches.
 
 Pass 2 resumes the Pass 1 agent via `SendMessage` using the **agent ID** (not the name).
 This preserves the agent's full conversation history from Pass 1. You MUST use the agent
@@ -804,7 +804,7 @@ Layer 1.75 — Plan Adherence: [N/A (no plan) | COMPLETE]
 Layer 2 — Subagent Reviews:
   Subagent A (Completeness): [count] findings across 2 passes — agent ID: [id]
   Subagent B (Adversarial): [count] findings across 2 passes — agent ID: [id]
-  (Layer 2 MUST show agent IDs. "SUBSTITUTED" or "N/A" is NEVER valid here.)
+  (Layer 2 MUST show agent IDs — omission indicates the layer was skipped.)
 
 Lifecycle Gate: [PASS / FAIL / SKIP (no plan) / SKIP (pre-feature plan)]
   (For SKIP variants, omit the sub-lines below — show only the top-level result)
