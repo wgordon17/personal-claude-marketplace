@@ -1842,7 +1842,7 @@ def get_user_from_cache(key: str) -> User:
 
 ### Priority for Fixing
 
-Process all `needs-fix` findings. Order by file (core modules first — most-imported, most-modified files), then by source order within each file. Do not skip findings based on perceived importance.
+Process all `needs-fix` findings. Order by file (core modules first — most-imported, most-modified files), then by source order within each file. Address every finding regardless of perceived importance — prioritization introduces gaps that accumulate over time.
 
 Core modules first: `git log --format='' --name-only | sort | uniq -c | sort -rn | head -20`
 

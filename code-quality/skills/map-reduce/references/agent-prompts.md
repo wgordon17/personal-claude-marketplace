@@ -154,14 +154,14 @@ Output written to {output_path}. turn_count: {N}
 
 ## Key Rules
 
-- Process ONLY your assigned files/items. Do not read files outside your chunk unless
-  they appear in the cross_reference_manifest and you need their exported symbols.
+- Process ONLY your assigned files/items. Read files outside your chunk only when they appear
+  in the cross_reference_manifest and you need their exported symbols.
 - Mark every finding with `confidence: "verified"` or `"chunk-local"` — no exceptions.
 - For exported/public symbols with no local references: ALWAYS mark `chunk-local`, never
   report as definitively unused.
 - Be thorough within your chunk. Evidence-based findings only — no speculation.
-- Do not fabricate findings — false positives cost more than missed issues. An empty findings
-  list for a clean chunk is valid.
+- Report only real findings — false positives cost more than missed issues. An empty findings
+  list for a clean chunk is a valid result.
 - If you encounter a file you cannot read or process, mark it in your summary and continue
   with the remaining files. Set `status: "partial"` if you skip any files.
 ```
@@ -301,7 +301,7 @@ Output written to {output_path}.
 
 ## Key Rules
 
-- Execute ALL 4 cross-chunk validation steps. Do not skip any.
+- Execute ALL 4 cross-chunk validation steps — all four are required, none optional.
 - For destructive findings (unused code, dead imports), resolve ambiguity in favor of "used" —
   false negatives are better than false positives.
 - Report `invalidated_findings` count accurately — this is used for the fidelity report.

@@ -111,7 +111,7 @@ AskUserQuestion(questions=[{
 }])
 ```
 
-**Warn if on main/master:** Do not abort, but note it in the context bundle and remind at completion.
+**Warn if on main/master:** Note it in the context bundle and remind at completion — proceed without aborting.
 
 **Check if branch has open PR:**
 ```bash
@@ -337,7 +337,7 @@ Parse the task description for any of these signals:
 | Breaking changes implied | "refactor the API" | Ask: backwards compat required? |
 | Multiple valid approaches | "add search" | Present top 2-3 options, ask for choice |
 
-Batch ALL ambiguities into a single AskUserQuestion call. Do not ask one question at a time.
+Batch ALL ambiguities into a single AskUserQuestion call — one call total, not one per question.
 
 ### Step 1.2: Auto-detect Optional Reviewers
 
@@ -1028,7 +1028,7 @@ TaskCreate(
 )
 ```
 
-Continue to the next component. Do not retry. Record blocked item in audit trail.
+Continue to the next component. Record the blocked item in the audit trail — no retry.
 
 ### Step 3.5: Test Failure Protocol
 
@@ -1173,7 +1173,7 @@ One commit per successfully completed component. Failed/blocked components get n
 
 ## Phase 3.5: BDD Step Writing (conditional)
 
-**Skip when:** `phase_3_5_enabled = false` (set in Step 0.4.5). Do not spawn any agent.
+**Skip when:** `phase_3_5_enabled = false` (set in Step 0.4.5) — spawn no agent for this phase.
 
 ### Step 3.5.1: Determine .feature Target Directory
 
@@ -1315,7 +1315,7 @@ SendMessage(type="shutdown_request", recipient="architect", content="Implementat
 
 ### Step 4.2: Spawn All Reviewers
 
-Spawn ALL reviewers simultaneously in a SINGLE message. Do not spawn them sequentially.
+Spawn ALL reviewers simultaneously in a SINGLE message — parallel launch only, never sequential.
 
 **Core reviewers (always spawn):**
 ```

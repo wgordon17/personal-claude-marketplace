@@ -5,8 +5,7 @@ Seven self-contained prompt templates for Phase 1 discovery agents. Each is spaw
 All agents share the same output JSON schema (see [Shared Output Schema](#shared-output-schema) at the bottom).
 
 **Anti-fabrication principle (applies to all 7 agents):** Include this instruction in the
-`{context_bundle}` prepended to each agent prompt: "Do not fabricate findings — false positives
-cost more than missed issues. Reporting zero findings in a clean codebase is the correct outcome,
+`{context_bundle}` prepended to each agent prompt: "Report only findings you can substantiate with evidence — false positives cost more than missed issues. Reporting zero findings in a clean codebase is the correct outcome,
 not a sign of insufficient analysis."
 
 ---
@@ -574,8 +573,8 @@ Assign `loe` per finding:
 - **medium**: Fix requires architectural change (add auth middleware layer, implement RBAC)
 - **high**: Fix may break existing functionality (changing auth flow, updating major dependency versions)
 
-### CRITICAL RULES
-1. **Never report test fixture credentials as real secrets.** Check if the file is in a test directory and the value is obviously fake (`"test"`, `"password123"`, `"changeme"`).
+### Security Auditor Rules
+1. **Never report test fixture credentials as real secrets** — check if the file is in a test directory and the value is obviously fake (`"test"`, `"password123"`, `"changeme"`) before flagging — because test fixtures with fake values are intentional and correct.
 2. **Never report .env.example files as exposed secrets.** They contain placeholders.
 3. **Always include CWE ID** when applicable (e.g., CWE-89 for SQL injection).
 4. **Rate exploitability honestly.** A SQL injection behind authentication is still critical but note the prerequisite.
@@ -1589,7 +1588,7 @@ All seven agents write JSON files conforming to this schema. The orchestrator me
    - Files with recent changes over stable files
    - High-import-count files over leaf files
 
-6. **Do not duplicate work.** If an external tool already found something, reference its output in `source` and `evidence` rather than re-deriving the same finding.
+6. **Reference, don't re-derive.** If an external tool already found something, reference its output in `source` and `evidence` — re-deriving the same finding wastes analysis time without adding accuracy.
 
 7. **Write valid JSON.** The output file MUST be parseable JSON. Use proper escaping for strings containing quotes, backslashes, or newlines. Test mentally before writing. If in doubt, use the Write tool which handles encoding.
 

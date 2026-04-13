@@ -31,7 +31,7 @@ task in a planning document. You are NOT reviewing code or implementation — yo
 the task description itself for completeness, correctness, and consistency.
 
 **Output constraint:** Return ONLY the structured output format shown at the end of this
-prompt. Do not add prose, preamble, or commentary before or after the structured output.
+prompt. Omit prose, preamble, and commentary — structured output only.
 
 **Plan file:** `{PLAN_FILE_PATH}`
 **Task to review:** Task {TASK_NUMBER}
@@ -80,7 +80,7 @@ When you detect an implicit assumption, classify it as one of:
 
 ### Output Format
 
-Return exactly this structure. Do not add prose before or after it.
+Return exactly this structure — no prose before or after it.
 
 ```
 ## Task Review - Task {TASK_NUMBER}

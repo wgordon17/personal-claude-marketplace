@@ -34,8 +34,8 @@ FOCUS: Security vulnerabilities only — do not report style, performance, or co
 
 INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it before reporting. Read the
 actual source files (not just the diff) to confirm the issue exists. Trace call chains to verify
-exploitability. Do not report speculative issues — only report what you have confirmed by
-reading the code. A finding you investigated and verified is worth ten you guessed from the diff.
+exploitability. Report only what you have confirmed by reading the code — a verified finding
+is worth ten guesses from the diff.
 
 CHECKLIST:
 1. Injection: command injection, SQL injection, path traversal, template injection?
@@ -62,7 +62,7 @@ For each finding, report:
 - Evidence: the specific code or configuration that demonstrates the issue
 - Suggested fix (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no security issues, say "No security findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no security issues, say "No security findings."
 ```
 
 ---
@@ -91,8 +91,7 @@ FOCUS: Test coverage, testability, and quality assurance concerns — not style 
 
 INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it before reporting. Read the
 actual test files to confirm coverage gaps exist. Check if tests for the changed code already
-exist in other test files. Do not report speculative gaps — only report what you have confirmed
-by reading both the implementation and test code.
+exist in other test files. Report only gaps confirmed by reading both the implementation and test code.
 
 UAT CROSS-REFERENCE:
 {plan_test_plan}
@@ -128,7 +127,7 @@ For each finding, report:
 - Evidence: the specific code path or condition that is not covered
 - Suggested test approach (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no QA issues, say "No QA findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no QA issues, say "No QA findings."
 ```
 
 ---
@@ -157,8 +156,8 @@ FOCUS: Performance issues only — not correctness, style, or test coverage.
 
 INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it before reporting. Read the
 actual source files to confirm the performance issue exists. Check input sizes, call frequency,
-and real-world data patterns before claiming an issue matters. Do not report theoretical
-performance concerns that would never manifest at the project's actual scale.
+and real-world data patterns before claiming an issue matters. Report only performance concerns
+that would manifest at the project's actual scale.
 
 CHECKLIST:
 1. Algorithmic complexity: O(N²) or worse where O(N) is achievable? Unbounded loops?
@@ -185,7 +184,7 @@ For each finding, report:
 - Evidence: the specific code that demonstrates the issue, with expected impact (scale at which it matters, latency/throughput effect)
 - Suggested fix (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no performance issues, say "No performance findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no performance issues, say "No performance findings."
 ```
 
 ---
@@ -216,8 +215,8 @@ security, or performance.
 
 INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it before reporting. Read the
 actual source files and adjacent files to confirm pattern violations. Check the project's
-existing conventions before claiming something violates them. Do not report style preferences
-that contradict the project's established patterns.
+existing conventions before claiming something violates them. Report only deviations from the
+project's established patterns, not personal style preferences.
 
 CHECKLIST:
 1. Clarity: is the intent of the code clear without needing to trace execution?
@@ -248,7 +247,7 @@ For each finding, report:
 - Evidence: the specific code or doc text that demonstrates the issue
 - Suggested improvement (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no code quality issues, say "No code quality findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no code quality issues, say "No code quality findings."
 ```
 
 ---
@@ -285,8 +284,8 @@ FOCUS: Correctness — does the code do what it claims? Not style, security, or 
 
 INVESTIGATION REQUIREMENT: For every potential finding, VERIFY it before reporting. Read the
 actual source files, trace the execution path, and confirm the logic error exists. Check
-callers and test cases to understand intended behavior. Do not report speculative correctness
-issues — only report what you have confirmed by reading and tracing the code.
+callers and test cases to understand intended behavior. Report only what you have confirmed
+by reading and tracing the code — speculative correctness issues are not findings.
 
 CHECKLIST:
 1. Logic errors: wrong conditions, inverted comparisons, off-by-one, missing negation?
@@ -326,7 +325,7 @@ For each finding, report:
 - Evidence: the specific code that demonstrates the issue, with the expected vs actual behavior
 - Suggested fix (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no correctness issues, say "No correctness findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no correctness issues, say "No correctness findings."
 ```
 
 ---
@@ -391,7 +390,7 @@ INSTRUCTIONS:
    - Evidence: the specific plan text and the diff/code that shows the mismatch
    - Suggested action (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If the implementation faithfully follows the plan, say "No plan adherence findings."
+Report only real findings — false positives cost more than missed issues. If the implementation faithfully follows the plan, say "No plan adherence findings."
 ```
 
 ---
@@ -492,6 +491,6 @@ Verdicts:
 - "needs_context": You investigated but cannot confirm or deny — requires human judgment or
   production context you don't have access to
 
-An honest "false_positive" verdict is more valuable than a fabricated "verified" one. Do not
-confirm findings that your investigation does not support. If the code is correct, say so.
+An honest "false_positive" verdict is more valuable than a fabricated "verified" one. Confirm
+only findings your investigation actually supports — when the code is correct, say so.
 ```

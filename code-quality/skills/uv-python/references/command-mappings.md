@@ -39,7 +39,7 @@ This reference provides a comprehensive mapping of legacy Python commands to the
 | `python -m module` | `uv run python -m module` | Run module as script |
 | `python -c "code"` | `uv run python -c "code"` | Execute inline Python code |
 | `./script.py` (with shebang) | `uv run script.py` | uv respects PEP 723 dependencies |
-| `cat script.py \| python3` | `uv run script.py` | Don't pipe to python, use uv run |
+| `cat script.py \| python3` | `uv run script.py` | Use uv run instead of piping to python |
 
 ## Bash Scripts and Shebangs
 

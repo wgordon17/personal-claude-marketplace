@@ -282,8 +282,8 @@ Active from Phase 2 (remains available):
   architect    (code-quality:architect, opus) -- on standby for clarification questions
 ```
 
-These 4 pipeline agents persist through ALL components in Phase 3. Do not shut them down between
-components — maintaining the agents' context across the full implementation reduces re-explanation
+These 4 pipeline agents persist through ALL components in Phase 3. Keep them running between
+components — maintaining agent context across the full implementation reduces re-explanation
 overhead and keeps the Reviewer aware of earlier decisions.
 
 The Architect persists through Phase 3 to answer clarification questions from the Implementer

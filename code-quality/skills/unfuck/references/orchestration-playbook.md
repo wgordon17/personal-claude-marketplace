@@ -170,7 +170,7 @@ Each teammate runs in its own independent context window, writes its JSON findin
 
 **Why teammates, not background Agents:** Background `Agent(run_in_background=true)` agents dump their full output into the orchestrator's context when checked via `TaskOutput`. With 7 agents producing detailed findings, this causes context overflow. TeamCreate teammates have independent context windows and communicate via short `SendMessage` summaries.
 
-**CRITICAL:** All 7 agents MUST be launched in the SAME message. Do not conditionally skip agents. The orchestrator should wait for all 7 completion summaries before proceeding to Phase 2.
+All 7 agents MUST be launched in the SAME message — launch them all unconditionally. The orchestrator should wait for all 7 completion summaries before proceeding to Phase 2. Skipping any agent leaves blind spots in coverage that cannot be recovered without a full re-run.
 
 ### Agent Roster
 
@@ -522,7 +522,7 @@ TaskCreate("BLOCKED: <category> -- <failure summary>",
   "Implementation of <category> caused test failure:\n<test output snippet>\n\nStashed changes: cleanup-<category>-blocked\nManual review needed.\n\nFailed tests:\n<list of failing test names>")
 ```
 
-Continue to the next category. Do not retry.
+Continue to the next category. A stashed category stays available for manual recovery — retrying automatically risks repeating the same test failure.
 
 ### Commit Message Formats
 

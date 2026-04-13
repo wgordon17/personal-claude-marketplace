@@ -23,7 +23,7 @@ CHANGES TO REVIEW:
 PROJECT RULES:
 {claude_md_rules_if_any}
 
-FOCUS: Security vulnerabilities only — do not report style, performance, or completeness issues.
+FOCUS: Security vulnerabilities only. Stay within this lens — style, performance, and completeness issues belong to other reviewers.
 
 CHECKLIST:
 1. Injection: command injection, SQL injection, path traversal, template injection?
@@ -44,7 +44,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No security findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No security findings."
 ```
 
 ### Domain Reviewer: QA
@@ -82,7 +82,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested test approach (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No QA findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No QA findings."
 ```
 
 ### Domain Reviewer: Performance
@@ -120,7 +120,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No performance findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No performance findings."
 ```
 
 ### Domain Reviewer: Code-Reviewer
@@ -159,7 +159,7 @@ For each finding, report:
 - LoE: trivial | moderate | significant
 - Suggested improvement (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No code quality findings."
+Report only real findings — false positives cost more than missed issues. If you genuinely find no issues under your lens, say "No code quality findings."
 ```
 
 ---
@@ -265,8 +265,7 @@ For each issue found, report:
   situations — pick the better option and classify as needs-fix.
 - LoE: trivial | moderate | significant
 
-Be thorough but honest. An empty findings list is a valid outcome — do not fabricate
-completeness gaps to appear thorough. False positives waste more time than missed issues.
+Be thorough but honest. An empty findings list is a valid outcome — report only real gaps. False positives waste more time than missed issues.
 ```
 
 ### Pass 2 Prompt (Resume)
@@ -340,9 +339,7 @@ For each issue found, report:
 - LoE: trivial | moderate | significant
 - Suggested fix (brief)
 
-Be thorough but honest. An empty findings list is a valid outcome — do not fabricate issues
-to appear thorough. False positives waste more time than missed issues. Find real problems,
-not imagined ones.
+Be thorough but honest. An empty findings list is a valid outcome — report only real problems. False positives waste more time than missed issues.
 ```
 
 ### Pass 2 Prompt (Resume)

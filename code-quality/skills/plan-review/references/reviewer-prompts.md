@@ -50,8 +50,8 @@ PROJECT CONTEXT (PROJECT.md):
 FOCUS: Feasibility — can this plan actually be built as written? Not scope, style, or architecture.
 
 READ REQUIREMENT: You MUST read the plan carefully before reporting any finding. For each
-potential finding, cite the specific task number or section you are referencing. Do not report
-speculative concerns — only report what you can point to in the plan text.
+potential finding, cite the specific task number or section you are referencing. Report only
+what you can point to in the plan text — speculative concerns are not findings.
 
 CHECKLIST:
 1. Technically achievable steps: are the individual implementation steps concrete and achievable,
@@ -88,7 +88,7 @@ test environment it implicitly requires is not set up.
 
 If no test plan is provided (empty string), skip this check.
 
-Do not fabricate findings — false positives cost more than missed issues. If the plan is feasible as written, say "No feasibility findings."
+Report only real findings — false positives cost more than missed issues. If the plan is feasible as written, say "No feasibility findings."
 ```
 
 ---
@@ -124,8 +124,8 @@ FOCUS: Scope and completeness — does the plan cover the goal, nothing more, no
 Not feasibility, style, or architecture.
 
 READ REQUIREMENT: You MUST read the full plan before reporting any finding. For each potential
-finding, cite the specific task or section. Do not report speculative gaps — only report what
-you can demonstrate by pointing to the goal statement versus plan content.
+finding, cite the specific task or section. Report only what you can demonstrate by pointing
+to the goal statement versus plan content — speculative gaps are not findings.
 
 CHECKLIST:
 1. Goal coverage: break the stated goal into atomic requirements. Does each requirement have a
@@ -171,7 +171,7 @@ which means the goal cannot be confirmed as complete.
 
 If no test plan is provided (empty string), skip this check.
 
-Do not fabricate findings — false positives cost more than missed issues. If scope and completeness are good, say "No scope findings."
+Report only real findings — false positives cost more than missed issues. If scope and completeness are good, say "No scope findings."
 ```
 
 ---
@@ -232,7 +232,7 @@ For each finding, report:
 - Evidence: the specific task descriptions that show the ordering issue
 - Suggested reordering or restructure (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If ordering is correct, say "No dependency findings."
+Report only real findings — false positives cost more than missed issues. If ordering is correct, say "No dependency findings."
 ```
 
 ---
@@ -316,7 +316,7 @@ For each finding, report:
 - Evidence: the specific plan text (or its absence) that demonstrates the gap
 - Suggested spike or verification step (brief — what question needs answering?)
 
-Do not fabricate findings — false positives cost more than missed issues. If the plan addresses its unknowns well, say "No unknown unknowns findings." But be rigorous — this reviewer catches what others miss.
+Report only real findings — false positives cost more than missed issues. If the plan addresses its unknowns well, say "No unknown unknowns findings." Be rigorous — this reviewer catches what others miss.
 ```
 
 ---
@@ -380,7 +380,7 @@ For each finding, report:
 - Evidence: the specific plan text that demonstrates the concern
 - Suggested architectural adjustment (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If the architecture is sound, say "No architecture findings."
+Report only real findings — false positives cost more than missed issues. If the architecture is sound, say "No architecture findings."
 ```
 
 ---
@@ -415,8 +415,8 @@ PROJECT CONTEXT (PROJECT.md):
 FOCUS: Security implications of the planned design — not feasibility, scope, or style.
 
 READ REQUIREMENT: You MUST read the full plan before reporting any finding. For each potential
-finding, cite the specific task, API endpoint, or file path you are concerned about. Do not
-report speculative issues — only report what you can point to in the plan.
+finding, cite the specific task, API endpoint, or file path you are concerned about. Report
+only what you can point to in the plan — speculative issues are not findings.
 
 CHECKLIST:
 1. New attack surfaces: does the plan introduce new entry points (API endpoints, file uploads,
@@ -441,7 +441,7 @@ For each finding, report:
 - Evidence: the specific plan text that demonstrates the concern or its absence
 - Suggested security requirement or design change (brief)
 
-Do not fabricate findings — false positives cost more than missed issues. If no security concerns are found, say "No security findings."
+Report only real findings — false positives cost more than missed issues. If no security concerns are found, say "No security findings."
 ```
 
 ---
@@ -538,6 +538,6 @@ Verdicts:
 - "needs_context": The finding may be valid but cannot be confirmed without information not
   in the plan (external context, team decisions, production environment details)
 
-An honest "false_positive" verdict is more valuable than a fabricated "verified" one. Do not
-confirm findings that your investigation does not support. If the plan is correct, say so.
+An honest "false_positive" verdict is more valuable than a fabricated "verified" one. Confirm
+only findings your investigation actually supports — when the plan is correct, say so.
 ```
