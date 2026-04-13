@@ -223,7 +223,7 @@ When the user is done reporting bugs or asks to review status:
    - Total bugs documented
    - Breakdown by impact (Critical/High/Medium/Low)
    - Breakdown by status (Investigating/Root Cause Found/Fix Ready/Fixed)
-   - Breakdown by Tracked In state (untracked/plan/PR/merged)
+   - Breakdown by Tracked In state (untracked/plan/roadmap/branch/PR/merged)
    - Any agents still running
 
 2. If the user asks to clean up:

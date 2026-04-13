@@ -302,8 +302,8 @@ Per `## BUG-NNN: <Title>` section:
 | Resolution Plan | `### Resolution Plan` checkboxes | `- [ ]` / `- [x]` steps |
 
 **Summary extraction:** Count bugs by status, impact, and Tracked In state
-(untracked/plan/PR/merged). List all non-Fixed bugs with their impact, status, and
-Tracked In reference.
+(untracked/plan/roadmap/branch/PR/merged). List all non-Fixed bugs with their impact, status,
+and Tracked In reference.
 
 ### Audit Checklist
 
