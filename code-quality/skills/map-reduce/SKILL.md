@@ -61,8 +61,9 @@ LEAD (you)
 
 2. **Module-aware splitting:** when splitting by-directory, respect module boundaries — keep
    tightly coupled files in the same chunk. Use import/directory structure to determine coupling.
-   Never split a single module (e.g., `auth/`) across chunks. If a module is too large for one
-   chunk, treat it as its own chunk even if that makes the chunk larger than average.
+   Keep each module (e.g., `auth/`) in a single chunk — because split modules lose
+   cross-function context. If a module is too large for one chunk, treat it as its own chunk
+   even if that makes the chunk larger than average.
 
 3. **Cross-reference manifest:** before splitting, build a lightweight manifest of exported
    symbols per file — function names, class names, and file paths for all files NOT in each
@@ -125,9 +126,10 @@ LEAD (you)
    If no → promote to `verified`.
 
    **Step 3 — Deduplication:** for duplicate findings across chunks (same issue, different
-   chunks found it), merge by evidence + location, keeping the most detailed description. Never
-   silently drop a finding — if two chunks found the same issue with different evidence, keep
-   both evidence strings in the merged finding.
+   chunks found it), merge by evidence + location, keeping the most detailed description. Surface
+   every finding in the output — because silently dropped findings are unaccounted-for work. If
+   two chunks found the same issue with different evidence, keep both evidence strings in the
+   merged finding.
 
    **Step 4 — Conflict resolution:** for conflicting findings (chunk A says "unused", chunk B
    references it), always resolve in favor of "used" — false negatives are better than false
@@ -193,15 +195,8 @@ Match the tool to the task scope:
 | Full implementation task | `/swarm` |
 | Codebase cleanup | `/unfuck` |
 
-### Work Completion Principle
-
-Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
-If the task requires a mapper, spawn the mapper. If a finding needs fixing, fix it.
-The only valid reasons to skip work are: (1) the user explicitly opted out,
-(2) the work is genuinely out of scope, or (3) the task shape genuinely doesn't match
-map-reduce (see table above).
-
-"It would be expensive" is NEVER a valid reason to skip work or reduce mapper count.
+> Scope integrity, phase compliance, and cost framing rules:
+> see `code-quality/references/anti-deferral-rules.md`.
 
 ---
 
@@ -220,7 +215,7 @@ Create the CronCreate watchdog after all mappers are spawned. Track its job ID. 
 - In any error or escalation path
 - Before returning control to the user
 
-Never leave an orphaned cron job.
+Clean up all cron jobs before completing — because orphaned jobs consume resources.
 
 ### Audit Trail
 

@@ -10,9 +10,9 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Sen
 
 # /speculative — Competing Implementations with Judge Selection
 
-You MUST follow the phased approach described here. Do not collapse phases or implement
-the task yourself. Your role is orchestration — you define the spec, spawn competitors,
-coordinate the judge, and present the result to the user.
+Follow the phased approach described here — because collapsing phases or implementing directly
+bypasses the comparison this skill provides. Your role is orchestration — you define the spec,
+spawn competitors, coordinate the judge, and present the result to the user.
 
 ---
 
@@ -71,8 +71,8 @@ is blocked.
 interval. The watchdog checks `TaskList` for competitor tasks with no recent updates and sends
 a status alert to the lead if any competitor has been idle for 2+ consecutive checks. The
 watchdog monitors — it does NOT intervene directly. CronDelete the watchdog before
-transitioning to Phase 2, including when all competitors fail or are timed out. Delete on all
-paths — never leave orphaned cron jobs at phase boundaries.
+transitioning to Phase 2, including when all competitors fail or are timed out. Clean up all
+cron jobs before completing — because orphaned jobs consume resources. Delete on all paths.
 
 **Completion:** Each competitor writes its `ImplementationResult` to
 `{run_dir}/implementations/competitor-{id}.json` and signals completion via SendMessage.
@@ -239,7 +239,7 @@ Write all structured outputs to `{run_dir}/`:
 | Phase | Skip When |
 |-------|-----------|
 | Phase 3.5: Hybrid | Judge does not set `hybrid_recommended: true`, OR user declines hybrid |
-| NEVER SKIP | Phase 0 (specification), Phase 1 (competitors), Phase 2 (judge), Phase 3 (selection) |
+| Required phases (always execute) | Phase 0 (specification), Phase 1 (competitors), Phase 2 (judge), Phase 3 (selection) |
 
 ---
 
@@ -265,15 +265,8 @@ This skill runs competing implementations in parallel. Match tool to task:
 | Judge | opus | Judgment-heavy evaluation — fair comparison requires strong reasoning |
 | Synthesis (Phase 3.5) | sonnet | Mechanical combination of known elements |
 
-### Work Completion Principle
-
-Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
-If the task requires an agent, spawn the agent. If a finding needs fixing, fix it.
-The only valid reasons to skip work are: (1) the user explicitly opted out,
-(2) the skip condition in the phase table applies, or (3) the work is genuinely
-out of scope for the current task.
-
-"It would be expensive" is NEVER a valid reason to skip work.
+> Scope integrity, phase compliance, and cost framing rules:
+> see `code-quality/references/anti-deferral-rules.md`.
 
 ---
 
