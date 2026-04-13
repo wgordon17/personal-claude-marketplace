@@ -56,8 +56,7 @@ Detect the project memory directory using the convention in
 
 ### Step 2: Glob and verify
 
-**Scope the glob strictly to the determined plan directory** — do not glob the project root
-or any other location. This prevents false positives from unrelated files.
+**Scope the glob strictly to the determined plan directory.** Glob only the plans directory — because project root globbing returns hundreds of irrelevant files.
 
 Glob for `*roadmap*.md` within the plan directory only.
 
@@ -127,8 +126,7 @@ Executes when user selects "Update existing roadmap."
 3. Combine: existing source plans + any new plans provided → full plan list.
 4. Run completion tracking (see **Completion Tracking** section) to identify which phases
    are fully complete.
-5. **Preserve completed phases** — do not re-sequence work already done. Only re-analyze
-   incomplete and not-started phases.
+5. **Preserve completed phases** — preserve the order of completed work — because re-sequencing implies completed phases weren't valid. Only re-analyze incomplete and not-started phases.
 6. **Backup before overwrite:** Copy the existing roadmap to
    `{plan-dir}/done/{filename}.YYYY-MM-DDTHH-MM-SS.pre-update` (timestamped, unique per run)
    before writing the regenerated version. Create `{plan-dir}/done/` if it doesn't exist.
@@ -176,8 +174,7 @@ Executes when user selects "Clean up completed work."
 5. Execute cleanup actions **sequentially**: archive files first → delete local branches →
    delete remote branches (if opted in) → update roadmap document. If any step fails (e.g.,
    permission error, branch checked out elsewhere), **stop immediately** and surface the
-   error in chat. Do not continue to remaining steps — inconsistent state is better diagnosed
-   with a clear stopping point.
+   error in chat. Stop at the inconsistency and report it — because continuing with inconsistent state compounds the error.
 6. Update the roadmap document: append `**Status:** Completed` to each cleaned-up phase
    block (non-destructive — preserves phase content for reference).
 
@@ -274,7 +271,7 @@ For task-level extraction:
 
 If a plan doesn't follow incremental-planning's format (missing `**Goal:**`, no `## Task N:`
 headings, no `**Files:**` blocks), use `AskUserQuestion` to surface what's missing. Offer
-best-effort extraction or skip. Do not silently proceed.
+best-effort extraction or skip. Report missing metadata explicitly — because silent gaps in metadata produce incorrect status assessments.
 
 ### BUGS.md Cross-Reference
 
@@ -432,7 +429,7 @@ Write incrementally, one phase block at a time:
 **Chat output per phase written:**
 > "Phase N written: [one sentence summary]. [M] parallel tracks."
 
-Do not write all phases at once.
+Write one phase at a time — because incremental writing allows checkpoint verification between phases.
 
 ---
 
@@ -569,7 +566,7 @@ Surface immediately via `AskUserQuestion`:
 > 2. Manually specify which plan should run first and accept the merge conflict
 > 3. Re-examine whether the dependency is real"
 
-Do not write a roadmap document until the cycle is resolved.
+Resolve the review cycle before writing the roadmap — because unresolved cycles produce stale roadmaps.
 
 ### Plan with no tasks
 
@@ -607,7 +604,7 @@ Phase 0: Detect & Route (HITL, requires project memory dir) →
 CHAT: Mode routing, ingest summary, dependency edges, checkpoint questions,
       per-phase write confirmations, status/drift report, completion validation verdicts
 FILE: Full roadmap document (header + phase blocks, optional Status/Last updated fields)
-NEVER IN CHAT: Full roadmap content, raw table data, raw diff content from subagent validators
+Write roadmap content to file, summaries to chat — because raw content in chat overwhelms the conversation. Raw diff content from subagent validators also goes to file only.
 ```
 
 ### Roadmap File Location (Phase 4 — document generation)

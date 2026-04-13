@@ -15,7 +15,7 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP
 # Incremental Planning
 
 Replaces native plan mode with a question-first, file-based, incremental workflow.
-The plan lives in a file. Chat contains research, questions, and summaries — never full plan content.
+The plan lives in a file. Chat contains research, questions, and summaries — write plan content to file, not chat — because dumping plan content into chat overwhelms the conversation and hides the user's questions.
 
 ## Activation
 
@@ -34,8 +34,8 @@ This skill activates when:
    Provide 1-2 sentence summaries in chat after each section.
 3. **Never dump plan content into chat.** If the user wants to read the plan, tell them
    the file path. Only paste specific sections if the user explicitly asks to see them.
-4. **Questions before writing.** Do not write ANY plan content until Phase 2 is complete.
-5. **Incremental writing.** Write one section/task at a time, never the whole plan at once.
+4. **Questions before writing.** Complete Phase 2 before writing any plan content — because writing before clarifying produces plans that need immediate revision.
+5. **Incremental writing.** Write one section/task at a time — because writing the whole plan at once prevents checkpoint verification between tasks.
 
 ## Phase 0: Assess
 
@@ -106,7 +106,7 @@ specific questions — not generic ones.
 - Read `PROJECT.md` from the memory directory (detect using `code-quality/references/project-memory-reference.md` Directory Detection section) for past architectural decisions
 - Read `LESSONS.md` (if exists) from the memory directory for relevant past lessons. Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without
-  announcing each one. Do not quote lessons verbatim in chat.
+  announcing each one. Incorporate lessons silently — because quoting lessons verbatim consumes context the user needs for actual answers.
 - Check `{memory_dir}/BUGS.md` (if it exists) for open bug entries whose `### Files Involved`
   paths overlap with the areas being planned. Note any overlaps — these inform Phase 4
   (section 2.5. BUGS.md Cross-Reference).
@@ -192,7 +192,7 @@ via `AskUserQuestion`.
 
 The model does not decide what is in scope. If prioritization is needed, present
 options: "This plan could include [X] (adds ~N tasks) or defer it. Which do you prefer?"
-Do not silently exclude work by relabeling it as out of scope.
+Surface all work to the user — because silently relabeling work as out of scope hides it from the user who asked for it.
 
 ### Question Design
 
@@ -465,7 +465,7 @@ Assumptions must persist in the file so they survive context recycling.
 
 If a reviewer flags a **scope-level** assumption, treat it as a reactive breakpoint: stop
 and use `AskUserQuestion` immediately (same as agent-initiated scope ambiguity in step 3.5
-below). Do not defer scope assumptions to Phase 6.
+below). Surface scope assumptions immediately via AskUserQuestion — because deferring them to Phase 6 produces a plan built on unresolved assumptions.
 
 #### 3.5 Reactive Breakpoints
 
@@ -511,8 +511,7 @@ Mention in the checkpoint: "N assumptions flagged so far — will surface all in
 
 #### 5. Incorporate Feedback Immediately
 
-When the user gives feedback on a specific task, rewrite ONLY that task. Don't regenerate
-the entire plan.
+When the user gives feedback on a specific task, rewrite only that task — because regenerating the entire plan discards all other reviewed and approved content.
 
 ## Phase 5: Validate
 
@@ -559,8 +558,7 @@ The plan is the deliverable. Present the completion report.
      only — do not surface them as flags.
    - Open questions from the plan header marked `[human]`
 3. **AskUserQuestion** — If there are ANY `[human]` open questions or scope-level assumptions
-   remaining, present them via `AskUserQuestion`. Hard requirement — never bury open questions
-   in the plan doc without surfacing them here.
+   remaining, present them via `AskUserQuestion`. Surface all open questions here — because burying them in the plan doc means they go unresolved until implementation.
 
    After receiving answers, update the plan file: resolve open questions in the header and
    apply any scope-level assumption resolutions to affected tasks. Then re-state the summary
@@ -833,7 +831,7 @@ Phase 5: Validate → Phase 6: Complete (issue creation + completion report)
 ```
 CHAT: Research findings, reasoning, questions, 1-sentence task summaries, checkpoints
 FILE: Plan header, task definitions, code snippets, test commands, commit messages
-NEVER IN CHAT: Full plan content, task details, code blocks from the plan
+Write to file: Full plan content, task details, code blocks from the plan — because full content in chat overwhelms the conversation
 ```
 
 ### Plan File Location

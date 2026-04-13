@@ -197,13 +197,7 @@ After launching agent(s), confirm with a brief acknowledgment:
 BUG-014 launched — investigating [short description].
 ```
 
-Do NOT:
-- Repeat the user's bug description back to them
-- Speculate about the root cause
-- Provide a lengthy response
-- Investigate the bug yourself (read source files, trace code paths, analyze root causes)
-
-The user wants to keep reporting bugs. Stay out of their way.
+Keep acknowledgments brief — confirm the bug ID and short description only — because the user wants to keep reporting bugs, not read summaries. Dispatch immediately — your value is speed of coordination, not analysis. Investigation belongs to the background agents you spawn.
 
 ### 6. Agent Completion Summaries
 
@@ -213,7 +207,7 @@ When a background agent completes, summarize in 1-2 sentences:
 BUG-014 complete — [impact]. Root cause: [one sentence]. See BUGS.md for details.
 ```
 
-Do NOT dump the full agent report into the conversation.
+Summarize only — because dumping the full agent report into the conversation overwhelms the bug-reporting flow.
 
 ## Phase 3: Review & Cleanup
 

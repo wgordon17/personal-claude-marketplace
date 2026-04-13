@@ -139,7 +139,7 @@ The orchestrator assigns categories in priority order (security → dead code �
 
 - Tests verified after every implementation category — rollback on failure
 - LSP `findReferences` before every deletion, move, or rename
-- Security fixes NEVER auto-applied if they could change business logic
+- Security fixes require explicit user confirmation when they could change business logic — because auto-applying such changes bypasses the review that prevents behavioral regressions
 - AskUserQuestion for all ambiguous or high-risk decisions
 - `--dry-run` flag for discovery + planning without implementation
 - Agents use `needs-input` escape hatch for uncertain changes — see `code-quality/references/finding-classification.md` Fixer Protocol

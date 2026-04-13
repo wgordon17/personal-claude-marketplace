@@ -20,7 +20,7 @@ Read all markdown files in the memory directory to understand what's already doc
 
 ---
 
-## Content Placement Rules (CRITICAL)
+## Content Placement Rules
 
 See `code-quality/references/project-memory-reference.md` (Content Placement Rules section) for the authoritative table of where each content type belongs.
 
@@ -72,7 +72,7 @@ Keep it current: Remove outdated info, update stale sections.
 - Main accomplishment 3
 ```
 
-**FORBIDDEN in SESSIONS.md:**
+**Avoid in SESSIONS.md** — because SESSIONS.md is a log, not documentation; paragraphs and implementation details belong in PROJECT.md:
 - Implementation details (→ PROJECT.md)
 - Technical decisions (→ PROJECT.md)
 - Task lists or todos (→ TODO.md)
@@ -102,7 +102,7 @@ Keep it current: Remove outdated info, update stale sections.
 - Brief context if needed (1 sentence max)
 - Optionally: 2-3 options for user to choose from
 
-**FORBIDDEN in NEXT.md:**
+**Avoid in NEXT.md** — because NEXT.md is a pointer, not a plan; implementation details belong in TODO.md or the plan file:
 - Implementation details
 - Full task descriptions (those belong in TODO.md)
 - Decisions or rationale (→ PROJECT.md)

@@ -17,7 +17,7 @@ verify findings before reporting. A Sonnet verification agent then reads source 
 or disprove each finding. Results are categorized by type (testing gaps, correctness, security,
 architecture, decisions needed, etc.) and printed as a structured terminal report.
 
-**Never comments on GitHub PRs.** Output is terminal-only.
+**Output is terminal-only** — because PR comments from review tools create noise and can't be retracted.
 
 ## Usage
 
@@ -249,8 +249,7 @@ The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{pl
 
 When `{plan_test_plan}` is empty string, omit the `UAT CROSS-REFERENCE` section entirely from
 the QA Reviewer prompt, omit the `UAT SCENARIOS` section from the Correctness Reviewer and Plan
-Adherence Reviewer prompts — do not render the heading, label, or empty placeholder in any of
-these reviewers.
+Adherence Reviewer prompts — omit empty sections — because rendering empty placeholders adds visual noise.
 
 ### Collect Findings
 
@@ -521,7 +520,7 @@ After output and counter increment, return to the original branch or worktree re
 | All findings false positive | Output "no findings" report format (not an error) |
 | Verification JSON parse fails | All findings get `unverified` verdict, treated as `needs_context` in output |
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
-| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
+| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output — surface needs-input findings in the output — because hidden findings are unaccounted-for work |
 
 ---
 

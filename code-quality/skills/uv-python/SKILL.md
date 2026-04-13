@@ -1,6 +1,6 @@
 ---
 name: uv-python
-description: PROACTIVE skill - Use for ANY task involving Python execution or bash/shell scripts that might run Python. Triggers include creating .py files, writing bash scripts, running terminal commands, automation scripts, CI/CD configs, Makefiles, dependency management, or ANY mention of python/pip/python3. Enforces uv CLI to replace ALL python/pip usage. CRITICAL - Activate BEFORE writing scripts or commands that could invoke Python.
+description: PROACTIVE skill - Use for ANY task involving Python execution or bash/shell scripts that might run Python. Triggers include creating .py files, writing bash scripts, running terminal commands, automation scripts, CI/CD configs, Makefiles, dependency management, or ANY mention of python/pip/python3. Enforces uv CLI to replace ALL python/pip usage. Activate before writing any script or command that could invoke Python — because uv enforcement requires the skill to be loaded before code generation.
 allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 ---
 
@@ -8,14 +8,14 @@ allowed-tools: [Bash, Read, Write, Edit, Grep, Glob]
 
 This skill ensures that all Python interactions utilize the `uv` CLI tool, a high-performance Python package and project manager that replaces pip, pipx, pyenv, and other tools.
 
-## ⚠️ MANDATORY RULES - READ FIRST
+## Rules for Python Operations
 
-**YOU MUST FOLLOW THESE RULES FOR ALL PYTHON OPERATIONS:**
+**Follow these rules for all Python operations:**
 
-1. **NEVER use `python`, `python3`, or `python3.x` directly** - Always use `uv run`
-2. **NEVER use `pip install`** - Use `uv add` (in projects) or `uv pip install`
-3. **NEVER use raw shebangs like `#!/usr/bin/env python3`** - Use `#!/usr/bin/env -S uv run` or omit shebang entirely (uv run handles it)
-4. **NEVER pipe scripts to python** (e.g., `cat script.py | python3`) - Use `uv run script.py`
+1. **Always use `uv run` instead of `python`/`python3`** — because direct Python invocation bypasses the managed environment.
+2. **Always use `uv add` or `uv pip install` instead of `pip install`** — because pip installs outside the managed dependency graph.
+3. **Use `uv run` shebangs instead of `#!/usr/bin/env python3`** — Use `#!/usr/bin/env -S uv run` or omit shebang entirely (uv run handles it) — because raw shebangs bypass the virtual environment.
+4. **Use `uv run script.py` instead of piping to `python3`** (e.g., `cat script.py | python3`) — because piping bypasses environment and dependency management.
 5. **ALWAYS check for uv availability first** - If not installed, offer installation once
 
 These rules apply to:
@@ -160,7 +160,7 @@ This creates:
 
 ### 7. Bash Scripts and Terminal Commands
 
-**CRITICAL**: When writing bash scripts, automation scripts, or any shell commands that execute Python, use `uv run`:
+When writing bash scripts, automation scripts, or any shell commands that execute Python, use `uv run`:
 
 **❌ WRONG - Legacy bash script:**
 ```bash
@@ -259,7 +259,7 @@ black .  # Now available globally
 
 ### Test Execution (Pytest and Pre-commit)
 
-**CRITICAL**: For comprehensive test execution guidance, see `/test-runner skill`
+For comprehensive test execution guidance, see `/test-runner skill`
 
 **Quick reference for pytest with uv:**
 

@@ -160,7 +160,7 @@ Or use `.local/`, `scratch/`, or `.dev/` if user prefers.
 
 ## Tooling
 [For Python projects:]
-**CRITICAL: ALWAYS use `uv run` instead of direct `python` invocation**
+**Always use `uv run` instead of direct `python` invocation** — because uv enforcement is a project convention:
 - Use: `uv run script.py` NOT `python script.py`
 - Use: `uv add package` NOT `pip install package`
 ```
@@ -225,7 +225,7 @@ Ready to start! Use /session-end before finishing to sync.
 
 - **Be selective:** Only load the files listed in Step 1 at startup
 - **Be concise:** Summaries should be scannable, not essays
-- **Don't overwhelm:** Focus on immediate focus from NEXT.md
+- **Focus on immediate priorities from NEXT.md** — because loading too much context at startup wastes the initial context window
 - **Respect existing structure:** If files have custom formats, preserve them
 - **Set expectations:** Remind user about `/session-end` at the end
 

@@ -231,12 +231,10 @@ Project Memory:
 }
 ```
 
-IMPORTANT:
-- Be thorough: this is a deep audit
-- Evidence-based: every issue must have concrete evidence
-- No false positives: only flag issues you're confident about
-- Do not fabricate findings — false positives cost more than missed issues. Reporting zero
-  issues for a well-written file is the correct outcome, not a sign of insufficient review.
+Guidelines:
+- Be thorough — this is a deep audit
+- Evidence-based — every issue must have concrete evidence
+- Report only findings you can confirm with concrete evidence — because false positives cost more than missed issues. Reporting zero issues for a well-written file is the correct outcome, not a sign of insufficient review.
 ```
 
 ---

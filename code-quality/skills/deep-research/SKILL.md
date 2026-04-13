@@ -311,7 +311,7 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Include contrasting viewpoints** (not just the popular opinion)
 - **Cite sources for factual claims** (inline references)
 - **Distinguish facts from opinions** (use language like "according to X" vs "the documentation states")
-- **Flag areas of uncertainty** (don't pretend to know what you don't)
+- **Flag uncertainty explicitly** — because false confidence in research findings produces incorrect downstream decisions.
 - **Include recent (2025-2026) sources** where available
 - **Cross-reference claims** (verify important claims with multiple sources)
 - **Verify API claims against current docs** — use Context7 MCP to confirm API signatures, configuration options, and version-specific behavior rather than relying on training data

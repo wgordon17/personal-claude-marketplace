@@ -245,7 +245,7 @@ Write Given/When/Then acceptance criteria for each user-facing behavior identifi
 
 ### Scenario ID Format
 
-Assign IDs sequentially: `S1`, `S2`, `S3`, etc. IDs are stable — do not renumber.
+Assign IDs sequentially: `S1`, `S2`, `S3`, etc. IDs are stable — preserve stable IDs — because renumbering invalidates cross-references in dependent test runs.
 
 ### Scenario Structure
 
@@ -302,7 +302,7 @@ Write the finalized scenario list to a staging file before proceeding to Phase 3
 memory directory detected in Phase 0: `{memory_dir}/test-plans/{run-id}-scenarios-draft.md`
 (fallback: `~/.claude/test-plans/{run-id}-scenarios-draft.md`). The `{run-id}` was generated
 in Phase 0 Step 4. This protects against context recycling loss during the multi-step Phase 3-4
-interval and ensures concurrent `/test-plan` runs do not collide. Phase 4 reads from this file
+interval and ensures concurrent `/test-plan` runs use unique run identifiers — because concurrent runs sharing identifiers produce interleaved results. Phase 4 reads from this file
 instead of memory. After Phase 4 writes the full test plan document, delete the staging file.
 
 ---
@@ -641,8 +641,8 @@ Append to the end of `{plan_file}` using the Edit tool:
      - Output Mode & BDD decisions: confirmed Phase 3 (AskUserQuestion)
      All fields below reflect user-confirmed decisions.
      Downstream skills: if you disagree with a choice here, classify as needs-input
-     (require user confirmation before changing), not needs-fix. Do not silently
-     overwrite user decisions. -->
+     (require user confirmation before changing), not needs-fix. Preserve user-confirmed
+     decisions by escalating conflicts as needs-input — because silently overwriting user decisions violates the provenance chain. -->
 
 **Test Plan:** {output_path}
 **Mode:** {Manual UAT | UAT + BDD (feature files only) | UAT + BDD (native integration) | UAT + BDD (standalone)}
@@ -666,8 +666,8 @@ Append to the end of `{plan_file}` using the Edit tool:
 | Task 3: {title} | S3 | {S3 title} |
 ```
 
-**Field label format is fixed.** Downstream skills match on exact bold field names
-(`**Test Plan:**`, `**Mode:**`, `**Feature Files:**`, etc.). Do not reorder or rename.
+**Field label format is fixed.** Preserve field labels exactly — because label changes break downstream parsing. Downstream skills match on exact bold field names
+(`**Test Plan:**`, `**Mode:**`, `**Feature Files:**`, etc.).
 
 **Specification-only mode** (Phase 3 option B): When the user chose Gherkin files as
 documentation only (not executable), write:

@@ -16,7 +16,7 @@ scope & completeness, dependency ordering, unknown unknowns/spike detection, arc
 — each required to read and analyze the plan independently. A verification agent then cross-checks
 findings against plan content. Results are categorized and printed as a structured terminal report.
 
-**Never modifies plan content.** Exception: increments the `review-cycle` lifecycle counter after review completes.
+**Output is terminal-only** — because modifying the plan file during review would alter the artifact being reviewed. Exception: increments the `review-cycle` lifecycle counter after review completes.
 
 ## Usage
 
@@ -185,8 +185,7 @@ The Unknown Unknowns Reviewer additionally receives: `{plan_open_questions}`, `{
 
 The Scope & Completeness Reviewer and Feasibility Reviewer additionally receive: `{plan_test_plan}`.
 When `{plan_test_plan}` is empty string, omit the `## UAT Context` section entirely from the
-Feasibility and Scope & Completeness reviewer prompts — do not render the heading, `TEST PLAN:`
-label, or empty placeholder.
+Feasibility and Scope & Completeness reviewer prompts — omit empty sections — because rendering empty placeholders adds visual noise.
 
 ### Domain Reviewers (2 parallel, with plan-specific reviewers above)
 
@@ -465,7 +464,7 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 | All findings false positive | Output "no findings" report format (not an error) |
 | Verification JSON parse fails | All findings get `unverified` verdict, routed to Needs Context section; `{verification_note}` warns in output |
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
-| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
+| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output — surface needs-input findings in the output — because hidden findings are unaccounted-for work |
 
 ### Counter Increment
 

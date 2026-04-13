@@ -17,8 +17,7 @@ Distills large project-memory artifacts and pull requests into concise, human-re
 summaries. Supports all 8 artifact-producing skill outputs plus GitHub PRs. Verifies
 artifact claims against current codebase state and offers archival for completed artifacts.
 
-**Edit** is included for archival status header insertion only (Phase 3). This skill never
-creates new files — **Write** is intentionally excluded. **Bash** is used for `uv run python`
+**Edit** is included for archival status header insertion only (Phase 3). Use Edit only for status header insertion — **Write** is intentionally excluded — because this skill summarizes existing artifacts rather than creating new ones. **Bash** is used for `uv run python`
 (archive file moves, path validation) and `gh`/`git` commands (PR data fetching and diff
 retrieval for PR artifact type).
 
@@ -605,7 +604,7 @@ boundaries (plan phases, swarm finding groups) — not arbitrary line ranges.
 
 If an audit agent crashes or returns unparseable output, retry once. If the second attempt
 also fails, mark all items assigned to that agent as SKIP with reason "audit agent failed."
-Do not block the entire audit on one agent's failure.
+Isolate individual agent failures — because blocking the entire audit on one agent's failure wastes all completed work.
 
 ### Cross-Reference Resolution
 
@@ -667,14 +666,13 @@ Evaluate in this priority order — stop at the first match:
 **1. Incomplete**
 If this artifact was identified as an incomplete run in Phase 0 (e.g., swarm with no
 `swarm-report.md`, fell back to `architect-plan.json`; unfuck with no `cleanup-report.md`,
-fell back to `cleanup-plan.md`): classify as Active. Do not offer
-archival. Skip the remaining classification checks.
+fell back to `cleanup-plan.md`): classify as Active — skip the archive offer and the remaining classification checks, because incomplete runs have unfinished work that archiving would hide.
 
 **2. Obsolete (flag override)**
 If `obsolete_flag` was set in Phase 0 (user included "obsolete" in the invocation): classify
 as Obsolete immediately. Skip the Superseded and Completed checks — the user has declared
 intent. **Exception:** If the artifact is BUGS.md, ignore the obsolete flag and continue to
-item 3 — BUGS.md is a persistent tracker that must never be archived (see BUGS.md Exception).
+item 3 — BUGS.md is a persistent tracker; keep it in place (see BUGS.md Exception) — because archiving BUGS.md blocks future bug tracking.
 
 **3. Superseded**
 Check for a newer artifact covering the same scope. Detection by type:
@@ -744,10 +742,7 @@ If status is Active, print the summary and audit results without an archive offe
 
 ### BUGS.md Exception
 
-BUGS.md is a persistent tracker — **never** move it to `done/` and **never** add a status
-header. BUGS.md completion is determined by its entry statuses (all Fixed), not a document
-header. Adding `**Status:** Archived` would permanently block future `/summarize` access if
-new bugs are later added.
+BUGS.md is a persistent tracker — keep it in place and leave it without a status header — because adding `**Status:** Archived` would permanently block future `/summarize` access if new bugs are later added. BUGS.md completion is determined by its entry statuses (all Fixed), not a document header.
 
 When BUGS.md is classified as Completed, skip the archive offer AskUserQuestion entirely.
 Instead, print directly:
@@ -806,7 +801,7 @@ no TOCTOU risk between validation and move).
 (remove the status header line inserted in step 1 from the primary report file). Print:
 > "Archive failed: could not move [path] to done/. Status header reverted. Error: [error message]."
 
-Stop. Do not leave the artifact in a half-archived state.
+Stop — leave the artifact in its previous state — because a half-archived artifact is harder to recover than either the original or the fully-archived form.
 
 **Step 4 — Confirm.**
 Print:

@@ -6,7 +6,7 @@ description: Comprehensive project review with TODO validation and claim verific
 
 Perform comprehensive project review and TODO validation with **actual testing and execution**.
 
-**CRITICAL:** This skill validates FEATURES, not just files. "Encryption works" ≠ "encryption.py exists".
+This skill validates features, not just files — because "encryption.py exists" is not the same as "encryption works".
 
 **CAPABILITIES:**
 1. **Legacy Migration** - Migrates CONTEXT.md + NOTES.md → PROJECT.md (new format)
@@ -85,7 +85,7 @@ Continuing with project review...
 
 ## Step 1: Claim Verification (Use LSP + Grep)
 
-**CRITICAL:** Verify what we've SAID we did actually matches the codebase reality.
+Verify claims against codebase reality — because documentation drift silently misleads future sessions.
 
 ### 1a. Extract Claims from Project Memory
 
@@ -126,7 +126,7 @@ For each claim:
 For each discrepancy found, collect for user clarification later:
 - File path and line number
 - Whether file appears active or archived
-- Suggested action (but don't execute)
+- Suggest an action without executing it — because execution before user clarification risks irreversible changes
 
 ---
 
@@ -220,7 +220,7 @@ For each `[ ]` item:
 
 ---
 
-## Step 4: User Clarification (CRITICAL)
+## Step 4: User Clarification
 
 **BEFORE making any changes, present collected ambiguities to the user.**
 
@@ -253,11 +253,11 @@ Question 2: "Ready to archive 8 old sessions. Proceed?"
 - Option C: "Don't archive yet"
 ```
 
-### NEVER Assume:
-- Old = deletable
-- Missing = incomplete
-- Archived = safe to ignore
-- Conflict = error to fix
+### Verify before assuming:
+- Old = may still be needed — verify before deleting
+- Missing = may be elsewhere — verify before marking incomplete
+- Archived = may still be relevant — verify before ignoring
+- Conflict = may be intentional — verify before treating as an error
 
 ### Always Ask When:
 - Action could delete information
