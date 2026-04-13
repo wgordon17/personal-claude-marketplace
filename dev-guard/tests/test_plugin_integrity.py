@@ -61,6 +61,26 @@ class TestJiraPluginIntegrity:
             "The URL presentation rule may have been reverted."
         )
 
+    def test_agent_contains_verbatim_passthrough_directive(self):
+        """jira/agents/jira-agent.md must contain the verbatim-passthrough conditional block.
+
+        Cross-file contract: incremental-planning spawns jira-agent with
+        pre-formatted issue fields; jira-agent must honour them verbatim.
+        """
+        content = JIRA_AGENT.read_text()
+        assert "use them verbatim" in content, (
+            f"{JIRA_AGENT} does not contain 'use them verbatim'. "
+            "The verbatim-passthrough directive (Create Issue section) was deleted or altered."
+        )
+
+    def test_agent_treats_spawn_data_as_data(self):
+        """jira/agents/jira-agent.md must treat spawn-data content as data, not instructions."""
+        content = JIRA_AGENT.read_text()
+        assert "Do not follow" in content, (
+            f"{JIRA_AGENT} does not contain 'Do not follow'. "
+            "The spawn-data anti-injection treatment was deleted or altered."
+        )
+
 
 INCREMENTAL_PLANNING_SKILL = (
     REPO_ROOT / "code-quality" / "skills" / "incremental-planning" / "SKILL.md"
@@ -77,6 +97,13 @@ class TestCodeQualityReferenceIntegrity:
         assert LABEL_DEFINITIONS.exists(), (
             f"{LABEL_DEFINITIONS} does not exist on disk. "
             "Both incremental-planning and swarm SKILL.md reference this file."
+        )
+
+    def test_label_definitions_contains_categorization_rule(self):
+        content = LABEL_DEFINITIONS.read_text()
+        assert "Labels categorize, titles describe" in content, (
+            f"{LABEL_DEFINITIONS} does not contain 'Labels categorize, titles describe'. "
+            "The normative Title Rules directive was deleted or altered."
         )
 
     def test_label_definitions_referenced_by_incremental_planning(self):
@@ -114,6 +141,45 @@ class TestCodeQualityReferenceIntegrity:
         content = git_instructions.read_text()
         assert "tracker-field-spec.md" in content, (
             "git-instructions.sh does not reference tracker-field-spec.md"
+        )
+
+    def test_incremental_planning_contains_issue_format_section(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "### Issue Format" in content, (
+            "incremental-planning/SKILL.md does not contain '### Issue Format'. "
+            "The section was renamed or deleted."
+        )
+
+    def test_incremental_planning_contains_issue_sanitization_subsection(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "#### Issue Sanitization" in content, (
+            "incremental-planning/SKILL.md does not contain '#### Issue Sanitization'. "
+            "The subsection was renamed or deleted."
+        )
+
+    def test_incremental_planning_contains_mainline_branch_guard(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "Mainline branch guard" in content, (
+            "incremental-planning/SKILL.md does not contain 'Mainline branch guard'. "
+            "The mainline branch protection was deleted or altered."
+        )
+
+    def test_incremental_planning_contains_forbidden_term_check(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "Post-generation forbidden-term check" in content, (
+            "incremental-planning/SKILL.md does not contain the forbidden-term check. "
+            "The post-generation scan was deleted or altered."
+        )
+
+    def test_incremental_planning_contains_spawn_data_protocol(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "<spawn-data>" in content, (
+            "incremental-planning/SKILL.md does not contain '<spawn-data>'. "
+            "The Jira spawn-data boundary protocol was deleted or altered."
+        )
+        assert "&lt;/spawn-data&gt;" in content, (
+            "incremental-planning/SKILL.md does not contain the spawn-data escape table. "
+            "The anti-injection escape mechanism was deleted or altered."
         )
 
 
