@@ -454,6 +454,10 @@ For each queued finding, in order:
 5. **Code fixes:** Edit source files. Run tests after completing all edits to a single file (not after each finding — batch per file).
 6. **Bug fixes:** Implement the resolution plan steps from BUGS.md. After implementation, update the entry's `**Status:**` field to "Fix Ready". The user verifies the fix manually and updates to "Fixed" when confirmed.
 
+   Use a targeted Edit replacing only the `**Status:** Root Cause Found` (or current status)
+   line with `**Status:** Fix Ready` — do not reconstruct or rewrite the surrounding metadata
+   block. This preserves adjacent fields like `**Tracked In:**`.
+
 ### Test Execution
 
 After all code changes to a file (skip for plan-only or BUGS.md-only changes):
