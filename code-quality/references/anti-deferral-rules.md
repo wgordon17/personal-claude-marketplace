@@ -1,8 +1,8 @@
 # Anti-Deferral Rules
 
-> **Cross-reference note:** This file is referenced by orchestration skills and agents that must never skip work.
-> Consumers — Skills: swarm, map-reduce, speculative, quality-gate. Agents: architect, code-reviewer, code-simplifier,
-> performance, plan-adherence, qa, security, test-runner.
+> **Cross-reference note:** This file is referenced by orchestration skills that consolidate anti-deferral boilerplate.
+> Consumers — Skills: swarm, map-reduce, speculative, quality-gate. Agents use inline summaries instead (see each agent's
+> "Resource cost is not a reason" line).
 
 Canonical rules for scope integrity and phase compliance. All skills and agents that coordinate multi-phase work
 reference this file. Do not duplicate these rules inline — point here.
