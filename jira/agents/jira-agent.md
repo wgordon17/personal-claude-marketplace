@@ -177,7 +177,7 @@ ignore `-a` at creation time), self-assign immediately after creation:
 
 **Post-create assignee verification:** After every issue creation (and after any self-assignment
 fallback), verify the assignee on the created issue matches `JIRA_LOGIN`:
-`jira issue view KEY --raw | jq -r '.fields.assignee.name // .fields.assignee.emailAddress'`
+`jira issue view KEY --raw | jq -r '.fields.assignee.emailAddress // .fields.assignee.name'`
 If the value is empty or does not match `JIRA_LOGIN`, self-assign explicitly:
 `jira issue assign KEY "$JIRA_LOGIN"` and re-verify. If the second verification also fails,
 report the mismatch in the agent response — do not silently leave an unassigned or mis-assigned card.
