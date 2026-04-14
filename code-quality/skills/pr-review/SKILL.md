@@ -17,7 +17,7 @@ verify findings before reporting. A Sonnet verification agent then reads source 
 or disprove each finding. Results are categorized by type (testing gaps, correctness, security,
 architecture, decisions needed, etc.) and printed as a structured terminal report.
 
-**Output is terminal-only** — because PR comments from review tools create noise and can't be retracted.
+**Never comments on GitHub PRs** — because PR comments from review tools create noise and can't be retracted. Output is terminal-only.
 
 ## Usage
 
