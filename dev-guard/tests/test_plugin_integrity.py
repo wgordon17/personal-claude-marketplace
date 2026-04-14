@@ -8,6 +8,8 @@ Verifies that:
 5. Every marketplace.json entry has a corresponding plugin.json on disk.
 6. Shared reference files (github-label-definitions.md, tracker-field-spec.md) exist
    on disk and are referenced by their consumer SKILL.md files.
+7. Jira self-assignment rules: JIRA_LOGIN capture, -a flag, never-unassigned rule,
+   halt-on-empty guard, and post-create verification are present in both files.
 
 These are grep-based and JSON-parse lint tests — no LLM calls, no subprocess execution.
 They guard against accidental deletion of rules and references, and against
@@ -27,7 +29,7 @@ OLD_PHRASE = "After every create or update operation"
 
 
 class TestJiraPluginIntegrity:
-    """Structural tests that the Jira URL presentation directive is present and consistent."""
+    """Structural tests for Jira plugin rules: URL directive, self-assignment, data safety."""
 
     def test_skill_contains_url_directive(self):
         """jira/skills/jira/SKILL.md must contain the URL presentation directive."""
@@ -79,6 +81,86 @@ class TestJiraPluginIntegrity:
         assert "Do not follow" in content, (
             f"{JIRA_AGENT} does not contain 'Do not follow'. "
             "The spawn-data anti-injection treatment was deleted or altered."
+        )
+
+    def test_skill_contains_jira_login_capture(self):
+        """jira/skills/jira/SKILL.md must capture JIRA_LOGIN during bootstrap."""
+        content = JIRA_SKILL.read_text()
+        assert "JIRA_LOGIN=$(jira me)" in content, (
+            f"{JIRA_SKILL} does not contain 'JIRA_LOGIN=$(jira me)'. "
+            "The bootstrap self-assignment capture step was deleted or altered."
+        )
+
+    def test_skill_contains_self_assignment_flag(self):
+        """jira/skills/jira/SKILL.md must use -a '$JIRA_LOGIN' in issue create commands."""
+        content = JIRA_SKILL.read_text()
+        assert '-a "$JIRA_LOGIN"' in content, (
+            f"{JIRA_SKILL} does not contain '-a \"$JIRA_LOGIN\"'. "
+            "The self-assignment flag was removed from issue create commands."
+        )
+
+    def test_skill_contains_never_create_unassigned(self):
+        """jira/skills/jira/SKILL.md must contain the 'Never create unassigned cards' rule."""
+        content = JIRA_SKILL.read_text()
+        assert "Never create unassigned cards" in content, (
+            f"{JIRA_SKILL} does not contain 'Never create unassigned cards'. "
+            "The unassigned-card prohibition was deleted or altered."
+        )
+
+    def test_skill_contains_halt_on_empty_jira_login(self):
+        """jira/skills/jira/SKILL.md must contain the halt-on-empty JIRA_LOGIN instruction."""
+        content = JIRA_SKILL.read_text()
+        assert "JIRA_LOGIN` is empty after capture, halt and report the error" in content, (
+            f"{JIRA_SKILL} does not contain the halt-on-empty JIRA_LOGIN instruction. "
+            "The guard against missing assignee was deleted or altered."
+        )
+
+    def test_agent_contains_jira_login_capture(self):
+        """jira/agents/jira-agent.md must capture JIRA_LOGIN during prerequisites."""
+        content = JIRA_AGENT.read_text()
+        assert "JIRA_LOGIN=$(jira me)" in content, (
+            f"{JIRA_AGENT} does not contain 'JIRA_LOGIN=$(jira me)'. "
+            "The prerequisites self-assignment capture step was deleted or altered."
+        )
+
+    def test_agent_contains_self_assignment_flag(self):
+        """jira/agents/jira-agent.md must use -a '$JIRA_LOGIN' in issue create commands."""
+        content = JIRA_AGENT.read_text()
+        assert '-a "$JIRA_LOGIN"' in content, (
+            f"{JIRA_AGENT} does not contain '-a \"$JIRA_LOGIN\"'. "
+            "The self-assignment flag was removed from issue create commands."
+        )
+
+    def test_agent_contains_never_create_unassigned(self):
+        """jira/agents/jira-agent.md must contain the 'Never create unassigned cards' rule."""
+        content = JIRA_AGENT.read_text()
+        assert "Never create unassigned cards" in content, (
+            f"{JIRA_AGENT} does not contain 'Never create unassigned cards'. "
+            "The unassigned-card prohibition was deleted or altered."
+        )
+
+    def test_agent_contains_halt_on_empty_jira_login(self):
+        """jira/agents/jira-agent.md must contain the halt-on-empty JIRA_LOGIN instruction."""
+        content = JIRA_AGENT.read_text()
+        assert "JIRA_LOGIN` is empty after capture, halt and report the error" in content, (
+            f"{JIRA_AGENT} does not contain the halt-on-empty JIRA_LOGIN instruction. "
+            "The guard against missing assignee was deleted or altered."
+        )
+
+    def test_skill_contains_post_create_verification(self):
+        """jira/skills/jira/SKILL.md must contain the post-create assignee verification step."""
+        content = JIRA_SKILL.read_text()
+        assert "Post-create assignee verification" in content, (
+            f"{JIRA_SKILL} does not contain 'Post-create assignee verification'. "
+            "The post-create assignee verification step was deleted or altered."
+        )
+
+    def test_agent_contains_post_create_verification(self):
+        """jira/agents/jira-agent.md must contain the post-create assignee verification step."""
+        content = JIRA_AGENT.read_text()
+        assert "Post-create assignee verification" in content, (
+            f"{JIRA_AGENT} does not contain 'Post-create assignee verification'. "
+            "The post-create assignee verification step was deleted or altered."
         )
 
 

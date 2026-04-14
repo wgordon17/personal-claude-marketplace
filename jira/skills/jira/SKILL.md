@@ -152,6 +152,13 @@ URL: `https://redhat.atlassian.net/browse/<KEY>`
 ignore `-a` at creation time), self-assign immediately after creation:
 `jira issue assign KEY "$JIRA_LOGIN"`. Never leave a card unassigned.
 
+**Post-create assignee verification:** After every issue creation (and after any self-assignment
+fallback), verify the assignee on the created issue matches `JIRA_LOGIN`:
+`jira issue view KEY --raw | jq -r '.fields.assignee.name // .fields.assignee.emailAddress'`
+If the value is empty or does not match `JIRA_LOGIN`, self-assign explicitly:
+`jira issue assign KEY "$JIRA_LOGIN"` and re-verify. If the second verification also fails,
+report the mismatch to the user — do not silently leave an unassigned or mis-assigned card.
+
 ### Custom Field Validation
 
 Use `--parent` for Epic Link on classic project non-subtask types (automatically sets

@@ -175,6 +175,13 @@ Note: 403 errors are auth failures — see Prerequisites auth type warning for t
 ignore `-a` at creation time), self-assign immediately after creation:
 `jira issue assign KEY "$JIRA_LOGIN"`. Never leave a card unassigned.
 
+**Post-create assignee verification:** After every issue creation (and after any self-assignment
+fallback), verify the assignee on the created issue matches `JIRA_LOGIN`:
+`jira issue view KEY --raw | jq -r '.fields.assignee.name // .fields.assignee.emailAddress'`
+If the value is empty or does not match `JIRA_LOGIN`, self-assign explicitly:
+`jira issue assign KEY "$JIRA_LOGIN"` and re-verify. If the second verification also fails,
+report the mismatch in the agent response — do not silently leave an unassigned or mis-assigned card.
+
 URL: `https://redhat.atlassian.net/browse/<KEY>`
 
 ### View/Query Issue
@@ -250,7 +257,8 @@ Note: `jira epic create` does NOT support `--raw`. Parse the key from the plain-
 output (format: "Key: MGMT-XXX") or use `jira issue list` after create.
 
 **Self-assignment fallback:** If the created epic has no assignee, self-assign immediately:
-`jira issue assign KEY "$JIRA_LOGIN"`. Same pattern as issue create fallback.
+`jira issue assign KEY "$JIRA_LOGIN"`. Same pattern as issue create fallback and
+post-create assignee verification.
 
 ### Sprint Operations
 
