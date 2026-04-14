@@ -518,7 +518,7 @@ After output and counter increment, return to the original branch or worktree re
 | All findings false positive | Output "no findings" report format (not an error) |
 | Verification JSON parse fails | All findings get `unverified` verdict, treated as `needs_context` in output |
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
-| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output — surface needs-input findings in the output — because hidden findings are unaccounted-for work |
+| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output — because hidden findings are unaccounted-for work |
 
 ---
 

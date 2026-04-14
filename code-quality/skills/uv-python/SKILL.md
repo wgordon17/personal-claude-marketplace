@@ -16,7 +16,7 @@ This skill ensures that all Python interactions utilize the `uv` CLI tool, a hig
 2. **Always use `uv add` or `uv pip install` instead of `pip install`** — because pip installs outside the managed dependency graph.
 3. **Use `uv run` shebangs instead of `#!/usr/bin/env python3`** — Use `#!/usr/bin/env -S uv run` or omit shebang entirely (uv run handles it) — because raw shebangs bypass the virtual environment.
 4. **Use `uv run script.py` instead of piping to `python3`** (e.g., `cat script.py | python3`) — because piping bypasses environment and dependency management.
-5. **ALWAYS check for uv availability first** - If not installed, offer installation once
+5. **Check for uv availability before running** — because commands fail cryptically without it. If uv is not installed, offer installation once
 
 These rules apply to:
 - Writing new Python scripts
