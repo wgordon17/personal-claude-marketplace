@@ -4,6 +4,7 @@ description: Use when investigating performance issues, optimizing slow code, an
 tools: Read, Glob, Grep, LSP, Bash, WebSearch
 model: sonnet
 color: yellow
+spawned-by: [swarm]
 ---
 
 # code-quality:performance — Performance Engineering Specialist

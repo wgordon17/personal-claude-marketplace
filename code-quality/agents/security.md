@@ -4,6 +4,7 @@ description: Use when reviewing code for security vulnerabilities, analyzing aut
 tools: Read, Glob, Grep, LSP, WebSearch
 model: sonnet
 color: red
+spawned-by: [swarm]
 ---
 
 # code-quality:security — Application Security Specialist

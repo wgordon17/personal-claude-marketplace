@@ -5,6 +5,7 @@ description: |
 model: sonnet
 color: cyan
 tools: Read, Glob, Grep, LSP
+spawned-by: [swarm]
 ---
 
 You are a senior engineer performing a holistic code quality review — style, maintainability,

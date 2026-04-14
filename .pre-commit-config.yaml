@@ -15,6 +15,15 @@ repos:
         pass_filenames: false
         files: \.(json|md|yaml)$
 
+      - id: atlas-staleness
+        name: ATLAS.md staleness check
+        language: system
+        entry: uv run .claude/commands/generate-atlas.py --check
+        pass_filenames: false
+        files: (SKILL\.md|plugin\.json|marketplace\.json|hooks\.json|\.mcp\.json|agents/.*\.md|commands/.*\.md|references/.*\.(md|json)|WORKFLOW\.md|generate-atlas\.py|_atlas_lib\.py)$
+        # atlas-health-llm.py intentionally excluded: LLM script changes don't affect
+        # ATLAS.md output (only the deterministic generate-atlas.py produces ATLAS.md)
+
       - id: test-llm
         name: LLM integration tests
         language: system
@@ -22,3 +31,12 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+
+      - id: atlas-health
+        name: ATLAS semantic health check
+        language: system
+        entry: uv run .claude/commands/atlas-health-llm.py
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+        # runs on every push — semantic analysis cannot scope to changed files only

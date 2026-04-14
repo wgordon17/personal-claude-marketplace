@@ -48,8 +48,19 @@ Personal Claude Code plugin marketplace with 10 plugins. Master registry: `.clau
 - **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
 - **jira/** — Jira integration via jira CLI (MCP temporarily disabled); OSAC defaults (project=MGMT, component=OSAC); skill (`/jira:jira`) and spawnable agent (`jira:jira-agent`)
 
-Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
+Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`. Agents live in `agents/*.md`.
+
+**Agent spawn convention:** Skills that spawn agents must use `subagent_type="plugin:agent-name"` in their SKILL.md body or reference docs. Agents should declare `spawned-by: [skill1, skill2]` in their frontmatter. The ATLAS generator validates both directions.
+
+## ATLAS.md
+
+`ATLAS.md` is a fully generated plugin inventory and health report. Never edit it manually.
+
+- **Generate:** `uv run .claude/commands/generate-atlas.py`
+- **Staleness check:** Pre-commit hook validates on plugin file changes
+- **Semantic health:** Pre-push hook runs Vertex AI analysis (fail-open)
+- **Workflow guide:** `docs/WORKFLOW.md` is hand-authored and included verbatim at the top
 
 ## CI
 
-GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx claudelint --strict`).
+GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx claudelint --strict`, ATLAS.md staleness check).

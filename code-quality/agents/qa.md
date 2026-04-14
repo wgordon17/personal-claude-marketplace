@@ -4,6 +4,7 @@ description: Use when reviewing code quality, test coverage, code smells, mainta
 tools: Read, Glob, Grep, LSP, Bash
 model: sonnet
 color: green
+spawned-by: [swarm]
 ---
 
 # code-quality:qa — Code Quality & QA Specialist
