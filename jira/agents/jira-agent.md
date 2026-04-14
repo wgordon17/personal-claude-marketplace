@@ -239,7 +239,7 @@ OSAC does not use time tracking, but the command is available for other projects
 ### Epic Operations
 
 ```bash
-jira epic create -p MGMT -n "Epic Name" -s "Epic Summary" -b "Description" --no-input
+jira epic create -p MGMT -n "Epic Name" -s "Epic Summary" -b "Description" -a "$JIRA_LOGIN" --no-input
 jira epic list --plain --paginate 0:50
 jira epic add MGMT-100 MGMT-101 MGMT-102    # Add issues to epic
 ```
