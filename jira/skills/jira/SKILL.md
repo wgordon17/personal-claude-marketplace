@@ -49,6 +49,9 @@ On the first use each session, verify CLI connectivity:
 2. `jira me` displays the configured login from local config only — it does NOT validate the
    API token. Do NOT use it as an auth check.
 3. Default project from `~/.config/.jira/.config.yml` (MGMT).
+4. Capture login for self-assignment: `JIRA_LOGIN=$(jira me)` — store for use in the `-a`
+   flag during issue creation. This ensures every card created in the session is assigned to
+   the current user.
 
 ## Default OSAC Scope
 
@@ -108,6 +111,11 @@ When creating a MGMT/OSAC issue, always set:
 - `-s "Summary"` (from user input)
 - `-t Type` (Task, Story, Bug, Epic)
 - `-l OSAC` (label)
+- `-a "$JIRA_LOGIN"` (assignee — self-assign to the current user, captured during bootstrap)
+
+**Never create unassigned cards.** An unassigned card on the team's sprint board or backlog
+is an open invitation for another developer to pick it up — even when the work is already
+in progress locally. This creates duplicate effort and conflicting implementations.
 
 When creating Stories/Tasks/Bugs under an epic, use `--parent MGMT-12345` to set the Epic Link.
 `--parent` automatically sets customfield_10014 (from `epic.link` config) for classic project
@@ -121,7 +129,7 @@ Before writing descriptions, read `jira/reference/osac-conventions.md` for the a
 template (Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to write markdown correctly.
 
 ```bash
-jira issue create -p MGMT -t Task -s "Summary" -b "Description" -l OSAC -C OSAC --no-input --raw
+jira issue create -p MGMT -t Task -s "Summary" -b "Description" -l OSAC -C OSAC -a "$JIRA_LOGIN" --no-input --raw
 ```
 
 Note: `-b` takes precedence over `--template` — if both are provided, `-b` wins. Use `-b` for
@@ -130,7 +138,7 @@ via stdin.
 
 **Shell safety:** LLM-generated summaries and descriptions may contain quotes, backticks, or `$`.
 Never interpolate them directly into flags. Assign to a variable via heredoc, then pipe:
-`printf '%s\n' "$BODY" | jira issue create -s "$SUMMARY" --template - -p MGMT -t Task -l OSAC -C OSAC --no-input --raw`
+`printf '%s\n' "$BODY" | jira issue create -s "$SUMMARY" --template - -p MGMT -t Task -l OSAC -C OSAC -a "$JIRA_LOGIN" --no-input --raw`
 
 Parse key from JSON output: `jq -r '.key'`
 
@@ -138,6 +146,10 @@ Fallback (if `--raw` returns non-JSON output or is unsupported): run without `--
 parse key from plain output using regex `[A-Z]+-[0-9]+`.
 
 URL: `https://redhat.atlassian.net/browse/<KEY>`
+
+**Self-assignment fallback:** If the created issue has no assignee (some Jira configurations
+ignore `-a` at creation time), self-assign immediately after creation:
+`jira issue assign KEY "$JIRA_LOGIN"`. Never leave a card unassigned.
 
 ### Custom Field Validation
 
