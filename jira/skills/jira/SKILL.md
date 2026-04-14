@@ -51,7 +51,8 @@ On the first use each session, verify CLI connectivity:
 3. Default project from `~/.config/.jira/.config.yml` (MGMT).
 4. Capture login for self-assignment: `JIRA_LOGIN=$(jira me)` — store for use in the `-a`
    flag during issue creation. This ensures every card created in the session is assigned to
-   the current user.
+   the current user. If `JIRA_LOGIN` is empty after capture, halt and report the error — do
+   not proceed with issue creation without a valid assignee.
 
 ## Default OSAC Scope
 

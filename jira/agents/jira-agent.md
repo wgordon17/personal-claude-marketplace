@@ -54,6 +54,8 @@ Run autonomously on first operation — do not wait for prompting:
    (PAT tokens typically use `basic`; OAuth tokens use `bearer`).
 5. Capture login for self-assignment: `JIRA_LOGIN=$(jira me)` — store for use in the `-a`
    flag during issue creation. Every card created must be assigned to the current user.
+   If `JIRA_LOGIN` is empty after capture, halt and report the error — do not proceed with
+   issue creation without a valid assignee.
 
 ## Write-Operation Constraint
 
@@ -298,7 +300,8 @@ Do NOT use `${CLAUDE_PLUGIN_ROOT}` in Read calls — it only expands in hook com
 
 ## Generalized Mode (Non-OSAC Work)
 
-When spawned for non-OSAC work, drop the MGMT/OSAC defaults:
+When spawned for non-OSAC work, drop the MGMT/OSAC defaults (project, component, label).
+Self-assignment (Prerequisites step 5) applies to ALL projects, not just OSAC.
 
 1. Use `PAGER=cat jira project list` to discover available projects (limited compared to MCP metadata)
 2. Use `--custom` flag for project-specific custom fields not covered by built-in flags

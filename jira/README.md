@@ -45,6 +45,7 @@ CLI write commands prompt for permission on each use unless you add them to
   "permissions": {
     "allow": [
       "Bash(jira issue create:*)",
+      "Bash(jira issue assign:*)",
       "Bash(jira issue edit:*)",
       "Bash(jira issue move:*)",
       "Bash(jira issue comment add:*)",
