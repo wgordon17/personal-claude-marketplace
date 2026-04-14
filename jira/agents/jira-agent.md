@@ -249,6 +249,9 @@ jira epic add MGMT-100 MGMT-101 MGMT-102    # Add issues to epic
 Note: `jira epic create` does NOT support `--raw`. Parse the key from the plain-text
 output (format: "Key: MGMT-XXX") or use `jira issue list` after create.
 
+**Self-assignment fallback:** If the created epic has no assignee, self-assign immediately:
+`jira issue assign KEY "$JIRA_LOGIN"`. Same pattern as issue create fallback.
+
 ### Sprint Operations
 
 ```bash

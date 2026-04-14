@@ -184,7 +184,8 @@ are unresolvable):
 
 ## Generalized Jira (Non-OSAC Projects)
 
-When working outside MGMT/OSAC, drop the default project/component filter and:
+When working outside MGMT/OSAC, drop the default project/component filter (project,
+component, label). Self-assignment (Bootstrap step 4) applies to ALL projects, not just OSAC.
 
 1. Use `PAGER=cat jira project list` to discover available projects (`jira project list` has no
    `--plain` flag and uses a pager that hangs in non-interactive contexts)
