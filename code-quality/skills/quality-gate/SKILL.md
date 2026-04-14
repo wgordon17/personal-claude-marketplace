@@ -304,7 +304,7 @@ most improvement occurs in early rounds, while preserving lens diversity.
 In scan-only mode:
 - Still apply the full lens checklist — do not skip the analysis
 - Record findings with `[scan-only]` prefix
-- Do NOT apply step 4 (FIX ALL FINDINGS IMMEDIATELY) — instead, carry findings to Layer 2
+- Carry findings to Layer 2 rather than applying step 4 (FIX ALL FINDINGS IMMEDIATELY) — scan-only mode is designed for analysis, not in-place fixes
 - Layer 2 subagents receive scan-only findings as additional context for verification
 - If a scan-only finding is clearly critical (security vulnerability, data loss), override
   scan-only and fix immediately — use judgment, not a blanket rule
@@ -486,8 +486,8 @@ This preserves the agent's full conversation history from Pass 1. You MUST use t
 ID returned in the Pass 1 result — using the agent name routes to a team inbox instead.
 
 **Pass 2 synchronization:** Wait for each Pass 2 response before proceeding — because
-`SendMessage` is asynchronous and results arrive out of order. Do not move to Memory Gate or
-any subsequent gate until BOTH Pass 2 responses are received and all findings are fixed.
+`SendMessage` is asynchronous and results arrive out of order. Wait for BOTH Pass 2 responses
+and confirm all findings are fixed before moving to Memory Gate or any subsequent gate.
 "Message sent" is not "response received." If the agent does not respond within 2 minutes,
 re-do the Pass 2 check yourself: re-read the files you fixed and verify the fixes are
 semantically correct (not just syntactically applied). A self-performed Pass 2 is better than
@@ -557,8 +557,8 @@ exists (Memory Gate may delete completed plans).
 discovered, skip entire gate with `SKIP (no plan)`.
 
 **Backward compatibility:** If the plan file exists but has no `**Iterations:**` block
-(pre-feature plan), skip with `SKIP (pre-feature plan)`. Do NOT fail structural checks on
-plans created before this feature existed.
+(pre-feature plan), skip with `SKIP (pre-feature plan)` — plans created before this feature
+existed should not be penalized for missing the `**Iterations:**` block.
 
 ### Structural Checks
 

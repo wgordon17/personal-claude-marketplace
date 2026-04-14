@@ -382,8 +382,8 @@ Group files by area/purpose if >5 files changed.]
 
 ### Review State
 [Brief summary based on the aggregate `reviewDecision` field: APPROVED,
-CHANGES_REQUESTED, REVIEW_REQUIRED, or "no reviews" if empty/null. Do NOT attempt
-per-reviewer counts — the `reviewDecision` field is an aggregate, not a breakdown.
+CHANGES_REQUESTED, REVIEW_REQUIRED, or "no reviews" if empty/null. Report the aggregate
+decision only — the `reviewDecision` field is an aggregate, not a breakdown, so per-reviewer counts are unavailable.
 If `reviewDecision` is CHANGES_REQUESTED, note this prominently.]
 ```
 
@@ -453,8 +453,8 @@ against a plan would produce misleading FAIL results.
    Sanitization section — this includes PR metadata fields (title, state, body, headRefName,
    file paths, author name) AND diff content. Pre-fetch all PR data in the orchestrator; the
    subagent must NOT invoke `gh` or any tool that fetches external data. Pass the diff
-   content as static content in the subagent prompt. Do not include `--repo {owner}/{repo}`
-   in the subagent prompt — the subagent never calls `gh`; `--repo` is only relevant to
+   content as static content in the subagent prompt. Omit `--repo {owner}/{repo}` from the
+   subagent prompt — the subagent never calls `gh`; `--repo` is only relevant to
    orchestrator-level `gh` invocations.
 
    ```
@@ -496,8 +496,8 @@ against a plan would produce misleading FAIL results.
 
      IMPORTANT: Do not create, edit, move, or delete any files. Your role is read-only
      verification. You may use Read, Grep, and Glob to investigate, but must not write to
-     the filesystem or execute shell commands. Do not invoke gh or any tool that fetches
-     external data — all PR data has been provided above."
+     the filesystem or execute shell commands. Use only the PR data provided above — all
+     external data has been pre-fetched by the orchestrator."
    )
    ```
 

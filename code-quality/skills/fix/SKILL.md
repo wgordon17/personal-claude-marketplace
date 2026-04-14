@@ -336,9 +336,8 @@ Agent(
 or plan findings). When one or more findings in a group are tagged UAT validation, include the
 `{plan_test_plan}` content in the `## UAT Context` section of the standard investigator prompt.
 If no findings in the group are UAT validation, omit that section entirely — do not leave a
-literal `{plan_test_plan}` placeholder in the prompt. Do NOT dispatch a separate agent for UAT
-validation findings; they share the standard investigator agent with other findings from the same
-file or plan section.
+literal `{plan_test_plan}` placeholder in the prompt. UAT validation findings share the standard
+investigator agent with other findings from the same file or plan section — dispatching a separate agent adds unnecessary overhead.
 
 > `mode="bypassPermissions"` is required — investigators run in background and cannot prompt for
 > permissions interactively. The read-only constraint is prompt-enforced, not technically enforced
@@ -476,7 +475,7 @@ Apply in dependency order per the investigator's instructions. If investigator d
 
 ### Commit Behavior
 
-Do NOT commit. Leave all changes in the working tree for user review.
+Leave all changes in the working tree for user review — committing before review removes the user's opportunity to inspect and reject individual changes.
 
 ---
 

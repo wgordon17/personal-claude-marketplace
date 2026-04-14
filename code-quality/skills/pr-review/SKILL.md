@@ -264,10 +264,8 @@ classification, evidence, source reviewer.
 If no findings were reported by any reviewer, skip verification and proceed directly to
 Phase 4 with the 'no findings' output path.
 
-Spawn a **single** Sonnet agent with ALL findings in one call. Do NOT spawn one agent per
-finding — that pattern is catastrophically slow in Claude Code where each Agent() has
-significant startup overhead. A single batched call takes ~15 seconds; per-finding agents
-with 15-20 findings would take 2-5 minutes.
+Spawn a **single** Sonnet agent with ALL findings in one call — spawning one agent per finding
+is catastrophically slow in Claude Code where each Agent() has significant startup overhead. A single batched call takes ~15 seconds; per-finding agents with 15-20 findings would take 2-5 minutes.
 
 Build the findings JSON array:
 ```json
@@ -346,8 +344,8 @@ they appear in the Needs Context section with the verification failure note.
 ## Phase 3.5 — Needs-Input Resolution
 
 If any surviving findings (after filtering false positives) have classification `needs-input`,
-present them to the user before producing the report. Do NOT skip this step - the skill must
-not exit with unresolved `needs-input` items.
+present them to the user before producing the report. Resolve all `needs-input` items before
+exiting — because the report's final classification depends on those user decisions.
 
 If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
 
@@ -528,8 +526,8 @@ After output and counter increment, return to the original branch or worktree re
 
 Prompt templates are in `references/reviewer-prompts.md`. Read that file and substitute
 placeholders before passing to each Agent call. The templates are not executable — they are
-documentation that Claude reads and fills in. Do not reference `quality-gate/references/` at
-runtime; this skill owns its own copies adapted for PR review context.
+documentation that Claude reads and fills in. Reference `references/reviewer-prompts.md` at
+runtime — this skill owns its own copies adapted for PR review context, not `quality-gate/references/`.
 
 ### Placeholder Reference
 

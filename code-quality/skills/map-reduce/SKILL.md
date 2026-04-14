@@ -156,9 +156,9 @@ LEAD (you)
    per finding, batch up to 4 per call). Each question includes full context:
    `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"` with
    options "Fix" (promoted to `needs-fix`) and "Defer" (`user-deferred`). `multiSelect: false`.
-   Do NOT exit with unresolved `needs-input` findings. If AskUserQuestion is unavailable, treat
-   all `needs-input` findings as `needs_context` in the final report (surface them, don't hide
-   them). Offer to write a detailed report or create actionable TODO items.
+   Resolve all `needs-input` findings before exiting — because leaving them unresolved hides decisions the user must make. If AskUserQuestion is unavailable, treat
+   all `needs-input` findings as `needs_context` in the final report (surface them prominently).
+   Offer to write a detailed report or create actionable TODO items.
 
 3. **For implementation workloads:**
    - Apply all `needs-fix` changes first, run tests, verify nothing regressed. Roll back on
@@ -167,9 +167,9 @@ LEAD (you)
      per finding, batch up to 4 per call). Each question includes full context:
      `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"`
      with options "Fix" (apply change) and "Defer" (`user-deferred`). `multiSelect: false`.
-     Selected items are applied, then tests re-run. Do NOT apply `needs-input` changes without
-     user approval. If AskUserQuestion is unavailable, treat all `needs-input` findings as
-     `needs_context` in the final report (surface them, don't hide them).
+     Selected items are applied, then tests re-run. Apply `needs-input` changes only after
+     explicit user approval via AskUserQuestion — because applying unreviewed changes bypasses the user's judgment. If AskUserQuestion is unavailable, treat all `needs-input` findings as
+     `needs_context` in the final report (surface them prominently).
 
 4. **Write final report** to `{run_dir}/map-reduce-report.md` with:
    - Summary statistics (files analyzed, total findings, deduplicated, invalidated)

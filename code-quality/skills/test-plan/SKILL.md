@@ -359,9 +359,7 @@ present options A and B only (no C/D), with this note:
 determined for {test_runner}. Options C/D require confirmed package compatibility and have been
 omitted. Choose A (no BDD) or B (specification-only .feature files). If you know which BDD
 framework you want, set it up manually after the plan is complete."
-Do NOT fall back to the Phase 5 BDD Toolchain Reference table — that table applies only to
-projects that already have BDD installed; it does not provide install commands suitable for
-fresh BDD setup on arbitrary test runners.
+Use the research findings for fresh BDD setup, not the Phase 5 BDD Toolchain Reference table — that table applies only to projects that already have BDD installed and lacks install commands for arbitrary test runners.
 
 **If research succeeds:** Use the research findings to build a project-aware options list.
 Present via `AskUserQuestion`:
@@ -444,8 +442,7 @@ Use the two-stage fallback:
 
 Use the `{run-id}` generated in Phase 0 Step 4.
 
-**Do NOT create a `hack/` directory if one doesn't exist.** Only write to confirmed existing
-memory directories or the `~/.claude/` fallback.
+**Respect the existing memory directory structure — only write to confirmed existing memory directories or the `~/.claude/` fallback.**
 
 **Fallback limitation:** When the `~/.claude/` fallback is used, downstream skills validate
 test plan paths against their own `{memory_dir}/test-plans/`. If the downstream skill's
@@ -615,8 +612,7 @@ Record:
 These values are written into the plan file annotation in Phase 6 so `/swarm` Phase 0 knows
 what to install and run without re-detecting.
 
-**Do NOT run the install command.** Recording it in the annotation is the contract.
-`/swarm` handles installation on the feature branch.
+**Record the install command in the annotation — `/swarm` handles installation on the feature branch.** Running it here would install BDD on the wrong branch.
 
 ---
 

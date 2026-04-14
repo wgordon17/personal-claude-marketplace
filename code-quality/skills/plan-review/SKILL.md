@@ -230,9 +230,8 @@ source reviewer.
 If no findings were reported by any reviewer, skip verification and proceed directly to
 Phase 4 with the 'no findings' output path.
 
-Spawn a **single** Sonnet agent with ALL findings in one call. Do NOT spawn one agent per
-finding — that pattern is catastrophically slow. A single batched call takes ~15 seconds;
-per-finding agents with 15–20 findings would take 2–5 minutes.
+Spawn a **single** Sonnet agent with ALL findings in one call — spawning one agent per finding
+is catastrophically slow. A single batched call takes ~15 seconds; per-finding agents with 15–20 findings would take 2–5 minutes.
 
 Build the findings JSON array:
 ```json
@@ -307,8 +306,8 @@ sections. Keep `needs_context` and `unverified` findings for the Needs Context s
 ## Phase 3.5 — Needs-Input Resolution
 
 If any surviving findings (after filtering false positives) have classification `needs-input`,
-present them to the user before producing the report. Do NOT skip this step - the skill must
-not exit with unresolved `needs-input` items.
+present them to the user before producing the report. Resolve all `needs-input` items before
+exiting — because the report's final classification depends on those user decisions.
 
 If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
 

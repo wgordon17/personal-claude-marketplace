@@ -339,8 +339,8 @@ proceeding. This is the same principle as the Reconcile step in pr-review and pl
 ### Step 4.5: Needs-Input Resolution
 
 After writing inventory.json, check the generated TODO list for items classified as `needs-input`.
-If any exist, present them to the user before exiting. Do NOT exit with unresolved `needs-input`
-items.
+If any exist, present them to the user before exiting. Resolve all `needs-input` items before
+exiting — because the inventory's final classification depends on those user decisions.
 
 Present each `needs-input` item individually via AskUserQuestion. Each item gets its own
 question with full context. Batch up to 4 per call:
@@ -367,7 +367,7 @@ For each `needs-input` TODO:
 - **Defer selected:** Update classification to `user-deferred` in inventory.json.
 
 If zero `needs-input` TODOs exist, skip this step. If AskUserQuestion is unavailable, treat
-`needs-input` items as `needs_context` in the inventory (surface them, don't hide them).
+`needs-input` items as `needs_context` in the inventory (surface them prominently).
 
 ---
 

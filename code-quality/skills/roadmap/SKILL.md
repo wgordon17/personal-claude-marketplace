@@ -188,8 +188,8 @@ Executes when user selects "Clean up completed work."
   moving the file to `{plan-dir}/done/`.
 
 **Branch deletion scoping:** Only delete branches matching `roadmap/phase-N/` for the
-specific completed phase numbers. Do NOT delete branches for in-progress or not-started
-phases — filter by exact phase number, not a broad `roadmap/*` pattern.
+specific completed phase numbers. Filter by exact phase number (not a broad `roadmap/*` pattern)
+to protect in-progress and not-started phases from accidental deletion.
 
 **After cleanup completes**, announce: "Cleanup complete. [N] plans archived, [M] branches
 deleted, [P] phase blocks marked Completed." If not all phases were cleaned up, note which
@@ -264,8 +264,7 @@ For task-level extraction:
 
 - Use `## Task N:` heading pattern to identify tasks
 - Use `**Files:**` block within each task to identify which files that task touches
-- Do NOT parse intra-task dependencies from free-form markdown — cross-plan dependencies
-  are inferred from file-path overlap in Phase 2
+- Infer cross-plan dependencies from file-path overlap in Phase 2 rather than parsing free-form markdown — because intra-task markdown prose is ambiguous and produces unreliable dependency graphs
 
 ### Non-conforming plans
 
@@ -403,7 +402,7 @@ Use the same logic as `/incremental-planning`:
 
 **Announce location:** "Roadmap file: `hack/plans/feat-auth-1711388400-roadmap-auth-launch.md`"
 
-Do NOT create a `hack/` directory if one doesn't exist.
+Respect the existing memory directory structure — creating `hack/` is a project-level decision, not yours to make.
 
 ### Writing sequence
 
@@ -549,7 +548,7 @@ When subagent validation finds `partial` or `deferred` tasks, surface via `AskUs
 ### Single plan input
 
 Trivial roadmap: one phase, one track. Still useful for documenting worktree isolation and
-the execution skill to use. Write it — don't skip.
+the execution skill to use. Write it — worktree isolation and execution skill documentation are still valuable even for trivial roadmaps.
 
 ### All plans independent
 

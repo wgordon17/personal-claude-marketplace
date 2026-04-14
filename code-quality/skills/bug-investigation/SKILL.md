@@ -258,7 +258,7 @@ Agents should READ the file first (to find the insertion point) then EDIT it.
 
 ### Keep Investigation Focused
 
-Each agent investigates ONE bug. Don't combine multiple issues into a single agent.
+Each agent investigates ONE bug — because combining multiple issues into a single agent produces entangled findings that are hard to act on independently.
 The agent should:
 1. Understand the problem
 2. Read relevant code
@@ -297,7 +297,7 @@ Mitigation strategies:
 ### Completion
 ```
 1. Summarize: "BUG-NNN complete — [impact]. Root cause: [one sentence]"
-2. Don't dump full report
+2. One-sentence root cause only — the full report is in BUGS.md
 ```
 
 ### Cleanup

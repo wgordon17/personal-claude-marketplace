@@ -121,8 +121,8 @@ the `**Tracker:**` field is absent from the plan file header (pre-feature plans)
 Finalization Constraint section. If `{tracker}` is a non-terminal state (`github:pending`,
 `github:linked#N`, or `jira:pending`), warn via `AskUserQuestion`: "Plan file has unresolved
 tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or set to 'none'
-to skip issue tracking." Do not proceed to Phase 1 until the tracker is resolved or set to
-`none`.
+to skip issue tracking." Resolve the tracker state before proceeding to Phase 1 — because
+`/swarm` requires a terminal tracker state to link commits correctly.
 
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
@@ -181,7 +181,7 @@ After receiving the plan, the Lead MUST:
    the architect via SendMessage for plan revision if external evidence contradicts the
    recommendation.
 
-Do NOT proceed to Phase 3 until all architect questions are resolved and scope is verified.
+Resolve all architect questions and verify scope before proceeding to Phase 3 — because implementers need a stable plan to avoid rework.
 The Architect remains active through Phase 3 to answer clarification questions from the
 Implementer and Reviewer.
 
@@ -360,7 +360,7 @@ in the repo root. If not found, check for `tests/acceptance/`. If neither exists
 Before copying each file, verify it is a regular file and not a symlink (SEC-004). If a
 `.feature` file with the same name already exists in `{feature_target_dir}`, use
 `AskUserQuestion` to resolve the collision: offer "Overwrite", "Keep existing", or "Rename
-incoming" for each conflict. Do not overwrite silently.
+incoming" for each conflict — because silent overwrites lose work the user may have customized.
 
 **Step 3.5.3 — BDD dependency installation (if needed):** If `**BDD Setup Needed:** yes`,
 run the recorded install command (from `**BDD Setup Needed:**` annotation value, e.g.,
@@ -518,14 +518,14 @@ If a plan file was found, the Lead performs reconciliation:
 
 3. **Escalate unaddressed tasks** — For any task that is not fully addressed by the diff, use
    `AskUserQuestion` to escalate with: the task description, what was done toward it (if anything),
-   and what remains unimplemented. Do NOT silently skip unaddressed tasks.
+   and what remains unimplemented. Escalate every unaddressed task — because silently skipping them produces a plan that misrepresents completion.
 
 4. **Spawn a plan file updater** — After escalation decisions are made, spawn a general-purpose
    sonnet agent (Can Edit: Yes) with the plan file path and reconciliation results. This agent:
    - Checks off tasks that were completed (`[x]`)
    - Marks tasks skipped by user decision as `[SKIPPED by user]`
    - Marks tasks blocked due to unresolved issues as `[BLOCKED: reason]`
-   - Do NOT modify the `## Test Plan` section or any content below it — it is a
+   - Preserve the `## Test Plan` section and all content below it exactly as-is — it is a
      machine-readable annotation consumed by downstream skills with exact field label matching.
 
    The Lead does NOT write to the plan file directly (Can Edit: No).
