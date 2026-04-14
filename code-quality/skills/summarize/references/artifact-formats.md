@@ -297,11 +297,13 @@ Per `## BUG-NNN: <Title>` section:
 | Status | `**Status:**` field | Investigating / Root Cause Found / Fix Ready / Fixed |
 | Reported date | `**Reported:**` field | YYYY-MM-DD |
 | Impact | `**Impact:**` field | Critical / High / Medium / Low |
+| Tracked In | `**Tracked In:**` field | — / Plan: {path} / Roadmap: {path} (Phase N) / Branch: {name} / PR: #N / PR: #N (merged YYYY-MM-DD) |
 | Root Cause | `### Root Cause` section | Code-level explanation with file:line refs |
 | Resolution Plan | `### Resolution Plan` checkboxes | `- [ ]` / `- [x]` steps |
 
-**Summary extraction:** Count bugs by status and impact. List all non-Fixed bugs with their
-impact and status.
+**Summary extraction:** Count bugs by status, impact, and Tracked In state
+(untracked/plan/roadmap/branch/PR/merged). List all non-Fixed bugs with their impact, status,
+and Tracked In reference.
 
 ### Audit Checklist
 
@@ -313,6 +315,10 @@ For each `## BUG-NNN` with `**Status:** Fixed`:
 For each `## BUG-NNN` with `**Status:** Fix Ready`:
 1. Read `### Resolution Plan` — verify the fix was actually applied by checking the code,
    not just the plan.
+
+For each `## BUG-NNN` with `**Status:** Fix Ready` or `**Status:** Fixed`:
+1. Verify `**Tracked In:**` is not `—` — bugs that reached Fix Ready or Fixed should
+   have a plan, PR, or merged reference. Flag as informational if missing (not blocking).
 
 ### Completion Criteria
 

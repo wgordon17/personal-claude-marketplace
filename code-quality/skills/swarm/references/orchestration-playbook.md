@@ -115,7 +115,7 @@ AskUserQuestion(questions=[{
 
 **Check if branch has open PR:**
 ```bash
-# Use mcp__github__list_pull_requests for reading PR status, or:
+# Use mcp__plugin_github-mcp_github__list_pull_requests for reading PR status, or:
 gh pr list --head $(git branch --show-current) --json number,state 2>/dev/null
 ```
 

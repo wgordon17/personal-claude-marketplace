@@ -313,3 +313,135 @@ class TestPluginVersionParity:
         assert not missing, "Phantom marketplace entries (no plugin.json on disk):\n" + "\n".join(
             f"  - {m}" for m in missing
         )
+
+
+BUG_INVESTIGATION_SKILL = REPO_ROOT / "code-quality" / "skills" / "bug-investigation" / "SKILL.md"
+QUALITY_GATE_SKILL = REPO_ROOT / "code-quality" / "skills" / "quality-gate" / "SKILL.md"
+ROADMAP_SKILL = REPO_ROOT / "code-quality" / "skills" / "roadmap" / "SKILL.md"
+ARTIFACT_FORMATS = (
+    REPO_ROOT / "code-quality" / "skills" / "summarize" / "references" / "artifact-formats.md"
+)
+
+_EM_DASH = "\u2014"
+_DEPTH_3_PHRASE = "at least 3 components"
+_ROADMAP_HOLD_PHRASE = "do NOT update"
+_ROADMAP_WRITE_PHRASE = "update those BUGS.md entries now"
+
+
+class TestBugsTrackingIntegrity:
+    """Guard the cross-skill Tracked In field contract."""
+
+    def test_bug_investigation_contains_tracked_in_field(self):
+        content = BUG_INVESTIGATION_SKILL.read_text()
+        assert "**Tracked In:**" in content, (
+            f"{BUG_INVESTIGATION_SKILL} does not contain '**Tracked In:**'. "
+            "The Tracked In field was deleted or renamed."
+        )
+
+    def test_incremental_planning_contains_tracked_in_field(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "**Tracked In:**" in content, (
+            f"{INCREMENTAL_PLANNING_SKILL} does not contain '**Tracked In:**'. "
+            "The Tracked In field was deleted or renamed."
+        )
+
+    def test_quality_gate_contains_tracked_in_field(self):
+        content = QUALITY_GATE_SKILL.read_text()
+        assert "**Tracked In:**" in content, (
+            f"{QUALITY_GATE_SKILL} does not contain '**Tracked In:**'. "
+            "The Tracked In field was deleted or renamed."
+        )
+
+    def test_roadmap_contains_tracked_in_field(self):
+        content = ROADMAP_SKILL.read_text()
+        assert "**Tracked In:**" in content, (
+            f"{ROADMAP_SKILL} does not contain '**Tracked In:**'. "
+            "The Tracked In field was deleted or renamed."
+        )
+
+    def test_artifact_formats_contains_tracked_in(self):
+        content = ARTIFACT_FORMATS.read_text()
+        assert "**Tracked In:**" in content, (
+            f"{ARTIFACT_FORMATS} does not contain '**Tracked In:**'. "
+            "The Tracked In field was removed from artifact format documentation."
+        )
+
+    def test_bug_investigation_contains_em_dash_sentinel(self):
+        content = BUG_INVESTIGATION_SKILL.read_text()
+        assert f"**Tracked In:** {_EM_DASH}" in content, (
+            f"{BUG_INVESTIGATION_SKILL} does not contain '**Tracked In:** {_EM_DASH}'. "
+            "The em-dash untracked sentinel was changed or removed."
+        )
+
+    def test_quality_gate_contains_em_dash_sentinel(self):
+        content = QUALITY_GATE_SKILL.read_text()
+        assert f"**Tracked In:** {_EM_DASH}" in content, (
+            f"{QUALITY_GATE_SKILL} does not contain '**Tracked In:** {_EM_DASH}'. "
+            "The em-dash untracked sentinel was changed or removed."
+        )
+
+    def test_quality_gate_uses_correct_mcp_tool_name(self):
+        content = QUALITY_GATE_SKILL.read_text()
+        assert "mcp__plugin_github-mcp_github__pull_request_read" in content, (
+            f"{QUALITY_GATE_SKILL} does not contain the correct MCP tool name. "
+            "Stale 'mcp__github__pull_request_read' may have been reintroduced."
+        )
+        cleaned = content.replace("mcp__plugin_github-mcp_github__pull_request_read", "")
+        assert "mcp__github__pull_request_read" not in cleaned, (
+            f"{QUALITY_GATE_SKILL} contains stale 'mcp__github__pull_request_read' "
+            "reference(s) without the 'plugin_github-mcp_' qualifier."
+        )
+
+
+class TestBugsTrackingDepthConsistency:
+    """Guard the path-comparison depth-3 rule shared across 3 skills."""
+
+    def test_incremental_planning_requires_depth_3_prefix(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert _DEPTH_3_PHRASE in content, (
+            f"{INCREMENTAL_PLANNING_SKILL} does not contain '{_DEPTH_3_PHRASE}'. "
+            "The path-comparison depth rule was changed or removed."
+        )
+
+    def test_quality_gate_requires_depth_3_prefix(self):
+        content = QUALITY_GATE_SKILL.read_text()
+        assert _DEPTH_3_PHRASE in content, (
+            f"{QUALITY_GATE_SKILL} does not contain '{_DEPTH_3_PHRASE}'. "
+            "The path-comparison depth rule was changed or removed."
+        )
+
+    def test_roadmap_requires_depth_3_prefix(self):
+        content = ROADMAP_SKILL.read_text()
+        assert _DEPTH_3_PHRASE in content, (
+            f"{ROADMAP_SKILL} does not contain '{_DEPTH_3_PHRASE}'. "
+            "The path-comparison depth rule was changed or removed."
+        )
+
+
+class TestRoadmapBugsContractIntegrity:
+    """Guard the cross-phase deferred-write contract in roadmap/SKILL.md."""
+
+    def test_roadmap_phase1_holds_tracked_in_update(self):
+        content = ROADMAP_SKILL.read_text()
+        assert _ROADMAP_HOLD_PHRASE in content, (
+            f"{ROADMAP_SKILL} does not contain '{_ROADMAP_HOLD_PHRASE}'. "
+            "The Phase 1 deferred-write instruction was deleted or altered."
+        )
+
+    def test_roadmap_phase4_writes_tracked_in(self):
+        content = ROADMAP_SKILL.read_text()
+        assert _ROADMAP_WRITE_PHRASE in content, (
+            f"{ROADMAP_SKILL} does not contain '{_ROADMAP_WRITE_PHRASE}'. "
+            "The Phase 4 deferred-write step was deleted or altered."
+        )
+
+    def test_roadmap_hold_precedes_write(self):
+        content = ROADMAP_SKILL.read_text()
+        hold_pos = content.find(_ROADMAP_HOLD_PHRASE)
+        write_pos = content.find(_ROADMAP_WRITE_PHRASE)
+        assert hold_pos != -1, f"'{_ROADMAP_HOLD_PHRASE}' not found in {ROADMAP_SKILL}"
+        assert write_pos != -1, f"'{_ROADMAP_WRITE_PHRASE}' not found in {ROADMAP_SKILL}"
+        assert hold_pos < write_pos, (
+            f"{ROADMAP_SKILL}: Phase 1 hold instruction appears AFTER Phase 4 write instruction. "
+            "The cross-phase contract ordering is broken."
+        )

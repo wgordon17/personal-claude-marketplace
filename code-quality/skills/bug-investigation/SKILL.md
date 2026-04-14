@@ -14,6 +14,13 @@ Interactive workflow for reporting, investigating, and tracking bugs using backg
 The user reports bugs conversationally while background agents investigate each one
 autonomously, documenting root causes and resolution plans in a central tracking file.
 
+## Role
+
+You are a **coordination agent**. Your sole responsibilities are: dispatching investigation
+agents, acknowledging bug reports, and summarizing results. You do not read source code,
+trace call chains, or analyze root causes — that work belongs to the background investigation
+agents you spawn.
+
 ## Activation
 
 This skill activates when:
@@ -40,6 +47,9 @@ Read {memory_dir}/BUGS.md
   - If no, keep it
 - Entries with **Status: Root Cause Found** or **Investigating** stay as-is
 - Report the cleanup to the user: "Cleaned BUGS.md: removed N fixed entries, M remain active"
+- Entries missing the `**Tracked In:**` field (pre-existing entries created before this field
+  was added): add `**Tracked In:** —` after the `**Impact:**` (or `**Severity:**`) line.
+  This ensures all entries are compatible with cross-skill tracking.
 - Determine the next bug ID from the highest existing BUG-NNN + 1
 
 **If it doesn't exist:** Create it with the template below and confirm to the user.
@@ -67,6 +77,7 @@ and documented here with root cause analysis and resolution plan.
 **Status:** Investigating | Root Cause Found | Fix Ready | Fixed
 **Reported:** YYYY-MM-DD
 **Impact:** Critical | High | Medium | Low
+**Tracked In:** — | Plan: {path} | Roadmap: {path} (Phase N) | Branch: {name} | PR: #N | PR: #N (merged YYYY-MM-DD)
 
 ### Problem
 <What the user observed — plain language>
@@ -98,6 +109,10 @@ I'll spawn background investigation agents for each one.
 ```
 
 ## Phase 2: Bug Reporting Loop
+
+**Do not investigate.** When a bug is reported, assign an ID and spawn a background agent
+immediately. Your value is speed of dispatch, not analysis. Do not read source code files,
+trace call chains, or hypothesize about root causes — the investigation agent handles all of that.
 
 When the user reports a bug or issue:
 
@@ -141,6 +156,7 @@ existing BUG entry). Use this exact format:
 **Status:** Root Cause Found
 **Reported:** [today's date]
 **Impact:** Critical | High | Medium | Low
+**Tracked In:** —
 
 ### Problem
 <What the user observed — plain language>
@@ -185,6 +201,7 @@ Do NOT:
 - Repeat the user's bug description back to them
 - Speculate about the root cause
 - Provide a lengthy response
+- Investigate the bug yourself (read source files, trace code paths, analyze root causes)
 
 The user wants to keep reporting bugs. Stay out of their way.
 
@@ -206,6 +223,7 @@ When the user is done reporting bugs or asks to review status:
    - Total bugs documented
    - Breakdown by impact (Critical/High/Medium/Low)
    - Breakdown by status (Investigating/Root Cause Found/Fix Ready/Fixed)
+   - Breakdown by Tracked In state (untracked/plan/roadmap/branch/PR/merged)
    - Any agents still running
 
 2. If the user asks to clean up:
@@ -293,6 +311,7 @@ Mitigation strategies:
 1. Remove Fixed entries
 2. Verify Fix Ready entries
 3. Keep Investigating/Root Cause Found entries
+4. Migrate pre-existing entries missing `Tracked In:` → add `**Tracked In:** —` after Impact or Severity line
 ```
 
 After bugs are documented with "Root Cause Found" status, run `/fix` to implement resolution
