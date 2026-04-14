@@ -125,7 +125,7 @@ if [[ "$CURRENT_BRANCH" == "main" ]] || [[ "$CURRENT_BRANCH" == "master" ]]; the
     echo "  # make your changes" >&2
     echo "  git commit -m \"feat(scope): description\"" >&2
     echo "  git push origin feature/descriptive-name" >&2
-    echo "  gh pr create" >&2
+    echo "  gh pr create --draft" >&2
     echo "" >&2
     echo "Emergency bypass: git checkout -b temp-branch && git commit" >&2
     exit 1

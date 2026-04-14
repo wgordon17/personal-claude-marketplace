@@ -337,7 +337,7 @@ if [ "$IS_FORK" -eq 1 ]; then
    Use a multiline double-quoted string for \`--body\`. Never use HEREDOC, \`--body-file\`, or pipes.
    \`\`\`bash
    BRANCH=\$(git branch --show-current)
-   gh pr create --repo ${UPSTREAM_REPO} --head "${ORIGIN_OWNER}:\$BRANCH" \\
+   gh pr create --repo ${UPSTREAM_REPO} --head "${ORIGIN_OWNER}:\$BRANCH" --draft \\
      --title "type(scope): description" \\
      --body "## Summary
 - What changed and why"
@@ -349,7 +349,7 @@ else
    Use a multiline double-quoted string for `--body`. Never use HEREDOC, `--body-file`, or pipes.
    ```bash
    BRANCH=$(git branch --show-current)
-   gh pr create --head "$BRANCH" \
+   gh pr create --head "$BRANCH" --draft \
      --title "type(scope): description" \
      --body "## Summary
 - What changed and why"
@@ -359,6 +359,10 @@ NONFORK_PR
 fi
 
 cat <<'PR_FORMAT'
+**Always create PRs as drafts** (`--draft`). Draft PRs signal that the work is not ready
+for human review — the LLM created the PR for CI and visibility, not for merge. The user
+marks it ready-for-review when they are satisfied with the changes.
+
 **PR body rules:** Max 3 bullets under `## Summary`.
 
 **NEVER include in PR descriptions:**

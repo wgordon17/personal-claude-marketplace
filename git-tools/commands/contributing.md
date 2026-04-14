@@ -214,8 +214,8 @@ git push  # Auto-sets up tracking
 git fetch upstream
 git rebase upstream/main
 
-# Create PR
-gh pr create
+# Create PR (always as draft — mark ready-for-review manually)
+gh pr create --draft
 \`\`\`
 
 After PR merges, delete the branch and sync main.
