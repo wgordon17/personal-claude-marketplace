@@ -156,6 +156,21 @@ Always include the `OSAC` label on creation.
 
 Do not set these fields when creating OSAC issues unless specifically requested.
 
+### Self-Assignment Rule
+
+Always assign newly created OSAC issues to the current user via `-a "$JIRA_LOGIN"` (login
+captured from `jira me` at session start). Never create unassigned cards.
+
+| Scenario | Risk |
+|----------|------|
+| Unassigned card in backlog | Another developer picks it up, duplicating in-progress work |
+| Unassigned card in sprint | Team sees unclaimed work, starts working on it independently |
+| Assigned to Project Lead (Jira default) | Wrong owner — lead gets noise, actual worker has no card |
+
+The `assignee` field is the ownership signal in Jira — it tells the team who is actively
+responsible for the work. The `reporter` field (set automatically to the API caller) only
+indicates who created the card, not who is working on it.
+
 ## Custom Field IDs
 
 These IDs are point-in-time snapshots (verified 2026-04-08). Use `--parent` for Epic Link on

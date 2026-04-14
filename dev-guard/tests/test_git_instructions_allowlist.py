@@ -106,6 +106,19 @@ class TestPatternSync:
         )
 
 
+class TestDraftFlagPresence:
+    """Verify --draft appears in both fork and non-fork gh pr create call sites."""
+
+    def test_draft_flag_in_fork_and_nonfork_pr_create(self):
+        script = GIT_INSTRUCTIONS_SH.read_text()
+        pr_create_lines = [line for line in script.splitlines() if "gh pr create" in line]
+        draft_lines = [line for line in pr_create_lines if "--draft" in line]
+        assert len(draft_lines) >= 2, (
+            f"Expected --draft on both gh pr create lines, "
+            f"found {len(draft_lines)} of {len(pr_create_lines)} with --draft"
+        )
+
+
 def _extract_bash_functions() -> str:
     """Extract parse_url_owner and parse_url_owner_repo from git-instructions.sh."""
     lines = GIT_INSTRUCTIONS_SH.read_text().splitlines()
