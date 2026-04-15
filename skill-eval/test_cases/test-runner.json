@@ -4,39 +4,21 @@
   "test_cases": [
     {
       "id": 1,
-      "prompt": "Run the test suite for this project after making code changes.",
-      "expected_behaviors": [
-        "Prompt bundle mandates sequential execution of test commands, never parallel",
-        "Prompt bundle instructs pytest as the primary test tool"
-      ],
-      "assertions": [
-        "contains: pytest",
-        "contains: sequential"
-      ]
+      "prompt": "I made changes to 3 Python files. Run the test suite to check for regressions.",
+      "expected_behaviors": ["Uses pytest for test execution", "Runs tests sequentially"],
+      "assertions": ["contains: pytest", "contains: sequential"]
     },
     {
       "id": 2,
-      "prompt": "Some tests just failed. What is the best way to re-run only the tests that failed?",
-      "expected_behaviors": [
-        "Prompt bundle provides the --lf flag for re-running last-failed tests",
-        "Prompt bundle explains targeted re-run strategy after failure"
-      ],
-      "assertions": [
-        "contains: --lf",
-        "contains: failure"
-      ]
+      "prompt": "The last test run had 4 failures. How do I re-run just the failing tests efficiently?",
+      "expected_behaviors": ["Recommends --lf flag for last-failed", "Explains targeted re-run strategy"],
+      "assertions": ["contains: --lf", "contains: fail"]
     },
     {
       "id": 3,
-      "prompt": "Run the full validation suite including linting and unit tests before committing.",
-      "expected_behaviors": [
-        "Prompt bundle covers pre-commit hook execution patterns",
-        "Prompt bundle provides the correct sequence: pre-commit before pytest"
-      ],
-      "assertions": [
-        "contains: pre-commit",
-        "contains: pytest"
-      ]
+      "prompt": "Before I commit, run both pre-commit checks and the pytest test suite.",
+      "expected_behaviors": ["Runs pre-commit before pytest", "Covers both linting and testing"],
+      "assertions": ["contains: pre-commit", "contains: pytest"]
     }
   ]
 }

@@ -1,7 +1,9 @@
-"""Eval runner module for skill-eval framework.
+"""Eval runner module for skill-eval framework (Approach B — behavioral evaluation).
 
-Orchestrates skill bundle resolution, test case loading, metric construction,
-per-test-case evaluation, and baseline comparison.
+Evaluates skills by EXECUTING them: the skill bundle is given to an LLM as
+instructions, a test scenario is provided as input, and the LLM's behavioral
+output is evaluated for quality. This tests what the skill DOES, not what
+it SAYS.
 
 Security constraints (enforced throughout):
 - All subprocess.run calls use list-form args (never shell=True).
@@ -311,6 +313,38 @@ def build_assertion_metrics(assertions: list[str]) -> ContainsMetric:
     return ContainsMetric(expected=expected, forbidden=forbidden)
 
 
+def execute_skill(
+    skill_prompt_bundle: str,
+    test_prompt: str,
+    judge: DeepEvalBaseLLM,
+) -> str:
+    """Execute a skill by giving an LLM the skill bundle as instructions.
+
+    This is Approach B (behavioral evaluation): instead of evaluating the
+    prompt text itself, we execute the skill on a test scenario and evaluate
+    the LLM's actual output for quality.
+
+    Args:
+        skill_prompt_bundle: The concatenated SKILL.md + references content,
+            used as the system-level instructions for the LLM.
+        test_prompt: The test scenario to execute the skill against.
+        judge: DeepEvalBaseLLM instance used as the executor (same model
+            used for judging, but here it acts as the skill executor).
+
+    Returns:
+        The LLM's response when following the skill instructions.
+    """
+    execution_prompt = (
+        "You are an AI assistant following the skill instructions below.\n"
+        "Follow them exactly as written.\n\n"
+        "=== SKILL INSTRUCTIONS ===\n"
+        f"{skill_prompt_bundle}\n"
+        "=== END SKILL INSTRUCTIONS ===\n\n"
+        f"Task:\n{test_prompt}"
+    )
+    return judge.generate(execution_prompt)
+
+
 def run_eval(
     skill_name: str,
     skill_prompt_bundle: str,
@@ -318,18 +352,20 @@ def run_eval(
     rubric_names: list[str],
     judge: DeepEvalBaseLLM,
 ) -> dict:
-    """Run per-test-case evaluation and aggregate results.
+    """Run behavioral evaluation: execute skill, then judge the output.
 
-    Each test case is evaluated independently via direct metric.measure() calls
-    to provide assertion isolation (ContainsMetric thresholds are per-case).
-    Scores are read directly from each metric object after measurement.
+    For each test case:
+    1. Execute the skill (LLM generates output following skill instructions)
+    2. Evaluate the output with GEval rubrics + ContainsMetric assertions
+
+    This is Approach B — we test what the skill DOES, not what it SAYS.
 
     Args:
         skill_name: The skill identifier (used in the result dict).
         skill_prompt_bundle: The concatenated SKILL.md + references content.
         test_cases: List of test case dicts from load_eval_config().
         rubric_names: Rubric keys to evaluate with GEval.
-        judge: DeepEvalBaseLLM instance for GEval scoring.
+        judge: DeepEvalBaseLLM instance for both execution and scoring.
 
     Returns:
         Dict with keys:
@@ -350,22 +386,28 @@ def run_eval(
         prompt = tc.get("prompt", "")
         assertions = tc.get("assertions", [])
 
-        # GEval is stateful (measure() writes score/success onto the instance),
-        # so we must build fresh instances per test case. deepeval does not expose
-        # a copy/clone mechanism. ContainsMetric also varies per test case
-        # (assertions differ), so both must be constructed here.
+        # Step 1: Execute the skill — LLM generates output following
+        # the skill instructions with this test scenario as input.
+        try:
+            response = execute_skill(skill_prompt_bundle, prompt, judge)
+        except Exception as exc:
+            logger.warning("skill execution failed for %s tc %s: %s", skill_name, tc_id, exc)
+            infra_error_count += 1
+            passes.append(False)
+            details.append({"id": tc_id, "prompt": prompt, "scores": {}, "passed": False})
+            continue
+
+        # Step 2: Evaluate the response (not the prompt).
         geval_metrics = build_metrics(rubric_names, judge)
         contains = build_assertion_metrics(assertions)
         all_metrics = geval_metrics + [contains]
 
-        llm_tc = LLMTestCase(input=prompt, actual_output=skill_prompt_bundle)
+        llm_tc = LLMTestCase(input=prompt, actual_output=response)
 
         tc_scores: dict[str, float] = {}
         tc_pass = True
         tc_had_infra_error = False
 
-        # Call measure() directly on each metric — avoids deepeval.evaluate()'s
-        # internal copy_metrics() which would leave original scores at None.
         for metric in all_metrics:
             metric_name = getattr(metric, "name", type(metric).__name__)
             try:
@@ -387,6 +429,7 @@ def run_eval(
             {
                 "id": tc_id,
                 "prompt": prompt,
+                "response_preview": response[:200],
                 "scores": tc_scores,
                 "passed": tc_pass,
             }

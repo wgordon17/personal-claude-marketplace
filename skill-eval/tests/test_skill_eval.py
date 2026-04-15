@@ -525,4 +525,4 @@ class TestBuildAssertionMetrics:
         tc = config["test_cases"][0]
         metric = build_assertion_metrics(tc["assertions"])
         assert isinstance(metric, ContainsMetric)
-        assert "correctness" in metric.expected
+        assert "layer 1" in metric.expected

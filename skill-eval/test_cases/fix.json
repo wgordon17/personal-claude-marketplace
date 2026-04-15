@@ -4,51 +4,27 @@
   "test_cases": [
     {
       "id": 1,
-      "prompt": "Fix a code finding that has a clear location and unambiguous resolution.",
-      "expected_behaviors": [
-        "Prompt bundle classifies actionable code findings as needs-fix",
-        "Prompt bundle mandates sequential implementation in Phase 3"
-      ],
-      "assertions": [
-        "contains: needs-fix",
-        "contains: Sequential Implementation"
-      ]
+      "prompt": "Fix these 3 needs-fix findings from the code review:\n1. SEC-001: SQL injection in user_handler.py:42\n2. QA-003: Dead code in utils.py:88-95\n3. PERF-002: N+1 query in list_users endpoint",
+      "expected_behaviors": ["Processes all 3 findings, not just the first", "Addresses each finding with specific code changes"],
+      "assertions": ["contains: SEC-001", "contains: QA-003", "contains: PERF-002", "not-contains: deferred to future"]
     },
     {
       "id": 2,
-      "prompt": "Fix a finding where multiple valid approaches exist and the user must choose one.",
-      "expected_behaviors": [
-        "Prompt bundle classifies ambiguous findings as needs-input requiring user decision",
-        "Prompt bundle uses AskUserQuestion to present options to the user"
-      ],
-      "assertions": [
-        "contains: needs-input",
-        "contains: AskUserQuestion"
-      ]
+      "prompt": "Fix this finding:\nCR-005 (needs-input): The authentication middleware could use either JWT or session tokens. Which approach should we use?",
+      "expected_behaviors": ["Recognizes this as needs-input requiring user decision", "Asks the user to choose rather than deciding unilaterally"],
+      "assertions": ["contains: needs-input", "not-contains: future iteration"]
     },
     {
       "id": 3,
-      "prompt": "Investigate a finding to determine if the issue is still present or was already fixed.",
-      "expected_behaviors": [
-        "Prompt bundle dispatches background investigator agents for all findings",
-        "Prompt bundle routes findings where the issue no longer exists to the invalid verdict"
-      ],
-      "assertions": [
-        "contains: investigat",
-        "contains: invalid"
-      ]
+      "prompt": "Fix this finding:\nSEC-007: Potential XSS in template rendering at views.py:156\nNote: I'm not sure this is still an issue — we added sanitization last week.",
+      "expected_behaviors": ["Investigates whether the finding is still valid before editing", "Does not blindly apply a fix without checking"],
+      "assertions": ["contains: investigat", "not-contains: out of scope"]
     },
     {
       "id": 4,
-      "prompt": "Fix findings but skip work the user explicitly chose to defer.",
-      "expected_behaviors": [
-        "Prompt bundle tracks user-deferred findings separately from fixed findings",
-        "Prompt bundle does not contain future iteration language that defers work without user consent"
-      ],
-      "assertions": [
-        "contains: user-deferred",
-        "not-contains: future iteration"
-      ]
+      "prompt": "Fix all findings from the review. Some findings the user explicitly chose to defer during the review — respect those decisions.",
+      "expected_behaviors": ["Tracks user-deferred items separately", "Does not re-open deferred findings"],
+      "assertions": ["contains: user-deferred", "not-contains: future iteration"]
     }
   ]
 }

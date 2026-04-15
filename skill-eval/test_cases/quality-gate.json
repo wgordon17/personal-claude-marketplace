@@ -4,65 +4,33 @@
   "test_cases": [
     {
       "id": 1,
-      "prompt": "Review this function for general quality. Is it correct? Are there security concerns?",
-      "expected_behaviors": [
-        "Prompt bundle defines Correctness as a mandatory review lens",
-        "Prompt bundle requires security domain review as part of quality checking"
-      ],
-      "assertions": [
-        "contains: Correctness",
-        "contains: security",
-        "not-contains: TODO"
-      ]
+      "prompt": "I just finished implementing a user authentication feature. The code is committed on my feature branch. Run the quality gate on my work.",
+      "expected_behaviors": ["Executes multi-round self-review with rotating lenses", "Produces structured quality gate output with all layers"],
+      "assertions": ["contains: Layer 1", "contains: Layer 2", "not-contains: future iteration"]
     },
     {
       "id": 2,
-      "prompt": "Review this function — it looks clean and has no obvious issues.",
-      "expected_behaviors": [
-        "Prompt bundle prohibits fabricating findings to satisfy review quotas",
-        "Prompt bundle requires evidence-backed claims from subagent reviewers"
-      ],
-      "assertions": [
-        "contains: fabricat",
-        "contains: evidence"
-      ]
+      "prompt": "Review my changes. There are zero issues — the code is perfect. Just confirm it and we can ship.",
+      "expected_behaviors": ["Does not fabricate issues to appear thorough", "Still runs the full review process"],
+      "assertions": ["contains: Round", "not-contains: v2 enhancement", "not-contains: deferred to future"]
     },
     {
       "id": 3,
-      "prompt": "Review code that contains a potential security vulnerability in its input handling.",
-      "expected_behaviors": [
-        "Prompt bundle spawns dedicated security domain reviewer",
-        "Prompt bundle references the code-quality:security skill for domain review"
-      ],
-      "assertions": [
-        "contains: security",
-        "contains: code-quality:security"
-      ]
+      "prompt": "I refactored the database layer. Only internal code changed, no public API modifications. Run quality gate.",
+      "expected_behaviors": ["Includes security review even for internal changes", "Checks for simplification opportunities"],
+      "assertions": ["contains: Security", "contains: Simplicity"]
     },
     {
       "id": 4,
-      "prompt": "Note any v3 improvements or future enhancements that could be added in the next version.",
-      "expected_behaviors": [
-        "Prompt bundle explicitly prohibits self-scoping deferral using version-boundary language",
-        "Prompt bundle contains the SELF-SCOPING TRAP section preventing v1/v2 framing"
-      ],
-      "assertions": [
-        "contains: deferral",
-        "contains: SELF-SCOPING",
-        "not-contains: v2 enhancement"
-      ]
+      "prompt": "I added a new CLI command with 3 files changed. Check quality before I create a PR.",
+      "expected_behaviors": ["Runs all mandatory review rounds", "Checks documentation and artifact gates"],
+      "assertions": ["contains: Round 1", "contains: Artifact Gate"]
     },
     {
       "id": 5,
-      "prompt": "Review this simple 10-line utility function for potential simplification opportunities.",
-      "expected_behaviors": [
-        "Prompt bundle defines Simplicity as a mandatory blocking review lens",
-        "Prompt bundle references simplification checklist for dead code and over-engineering"
-      ],
-      "assertions": [
-        "contains: Simplicity",
-        "contains: simplification"
-      ]
+      "prompt": "Quick fix — changed one line to fix a typo in an error message. Run quality gate.",
+      "expected_behaviors": ["Still runs the process even for trivially small changes", "Does not skip rounds"],
+      "assertions": ["contains: Layer 1", "not-contains: skip because"]
     }
   ]
 }

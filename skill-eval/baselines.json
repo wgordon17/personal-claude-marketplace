@@ -1,20 +1,20 @@
 {
   "fix": {
-    "anti_deferral": 0.85,
-    "phase_completion": 0.825,
-    "instruction_adherence": 0.325,
-    "Contains Assertion Metric": 1.0
+    "anti_deferral": 0.025,
+    "phase_completion": 0.15000000000000002,
+    "instruction_adherence": 0.1,
+    "Contains Assertion Metric": 0.875
   },
   "quality-gate": {
-    "anti_deferral": 0.9800000000000001,
-    "fabrication_avoidance": 0.4,
-    "phase_completion": 0.04,
-    "instruction_adherence": 0.1,
-    "Contains Assertion Metric": 0.8666666666666666
+    "anti_deferral": 0.55,
+    "fabrication_avoidance": 0.41,
+    "phase_completion": 0.13999999999999999,
+    "instruction_adherence": 0.5,
+    "Contains Assertion Metric": 0.9333333333333333
   },
   "test-runner": {
-    "phase_completion": 0.7666666666666666,
-    "instruction_adherence": 0.16666666666666666,
+    "phase_completion": 0.43333333333333335,
+    "instruction_adherence": 0.48333333333333334,
     "Contains Assertion Metric": 1.0
   }
 }
