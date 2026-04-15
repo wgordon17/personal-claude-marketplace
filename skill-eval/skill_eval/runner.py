@@ -410,9 +410,15 @@ def run_eval(
 def compare_baselines(
     results: dict,
     baselines: dict,
-    threshold: float = 0.05,
+    threshold: float = 0.40,
 ) -> tuple[bool, str]:
     """Compare current eval results against stored baselines.
+
+    Threshold calibrated from 5x variance measurement (2026-04-15):
+    max observed range across all metrics = 0.380 (quality-gate
+    phase_completion). Threshold set to 0.40 (max + 0.02 margin)
+    to avoid false-positive regression blocks from LLM judge
+    non-determinism.
 
     A regression is detected when any metric score drops by more than
     ``threshold`` below its baseline value.
