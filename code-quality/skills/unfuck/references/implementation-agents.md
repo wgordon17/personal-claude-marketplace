@@ -145,7 +145,7 @@ Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/refer
 for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
 
 ```
-SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}', summary="FixSummary: N fixed, N needs-input")
 ```
 
 ## Commit Message Format
@@ -274,7 +274,7 @@ Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/refer
 for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
 
 ```
-SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}', summary="FixSummary: N fixed, N needs-input")
 ```
 
 ## Commit Message Format
@@ -425,7 +425,7 @@ Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/refer
 for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
 
 ```
-SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}', summary="FixSummary: N fixed, N needs-input")
 ```
 
 ## Commit Message Format
@@ -618,7 +618,7 @@ Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/refer
 for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
 
 ```
-SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}', summary="FixSummary: N fixed, N needs-input")
 ```
 
 ## Commit Message Format
@@ -759,7 +759,7 @@ Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/refer
 for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
 
 ```
-SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}', summary="FixSummary: N fixed, N needs-input")
 ```
 
 ## Commit Message Format
@@ -914,7 +914,7 @@ Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/refer
 for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
 
 ```
-SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}', summary="FixSummary: N fixed, N needs-input")
 ```
 
 ## Commit Message Format
@@ -1183,7 +1183,7 @@ Then send a JSON FixSummary to the Lead via SendMessage (see `code-quality/refer
 for the full schema). Every agent MUST emit this — the SubagentStop hook validates it:
 
 ```
-SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}')
+SendMessage(to="team-lead", message='{"schema": "FixSummary", "findings_fixed": ["<id>", ...], "needs_input_items": [{"id": "<id>", "loe": "<trivial|moderate|significant>", "description": "...", "input_needed": "...", "suggested_action": "..."}], "user_deferred": [], "fixes": [{"finding_id": "<id>", "description": "...", "file": "...", "line_range": "..."}], "files_modified": ["..."]}', summary="FixSummary: N fixed, N needs-input")
 ```
 
 ## Commit Message Format

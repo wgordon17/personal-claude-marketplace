@@ -225,8 +225,8 @@ Agent(name="documentation-auditor", subagent_type="general-purpose", model="sonn
 Each teammate, after writing its JSON output file, sends a summary to the team lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="[Agent name] complete. Results: {run_dir}/discovery/[file].json\n\n
+SendMessage(to="team-lead",
+  message="[Agent name] complete. Results: {run_dir}/discovery/[file].json\n\n
     Summary: N findings (X needs-fix, Y needs-input)\n
     Key findings: [1-3 sentence highlights]\n
     External tools used: [list]\n
@@ -253,8 +253,8 @@ Teammates send messages automatically when complete and go idle. The orchestrato
 After Phase 2 synthesis is complete and all discovery JSON files have been read, shut down the discovery teammates:
 
 ```
-SendMessage(type="shutdown_request", recipient="dead-code-hunter",
-  content="Discovery phase complete, shutting down")
+SendMessage(to="dead-code-hunter",
+  message={"type": "shutdown_request", "reason": "Discovery phase complete"})
 # ... repeat for each teammate
 ```
 
@@ -480,8 +480,8 @@ Agent(name="impl-docs", subagent_type="general-purpose", model="sonnet",
 The orchestrator assigns categories to the team in priority order by messaging `impl-writer`:
 
 ```
-SendMessage(type="message", recipient="impl-writer",
-  content="Begin Category 1: Security. Findings:\n[filtered findings from cleanup-plan.md]\n\nUse the security fixer strategy from implementation-agents.md.",
+SendMessage(to="impl-writer",
+  message="Begin Category 1: Security. Findings:\n[filtered findings from cleanup-plan.md]\n\nUse the security fixer strategy from implementation-agents.md.",
   summary="Assign security category")
 ```
 
@@ -727,7 +727,7 @@ If reflection identifies gaps, address them before announcing completion.
 Shut down any remaining teammates and delete the team:
 
 ```
-SendMessage(type="shutdown_request", recipient="*", content="Cleanup complete.")
+SendMessage(to="*", message={"type": "shutdown_request", "reason": "Cleanup complete"})
 TeamDelete()
 ```
 

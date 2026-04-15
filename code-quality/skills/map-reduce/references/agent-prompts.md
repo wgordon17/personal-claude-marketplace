@@ -146,10 +146,11 @@ Format:
 
 ### Step 6: Notify the Lead
 
-After writing your ChunkResult, send a brief summary to the lead via SendMessage:
+After writing your ChunkResult, send a brief summary to the lead:
 ```
-Chunk {chunk_id} complete. Status: complete. Found {N} findings ({X} needs-fix, {Y} needs-input; {Z} verified, {W} chunk-local).
-Output written to {output_path}. turn_count: {N}
+SendMessage(to="team-lead",
+  message="Chunk {chunk_id} complete. Status: complete. Found {N} findings ({X} needs-fix, {Y} needs-input; {Z} verified, {W} chunk-local). Output written to {output_path}. turn_count: {N}",
+  summary="Mapper {chunk_id}: {N} findings")
 ```
 
 ## Key Rules
@@ -290,13 +291,11 @@ cross-chunk validation — there are no more `chunk-local` findings.
 
 ### Step 6: Notify the Lead
 
-After writing your ReductionResult, send a summary to the lead via SendMessage:
+After writing your ReductionResult, send a summary to the lead:
 ```
-Reduction complete. Status: complete.
-Raw findings: {total}, After dedup: {deduplicated}, Invalidated: {invalidated}.
-By classification: needs-fix={N}, needs-input={N}.
-Fidelity warnings: {count}. Cross-chunk issues: {count}.
-Output written to {output_path}.
+SendMessage(to="team-lead",
+  message="Reduction complete. Status: complete. Raw findings: {total}, After dedup: {deduplicated}, Invalidated: {invalidated}. By classification: needs-fix={N}, needs-input={N}. Fidelity warnings: {count}. Cross-chunk issues: {count}. Output written to {output_path}.",
+  summary="Reducer: {deduplicated} findings after dedup")
 ```
 
 ## Key Rules

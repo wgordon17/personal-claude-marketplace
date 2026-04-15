@@ -463,8 +463,8 @@ No user interruption needed — proceed autonomously.
 Send feedback to architect and request one revision:
 
 ```
-SendMessage(type="message", recipient="architect",
-  content="Plan needs revision. Issues:\n1. <specific issue>\n2. <specific issue>\n"
+SendMessage(to="architect",
+  message="Plan needs revision. Issues:\n1. <specific issue>\n2. <specific issue>\n"
           "Please revise {run_dir}/architect-plan.json and send updated summary.",
   summary="Plan revision requested")
 ```
@@ -502,8 +502,8 @@ for clarification questions from the Implementer and Reviewer.
 Notify the Architect that implementation is starting:
 
 ```
-SendMessage(type="message", recipient="architect",
-  content="Architecture review complete. Proceeding to Phase 3 implementation. "
+SendMessage(to="architect",
+  message="Architecture review complete. Proceeding to Phase 3 implementation. "
           "Please remain available — the Implementer and Reviewer may contact you "
           "directly with clarification questions.",
   summary="Phase 3 starting, architect on standby")
@@ -558,8 +558,8 @@ Check the `verdict` field:
 **`revise`** (`needs-fix` findings require architect plan revision):
 - Send findings to the Architect:
   ```
-  SendMessage(type="message", recipient="architect",
-    content="Security design review found findings requiring plan revision.\n\n"
+  SendMessage(to="architect",
+    message="Security design review found findings requiring plan revision.\n\n"
             "Findings: {run_dir}/security-design-review.json\n\n"
             "Please revise {run_dir}/architect-plan.json to address these findings and "
             "send an updated summary when done.",
@@ -791,9 +791,9 @@ After receiving the judge's result, read `{speculative_run_dir}/judgment.json`.
 
 **Shutdown judge and all competitor agents:**
 ```
-SendMessage(type="shutdown_request", recipient="speculative-judge", content="Judgment complete.")
-SendMessage(type="shutdown_request", recipient="competitor-1", content="Phase 2.7 complete.")
-SendMessage(type="shutdown_request", recipient="competitor-2", content="Phase 2.7 complete.")
+SendMessage(to="speculative-judge", message={"type": "shutdown_request", "reason": "Judgment complete"})
+SendMessage(to="competitor-1", message={"type": "shutdown_request", "reason": "Phase 2.7 complete"})
+SendMessage(to="competitor-2", message={"type": "shutdown_request", "reason": "Phase 2.7 complete"})
 ```
 
 ### Step 2.7.8: Audit Trail
@@ -1086,8 +1086,8 @@ When an agent's `turn_count` exceeds its threshold AND it is between components 
 
 1. **Send HandoffRequest:**
    ```
-   SendMessage(type="message", recipient="implementer",
-     content='{"schema": "HandoffRequest", "reason": "context_rotation",
+   SendMessage(to="implementer",
+     message='{"schema": "HandoffRequest", "reason": "context_rotation",
        "message": "You are approaching context limits. Please send a HandoffSummary with your current state so a replacement agent can continue your work."}',
      summary="Requesting handoff for context rotation")
    ```
@@ -1096,8 +1096,8 @@ When an agent's `turn_count` exceeds its threshold AND it is between components 
 
 3. **Shutdown the agent:**
    ```
-   SendMessage(type="shutdown_request", recipient="implementer",
-     content="Context rotation complete. Thank you.")
+   SendMessage(to="implementer",
+     message={"type": "shutdown_request", "reason": "Context rotation complete"})
    ```
 
 4. **Spawn replacement** with the same name, type, model, and mode:
@@ -1123,8 +1123,8 @@ TestHandoff, or TestResult) AND their task is not marked complete:
 
 1. **Send a status check** (the agent may just be processing a large file read):
    ```
-   SendMessage(type="message", recipient="implementer",
-     content="Status check — are you still working? If blocked, send current state.",
+   SendMessage(to="implementer",
+     message="Status check — are you still working? If blocked, send current state.",
      summary="Status check for silent agent")
    ```
 2. **If no response after the status check (agent remains idle):**
@@ -1282,7 +1282,7 @@ Wait for the `BDDStepHandoff` message from bdd-step-writer. Record:
 Store `{bdd_framework_info}` in Lead state — it is passed to the Verifier in Phase 7.
 
 ```
-SendMessage(type="shutdown_request", recipient="bdd-step-writer", content="Phase 3.5 complete.")
+SendMessage(to="bdd-step-writer", message={"type": "shutdown_request", "reason": "Phase 3.5 complete"})
 ```
 
 Log Phase 3.5 completion to `{run_dir}/.swarm-run` (append):
@@ -1306,11 +1306,11 @@ Send shutdown requests to all 4 pipeline agents AND the Architect before spawnin
 The Architect's clarification role ends when Phase 3 is complete. Wait for confirmations.
 
 ```
-SendMessage(type="shutdown_request", recipient="implementer", content="Pipeline complete.")
-SendMessage(type="shutdown_request", recipient="reviewer", content="Pipeline complete.")
-SendMessage(type="shutdown_request", recipient="test-writer", content="Pipeline complete.")
-SendMessage(type="shutdown_request", recipient="test-runner", content="Pipeline complete.")
-SendMessage(type="shutdown_request", recipient="architect", content="Implementation complete. Thank you.")
+SendMessage(to="implementer", message={"type": "shutdown_request", "reason": "Pipeline complete"})
+SendMessage(to="reviewer", message={"type": "shutdown_request", "reason": "Pipeline complete"})
+SendMessage(to="test-writer", message={"type": "shutdown_request", "reason": "Pipeline complete"})
+SendMessage(to="test-runner", message={"type": "shutdown_request", "reason": "Pipeline complete"})
+SendMessage(to="architect", message={"type": "shutdown_request", "reason": "Implementation complete"})
 ```
 
 ### Step 4.2: Spawn All Reviewers
@@ -1536,7 +1536,7 @@ Append entries rather than overwriting — multiple escalation events accumulate
 ### Step 4.6: Shutdown Reviewers
 
 ```
-SendMessage(type="shutdown_request", recipient="security-reviewer", content="Review synthesis complete.")
+SendMessage(to="security-reviewer", message={"type": "shutdown_request", "reason": "Review synthesis complete"})
 # ... repeat for each spawned reviewer ...
 ```
 
@@ -1604,8 +1604,8 @@ trail and skip_phase5 remains unchanged from Phase 4's determination.
 ### Step 4.5.5: Shutdown Structural Analysts
 
 ```
-SendMessage(type="shutdown_request", recipient="structural-concurrency", content="Structural review complete.")
-SendMessage(type="shutdown_request", recipient="structural-integration", content="Structural review complete.")
+SendMessage(to="structural-concurrency", message={"type": "shutdown_request", "reason": "Structural review complete"})
+SendMessage(to="structural-integration", message={"type": "shutdown_request", "reason": "Structural review complete"})
 ```
 
 ---
@@ -1721,9 +1721,9 @@ git commit -m "refactor: simplify implementation after review"
 ### Step 5.6: Shutdown
 
 ```
-SendMessage(type="shutdown_request", recipient="fixer", content="Fix phase complete.")
-SendMessage(type="shutdown_request", recipient="test-coverage-agent", content="Test coverage phase complete.")
-SendMessage(type="shutdown_request", recipient="code-simplifier", content="Simplify phase complete.")
+SendMessage(to="fixer", message={"type": "shutdown_request", "reason": "Fix phase complete"})
+SendMessage(to="test-coverage-agent", message={"type": "shutdown_request", "reason": "Test coverage phase complete"})
+SendMessage(to="code-simplifier", message={"type": "shutdown_request", "reason": "Simplify phase complete"})
 ```
 
 ---
@@ -1782,7 +1782,7 @@ The Lead does NOT write to the plan file directly (Can Edit: No).
 ### Step 5.5.5: Clean Up
 
 ```
-SendMessage(type="shutdown_request", recipient="plan-file-updater", content="Plan update complete.")
+SendMessage(to="plan-file-updater", message={"type": "shutdown_request", "reason": "Plan update complete"})
 ```
 
 ---
@@ -1876,7 +1876,7 @@ If no `needs-fix` findings, proceed.
 ### Step 6.6: Shutdown Docs Agent
 
 ```
-SendMessage(type="shutdown_request", recipient="docs", content="Documentation phase complete.")
+SendMessage(to="docs", message={"type": "shutdown_request", "reason": "Documentation phase complete"})
 ```
 
 ### Step 6.7: Spawn Lessons Extractor
@@ -1899,8 +1899,7 @@ or TODO.md — those are the Docs agent's responsibility.
 ### Step 6.8: Shutdown Lessons Extractor
 
 ```
-SendMessage(type="shutdown_request", recipient="lessons-extractor",
-  content="Lessons extraction complete.")
+SendMessage(to="lessons-extractor", message={"type": "shutdown_request", "reason": "Lessons extraction complete"})
 ```
 
 ---
@@ -2084,7 +2083,7 @@ directory is not discoverable by future agents — project memory files are.
 ### Step 7.6: Shutdown and Cleanup
 
 ```
-SendMessage(type="shutdown_request", recipient="verifier", content="Swarm complete.")
+SendMessage(to="verifier", message={"type": "shutdown_request", "reason": "Swarm complete"})
 # ... any remaining agents ...
 TeamDelete()
 ```

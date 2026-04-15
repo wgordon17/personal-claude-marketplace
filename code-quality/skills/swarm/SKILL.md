@@ -644,7 +644,7 @@ If `{tracker}` matches `jira:PROJ-N`:
 
 Generate the final audit report at
 `{run_dir}/swarm-report.md`. Announce completion with a summary and report path.
-Shut down all teammates via `SendMessage(type="shutdown_request")` and call `TeamDelete`.
+Shut down all teammates via `SendMessage(to="*", message={"type": "shutdown_request", "reason": "Swarm complete"})` and call `TeamDelete`.
 
 ---
 

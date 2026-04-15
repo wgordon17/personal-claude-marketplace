@@ -116,13 +116,13 @@ from the schema (see `references/communication-schema.md`).
 Then send a message to the lead:
 
 ```
-SendMessage(to="team-lead", content=JSON.stringify({
+SendMessage(to="team-lead", message=JSON.stringify({
   "schema": "ImplementationResult",
   "competitor_id": "{competitor_id}",
   "status": "complete",
   "approach": "...",
   ... (all fields)
-}))
+}), summary="Competitor {competitor_id}: implementation complete")
 ```
 
 Do NOT send a plain text message — the lead expects structured JSON.
@@ -237,7 +237,7 @@ fields (see `references/communication-schema.md`).
 Then send a message to the lead:
 
 ```
-SendMessage(to="team-lead", content=JSON.stringify({
+SendMessage(to="team-lead", message=JSON.stringify({
   "schema": "JudgmentResult",
   "winner": "competitor-N",
   "scoring_matrix": [...],
@@ -245,7 +245,7 @@ SendMessage(to="team-lead", content=JSON.stringify({
   "code_inspected": [...],
   "hybrid_recommended": false,
   "hybrid_elements": []
-}))
+}), summary="Judge: winner is competitor-N")
 ```
 
 ## Important Rules
