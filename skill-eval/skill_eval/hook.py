@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 # Regex for validating git refs before passing to subprocess.
-_VALID_REF_RE = re.compile(r"^[a-zA-Z0-9/_.-]+$")
+_VALID_REF_RE = re.compile(r"^[a-zA-Z0-9/_.\-~^]+$")
 
 
 # ---------------------------------------------------------------------------
@@ -171,9 +171,34 @@ def _eval_skills(
             print(f"  [error] {skill_name}: unexpected error — {exc}", file=sys.stderr)
             continue
 
+    # Gate bypass protection: if we had skills to eval but got zero results,
+    # all evals threw exceptions — fail the gate rather than silently passing.
+    expected_evals = sum(
+        1
+        for d in skill_dirs
+        if (Path(__file__).parent.parent / "test_cases" / f"{d.name}.json").exists()
+    )
+    if expected_evals > 0 and not all_results:
+        print(
+            "\nAll evaluations failed with errors — blocking push",
+            file=sys.stderr,
+        )
+        return False
+
     if update_baselines:
-        _write_baselines(all_results)
-        print("\nBaselines updated: skill-eval/baselines.json")
+        # Filter out results with infra errors to avoid zeroing baselines.
+        valid_results = [r for r in all_results if not r.get("infra_error")]
+        if len(valid_results) < len(all_results):
+            skipped = len(all_results) - len(valid_results)
+            print(
+                f"\n  [warn] {skipped} skill(s) had infra errors — excluded from baselines",
+                file=sys.stderr,
+            )
+        if valid_results:
+            _write_baselines(valid_results)
+            print("\nBaselines updated: skill-eval/baselines.json")
+        else:
+            print("\nNo valid results to write — baselines unchanged", file=sys.stderr)
         return True
 
     if regressions:

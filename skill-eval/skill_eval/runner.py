@@ -396,7 +396,7 @@ def run_eval(
     avg_scores = {name: sum(vals) / len(vals) for name, vals in score_accum.items()}
     pass_rate = sum(passes) / len(passes) if passes else 0.0
     total_cases = len(test_cases)
-    infra_error = total_cases > 0 and infra_error_count > total_cases / 2
+    infra_error = total_cases > 0 and infra_error_count >= total_cases / 2
 
     return {
         "skill": skill_name,
