@@ -1899,8 +1899,7 @@ or TODO.md — those are the Docs agent's responsibility.
 ### Step 6.8: Shutdown Lessons Extractor
 
 ```
-SendMessage(to="lessons-extractor",
-  message={"type": "shutdown_request", "reason": "Lessons extraction complete"})
+SendMessage(to="lessons-extractor", message={"type": "shutdown_request", "reason": "Lessons extraction complete"})
 ```
 
 ---
