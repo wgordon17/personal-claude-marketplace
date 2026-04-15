@@ -308,25 +308,25 @@ class TestCompareBaselines:
         assert passed is True
 
     def test_large_drop_fails(self):
-        results = _run_result("quality-gate", {"anti_deferral": 0.4})
+        results = _run_result("quality-gate", {"anti_deferral": 0.7})
         passed, report = compare_baselines(results, {"quality-gate": {"anti_deferral": 0.9}})
         assert passed is False
         assert "REGRESSION" in report
 
     def test_drop_within_threshold_passes(self):
-        """0.30 drop is below default threshold of 0.40."""
-        results = _run_result("quality-gate", {"anti_deferral": 0.60})
+        """0.10 drop is below default threshold of 0.15."""
+        results = _run_result("quality-gate", {"anti_deferral": 0.80})
         passed, _ = compare_baselines(results, {"quality-gate": {"anti_deferral": 0.90}})
         assert passed is True
 
     def test_moderate_drop_passes(self):
-        """Drop of 0.39 is below threshold of 0.40 → pass."""
-        results = _run_result("quality-gate", {"anti_deferral": 0.51})
+        """Drop of 0.14 is below threshold of 0.15 → pass."""
+        results = _run_result("quality-gate", {"anti_deferral": 0.76})
         passed, _ = compare_baselines(results, {"quality-gate": {"anti_deferral": 0.90}})
         assert passed is True
 
     def test_drop_just_over_threshold_fails(self):
-        results = _run_result("quality-gate", {"anti_deferral": 0.49})
+        results = _run_result("quality-gate", {"anti_deferral": 0.74})
         passed, _ = compare_baselines(results, {"quality-gate": {"anti_deferral": 0.90}})
         assert passed is False
 

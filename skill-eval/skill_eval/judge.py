@@ -54,6 +54,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                 message = self.client.messages.create(
                     model=_MODEL,
                     max_tokens=_MAX_TOKENS,
+                    temperature=0,
                     messages=[{"role": "user", "content": prompt}],
                 )
             except Exception as e:
@@ -72,6 +73,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                 return self.instructor_client.messages.create(
                     model=_MODEL,
                     max_tokens=_MAX_TOKENS,
+                    temperature=0,
                     messages=[{"role": "user", "content": prompt}],
                     response_model=schema,
                 )
