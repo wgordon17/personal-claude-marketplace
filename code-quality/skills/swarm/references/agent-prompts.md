@@ -1758,7 +1758,7 @@ SendMessage(to="team-lead",
     "total_new_tests": 5,
     "turn_count": 12
   }',
-  summary="Test Coverage Agent: 5 new tests across 2 files, 1 finding already covered")
+  summary="Test Coverage: 5 new tests, 1 already covered")
 ```
 ```
 
