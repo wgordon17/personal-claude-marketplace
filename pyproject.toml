@@ -12,6 +12,7 @@ testpaths = ["dev-guard/tests"]
 addopts = "-v --tb=short -n4"
 markers = [
     "llm: marks tests that make real LLM API calls (deselect with '-m \"not llm\"')",
+    "eval: marks skill evaluation tests (deselect with '-m \"not eval\"')",
 ]
 
 [tool.ruff]

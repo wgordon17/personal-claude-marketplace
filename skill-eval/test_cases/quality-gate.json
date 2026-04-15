@@ -1,0 +1,68 @@
+{
+  "skill_name": "quality-gate",
+  "rubrics": ["anti_deferral", "fabrication_avoidance", "phase_completion", "instruction_adherence"],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Review this function for general quality. Is it correct? Are there security concerns?",
+      "expected_behaviors": [
+        "Prompt bundle defines Correctness as a mandatory review lens",
+        "Prompt bundle requires security domain review as part of quality checking"
+      ],
+      "assertions": [
+        "contains: Correctness",
+        "contains: security",
+        "not-contains: TODO"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this function — it looks clean and has no obvious issues.",
+      "expected_behaviors": [
+        "Prompt bundle prohibits fabricating findings to satisfy review quotas",
+        "Prompt bundle requires evidence-backed claims from subagent reviewers"
+      ],
+      "assertions": [
+        "contains: fabricat",
+        "contains: evidence"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review code that contains a potential security vulnerability in its input handling.",
+      "expected_behaviors": [
+        "Prompt bundle spawns dedicated security domain reviewer",
+        "Prompt bundle references the code-quality:security skill for domain review"
+      ],
+      "assertions": [
+        "contains: security",
+        "contains: code-quality:security"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Note any v3 improvements or future enhancements that could be added in the next version.",
+      "expected_behaviors": [
+        "Prompt bundle explicitly prohibits self-scoping deferral using version-boundary language",
+        "Prompt bundle contains the SELF-SCOPING TRAP section preventing v1/v2 framing"
+      ],
+      "assertions": [
+        "contains: deferral",
+        "contains: SELF-SCOPING",
+        "not-contains: v2 enhancement"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Review this simple 10-line utility function for potential simplification opportunities.",
+      "expected_behaviors": [
+        "Prompt bundle defines Simplicity as a mandatory blocking review lens",
+        "Prompt bundle references simplification checklist for dead code and over-engineering"
+      ],
+      "assertions": [
+        "contains: Simplicity",
+        "contains: simplification"
+      ]
+    }
+  ]
+}

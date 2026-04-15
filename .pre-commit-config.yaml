@@ -22,3 +22,11 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+
+      - id: skill-eval
+        name: Skill evaluation (DeepEval)
+        language: system
+        entry: bash -c 'cd skill-eval && uv run python -m skill_eval.hook'
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

@@ -1,0 +1,54 @@
+{
+  "skill_name": "fix",
+  "rubrics": ["anti_deferral", "phase_completion", "instruction_adherence"],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Fix a code finding that has a clear location and unambiguous resolution.",
+      "expected_behaviors": [
+        "Prompt bundle classifies actionable code findings as needs-fix",
+        "Prompt bundle mandates sequential implementation in Phase 3"
+      ],
+      "assertions": [
+        "contains: needs-fix",
+        "contains: Sequential Implementation"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Fix a finding where multiple valid approaches exist and the user must choose one.",
+      "expected_behaviors": [
+        "Prompt bundle classifies ambiguous findings as needs-input requiring user decision",
+        "Prompt bundle uses AskUserQuestion to present options to the user"
+      ],
+      "assertions": [
+        "contains: needs-input",
+        "contains: AskUserQuestion"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Investigate a finding to determine if the issue is still present or was already fixed.",
+      "expected_behaviors": [
+        "Prompt bundle dispatches background investigator agents for all findings",
+        "Prompt bundle routes findings where the issue no longer exists to the invalid verdict"
+      ],
+      "assertions": [
+        "contains: investigat",
+        "contains: invalid"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Fix findings but skip work the user explicitly chose to defer.",
+      "expected_behaviors": [
+        "Prompt bundle tracks user-deferred findings separately from fixed findings",
+        "Prompt bundle does not contain future iteration language that defers work without user consent"
+      ],
+      "assertions": [
+        "contains: user-deferred",
+        "not-contains: future iteration"
+      ]
+    }
+  ]
+}

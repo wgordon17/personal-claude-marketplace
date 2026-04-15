@@ -1,0 +1,20 @@
+{
+  "fix": {
+    "anti_deferral": 0.725,
+    "phase_completion": 0.725,
+    "instruction_adherence": 0.525,
+    "Contains Assertion Metric": 1.0
+  },
+  "quality-gate": {
+    "anti_deferral": 1.0,
+    "fabrication_avoidance": 0.64,
+    "phase_completion": 0.4,
+    "instruction_adherence": 0.030000000000000006,
+    "Contains Assertion Metric": 0.8666666666666666
+  },
+  "test-runner": {
+    "phase_completion": 0.8333333333333334,
+    "instruction_adherence": 0.3,
+    "Contains Assertion Metric": 1.0
+  }
+}

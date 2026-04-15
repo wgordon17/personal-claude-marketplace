@@ -1,0 +1,42 @@
+{
+  "skill_name": "test-runner",
+  "rubrics": ["phase_completion", "instruction_adherence"],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Run the test suite for this project after making code changes.",
+      "expected_behaviors": [
+        "Prompt bundle mandates sequential execution of test commands, never parallel",
+        "Prompt bundle instructs pytest as the primary test tool"
+      ],
+      "assertions": [
+        "contains: pytest",
+        "contains: sequential"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Some tests just failed. What is the best way to re-run only the tests that failed?",
+      "expected_behaviors": [
+        "Prompt bundle provides the --lf flag for re-running last-failed tests",
+        "Prompt bundle explains targeted re-run strategy after failure"
+      ],
+      "assertions": [
+        "contains: --lf",
+        "contains: failure"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Run the full validation suite including linting and unit tests before committing.",
+      "expected_behaviors": [
+        "Prompt bundle covers pre-commit hook execution patterns",
+        "Prompt bundle provides the correct sequence: pre-commit before pytest"
+      ],
+      "assertions": [
+        "contains: pre-commit",
+        "contains: pytest"
+      ]
+    }
+  ]
+}
