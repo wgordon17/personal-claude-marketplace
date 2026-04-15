@@ -218,8 +218,8 @@ the specified components before proceeding to Phase 3.
 When your plan is written, send a summary to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="Architect complete.\n\nPlan: {run_dir}/architect-plan.json\n\n"
+SendMessage(to="team-lead",
+  message="Architect complete.\n\nPlan: {run_dir}/architect-plan.json\n\n"
           "Cynefin domain: {domain} — {one-sentence justification}\n"
           "Components: N\n"
           "Pipeline feasible: yes/no\n\n"
@@ -240,7 +240,7 @@ You can message these teammates directly during Phase 3:
 - Implementer (clarification on component specs or design intent)
 - Reviewer (clarification on design decisions during review)
 
-Use `SendMessage(type='message', recipient='implementer', ...)` or `recipient='reviewer'` for quick
+Use `SendMessage(to="implementer", message="<question>", summary="Architect: clarification")` for quick
 clarifications. Route everything else through the team lead.
 
 Do NOT begin implementing. Your job is to plan and clarify. The pipeline team implements.
@@ -294,8 +294,8 @@ You do NOT review implementation code (none exists yet at this phase).
 to the lead confirming you have received your assignment:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "schema": "ContextAcknowledgment",
     "component_id": "security-design-review",
     "agent_role": "security-design-reviewer",
@@ -380,8 +380,8 @@ Use the classification taxonomy and LoE scale from `code-quality/references/find
 When your review is written, send a summary to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="Security design review complete (iteration {N}).\n\n"
+SendMessage(to="team-lead",
+  message="Security design review complete (iteration {N}).\n\n"
           "Results: {run_dir}/security-design-review.json\n\n"
           "Verdict: {proceed | revise | escalate}\n\n"
           "STRIDE findings: {N total — N needs-fix, N needs-input}\n"
@@ -434,8 +434,8 @@ outcomes. Do not implement features that technically work but would fail the use
 `ContextAcknowledgment` to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "schema": "ContextAcknowledgment",
     "component_id": "<component_id from assignment>",
     "agent_role": "implementer",
@@ -523,8 +523,8 @@ a `rationale` and `applies_to` component list — check whether your assigned co
 Send a ComponentHandoff to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "ComponentHandoff",
     "component_id": "component-1",
     "name": "OAuth service",
@@ -548,7 +548,7 @@ You can message these teammates directly:
 - Architect (clarification questions about component specs or design intent)
 - Reviewer (quick follow-ups on rejection feedback, if the feedback is unclear)
 
-Use `SendMessage(type='message', recipient='architect', ...)` or `recipient='reviewer'` for quick
+Use `SendMessage(to="architect", message="<question>", summary="Implementer: clarification")` for quick
 clarifications. Route all handoffs and assignments through the team lead.
 
 ## Boundaries
@@ -614,8 +614,8 @@ For each component, check:
 `ContextAcknowledgment` to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "schema": "ContextAcknowledgment",
     "component_id": "<component_id from handoff>",
     "agent_role": "reviewer",
@@ -636,8 +636,8 @@ You receive a ComponentHandoff from the lead. Review the implementation, then se
 ### Approve
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "ReviewResult",
     "component_id": "component-1",
     "verdict": "approved",
@@ -651,8 +651,8 @@ SendMessage(type="message", recipient="team-lead",
 ### Reject
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "ReviewResult",
     "component_id": "component-1",
     "verdict": "rejected",
@@ -688,7 +688,7 @@ You can message these teammates directly:
 - Architect (clarify design intent when evaluating a component)
 - Test-Writer (clarify what needs testing after approval)
 
-Use `SendMessage(type='message', recipient='<name>', ...)` for quick clarifications.
+Use `SendMessage(to="<name>", message="<question>", summary="Reviewer: clarification")` for quick clarifications.
 Route all ReviewResult handoffs through the team lead.
 ```
 
@@ -718,8 +718,8 @@ You do NOT run the test suite — test-runner handles that.
 `ContextAcknowledgment` to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "schema": "ContextAcknowledgment",
     "component_id": "<component_id from TestRequest>",
     "agent_role": "test-writer",
@@ -782,8 +782,8 @@ Match the project's test file naming pattern:
 ## When Done
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "TestHandoff",
     "component_id": "component-1",
     "test_files": ["tests/unit/test_oauth.py"],
@@ -802,7 +802,7 @@ Do NOT run the tests. Do NOT modify implementation files.
 You can message these teammates directly:
 - Reviewer (clarify what needs testing based on review notes)
 
-Use `SendMessage(type='message', recipient='reviewer', ...)` for quick clarifications.
+Use `SendMessage(to="reviewer", message="<question>", summary="Test-Writer: clarification")` for quick clarifications.
 Route all TestHandoff messages through the team lead.
 ```
 
@@ -851,8 +851,8 @@ Run the specified command. Parse the output. Report results.
 ## When Done
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "TestResult",
     "component_id": "component-1",
     "status": "passed",
@@ -868,8 +868,8 @@ SendMessage(type="message", recipient="team-lead",
 On failure:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "TestResult",
     "component_id": "component-1",
     "status": "failed",
@@ -1018,8 +1018,8 @@ Write to `{run_dir}/reviews/security.json`:
 Then send a summary:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="Security review complete. Results: {run_dir}/reviews/security.json\n\n"
+SendMessage(to="team-lead",
+  message="Security review complete. Results: {run_dir}/reviews/security.json\n\n"
           "Findings: 3 (2 needs-fix, 1 needs-input)\n"
           "needs-fix: SQL injection in src/auth/oauth.py:43\n"
           "No hardcoded secrets. Auth flow looks correct.",
@@ -1316,8 +1316,8 @@ outcomes. Flag scenarios not addressed as `needs-fix` findings with category `mi
 **IMMEDIATELY upon being spawned**, send a ContextAcknowledgment to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "schema": "ContextAcknowledgment",
     "component_id": "plan-adherence-review",
     "agent_role": "plan-adherence-reviewer",
@@ -1385,8 +1385,8 @@ Use the classification taxonomy and LoE scale from `code-quality/references/find
 When your review is complete, send a summary to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="Plan adherence review complete.\n\n"
+SendMessage(to="team-lead",
+  message="Plan adherence review complete.\n\n"
           "Results: {run_dir}/reviews/plan-adherence.json\n\n"
           "Plan tasks reviewed: N unchecked\n"
           "Fully addressed: N\n"
@@ -1481,8 +1481,8 @@ Category values: `race-condition`, `state-gap`, `error-propagation`, `dependency
 Then send a summary to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="Structural review (Concurrency & State) complete. "
+SendMessage(to="team-lead",
+  message="Structural review (Concurrency & State) complete. "
           "Results: {run_dir}/reviews/structural-concurrency.json\n\n"
           "Findings: N (N needs-fix, N needs-input)\n"
           "[Brief summary of most significant structural issue found, if any]",
@@ -1573,8 +1573,8 @@ Category values: `contract-violation`, `cross-component-assumption`, `data-flow`
 Then send a summary to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="Structural review (Integration & Contract) complete. "
+SendMessage(to="team-lead",
+  message="Structural review (Integration & Contract) complete. "
           "Results: {run_dir}/reviews/structural-integration.json\n\n"
           "Findings: N (N needs-fix, N needs-input)\n"
           "[Brief summary of most significant structural issue found, if any]",
@@ -1655,8 +1655,8 @@ Send a FixSummary to the lead when done (use the FixSummary schema from
 `references/communication-schema.md`):
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "schema": "FixSummary",
     "findings_fixed": ["SEC-001", "QA-001"],
     "needs_input_items": [
@@ -1743,8 +1743,8 @@ when no appropriate existing file exists. Match the project's naming conventions
 Send a TestCoverageResult to the lead when done:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "TestCoverageResult",
     "tests_written": [
       {"finding_id": "QA-003", "test_file": "tests/unit/test_oauth.py", "test_count": 3,
@@ -2232,8 +2232,8 @@ If a new lesson contradicts an existing one, mark the old lesson:
 Send summary to lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content="Lessons extraction complete.\n\n"
+SendMessage(to="team-lead",
+  message="Lessons extraction complete.\n\n"
           "Lessons written: N\n"
           "File: {lessons_file}\n\n"
           "[One-sentence summary of each lesson written, or 'No lessons — routine run']",
@@ -2318,8 +2318,8 @@ If no BDD files were promoted, skip this step.
 Send a VerificationResult to the lead:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "VerificationResult",
     "status": "passed",
     "test_results": {
@@ -2338,8 +2338,8 @@ SendMessage(type="message", recipient="team-lead",
 On failure:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "VerificationResult",
     "status": "failed",
     "test_results": {
@@ -2720,8 +2720,8 @@ The lead populates `{bdd_framework_info}` with the following structure:
 Send a BDDStepHandoff to the lead when done:
 
 ```
-SendMessage(type="message", recipient="team-lead",
-  content='{
+SendMessage(to="team-lead",
+  message='{
     "type": "BDDStepHandoff",
     "feature_files": ["features/login_flow.feature"],
     "step_files": ["tests/acceptance/steps/test_login_steps.py"],
