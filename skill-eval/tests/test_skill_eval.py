@@ -495,8 +495,8 @@ class TestBuildAssertionMetrics:
 
     def test_contains_prefix_populates_expected(self):
         result = build_assertion_metrics(["contains: Correctness", "contains: Security"])
-        assert "Correctness" in result.expected
-        assert "Security" in result.expected
+        assert "correctness" in result.expected
+        assert "security" in result.expected
 
     def test_not_contains_prefix_populates_forbidden(self):
         result = build_assertion_metrics(["not-contains: deferred"])
@@ -506,7 +506,7 @@ class TestBuildAssertionMetrics:
         result = build_assertion_metrics(
             ["contains: SELF-SCOPING", "not-contains: future iteration"]
         )
-        assert "SELF-SCOPING" in result.expected
+        assert "self-scoping" in result.expected
         assert "future iteration" in result.forbidden
 
     def test_empty_list_produces_empty_metric(self):
@@ -525,4 +525,4 @@ class TestBuildAssertionMetrics:
         tc = config["test_cases"][0]
         metric = build_assertion_metrics(tc["assertions"])
         assert isinstance(metric, ContainsMetric)
-        assert "Correctness" in metric.expected
+        assert "correctness" in metric.expected

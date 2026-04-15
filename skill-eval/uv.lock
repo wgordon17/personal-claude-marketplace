@@ -2372,7 +2372,6 @@ dependencies = [
     { name = "anthropic", extra = ["vertex"] },
     { name = "deepeval" },
     { name = "instructor" },
-    { name = "langchain" },
 ]
 
 [package.dev-dependencies]
@@ -2386,7 +2385,6 @@ requires-dist = [
     { name = "anthropic", extras = ["vertex"], specifier = ">=0.40.0" },
     { name = "deepeval", specifier = ">=2.0,<3.0" },
     { name = "instructor", specifier = ">=1.0,<2.0" },
-    { name = "langchain", specifier = ">=0.1,<0.3" },
 ]
 
 [package.metadata.requires-dev]

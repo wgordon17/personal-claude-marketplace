@@ -6,7 +6,6 @@ dependencies = [
     "deepeval>=2.0,<3.0",
     "instructor>=1.0,<2.0",
     "anthropic[vertex]>=0.40.0",
-    "langchain>=0.1,<0.3",
 ]
 
 [dependency-groups]

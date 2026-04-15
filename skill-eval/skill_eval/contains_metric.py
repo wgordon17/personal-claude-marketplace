@@ -27,8 +27,8 @@ class ContainsMetric(BaseMetric):
         forbidden: list[str],
         threshold: float = 1.0,
     ) -> None:
-        self.expected = expected
-        self.forbidden = forbidden
+        self.expected = [s.lower() for s in expected]
+        self.forbidden = [s.lower() for s in forbidden]
         self.threshold = threshold
         self.async_mode = False
         self.score: float | None = None
@@ -55,13 +55,13 @@ class ContainsMetric(BaseMetric):
         failed: list[str] = []
 
         for substring in self.expected:
-            if substring.lower() in actual:
+            if substring in actual:
                 passed.append(f"found expected: {substring!r}")
             else:
                 failed.append(f"missing expected: {substring!r}")
 
         for substring in self.forbidden:
-            if substring.lower() not in actual:
+            if substring not in actual:
                 passed.append(f"absent forbidden: {substring!r}")
             else:
                 failed.append(f"found forbidden: {substring!r}")

@@ -44,7 +44,7 @@ def _repo_root() -> Path:
         text=True,
         check=True,
     )
-    return Path(result.stdout.strip())
+    return Path(result.stdout.strip()).resolve()
 
 
 def _merge_base(ref: str = "origin/main") -> str:
@@ -132,38 +132,44 @@ def _eval_skills(
 
     for skill_dir in skill_dirs:
         skill_name = skill_dir.name
-        config = load_eval_config(skill_name)
-        test_cases = config.get("test_cases", [])
-        rubric_names = config.get("rubrics", [])
+        try:
+            config = load_eval_config(skill_name)
+            test_cases = config.get("test_cases", [])
+            rubric_names = config.get("rubrics", [])
 
-        if not test_cases:
-            print(f"  [skip] {skill_name}: no test cases", file=sys.stderr)
-            continue
+            if not test_cases:
+                print(f"  [skip] {skill_name}: no test cases", file=sys.stderr)
+                continue
 
-        # Resolve bundle (new version from disk or git for compare mode).
-        bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
-        if bundle is None:
-            print(f"  [warn] {skill_name}: could not resolve bundle — skipping", file=sys.stderr)
-            continue
+            # Resolve bundle (new version from disk or git for compare mode).
+            bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
+            if bundle is None:
+                print(
+                    f"  [warn] {skill_name}: could not resolve bundle — skipping", file=sys.stderr
+                )  # noqa: E501
+                continue
 
-        print(f"  [eval] {skill_name} ({len(test_cases)} test cases)...")
-        results = run_eval(skill_name, bundle, test_cases, rubric_names, judge)
-        all_results.append(results)
+            print(f"  [eval] {skill_name} ({len(test_cases)} test cases)...")
+            results = run_eval(skill_name, bundle, test_cases, rubric_names, judge)
+            all_results.append(results)
 
-        if git_ref is not None:
-            # Compare mode: also get old bundle and eval it.
-            old_bundle = resolve_skill_bundle(skill_dir, git_ref=git_ref, repo_root=repo_root)
-            if old_bundle is None:
-                msg = f"  [warn] {skill_name}: could not resolve old bundle at {git_ref}"
-                print(msg, file=sys.stderr)
+            if git_ref is not None:
+                # Compare mode: also get old bundle and eval it.
+                old_bundle = resolve_skill_bundle(skill_dir, git_ref=git_ref, repo_root=repo_root)
+                if old_bundle is None:
+                    msg = f"  [warn] {skill_name}: could not resolve old bundle at {git_ref}"
+                    print(msg, file=sys.stderr)
+                else:
+                    old_results = run_eval(skill_name, old_bundle, test_cases, rubric_names, judge)
+                    _print_compare_table(skill_name, old_results, results, git_ref)
             else:
-                old_results = run_eval(skill_name, old_bundle, test_cases, rubric_names, judge)
-                _print_compare_table(skill_name, old_results, results, git_ref)
-        else:
-            passed, report = compare_baselines(results, baselines)
-            _print_result_table(results, passed)
-            if not passed:
-                regressions.append(report)
+                passed, report = compare_baselines(results, baselines)
+                _print_result_table(results, passed)
+                if not passed:
+                    regressions.append(report)
+        except Exception as exc:
+            print(f"  [error] {skill_name}: unexpected error — {exc}", file=sys.stderr)
+            continue
 
     if update_baselines:
         _write_baselines(all_results)
@@ -217,6 +223,8 @@ def _write_baselines(all_results: list[dict]) -> None:
     existing: dict = {}
     if baselines_path.exists():
         existing = json.loads(baselines_path.read_text(encoding="utf-8"))
+        if "baselines" in existing:
+            existing = existing["baselines"]
     for results in all_results:
         skill = results.get("skill")
         if skill:
@@ -259,9 +267,7 @@ def _mode_prepush(repo_root: Path) -> bool:
     # For plugin-level reference changes, find which skills bundle that file.
     if changed_ref_files:
         skills_with_cases = _skill_dirs_with_test_cases(repo_root)
-        # Deferred import needed for resolve_skill_bundle — but we do it inline.
-        os.environ["DEEPEVAL_DISABLE_TIMEOUTS"] = "true"
-        from skill_eval.runner import resolve_skill_bundle
+        resolve_skill_bundle = _deferred_imports()[1]
 
         for skill_dir in skills_with_cases:
             if skill_dir in changed_skill_dirs:

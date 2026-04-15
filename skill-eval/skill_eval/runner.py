@@ -48,7 +48,7 @@ def _get_repo_root() -> Path:
         text=True,
         check=True,
     )
-    return Path(result.stdout.strip())
+    return Path(result.stdout.strip()).resolve()
 
 
 def resolve_skill_bundle(
@@ -228,6 +228,8 @@ def load_eval_config(skill_name: str) -> dict:
         Full config dict with keys "skill_name", "rubrics", and "test_cases".
         Returns a shell dict with empty rubrics and test_cases if no file found.
     """
+    if "/" in skill_name or "\\" in skill_name:
+        return {"skill_name": skill_name, "rubrics": [], "test_cases": []}
     config_path = Path(__file__).parent.parent / "test_cases" / f"{skill_name}.json"
     if not config_path.exists():
         return {"skill_name": skill_name, "rubrics": [], "test_cases": []}
@@ -270,6 +272,8 @@ def build_metrics(rubric_names: list[str], judge: DeepEvalBaseLLM) -> list:
 
     metrics = []
     for name in rubric_names:
+        if name not in RUBRIC_REGISTRY:
+            raise ValueError(f"Unknown rubric: {name!r}. Known: {list(RUBRIC_REGISTRY)}")
         rubric = RUBRIC_REGISTRY[name]
         metrics.append(
             GEval(
@@ -277,6 +281,7 @@ def build_metrics(rubric_names: list[str], judge: DeepEvalBaseLLM) -> list:
                 evaluation_steps=rubric["evaluation_steps"],
                 evaluation_params=rubric["evaluation_params"],
                 model=judge,
+                async_mode=False,
             )
         )
     return metrics
@@ -338,13 +343,17 @@ def run_eval(
     score_accum: dict[str, list[float]] = {}
     passes: list[bool] = []
     details: list[dict] = []
+    infra_error_count: int = 0
 
     for tc in test_cases:
         tc_id = tc.get("id", "?")
         prompt = tc.get("prompt", "")
         assertions = tc.get("assertions", [])
 
-        # Build fresh metric instances per test case (GEval is stateful).
+        # GEval is stateful (measure() writes score/success onto the instance),
+        # so we must build fresh instances per test case. deepeval does not expose
+        # a copy/clone mechanism. ContainsMetric also varies per test case
+        # (assertions differ), so both must be constructed here.
         geval_metrics = build_metrics(rubric_names, judge)
         contains = build_assertion_metrics(assertions)
         all_metrics = geval_metrics + [contains]
@@ -353,6 +362,7 @@ def run_eval(
 
         tc_scores: dict[str, float] = {}
         tc_pass = True
+        tc_had_infra_error = False
 
         # Call measure() directly on each metric — avoids deepeval.evaluate()'s
         # internal copy_metrics() which would leave original scores at None.
@@ -362,11 +372,15 @@ def run_eval(
                 metric.measure(llm_tc)
             except Exception as exc:
                 logger.warning("metric %s failed: %s", metric_name, exc)
+                tc_had_infra_error = True
             score = metric.score if metric.score is not None else 0.0
             tc_scores[metric_name] = score
             score_accum.setdefault(metric_name, []).append(score)
             if not metric.is_successful():
                 tc_pass = False
+
+        if tc_had_infra_error:
+            infra_error_count += 1
 
         passes.append(tc_pass)
         details.append(
@@ -381,12 +395,15 @@ def run_eval(
     # Aggregate averages.
     avg_scores = {name: sum(vals) / len(vals) for name, vals in score_accum.items()}
     pass_rate = sum(passes) / len(passes) if passes else 0.0
+    total_cases = len(test_cases)
+    infra_error = total_cases > 0 and infra_error_count > total_cases / 2
 
     return {
         "skill": skill_name,
         "scores": avg_scores,
         "pass_rate": pass_rate,
         "details": details,
+        "infra_error": infra_error,
     }
 
 
@@ -410,6 +427,10 @@ def compare_baselines(
         is detected. report describes any regressions or confirms passage.
     """
     skill = results.get("skill", "unknown")
+
+    if results.get("infra_error"):
+        return False, f"{skill}: INFRA ERROR — judge unavailable"
+
     current_scores: dict[str, float] = results.get("scores", {})
     baseline_scores: dict[str, float] = baselines.get(skill, {})
 
