@@ -636,9 +636,9 @@ def _mode_with_context(repo_root: Path) -> bool:
             if abs(delta) < 0.02:
                 signal = "neutral"
             elif delta > 0:
-                signal = "synergy"
+                signal = "positive"
             else:
-                signal = "conflict"
+                signal = "negative"
             print(f"  {metric:<30} {b_val:>8.3f} {c_val:>8.3f} {delta:>+7.3f} {signal:<10}")
 
         b_pr = results_bare.get("pass_rate", 0.0)
@@ -664,7 +664,7 @@ def _mode_with_context(repo_root: Path) -> bool:
                 pos = sum(1 for d in deltas if d > 0.02)
                 neg = sum(1 for d in deltas if d < -0.02)
                 neu = len(deltas) - pos - neg
-                print(f"    {metric}: {pos} synergy, {neg} conflict, {neu} neutral")
+                print(f"    {metric}: {pos} positive, {neg} negative, {neu} neutral")
 
         print()
 
@@ -704,7 +704,7 @@ def main() -> None:
         action="store_true",
         help=(
             "A/B compare skill-only vs skill+CLAUDE.md to detect"
-            " synergy/conflict between behavioral context and skills"
+            " positive/negative/neutral impact of behavioral context on skills"
         ),
     )
     parser.add_argument(
