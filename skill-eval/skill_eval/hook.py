@@ -130,6 +130,7 @@ def _deferred_imports() -> tuple:
     from skill_eval.runner import (
         compare_baselines,
         load_baselines,
+        load_context_layers,
         load_eval_config,
         resolve_skill_bundle,
         run_eval,
@@ -142,6 +143,7 @@ def _deferred_imports() -> tuple:
         load_baselines,
         run_eval,
         compare_baselines,
+        load_context_layers,
     )
 
 
@@ -159,6 +161,7 @@ def _eval_skills(
         load_baselines,
         run_eval,
         compare_baselines,
+        _load_context_layers,
     ) = _deferred_imports()
 
     judge = VertexSonnetJudge()
@@ -441,6 +444,7 @@ def _mode_compare_scoring(repo_root: Path) -> bool:
         _load_baselines,
         run_eval,
         _compare_baselines,
+        _load_context_layers,
     ) = _deferred_imports()
 
     skill_dirs = _skill_dirs_with_test_cases(repo_root)
@@ -538,6 +542,135 @@ def _mode_compare_scoring(repo_root: Path) -> bool:
     return True
 
 
+def _mode_with_context(repo_root: Path) -> bool:
+    """--with-context mode: A/B compare skill-only vs skill+CLAUDE.md.
+
+    Runs each skill twice — once without any CLAUDE.md context and once
+    with discovered CLAUDE.md layers prepended. Prints a comparison table
+    showing how behavioral context affects skill scores.
+    """
+    (
+        VertexSonnetJudge,
+        resolve_skill_bundle,
+        load_eval_config,
+        _load_baselines,
+        run_eval,
+        _compare_baselines,
+        load_context_layers,
+    ) = _deferred_imports()
+
+    skill_dirs = _skill_dirs_with_test_cases(repo_root)
+    if not skill_dirs:
+        print("[skill-eval] No skills with test cases found", file=sys.stderr)
+        return True
+
+    layers = load_context_layers(repo_root)
+    if not layers:
+        print(
+            "[skill-eval] No CLAUDE.md files found"
+            " (checked ~/.claude/CLAUDE.md and {repo}/CLAUDE.md)",
+            file=sys.stderr,
+        )
+        return True
+
+    # Build the context preamble from all discovered layers.
+    layer_names = sorted(layers.keys())
+    preamble_parts = []
+    for name in layer_names:
+        preamble_parts.append(f"# {name.upper()} CLAUDE.md\n{layers[name]}")
+    preamble = "\n\n".join(preamble_parts)
+
+    print(
+        f"[skill-eval] Context layers: {', '.join(layer_names)}"
+        f" ({sum(len(v) for v in layers.values())} chars total)"
+    )
+    print(f"[skill-eval] Comparing {len(skill_dirs)} skill(s): skill-only vs skill+CLAUDE.md\n")
+
+    judge = VertexSonnetJudge()
+
+    for skill_dir in skill_dirs:
+        skill_name = skill_dir.name
+        config = load_eval_config(skill_name)
+        test_cases = config.get("test_cases", [])
+        rubric_names = config.get("rubrics", [])
+
+        if not test_cases:
+            continue
+
+        bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
+        if bundle is None:
+            continue
+
+        print(f"  === {skill_name} ({len(test_cases)} test cases) ===\n")
+
+        # Run without context.
+        print("  Running skill-only...")
+        results_bare = run_eval(skill_name, bundle, test_cases, rubric_names, judge)
+
+        # Run with CLAUDE.md context.
+        print("  Running skill + CLAUDE.md...")
+        results_ctx = run_eval(
+            skill_name,
+            bundle,
+            test_cases,
+            rubric_names,
+            judge,
+            context_preamble=preamble,
+        )
+
+        # Print comparison table.
+        b_scores = results_bare.get("scores", {})
+        c_scores = results_ctx.get("scores", {})
+        b_per = results_bare.get("per_case_scores", {})
+        c_per = results_ctx.get("per_case_scores", {})
+        all_metrics = sorted(set(b_scores) | set(c_scores))
+
+        hdr = f"  {'Metric':<30} {'Bare':>8} {'+ Ctx':>8} {'Delta':>7} {'Signal':<10}"
+        print(f"\n{hdr}")
+        print("  " + "-" * (len(hdr) - 2))
+
+        for metric in all_metrics:
+            b_val = b_scores.get(metric, 0.0)
+            c_val = c_scores.get(metric, 0.0)
+            delta = c_val - b_val
+            if abs(delta) < 0.02:
+                signal = "neutral"
+            elif delta > 0:
+                signal = "synergy"
+            else:
+                signal = "conflict"
+            print(f"  {metric:<30} {b_val:>8.3f} {c_val:>8.3f} {delta:>+7.3f} {signal:<10}")
+
+        b_pr = results_bare.get("pass_rate", 0.0)
+        c_pr = results_ctx.get("pass_rate", 0.0)
+        print(f"  {'pass_rate':<30} {b_pr:>8.3f} {c_pr:>8.3f} {c_pr - b_pr:>+7.3f}")
+
+        # Per-test-case detail for GEval metrics.
+        geval_metrics = [m for m in all_metrics if m != "Contains Assertion Metric"]
+        if geval_metrics:
+            print("\n  Per-test-case deltas (GEval):")
+            for metric in geval_metrics:
+                b_cases = b_per.get(metric, [])
+                c_cases = c_per.get(metric, [])
+                n = max(len(b_cases), len(c_cases))
+                if n == 0:
+                    continue
+                deltas = []
+                for j in range(n):
+                    if j < len(b_cases) and j < len(c_cases):
+                        deltas.append(c_cases[j] - b_cases[j])
+                if not deltas:
+                    continue
+                pos = sum(1 for d in deltas if d > 0.02)
+                neg = sum(1 for d in deltas if d < -0.02)
+                neu = len(deltas) - pos - neg
+                print(f"    {metric}: {pos} synergy, {neg} conflict, {neu} neutral")
+
+        print()
+
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -565,6 +698,14 @@ def main() -> None:
         "--compare-scoring",
         action="store_true",
         help="Run each skill twice (k=1 vs k=5) and print comparison table",
+    )
+    group.add_argument(
+        "--with-context",
+        action="store_true",
+        help=(
+            "A/B compare skill-only vs skill+CLAUDE.md to detect"
+            " synergy/conflict between behavioral context and skills"
+        ),
     )
     parser.add_argument(
         "--locked",
@@ -620,6 +761,8 @@ def main() -> None:
         passed = _mode_update_baselines(repo_root)
     elif args.compare_scoring:
         passed = _mode_compare_scoring(repo_root)
+    elif args.with_context:
+        passed = _mode_with_context(repo_root)
     else:
         passed = _mode_prepush(repo_root)
 

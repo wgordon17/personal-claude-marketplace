@@ -340,10 +340,43 @@ def build_assertion_metrics(assertions: list[str]) -> ContainsMetric:
     return ContainsMetric(expected=expected, forbidden=forbidden)
 
 
+def load_context_layers(repo_root: Path | None = None) -> dict[str, str]:
+    """Discover and load CLAUDE.md context layers.
+
+    Returns a dict of layer_name -> content for each CLAUDE.md found:
+      - "global": ~/.claude/CLAUDE.md (user's private global instructions)
+      - "project": {repo_root}/CLAUDE.md (project-level instructions)
+
+    Missing files are silently skipped — the returned dict only contains
+    layers that exist and are readable.
+    """
+    layers: dict[str, str] = {}
+
+    # Global CLAUDE.md — user's private instructions.
+    global_claude = Path.home() / ".claude" / "CLAUDE.md"
+    if global_claude.is_file():
+        try:
+            layers["global"] = global_claude.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Cannot read global CLAUDE.md: %s", exc)
+
+    # Project CLAUDE.md — repo-level instructions.
+    if repo_root is not None:
+        project_claude = repo_root / "CLAUDE.md"
+        if project_claude.is_file():
+            try:
+                layers["project"] = project_claude.read_text(encoding="utf-8")
+            except OSError as exc:
+                logger.warning("Cannot read project CLAUDE.md: %s", exc)
+
+    return layers
+
+
 def execute_skill(
     skill_prompt_bundle: str,
     test_prompt: str,
     judge: DeepEvalBaseLLM,
+    context_preamble: str | None = None,
 ) -> str:
     """Execute a skill by giving an LLM the skill bundle as instructions.
 
@@ -357,18 +390,31 @@ def execute_skill(
         test_prompt: The test scenario to execute the skill against.
         judge: DeepEvalBaseLLM instance used as the executor (same model
             used for judging, but here it acts as the skill executor).
+        context_preamble: Optional CLAUDE.md content to prepend before skill
+            instructions, simulating the real operating context where skills
+            run alongside global/project behavioral directives.
 
     Returns:
         The LLM's response when following the skill instructions.
     """
-    execution_prompt = (
-        "You are an AI assistant following the skill instructions below.\n"
-        "Follow them exactly as written.\n\n"
+    parts = ["You are an AI assistant following the instructions below.\n"]
+
+    if context_preamble:
+        parts.append(
+            "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===\n"
+            f"{context_preamble}\n"
+            "=== END BEHAVIORAL CONTEXT ===\n\n"
+        )
+
+    parts.append(
+        "Follow the skill instructions exactly as written.\n\n"
         "=== SKILL INSTRUCTIONS ===\n"
         f"{skill_prompt_bundle}\n"
         "=== END SKILL INSTRUCTIONS ===\n\n"
         f"Task:\n{test_prompt}"
     )
+
+    execution_prompt = "".join(parts)
     return judge.generate(execution_prompt)
 
 
@@ -378,6 +424,7 @@ def run_eval(
     test_cases: list[dict],
     rubric_names: list[str],
     judge: DeepEvalBaseLLM,
+    context_preamble: str | None = None,
 ) -> dict:
     """Run behavioral evaluation: execute skill, then judge the output.
 
@@ -393,6 +440,8 @@ def run_eval(
         test_cases: List of test case dicts from load_eval_config().
         rubric_names: Rubric keys to evaluate with GEval.
         judge: DeepEvalBaseLLM instance for both execution and scoring.
+        context_preamble: Optional CLAUDE.md content prepended before skill
+            instructions during execution. Does not affect scoring prompts.
 
     Returns:
         Dict with keys:
@@ -416,7 +465,9 @@ def run_eval(
         # Step 1: Execute the skill — LLM generates output following
         # the skill instructions with this test scenario as input.
         try:
-            response = execute_skill(skill_prompt_bundle, prompt, judge)
+            response = execute_skill(
+                skill_prompt_bundle, prompt, judge, context_preamble=context_preamble
+            )
         except Exception as exc:
             logger.warning("skill execution failed for %s tc %s: %s", skill_name, tc_id, exc)
             infra_error_count += 1

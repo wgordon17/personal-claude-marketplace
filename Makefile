@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-locked eval-compare eval-update-baselines eval-compare-scoring
+.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-locked eval-compare eval-update-baselines eval-compare-scoring eval-with-context
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
@@ -39,3 +39,6 @@ eval-update-baselines:  ## Update baselines.json with current scores
 
 eval-compare-scoring:  ## Compare single-shot vs multi-trial scoring side-by-side
 	cd skill-eval && uv run python -m skill_eval.hook --compare-scoring
+
+eval-with-context:  ## A/B compare skill-only vs skill+CLAUDE.md context
+	cd skill-eval && uv run python -m skill_eval.hook --with-context
