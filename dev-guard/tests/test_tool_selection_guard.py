@@ -1338,6 +1338,132 @@ class TestGitSafetyCommitToMain:
         result = run_guard("Bash", {"command": "git commit -m 'test'"}, env=env)
         assert result.returncode == 0
 
+    def test_commit_to_main_with_env_prefix(self):
+        """Gap 2 regression: env prefix before git bypasses ^-anchored check."""
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "main"
+        result = run_guard("Bash", {"command": "FOO=bar git commit -m 'test'"}, env=env)
+        assert_guard(result, 2, "FORBIDDEN", "commit-to-main-env-prefix")
+
+    def test_commit_to_main_with_skip_env_prefix(self):
+        """SKIP= on main should hit commit-to-main block (deny runs before ask)."""
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "main"
+        result = run_guard("Bash", {"command": "SKIP=hookid git commit -m 'test'"}, env=env)
+        assert_guard(result, 2, "FORBIDDEN", "commit-to-main-skip-prefix")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Git safety: SKIP / PREK_SKIP env var bypass (ASK)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSkipEnvBypass:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "SKIP=hookid git commit -m 'msg'",
+            "SKIP=hook1,hook2 git commit -m 'msg'",
+            "PREK_SKIP=hookid git commit -m 'msg'",
+            "PREK_SKIP=hook1,hook2 git push origin feature",
+            "SKIP=hookid git push origin feature",
+        ],
+        ids=[
+            "skip-single",
+            "skip-multiple",
+            "prek-skip-single",
+            "prek-skip-push",
+            "skip-push",
+        ],
+    )
+    def test_skip_env_triggers_ask(self, command):
+        result = run_bash(command)
+        assert_ask_decision(result, "SKIP")
+
+    def test_plain_git_commit_no_skip_ask(self):
+        """Plain git commit should NOT trigger the SKIP ask rule."""
+        result = run_bash("git commit -m 'msg'")
+        assert "SKIP" not in (result.stderr + result.stdout)
+
+    def test_skip_non_git_command_no_ask(self):
+        """SKIP= before a non-git command should NOT trigger the rule."""
+        result = run_bash("SKIP=hookid make test")
+        assert "SKIP" not in (result.stderr + result.stdout)
+
+    def test_skip_empty_value_no_ask(self):
+        """Empty SKIP= is a no-op in pre-commit — should NOT trigger ask."""
+        result = run_bash("SKIP= git commit -m 'msg'")
+        assert "SKIP" not in (result.stderr + result.stdout)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Git safety: core.hooksPath bypass (DENY)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCoreHooksPathBypass:
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # Gap 3: -c core.hooksPath (deny)
+            ("git -c core.hooksPath=/dev/null commit -m 'msg'", 2, "FORBIDDEN"),
+            ('git -c core.hooksPath="" commit -m "msg"', 2, "FORBIDDEN"),
+            ("git -c core.hooksPath=/tmp/empty commit -m 'msg'", 2, "FORBIDDEN"),
+            # Gap 4: git config core.hooksPath write (deny)
+            ("git config core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            ("git config --local core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            # Gap 4: git config --unset (allow — restores hooks)
+            ("git config --unset core.hooksPath", 0, None),
+            # Gap 4: git config --get (allow — read-only)
+            ("git config --get core.hooksPath", 0, None),
+            # Case-insensitive: git config keys are case-insensitive
+            ("git -c core.hookspath=/dev/null commit -m 'msg'", 2, "FORBIDDEN"),
+            ("git config core.hookspath /dev/null", 2, "FORBIDDEN"),
+            ("git config --get core.hookspath", 0, None),
+            # --global variant: deny fires before config-global-write ask
+            ("git config --global core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            # --get-regexp is read-only (allow)
+            ("git config --get-regexp core.hooksPath", 0, None),
+            # GIT_CONFIG_KEY_N env var bypass
+            (
+                "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath "
+                "GIT_CONFIG_VALUE_0=/dev/null git commit -m 'msg'",
+                2,
+                "FORBIDDEN",
+            ),
+            # Quoted bypass attempts
+            ("git -c 'core.hooksPath=/dev/null' commit -m 'msg'", 2, "FORBIDDEN"),
+            ('git -c "core.hooksPath=/dev/null" commit -m "msg"', 2, "FORBIDDEN"),
+            (
+                "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='core.hooksPath' "
+                "GIT_CONFIG_VALUE_0=/dev/null git commit -m 'msg'",
+                2,
+                "FORBIDDEN",
+            ),
+        ],
+        ids=[
+            "c-hookspath-devnull",
+            "c-hookspath-empty",
+            "c-hookspath-tmpdir",
+            "config-hookspath-write",
+            "config-hookspath-local-write",
+            "config-hookspath-unset-allow",
+            "config-hookspath-get-allow",
+            "c-hookspath-lowercase",
+            "config-hookspath-lowercase-write",
+            "config-hookspath-lowercase-get-allow",
+            "config-hookspath-global-write",
+            "config-hookspath-get-regexp-allow",
+            "hookspath-env-bypass",
+            "c-hookspath-single-quoted",
+            "c-hookspath-double-quoted",
+            "hookspath-env-quoted-key",
+        ],
+    )
+    def test_core_hookspath(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Git safety: branch creation enforcement
