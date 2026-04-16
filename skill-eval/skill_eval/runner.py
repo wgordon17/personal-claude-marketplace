@@ -241,6 +241,11 @@ def load_eval_config(skill_name: str) -> dict:
 def load_baselines(baselines_path: Path | None = None) -> dict[str, dict[str, float]]:
     """Load stored baseline scores from baselines.json.
 
+    Handles three formats:
+      - New nested: ``{"skill": {"scores": {...}, "per_case_scores": {...}}}``
+      - Old flat: ``{"skill": {"metric": 0.5, ...}}``
+      - Wrapped: ``{"baselines": {...}}`` (either nested or flat inside)
+
     Args:
         baselines_path: Path to baselines.json. Defaults to
             ``skill-eval/baselines.json`` (sibling of the test_cases directory).
@@ -254,7 +259,17 @@ def load_baselines(baselines_path: Path | None = None) -> dict[str, dict[str, fl
     if not baselines_path.exists():
         return {}
     data = json.loads(baselines_path.read_text(encoding="utf-8"))
-    return data.get("baselines", data)  # handles both wrapped and flat formats
+    raw = data.get("baselines", data)  # unwrap if wrapped
+
+    # Normalize: new nested format has {"scores": {...}} per skill,
+    # old flat format has {"metric": float} directly.
+    result: dict[str, dict[str, float]] = {}
+    for skill, value in raw.items():
+        if isinstance(value, dict) and "scores" in value:
+            result[skill] = value["scores"]
+        else:
+            result[skill] = value
+    return result
 
 
 def build_metrics(rubric_names: list[str], judge: DeepEvalBaseLLM) -> list:
@@ -272,20 +287,32 @@ def build_metrics(rubric_names: list[str], judge: DeepEvalBaseLLM) -> list:
 
     from skill_eval.rubrics import RUBRIC_REGISTRY
 
+    # Log scoring path: custom DeepEvalBaseLLM subclasses lack generate_raw_response(),
+    # so GEval silently falls back to integer-only scoring via ReasonScore schema.
+    # This is expected for Claude (no logprobs API) — log once for debuggability.
+    has_logprobs = hasattr(judge, "generate_raw_response")
+    if not has_logprobs:
+        logger.info(
+            "Judge %s lacks generate_raw_response() — GEval will use integer fallback scoring"
+            " (no token probability weighting)",
+            judge.get_model_name(),
+        )
+
     metrics = []
     for name in rubric_names:
         if name not in RUBRIC_REGISTRY:
             raise ValueError(f"Unknown rubric: {name!r}. Known: {list(RUBRIC_REGISTRY)}")
         rubric = RUBRIC_REGISTRY[name]
-        metrics.append(
-            GEval(
-                name=rubric["name"],
-                evaluation_steps=rubric["evaluation_steps"],
-                evaluation_params=rubric["evaluation_params"],
-                model=judge,
-                async_mode=False,
-            )
-        )
+        geval_kwargs = {
+            "name": rubric["name"],
+            "evaluation_steps": rubric["evaluation_steps"],
+            "evaluation_params": rubric["evaluation_params"],
+            "model": judge,
+            "async_mode": False,
+        }
+        if "rubric" in rubric:
+            geval_kwargs["rubric"] = rubric["rubric"]
+        metrics.append(GEval(**geval_kwargs))
     return metrics
 
 
@@ -441,9 +468,13 @@ def run_eval(
     total_cases = len(test_cases)
     infra_error = total_cases > 0 and infra_error_count >= total_cases / 2
 
+    # Per-test-case scores for statistical analysis (variance, confidence intervals).
+    per_case_scores: dict[str, list[float]] = dict(score_accum)
+
     return {
         "skill": skill_name,
         "scores": avg_scores,
+        "per_case_scores": per_case_scores,
         "pass_rate": pass_rate,
         "details": details,
         "infra_error": infra_error,

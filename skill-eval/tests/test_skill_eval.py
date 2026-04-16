@@ -526,3 +526,387 @@ class TestBuildAssertionMetrics:
         metric = build_assertion_metrics(tc["assertions"])
         assert isinstance(metric, ContainsMetric)
         assert "layer 1" in metric.expected
+
+
+# ── Group 8: Score anchoring in rubrics ─────────────────────────────────────
+
+
+class TestScoreAnchoring:
+    """Every rubric includes SCORE_ANCHORING Rubric objects for score-range guidance."""
+
+    def test_all_rubrics_have_rubric_key(self):
+        from skill_eval.rubrics import RUBRIC_REGISTRY, SCORE_ANCHORING
+
+        for name, rubric in RUBRIC_REGISTRY.items():
+            assert "rubric" in rubric, f"Rubric {name!r} missing 'rubric' key"
+            assert rubric["rubric"] is SCORE_ANCHORING, (
+                f"Rubric {name!r} should reference shared SCORE_ANCHORING list"
+            )
+
+    def test_score_anchoring_covers_full_range(self):
+        """SCORE_ANCHORING should have 5 Rubric objects covering 0-10."""
+        from skill_eval.rubrics import SCORE_ANCHORING
+
+        assert len(SCORE_ANCHORING) == 5
+        ranges = [r.score_range for r in SCORE_ANCHORING]
+        assert ranges == [(0, 2), (3, 4), (5, 6), (7, 8), (9, 10)]
+
+    def test_score_anchoring_has_outcomes(self):
+        """Each Rubric object should have a non-empty expected_outcome."""
+        from skill_eval.rubrics import SCORE_ANCHORING
+
+        for r in SCORE_ANCHORING:
+            assert r.expected_outcome, f"Empty expected_outcome for range {r.score_range}"
+
+    def test_evaluation_steps_are_criteria_only(self):
+        """Evaluation steps should NOT contain score anchoring (that's in rubric now)."""
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name, rubric in RUBRIC_REGISTRY.items():
+            for step in rubric["evaluation_steps"]:
+                assert "Score anchoring" not in step, (
+                    f"Rubric {name!r} still has score anchoring in evaluation_steps"
+                )
+
+
+# ── Group 9: Nested baselines format ───────────────────────────────────────
+
+
+class TestNestedBaselinesFormat:
+    """load_baselines handles the new nested format with per_case_scores."""
+
+    def test_nested_format_extracts_scores(self, tmp_path):
+        bl = tmp_path / "baselines.json"
+        _write_baselines(
+            bl,
+            {
+                "quality-gate": {
+                    "scores": {"anti_deferral": 0.85, "phase_completion": 0.70},
+                    "per_case_scores": {
+                        "anti_deferral": [0.8, 0.9],
+                        "phase_completion": [0.7, 0.7],
+                    },
+                }
+            },
+        )
+        result = load_baselines(bl)
+        assert result["quality-gate"]["anti_deferral"] == pytest.approx(0.85)
+        assert result["quality-gate"]["phase_completion"] == pytest.approx(0.70)
+
+    def test_nested_format_ignores_per_case(self, tmp_path):
+        """load_baselines returns only the scores dict, not per_case_scores."""
+        bl = tmp_path / "baselines.json"
+        _write_baselines(
+            bl,
+            {
+                "fix": {
+                    "scores": {"instruction_adherence": 0.5},
+                    "per_case_scores": {"instruction_adherence": [0.4, 0.6]},
+                }
+            },
+        )
+        result = load_baselines(bl)
+        assert "per_case_scores" not in result["fix"]
+
+    def test_mixed_format_both_loaded(self, tmp_path):
+        """A baselines file mixing old flat and new nested formats loads correctly."""
+        bl = tmp_path / "baselines.json"
+        _write_baselines(
+            bl,
+            {
+                "fix": {"anti_deferral": 0.5},  # old flat
+                "quality-gate": {
+                    "scores": {"anti_deferral": 0.85},
+                    "per_case_scores": {"anti_deferral": [0.8, 0.9]},
+                },  # new nested
+            },
+        )
+        result = load_baselines(bl)
+        assert result["fix"]["anti_deferral"] == pytest.approx(0.5)
+        assert result["quality-gate"]["anti_deferral"] == pytest.approx(0.85)
+
+
+# ── Group 10: Multi-trial averaging (VertexSonnetJudge) ────────────────────
+
+
+class TestMultiTrialAveraging:
+    """Test multi-trial averaging logic in VertexSonnetJudge.generate().
+
+    These tests mock _single_generate to avoid real API calls, testing only
+    the averaging and fallback logic.
+    """
+
+    def _make_judge(self, k_samples=5, eval_temperature=0.7):
+        """Create a VertexSonnetJudge with mocked Vertex AI client."""
+        with (
+            patch("skill_eval.judge.anthropic.AnthropicVertex"),
+            patch("skill_eval.judge.instructor.from_anthropic"),
+        ):
+            from skill_eval.judge import VertexSonnetJudge
+
+            return VertexSonnetJudge(
+                k_samples=k_samples,
+                eval_temperature=eval_temperature,
+            )
+
+    def test_single_trial_uses_temp_0(self):
+        """k_samples=1 should call _single_generate with temperature=0."""
+        judge = self._make_judge(k_samples=1)
+        mock_result = type("R", (), {"score": 7.0, "reason": "good"})()
+        with patch.object(judge, "_single_generate", return_value=mock_result) as mock_sg:
+            judge.generate("prompt", schema=type("S", (), {}))
+            mock_sg.assert_called_once()
+            assert mock_sg.call_args[1]["temperature"] == 0
+
+    def test_multi_trial_averages_scores(self):
+        """k_samples=3 should average the scores from 3 calls."""
+        judge = self._make_judge(k_samples=3, eval_temperature=0.5)
+
+        class FakeSchema:
+            def __init__(self, score=0, reason=""):
+                self.score = score
+                self.reason = reason
+
+        results = [
+            FakeSchema(score=6.0, reason="ok"),
+            FakeSchema(score=8.0, reason="great"),
+            FakeSchema(score=4.0, reason="meh"),
+        ]
+        call_count = {"n": 0}
+
+        def mock_single_gen(prompt, schema=None, temperature=0):
+            r = results[call_count["n"]]
+            call_count["n"] += 1
+            return r
+
+        with patch.object(judge, "_single_generate", side_effect=mock_single_gen):
+            result = judge.generate("prompt", schema=FakeSchema)
+            assert result.score == pytest.approx(6.0)  # (6+8+4)/3
+            assert result.reason == "great"  # from highest-scoring trial
+
+    def test_multi_trial_skips_failed_samples(self):
+        """If some trials fail, average over the successful ones."""
+        judge = self._make_judge(k_samples=3, eval_temperature=0.5)
+
+        class FakeSchema:
+            def __init__(self, score=0, reason=""):
+                self.score = score
+                self.reason = reason
+
+        call_count = {"n": 0}
+
+        def mock_single_gen(prompt, schema=None, temperature=0):
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("API error")
+            return FakeSchema(score=8.0, reason="good")
+
+        with patch.object(judge, "_single_generate", side_effect=mock_single_gen):
+            result = judge.generate("prompt", schema=FakeSchema)
+            assert result.score == pytest.approx(8.0)  # 2 successes, both 8.0
+
+    def test_all_trials_fail_falls_back_to_single(self):
+        """If all K trials fail, fall back to single deterministic call."""
+        judge = self._make_judge(k_samples=3, eval_temperature=0.5)
+
+        class FakeSchema:
+            def __init__(self, score=0, reason=""):
+                self.score = score
+                self.reason = reason
+
+        call_count = {"n": 0}
+
+        def mock_single_gen(prompt, schema=None, temperature=0):
+            call_count["n"] += 1
+            if temperature > 0:
+                raise RuntimeError("API error")
+            return FakeSchema(score=5.0, reason="fallback")
+
+        with patch.object(judge, "_single_generate", side_effect=mock_single_gen):
+            result = judge.generate("prompt", schema=FakeSchema)
+            assert result.score == pytest.approx(5.0)
+            assert result.reason == "fallback"
+
+    def test_no_schema_always_single_shot(self):
+        """Skill execution (schema=None) should always use single call at temp=0."""
+        judge = self._make_judge(k_samples=5)
+        with patch.object(judge, "_single_generate", return_value="output") as mock_sg:
+            result = judge.generate("prompt", schema=None)
+            assert result == "output"
+            mock_sg.assert_called_once()
+            assert mock_sg.call_args[1]["schema"] is None
+            assert mock_sg.call_args[1]["temperature"] == 0
+
+    def test_multi_trial_uses_eval_temperature(self):
+        """Multi-trial calls should use eval_temperature, not 0."""
+        judge = self._make_judge(k_samples=2, eval_temperature=0.7)
+
+        class FakeSchema:
+            def __init__(self, score=0, reason=""):
+                self.score = score
+                self.reason = reason
+
+        with patch.object(
+            judge,
+            "_single_generate",
+            return_value=FakeSchema(score=5.0, reason="r"),
+        ) as mock_sg:
+            judge.generate("prompt", schema=FakeSchema)
+            for call in mock_sg.call_args_list:
+                assert call[1]["temperature"] == 0.7
+
+    def test_multi_trial_produces_continuous_scores(self):
+        """With varied integer inputs, averaging should produce non-integer scores."""
+        judge = self._make_judge(k_samples=4, eval_temperature=0.5)
+
+        class FakeSchema:
+            def __init__(self, score=0, reason=""):
+                self.score = score
+                self.reason = reason
+
+        scores = [3.0, 5.0, 4.0, 6.0]
+        call_count = {"n": 0}
+
+        def mock_single_gen(prompt, schema=None, temperature=0):
+            r = FakeSchema(score=scores[call_count["n"]], reason="r")
+            call_count["n"] += 1
+            return r
+
+        with patch.object(judge, "_single_generate", side_effect=mock_single_gen):
+            result = judge.generate("prompt", schema=FakeSchema)
+            assert result.score == pytest.approx(4.5)  # (3+5+4+6)/4
+            # 4.5 is not one of the 11 discrete values (0.0, 0.1, ..., 1.0)
+            # demonstrating the continuous score benefit
+
+
+# ── Group 11: Hook dispatch for --compare-scoring ──────────────────────────
+
+
+class TestHookCompareScoringFlag:
+    """--compare-scoring dispatches to _mode_compare_scoring."""
+
+    def test_compare_scoring_calls_mode(self, tmp_path, tty_stdin):
+        from skill_eval import hook
+
+        with (
+            patch.object(sys, "argv", ["hook", "--compare-scoring"]),
+            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            patch("skill_eval.hook._mode_compare_scoring", return_value=True) as mock_cs,
+            pytest.raises(SystemExit) as exc,
+        ):
+            hook.main()
+
+        mock_cs.assert_called_once_with(tmp_path)
+        assert exc.value.code == 0
+
+    def test_compare_scoring_mutually_exclusive_with_all(self, tty_stdin):
+        """--compare-scoring and --all cannot be used together."""
+        from skill_eval import hook
+
+        with (
+            patch.object(sys, "argv", ["hook", "--compare-scoring", "--all"]),
+            pytest.raises(SystemExit) as exc,
+        ):
+            hook.main()
+
+        assert exc.value.code != 0
+
+
+# ── Group 12: Eval integrity guard (--locked) ──────────────────────────────
+
+
+class TestVerifyEvalIntegrity:
+    """_verify_eval_integrity checks for uncommitted changes in skill-eval/."""
+
+    def test_clean_repo_returns_true(self):
+        from skill_eval.hook import _verify_eval_integrity
+
+        # Use real repo root so relative_to() resolves correctly.
+        real_repo = Path(__file__).parent.parent.parent.resolve()
+        clean_result = type("R", (), {"stdout": "", "returncode": 0})()
+        with patch("skill_eval.hook.subprocess.run", return_value=clean_result):
+            clean, modified = _verify_eval_integrity(real_repo)
+
+        assert clean is True
+        assert modified == []
+
+    def test_modified_files_returns_false(self):
+        from skill_eval.hook import _verify_eval_integrity
+
+        # Use the real repo root so Path(__file__).parent.parent resolves
+        # as relative_to(repo_root) correctly.
+        real_repo = Path(__file__).parent.parent.parent.resolve()
+
+        call_count = {"n": 0}
+
+        def mock_run(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # Unstaged changes.
+                return type(
+                    "R",
+                    (),
+                    {"stdout": "skill-eval/test_cases/fix.json\n", "returncode": 0},
+                )()
+            # Staged changes.
+            return type(
+                "R",
+                (),
+                {"stdout": "skill-eval/skill_eval/rubrics.py\n", "returncode": 0},
+            )()
+
+        with patch("skill_eval.hook.subprocess.run", side_effect=mock_run):
+            clean, modified = _verify_eval_integrity(real_repo)
+
+        assert clean is False
+        assert len(modified) == 2
+
+
+class TestLockedMode:
+    """--locked flag blocks update-baselines and verifies integrity."""
+
+    def test_locked_blocks_update_baselines(self, tmp_path, tty_stdin):
+        from skill_eval import hook
+
+        with (
+            patch.object(sys, "argv", ["hook", "--update-baselines", "--locked"]),
+            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            pytest.raises(SystemExit) as exc,
+        ):
+            hook.main()
+
+        assert exc.value.code == 1
+
+    def test_locked_fails_on_dirty_eval(self, tmp_path, tty_stdin):
+        from skill_eval import hook
+
+        with (
+            patch.object(sys, "argv", ["hook", "--all", "--locked"]),
+            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            patch(
+                "skill_eval.hook._verify_eval_integrity",
+                return_value=(False, ["skill-eval/test_cases/fix.json"]),
+            ),
+            pytest.raises(SystemExit) as exc,
+        ):
+            hook.main()
+
+        assert exc.value.code == 1
+
+    def test_locked_passes_on_clean_eval(self, tmp_path, tty_stdin):
+        from skill_eval import hook
+
+        with (
+            patch.object(sys, "argv", ["hook", "--all", "--locked"]),
+            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            patch(
+                "skill_eval.hook._verify_eval_integrity",
+                return_value=(True, []),
+            ),
+            patch("skill_eval.hook._mode_all", return_value=True) as mock_all,
+            pytest.raises(SystemExit) as exc,
+        ):
+            hook.main()
+
+        mock_all.assert_called_once_with(tmp_path)
+        assert exc.value.code == 0

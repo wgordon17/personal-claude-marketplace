@@ -2,9 +2,20 @@
 
 Uses claude-sonnet-4-6 via AnthropicVertex for LLM-as-judge assessments.
 Reads ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION env vars.
+
+Multi-trial averaging (K-trial):
+  When k_samples > 1 and a schema is requested (the GEval scoring path),
+  the judge runs K independent calls at eval_temperature and averages the
+  numeric scores. This produces continuous values from discrete integer
+  outputs, matching the G-Eval paper's Monte Carlo approach for models
+  without logprob access (Claude does not expose logprobs).
+
+  Skill execution calls (schema=None) always use a single call at
+  temperature=0 for deterministic output.
 """
 
 import asyncio
+import logging
 import os
 
 import anthropic
@@ -12,14 +23,35 @@ import instructor
 from deepeval.models.base_model import DeepEvalBaseLLM
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
+
 _MODEL = "claude-sonnet-4-6"
 _MAX_TOKENS = 4096
 
+# Defaults for multi-trial averaging.
+_DEFAULT_K_SAMPLES = 5
+_DEFAULT_EVAL_TEMPERATURE = 0.7
+
 
 class VertexSonnetJudge(DeepEvalBaseLLM):
-    """DeepEval-compatible LLM judge backed by claude-sonnet-4-6 on Vertex AI."""
+    """DeepEval-compatible LLM judge backed by claude-sonnet-4-6 on Vertex AI.
 
-    def __init__(self) -> None:
+    Args:
+        k_samples: Number of independent scoring calls to average per evaluation.
+            Only applies when schema is provided (GEval scoring path). Default 5.
+            Set to 1 to disable multi-trial averaging (legacy behavior).
+        eval_temperature: Temperature for scoring calls when k_samples > 1.
+            Higher values produce more diverse samples for better averaging.
+            Default 0.7 (compromise between variance and quality).
+    """
+
+    def __init__(
+        self,
+        k_samples: int = _DEFAULT_K_SAMPLES,
+        eval_temperature: float = _DEFAULT_EVAL_TEMPERATURE,
+    ) -> None:
+        self._k_samples = k_samples
+        self._eval_temperature = eval_temperature
         project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID", "")
         region = os.environ.get("CLOUD_ML_REGION", "us-east5")
         try:
@@ -38,23 +70,19 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
     def load_model(self) -> "VertexSonnetJudge":
         return self
 
-    def generate(self, prompt: str, schema: type[BaseModel] | None = None) -> str | BaseModel:
-        """Generate a response, optionally structured against a Pydantic schema.
-
-        Args:
-            prompt: The evaluation prompt to send to the judge.
-            schema: When provided, returns a validated BaseModel instance via
-                instructor structured output. When None, returns raw string response.
-
-        Returns:
-            str when schema is None; BaseModel instance when schema is provided.
-        """
+    def _single_generate(
+        self,
+        prompt: str,
+        schema: type[BaseModel] | None = None,
+        temperature: float = 0,
+    ) -> str | BaseModel:
+        """Single LLM call — the building block for both direct and multi-trial modes."""
         if schema is None:
             try:
                 message = self.client.messages.create(
                     model=_MODEL,
                     max_tokens=_MAX_TOKENS,
-                    temperature=0,
+                    temperature=temperature,
                     messages=[{"role": "user", "content": prompt}],
                 )
             except Exception as e:
@@ -73,7 +101,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                 return self.instructor_client.messages.create(
                     model=_MODEL,
                     max_tokens=_MAX_TOKENS,
-                    temperature=0,
+                    temperature=temperature,
                     messages=[{"role": "user", "content": prompt}],
                     response_model=schema,
                 )
@@ -82,6 +110,69 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                     f"Vertex AI judge call failed ({type(e).__name__}):"
                     " check credentials and network connectivity"
                 ) from None
+
+    def generate(self, prompt: str, schema: type[BaseModel] | None = None) -> str | BaseModel:
+        """Generate a response, optionally structured against a Pydantic schema.
+
+        When schema is provided and k_samples > 1, runs K independent calls
+        at eval_temperature and returns a schema instance with the averaged
+        score and the reason from the highest-scoring trial.
+
+        Args:
+            prompt: The evaluation prompt to send to the judge.
+            schema: When provided, returns a validated BaseModel instance via
+                instructor structured output. When None, returns raw string response.
+
+        Returns:
+            str when schema is None; BaseModel instance when schema is provided.
+        """
+        # Skill execution (no schema) — always single call at temperature=0.
+        if schema is None:
+            return self._single_generate(prompt, schema=None, temperature=0)
+
+        # Scoring path with single trial — legacy behavior.
+        if self._k_samples <= 1:
+            return self._single_generate(prompt, schema=schema, temperature=0)
+
+        # Multi-trial averaging: run K times at eval_temperature, average scores.
+        scores: list[float] = []
+        best_reason = ""
+        best_score = -1.0
+
+        for i in range(self._k_samples):
+            try:
+                result = self._single_generate(
+                    prompt, schema=schema, temperature=self._eval_temperature
+                )
+                if hasattr(result, "score"):
+                    score = float(result.score)
+                    scores.append(score)
+                    if score > best_score:
+                        best_score = score
+                        best_reason = getattr(result, "reason", "")
+            except Exception:
+                logger.warning("Multi-trial sample %d/%d failed — skipping", i + 1, self._k_samples)
+                continue
+
+        if not scores:
+            # All trials failed — fall back to single deterministic call.
+            logger.warning(
+                "All %d multi-trial samples failed — falling back to single call",
+                self._k_samples,
+            )
+            return self._single_generate(prompt, schema=schema, temperature=0)
+
+        avg_score = sum(scores) / len(scores)
+        logger.debug(
+            "Multi-trial scores (%d/%d succeeded): %s → avg=%.3f",
+            len(scores),
+            self._k_samples,
+            [f"{s:.1f}" for s in scores],
+            avg_score,
+        )
+
+        # Return schema instance with averaged score and best reason.
+        return schema(score=avg_score, reason=best_reason)
 
     async def a_generate(
         self, prompt: str, schema: type[BaseModel] | None = None

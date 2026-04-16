@@ -83,6 +83,42 @@ def _skill_dirs_with_test_cases(repo_root: Path) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
+# Eval integrity guard
+# ---------------------------------------------------------------------------
+
+
+def _verify_eval_integrity(repo_root: Path) -> tuple[bool, list[str]]:
+    """Verify eval infrastructure has no uncommitted changes.
+
+    Checks both staged and unstaged modifications to skill-eval/ files
+    (test cases, rubrics, eval code, baselines). Used by --locked mode
+    to prevent an LLM self-improvement agent from gaming the evaluator.
+
+    Returns:
+        (clean: bool, modified_files: list[str]).
+    """
+    eval_dir = Path(__file__).parent.parent
+    try:
+        rel_eval = eval_dir.resolve().relative_to(repo_root)
+    except ValueError:
+        return True, []  # eval dir outside repo — can't verify
+
+    # Check both staged and unstaged changes.
+    result = subprocess.run(
+        ["git", "diff", "--name-only", str(rel_eval)],
+        capture_output=True,
+        text=True,
+    )
+    staged = subprocess.run(
+        ["git", "diff", "--name-only", "--staged", str(rel_eval)],
+        capture_output=True,
+        text=True,
+    )
+    modified = sorted(set(f for f in result.stdout.splitlines() + staged.stdout.splitlines() if f))
+    return len(modified) == 0, modified
+
+
+# ---------------------------------------------------------------------------
 # Deferred-import eval logic
 # ---------------------------------------------------------------------------
 
@@ -253,8 +289,30 @@ def _write_baselines(all_results: list[dict]) -> None:
     for results in all_results:
         skill = results.get("skill")
         if skill:
-            existing[skill] = results.get("scores", {})
+            existing[skill] = {
+                "scores": results.get("scores", {}),
+                "per_case_scores": results.get("per_case_scores", {}),
+            }
     baselines_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Statistical helpers
+# ---------------------------------------------------------------------------
+
+
+def _score_stats(values: list[float]) -> tuple[float, float, int]:
+    """Return (mean, stdev, unique_count) for a list of scores."""
+    n = len(values)
+    if n == 0:
+        return 0.0, 0.0, 0
+    mean = sum(values) / n
+    if n < 2:
+        return mean, 0.0, len(set(round(v, 6) for v in values))
+    variance = sum((x - mean) ** 2 for x in values) / (n - 1)
+    stdev = variance**0.5
+    unique = len(set(round(v, 6) for v in values))
+    return mean, stdev, unique
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +423,121 @@ def _mode_update_baselines(repo_root: Path) -> bool:
     return _eval_skills(skill_dirs, repo_root, update_baselines=True)
 
 
+def _mode_compare_scoring(repo_root: Path) -> bool:
+    """--compare-scoring mode: run each skill twice (k=1 vs k=5), print comparison.
+
+    Demonstrates the value of multi-trial averaging by running the same test
+    cases with two scoring configurations:
+      - Single-shot: k=1, temperature=0 (legacy integer-only scoring)
+      - Multi-trial: k=5, temperature=0.7 (averaged continuous scoring)
+
+    Prints a side-by-side comparison table showing score differences,
+    granularity (unique values), and standard deviation across test cases.
+    """
+    (
+        VertexSonnetJudge,
+        resolve_skill_bundle,
+        load_eval_config,
+        _load_baselines,
+        run_eval,
+        _compare_baselines,
+    ) = _deferred_imports()
+
+    skill_dirs = _skill_dirs_with_test_cases(repo_root)
+    if not skill_dirs:
+        print("[skill-eval] No skills with test cases found", file=sys.stderr)
+        return True
+
+    print(f"[skill-eval] Comparing scoring methods for {len(skill_dirs)} skill(s)...\n")
+
+    # Two judges: single-shot (legacy) and multi-trial (new).
+    judge_single = VertexSonnetJudge(k_samples=1, eval_temperature=0.0)
+    judge_multi = VertexSonnetJudge(k_samples=5, eval_temperature=0.7)
+
+    for skill_dir in skill_dirs:
+        skill_name = skill_dir.name
+        config = load_eval_config(skill_name)
+        test_cases = config.get("test_cases", [])
+        rubric_names = config.get("rubrics", [])
+
+        if not test_cases:
+            continue
+
+        bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
+        if bundle is None:
+            continue
+
+        print(f"  === {skill_name} ({len(test_cases)} test cases) ===\n")
+
+        # Run with single-shot judge.
+        print("  Running single-shot (k=1, temp=0)...")
+        results_single = run_eval(skill_name, bundle, test_cases, rubric_names, judge_single)
+
+        # Run with multi-trial judge.
+        print("  Running multi-trial (k=5, temp=0.7)...")
+        results_multi = run_eval(skill_name, bundle, test_cases, rubric_names, judge_multi)
+
+        # Print comparison table.
+        s_scores = results_single.get("scores", {})
+        m_scores = results_multi.get("scores", {})
+        s_per_case = results_single.get("per_case_scores", {})
+        m_per_case = results_multi.get("per_case_scores", {})
+        all_metrics = sorted(set(s_scores) | set(m_scores))
+
+        hdr = (
+            f"  {'Metric':<30} {'Single':>8} {'Multi':>8} {'Delta':>7}"
+            f" {'S-Uniq':>6} {'M-Uniq':>6} {'S-StDev':>7} {'M-StDev':>7}"
+        )
+        print(f"\n{hdr}")
+        print("  " + "-" * (len(hdr) - 2))
+
+        for metric in all_metrics:
+            s_val = s_scores.get(metric, 0.0)
+            m_val = m_scores.get(metric, 0.0)
+            delta = m_val - s_val
+
+            s_cases = s_per_case.get(metric, [])
+            m_cases = m_per_case.get(metric, [])
+            _, s_std, s_uniq = _score_stats(s_cases)
+            _, m_std, m_uniq = _score_stats(m_cases)
+
+            print(
+                f"  {metric:<30} {s_val:>8.3f} {m_val:>8.3f} {delta:>+7.3f}"
+                f" {s_uniq:>6} {m_uniq:>6} {s_std:>7.3f} {m_std:>7.3f}"
+            )
+
+        s_pr = results_single.get("pass_rate", 0.0)
+        m_pr = results_multi.get("pass_rate", 0.0)
+        print(
+            f"  {'pass_rate':<30} {s_pr:>8.3f} {m_pr:>8.3f} {m_pr - s_pr:>+7.3f}"
+            f" {'':>6} {'':>6} {'':>7} {'':>7}"
+        )
+
+        # Print per-test-case detail for GEval metrics (not Contains).
+        geval_metrics = [m for m in all_metrics if m != "Contains Assertion Metric"]
+        if geval_metrics:
+            print("\n  Per-test-case scores (GEval metrics):")
+            for metric in geval_metrics:
+                s_cases = s_per_case.get(metric, [])
+                m_cases = m_per_case.get(metric, [])
+                n = max(len(s_cases), len(m_cases))
+                if n == 0:
+                    continue
+                print(f"    {metric}:")
+                for j in range(n):
+                    s_v = f"{s_cases[j]:.3f}" if j < len(s_cases) else "  N/A"
+                    m_v = f"{m_cases[j]:.3f}" if j < len(m_cases) else "  N/A"
+                    flag = ""
+                    if j < len(s_cases) and j < len(m_cases):
+                        d = m_cases[j] - s_cases[j]
+                        flag = f" ({d:+.3f})"
+                    print(f"      tc[{j}]: single={s_v}  multi={m_v}{flag}")
+
+        print()
+
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -388,6 +561,19 @@ def main() -> None:
         action="store_true",
         help="Run --all and write results to baselines.json",
     )
+    group.add_argument(
+        "--compare-scoring",
+        action="store_true",
+        help="Run each skill twice (k=1 vs k=5) and print comparison table",
+    )
+    parser.add_argument(
+        "--locked",
+        action="store_true",
+        help=(
+            "Verify eval infrastructure has no uncommitted changes before running."
+            " Required for LLM self-improvement loops to prevent test tampering."
+        ),
+    )
     args = parser.parse_args()
 
     # Drain stdin (pre-push hooks receive ref data on stdin — ignore it).
@@ -400,12 +586,40 @@ def main() -> None:
         print("[skill-eval] Not in a git repository — skipping evals", file=sys.stderr)
         sys.exit(0)
 
+    # --locked: verify eval infrastructure integrity before running.
+    # Prevents LLM self-improvement agents from tampering with tests.
+    if args.locked:
+        if args.update_baselines:
+            print(
+                "[skill-eval] --locked blocks --update-baselines"
+                " (baseline writes are eval infrastructure changes)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        clean, modified = _verify_eval_integrity(repo_root)
+        if not clean:
+            print(
+                "[skill-eval] INTEGRITY CHECK FAILED — eval infrastructure modified:",
+                file=sys.stderr,
+            )
+            for f in modified:
+                print(f"  {f}", file=sys.stderr)
+            print(
+                "\nEval infrastructure must be clean when using --locked."
+                " Commit or revert changes to skill-eval/ before running.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
     if args.all:
         passed = _mode_all(repo_root)
     elif args.compare:
         passed = _mode_compare(repo_root, args.compare)
     elif args.update_baselines:
         passed = _mode_update_baselines(repo_root)
+    elif args.compare_scoring:
+        passed = _mode_compare_scoring(repo_root)
     else:
         passed = _mode_prepush(repo_root)
 

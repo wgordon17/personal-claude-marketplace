@@ -3,7 +3,7 @@ name = "skill-eval"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "deepeval>=2.0,<3.0",
+    "deepeval>=2.9,<3.0",
     "instructor>=1.0,<2.0",
     "anthropic[vertex]>=0.40.0",
 ]
