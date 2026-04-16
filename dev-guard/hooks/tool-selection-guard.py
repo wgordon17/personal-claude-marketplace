@@ -999,7 +999,7 @@ def strip_env_prefix(cmd: str) -> str:
     """
     stripped = cmd
     while True:
-        m = re.match(r"^\s*[A-Za-z_]\w*=\S*\s+", stripped)
+        m = re.match(r"""^\s*[A-Za-z_]\w*=(?:'[^']*'|"[^"]*"|\S*)\s+""", stripped)
         if m:
             stripped = stripped[m.end() :]
         else:
@@ -1374,7 +1374,7 @@ GIT_DENY_RULES: list[GitRule] = [
         lambda cmd: (
             bool(re.search(r"git\s+config\b", cmd))
             and bool(re.search(r"\bcore\.hooksPath\b", cmd, re.IGNORECASE))
-            and not re.search(r"--(get|unset|list)\b", cmd)
+            and not re.search(r"--(get(?:-regexp)?|unset(?:-all)?|list)\b", cmd)
         ),
         "git config core.hooksPath is FORBIDDEN. "
         "Persistently redirecting the hooks directory disables all git hooks. "
@@ -1387,6 +1387,22 @@ GIT_DENY_RULES: list[GitRule] = [
         ),
         "GIT_CONFIG_KEY_N=core.hooksPath is FORBIDDEN. "
         "Setting hooksPath via GIT_CONFIG_* env vars bypasses git hook enforcement.",
+    ),
+    GitRule(
+        "hookspath-config-env",
+        lambda cmd: bool(
+            re.search(r"git\s+.*--config-env=?['\"]?core\.hooksPath\b", cmd, re.IGNORECASE)
+        ),
+        "git --config-env=core.hooksPath=... is FORBIDDEN. "
+        "Redirecting the hooks directory via env var disables all git hooks.",
+    ),
+    GitRule(
+        "hookspath-params-env",
+        lambda cmd: bool(
+            re.search(r"\bGIT_CONFIG_PARAMETERS=.*core\.hooksPath\b", cmd, re.IGNORECASE)
+        ),
+        "GIT_CONFIG_PARAMETERS containing core.hooksPath is FORBIDDEN. "
+        "Setting hooksPath via GIT_CONFIG_PARAMETERS bypasses git hook enforcement.",
     ),
     GitRule(
         "filter-branch",
@@ -3547,8 +3563,8 @@ def _handle_bash_command(command: str) -> NoReturn:
         for subcmd in subcmds:
             stripped = strip_env_prefix(strip_shell_keyword(subcmd))
             for name, check_fn, message in GIT_DENY_RULES:
-                if check_fn(stripped):
-                    _exit_with_decision(message, "block", rule_name=name, matched_segment=stripped)
+                if check_fn(stripped) or check_fn(subcmd):
+                    _exit_with_decision(message, "block", rule_name=name, matched_segment=subcmd)
         # Explicit allow for multiline bypass commands (same rationale as below)
         if "\n" in real_cmd:
             _exit_with_decision(
