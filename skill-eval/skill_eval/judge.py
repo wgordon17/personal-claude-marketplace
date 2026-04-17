@@ -26,7 +26,8 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 _MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS = 4096
+_MAX_TOKENS_EXECUTE = 16384  # Skill execution — must be large enough for full output.
+_MAX_TOKENS_SCORE = 4096  # Scoring — ReasonScore JSON is small.
 
 # Defaults for multi-trial averaging.
 _DEFAULT_K_SAMPLES = 5
@@ -78,10 +79,11 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
     ) -> str | BaseModel:
         """Single LLM call — the building block for both direct and multi-trial modes."""
         if schema is None:
+            # Skill execution — needs room for full structured output.
             try:
                 message = self.client.messages.create(
                     model=_MODEL,
-                    max_tokens=_MAX_TOKENS,
+                    max_tokens=_MAX_TOKENS_EXECUTE,
                     temperature=temperature,
                     messages=[{"role": "user", "content": prompt}],
                 )
@@ -90,6 +92,15 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                     f"Vertex AI judge call failed ({type(e).__name__}):"
                     " check credentials and network connectivity"
                 ) from None
+
+            if message.stop_reason == "max_tokens":
+                logger.warning(
+                    "TRUNCATED: skill execution hit %d token limit"
+                    " — output is incomplete, scores will be unreliable."
+                    " Increase _MAX_TOKENS_EXECUTE in judge.py",
+                    _MAX_TOKENS_EXECUTE,
+                )
+
             text = ""
             for block in message.content:
                 if hasattr(block, "text"):
@@ -97,10 +108,11 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                     break
             return text
         else:
+            # Scoring — ReasonScore JSON is small.
             try:
                 return self.instructor_client.messages.create(
                     model=_MODEL,
-                    max_tokens=_MAX_TOKENS,
+                    max_tokens=_MAX_TOKENS_SCORE,
                     temperature=temperature,
                     messages=[{"role": "user", "content": prompt}],
                     response_model=schema,
