@@ -58,7 +58,11 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
         project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID", "")
         region = os.environ.get("CLOUD_ML_REGION", "us-east5")
         try:
-            self.client = anthropic.AnthropicVertex(project_id=project_id, region=region)
+            self.client = anthropic.AnthropicVertex(
+                project_id=project_id,
+                region=region,
+                timeout=600.0,  # 10 min — prevents SDK ValueError on long requests.
+            )
         except Exception:
             raise RuntimeError(
                 "Vertex AI judge init failed: check ANTHROPIC_VERTEX_PROJECT_ID"
