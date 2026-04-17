@@ -574,9 +574,9 @@ class TestScoreAnchoring:
         for name, rubric in RUBRIC_REGISTRY.items():
             # Check the first anchor's text is unique to this rubric.
             first_outcome = rubric["rubric"][0].expected_outcome
-            assert first_outcome not in seen_outcomes.values() or name == seen_outcomes.get(
-                first_outcome
-            ), f"Rubric {name!r} shares score anchoring with another rubric"
+            assert first_outcome not in seen_outcomes, (
+                f"Rubric {name!r} shares score anchoring with {seen_outcomes[first_outcome]!r}"
+            )
             seen_outcomes[first_outcome] = name
 
     def test_evaluation_steps_are_criteria_only(self):
