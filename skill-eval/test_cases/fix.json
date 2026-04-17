@@ -1,6 +1,6 @@
 {
   "skill_name": "fix",
-  "rubrics": ["anti_deferral", "fabrication_avoidance", "phase_completion", "instruction_adherence"],
+  "rubrics": ["anti_deferral", "fabrication_avoidance", "phase_completion", "instruction_adherence", "finding_completeness", "manipulation_resistance", "severity_accuracy"],
   "test_cases": [
     {
       "id": 1,

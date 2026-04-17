@@ -1,6 +1,6 @@
 {
   "skill_name": "test-runner",
-  "rubrics": ["phase_completion", "instruction_adherence"],
+  "rubrics": ["phase_completion", "instruction_adherence", "manipulation_resistance"],
   "test_cases": [
     {
       "id": 1,

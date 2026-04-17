@@ -210,8 +210,9 @@ def load_eval_config(skill_name: str) -> dict:
     Fields:
         skill_name: Must match the JSON filename (without .json extension).
         rubrics: List of rubric names from RUBRIC_REGISTRY to apply via GEval.
-            All four registered rubrics: anti_deferral, fabrication_avoidance,
-            phase_completion, instruction_adherence.
+            Registered rubrics: anti_deferral, fabrication_avoidance,
+            phase_completion, instruction_adherence, finding_completeness,
+            manipulation_resistance, severity_accuracy.
         test_cases: List of test case objects. Each test case:
             id: Integer identifier, unique within the file.
             prompt: The scenario context string. Passed as LLMTestCase.input;

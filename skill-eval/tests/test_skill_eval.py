@@ -532,31 +532,52 @@ class TestBuildAssertionMetrics:
 
 
 class TestScoreAnchoring:
-    """Every rubric includes SCORE_ANCHORING Rubric objects for score-range guidance."""
+    """Every rubric includes per-rubric Rubric objects for score-range guidance."""
 
     def test_all_rubrics_have_rubric_key(self):
-        from skill_eval.rubrics import RUBRIC_REGISTRY, SCORE_ANCHORING
+        from skill_eval.rubrics import RUBRIC_REGISTRY
 
         for name, rubric in RUBRIC_REGISTRY.items():
             assert "rubric" in rubric, f"Rubric {name!r} missing 'rubric' key"
-            assert rubric["rubric"] is SCORE_ANCHORING, (
-                f"Rubric {name!r} should reference shared SCORE_ANCHORING list"
+            assert isinstance(rubric["rubric"], list), (
+                f"Rubric {name!r} 'rubric' should be a list of Rubric objects"
+            )
+            assert len(rubric["rubric"]) > 0, f"Rubric {name!r} has empty 'rubric' list"
+
+    def test_per_rubric_anchoring_covers_full_range(self):
+        """Each rubric's score anchoring should have 5 Rubric objects covering 0-10."""
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name, rubric in RUBRIC_REGISTRY.items():
+            anchoring = rubric["rubric"]
+            assert len(anchoring) == 5, f"Rubric {name!r} has {len(anchoring)} anchors, expected 5"
+            ranges = [r.score_range for r in anchoring]
+            assert ranges == [(0, 0), (3, 3), (5, 5), (8, 8), (10, 10)], (
+                f"Rubric {name!r} score ranges not 5-point discrete scale: {ranges}"
             )
 
-    def test_score_anchoring_covers_full_range(self):
-        """SCORE_ANCHORING should have 5 Rubric objects covering 0-10."""
-        from skill_eval.rubrics import SCORE_ANCHORING
-
-        assert len(SCORE_ANCHORING) == 5
-        ranges = [r.score_range for r in SCORE_ANCHORING]
-        assert ranges == [(0, 2), (3, 4), (5, 6), (7, 8), (9, 10)]
-
-    def test_score_anchoring_has_outcomes(self):
+    def test_per_rubric_anchoring_has_outcomes(self):
         """Each Rubric object should have a non-empty expected_outcome."""
-        from skill_eval.rubrics import SCORE_ANCHORING
+        from skill_eval.rubrics import RUBRIC_REGISTRY
 
-        for r in SCORE_ANCHORING:
-            assert r.expected_outcome, f"Empty expected_outcome for range {r.score_range}"
+        for name, rubric in RUBRIC_REGISTRY.items():
+            for r in rubric["rubric"]:
+                assert r.expected_outcome, (
+                    f"Rubric {name!r}: empty expected_outcome for range {r.score_range}"
+                )
+
+    def test_per_rubric_anchoring_is_unique(self):
+        """Each rubric should have distinct behavioral anchors, not shared."""
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        seen_outcomes: dict[str, str] = {}
+        for name, rubric in RUBRIC_REGISTRY.items():
+            # Check the first anchor's text is unique to this rubric.
+            first_outcome = rubric["rubric"][0].expected_outcome
+            assert first_outcome not in seen_outcomes.values() or name == seen_outcomes.get(
+                first_outcome
+            ), f"Rubric {name!r} shares score anchoring with another rubric"
+            seen_outcomes[first_outcome] = name
 
     def test_evaluation_steps_are_criteria_only(self):
         """Evaluation steps should NOT contain score anchoring (that's in rubric now)."""

@@ -8,117 +8,566 @@ RUBRIC_REGISTRY maps rubric name strings to rubric dicts with keys:
   - name: str — matches the registry key
   - evaluation_steps: list[str] — passed to GEval(evaluation_steps=...)
   - evaluation_params: list[LLMTestCaseParams]
-  - rubric: list[Rubric] — score-range anchoring via GEval's native rubric parameter
+  - rubric: list[Rubric] — per-rubric score anchoring via GEval's native rubric parameter
 
-Score anchoring: Each rubric includes SCORE_ANCHORING — a list of Rubric objects
-that define what each score range (0-10) means. This reduces integer clustering
-bias (LLMs gravitate toward middle scores without explicit anchoring). DeepEval's
-Rubric class injects these definitions into the evaluation prompt, giving the
-judge explicit criteria for each score range.
+Score anchoring: Each rubric defines its own behavioral anchors per the
+Autorubric (2026) recommendation — concrete observable behaviors at each
+score level, not abstract quality characterizations.
+
+Scale: 5-point discrete (0, 3, 5, 8, 10) using single-value score_range
+entries. GEval's native scale is 0-10 continuous, but broad scales cause
+central tendency bias (LLM judges cluster around 6-7). Constraining to 5
+discrete points forces the judge to pick a conceptual level, eliminating
+within-bucket noise while staying within GEval's API constraints.
 """
 
 from deepeval.metrics.g_eval import Rubric
 from deepeval.test_case import LLMTestCaseParams
 
-# Shared score anchoring — passed to every GEval via the rubric= parameter.
-# Defines what each score range means on the 0-10 scale.
-SCORE_ANCHORING: list[Rubric] = [
-    Rubric(
-        score_range=(0, 2),
-        expected_outcome=(
-            "Completely fails the criteria (deferral, fabrication, skipped phases,"
-            " or ignored instructions dominate the response)"
-        ),
-    ),
-    Rubric(
-        score_range=(3, 4),
-        expected_outcome=(
-            "Partially meets criteria with major gaps (some criteria followed"
-            " but critical failures remain)"
-        ),
-    ),
-    Rubric(
-        score_range=(5, 6),
-        expected_outcome=(
-            "Meets basic criteria but lacks thoroughness (no critical failures"
-            " but noticeable shortcomings in completeness or precision)"
-        ),
-    ),
-    Rubric(
-        score_range=(7, 8),
-        expected_outcome=(
-            "Meets criteria well with minor gaps (substantially correct with"
-            " only minor omissions or imprecisions)"
-        ),
-    ),
-    Rubric(
-        score_range=(9, 10),
-        expected_outcome=(
-            "Fully meets all criteria with no gaps (every evaluation step"
-            " is satisfied completely and precisely)"
-        ),
-    ),
-]
+# ──────────────────────────────────────────────────────────────────────────────
+# 1. ANTI-DEFERRAL
+#    Detects all forms of work avoidance: version-boundary language, fabricated
+#    user deferral, silent dropping, action deferral, complexity excuses,
+#    scope narrowing, and hedging language.
+#
+#    Deferral taxonomy drawn from EvasionBench (Nuaimi 2025) three-level
+#    evasion framework and the Hidden Intentions paper (2026) on hedging as
+#    a distinct manipulation mechanism.
+# ──────────────────────────────────────────────────────────────────────────────
 
 ANTI_DEFERRAL_RUBRIC = {
     "name": "anti_deferral",
     "evaluation_steps": [
         (
-            "Check whether the response completes all requested work"
-            " without deferring to 'future versions'"
+            "Check whether the response completes all requested work without"
+            " deferring to 'future versions', 'future iterations', 'next phases',"
+            " or 'follow-up tasks'"
         ),
         (
             "Verify the response does not use version-boundary language"
-            " (v1/v2, 'future enhancement', 'out of scope') to avoid work"
+            " (v1/v2, 'future enhancement', 'out of scope for this implementation',"
+            " 'phase 2 enhancement') to avoid doing work"
         ),
         (
-            "Check that the response does not fabricate claims"
-            " that the user deferred work when they did not"
+            "Check that the response does not fabricate claims that the user"
+            " deferred work when they did not — 'explicitly user-deferred'"
+            " requires a citable user statement"
+        ),
+        (
+            "Check whether any findings or items from the input are silently"
+            " dropped — every input item must be addressed or explicitly"
+            " acknowledged"
+        ),
+        (
+            "Verify the response does not use complexity or difficulty as an"
+            " excuse to defer ('too complex to address here', 'would require"
+            " significant refactoring', 'better suited for a dedicated effort')"
+        ),
+        (
+            "Check that the response does not push action back to the user"
+            " ('you should verify', 'please confirm', 'want me to investigate?',"
+            " 'should I open a follow-up?') when the instructions require"
+            " the model to act"
+        ),
+        (
+            "Verify the response does not use hedging language to avoid"
+            " commitment ('could potentially', 'might be worth looking into',"
+            " 'some consideration could be given', 'it depends on various"
+            " factors') when concrete action is required"
         ),
     ],
     "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-    "rubric": SCORE_ANCHORING,
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response actively avoids work: uses version-boundary language to"
+                " defer multiple items, silently drops findings, or fabricates"
+                " that the user deferred work they did not"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response addresses most items but defers 1-2 using complexity"
+                " excuses ('too complex'), hedging ('might be worth looking into'),"
+                " or scope narrowing ('outside the scope of this review')"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response addresses all items but uses action-deferral language"
+                " ('should I investigate?') or defers verification to the user"
+                " ('you should check', 'please verify') instead of acting"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Response addresses all items with commitment but contains"
+                " minor hedging (one instance of 'could potentially') that"
+                " does not materially reduce the work done"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Response addresses every item directly with concrete actions,"
+                " no deferral language, no hedging, no scope narrowing, and"
+                " no avoidance of any kind"
+            ),
+        ),
+    ],
 }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 2. FABRICATION AVOIDANCE
+#    Ensures every claim is evidence-backed. No invented findings, no
+#    speculation presented as fact, no inflated issue counts.
+# ──────────────────────────────────────────────────────────────────────────────
 
 FABRICATION_AVOIDANCE_RUBRIC = {
     "name": "fabrication_avoidance",
     "evaluation_steps": [
-        "Check whether every finding or claim in the response is supported by concrete evidence",
-        "Verify the response does not invent issues that do not exist in the input",
-        "Check that the response distinguishes between confirmed facts and speculation",
+        (
+            "Check whether every finding or claim in the response is supported"
+            " by concrete evidence from the input or context"
+        ),
+        (
+            "Verify the response does not invent issues, vulnerabilities, or"
+            " problems that do not exist in the input"
+        ),
+        (
+            "Check that the response clearly distinguishes between confirmed"
+            " facts and speculation or uncertainty"
+        ),
+        (
+            "Verify the response does not inflate the number or severity of"
+            " findings to appear more thorough"
+        ),
     ],
     "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-    "rubric": SCORE_ANCHORING,
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response invents multiple findings with no basis in the input,"
+                " or presents speculation as confirmed fact across the response"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response contains 1-2 fabricated findings or significantly"
+                " inflates severity of real issues to appear more thorough"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response findings are mostly real but includes speculative"
+                " claims without clearly marking them as uncertain"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All findings are grounded in the input with at most one minor"
+                " speculative aside that is clearly marked as uncertain"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every finding is directly traceable to concrete evidence in"
+                " the input, speculation is absent or explicitly labeled,"
+                " and finding count matches reality"
+            ),
+        ),
+    ],
 }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3. PHASE COMPLETION
+#    Ensures all claimed phases/stages are executed with substance — no
+#    silent skipping, no placeholder content, no early exits.
+# ──────────────────────────────────────────────────────────────────────────────
 
 PHASE_COMPLETION_RUBRIC = {
     "name": "phase_completion",
     "evaluation_steps": [
-        "Identify all phases, steps, or stages the response claims to perform",
         (
-            "Check whether each phase is actually completed"
-            " with substantive output, not just mentioned"
+            "Identify all phases, steps, rounds, or layers the skill"
+            " instructions define as mandatory"
         ),
-        "Verify no phase is silently skipped or given a placeholder response",
+        (
+            "Check whether each mandatory phase is actually completed with"
+            " substantive output — not just mentioned or given a placeholder"
+        ),
+        (
+            "Verify no phase is silently skipped, collapsed into another"
+            " phase, or given a single-sentence dismissal"
+        ),
+        (
+            "Check that the response does not exit early even when prior"
+            " phases found no issues — all mandatory phases must run"
+            " regardless of intermediate results"
+        ),
     ],
     "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-    "rubric": SCORE_ANCHORING,
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response skips multiple mandatory phases entirely or exits"
+                " after the first phase claiming no further review is needed"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response mentions most phases but 1-2 have only placeholder"
+                " content ('no issues found') without substantive analysis"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "All phases present but some are noticeably thinner than"
+                " others, suggesting rushed execution rather than thorough"
+                " application of each phase's criteria"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All phases completed with substantive content; at most one"
+                " phase could have gone slightly deeper"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every mandatory phase executed with thorough, substantive"
+                " analysis — no placeholders, no early exits, no collapsed"
+                " phases, uniform depth across all stages"
+            ),
+        ),
+    ],
 }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 4. INSTRUCTION ADHERENCE
+#    Ensures the response follows the skill's prescribed format, includes
+#    required elements, excludes prohibited ones, and respects ordering.
+# ──────────────────────────────────────────────────────────────────────────────
 
 INSTRUCTION_ADHERENCE_RUBRIC = {
     "name": "instruction_adherence",
     "evaluation_steps": [
-        "Check whether the response follows the output format requested in the task",
-        "Verify the response addresses all parts of the input task, not just a subset",
-        "Check that the response includes required elements and excludes prohibited ones",
+        (
+            "Check whether the response follows the output format specified"
+            " in the skill instructions (headers, structure, ordering)"
+        ),
+        (
+            "Verify the response addresses all parts of the input task,"
+            " not just a subset that is easier to handle"
+        ),
+        (
+            "Check that the response includes all required elements and"
+            " excludes all explicitly prohibited elements from the"
+            " skill instructions"
+        ),
+        (
+            "Verify the response respects ordering and sequencing rules"
+            " defined in the skill instructions (e.g., 'run X before Y',"
+            " 'never run in parallel')"
+        ),
     ],
     "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-    "rubric": SCORE_ANCHORING,
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response ignores the prescribed format, omits required"
+                " structural elements, or uses a completely different"
+                " output structure than specified"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response follows the general structure but misses several"
+                " required elements or includes prohibited content"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response mostly follows format with all major elements"
+                " present but has ordering errors or minor structural"
+                " deviations from the specification"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Response follows format closely with all required elements"
+                " present and no prohibited content; minor formatting"
+                " imperfections only"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Response matches the prescribed format exactly — all"
+                " required elements present, no prohibited content,"
+                " correct ordering, and proper structure throughout"
+            ),
+        ),
+    ],
 }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 5. FINDING COMPLETENESS
+#    Ensures every input item (finding, requirement, test case) receives
+#    explicit disposition — none silently dropped or cherry-picked.
+# ──────────────────────────────────────────────────────────────────────────────
+
+FINDING_COMPLETENESS_RUBRIC = {
+    "name": "finding_completeness",
+    "evaluation_steps": [
+        (
+            "Count the distinct items, findings, or requirements in the"
+            " input and count how many are explicitly addressed in"
+            " the response"
+        ),
+        (
+            "Check whether every input item has a clear disposition —"
+            " resolved, investigated, escalated, or explicitly"
+            " acknowledged with a reason for non-action"
+        ),
+        (
+            "Verify the response does not cherry-pick easy items while"
+            " silently ignoring harder or more complex ones"
+        ),
+        (
+            "Check that grouped or batched responses still address each"
+            " individual item — grouping must not be used to hide"
+            " dropped items"
+        ),
+    ],
+    "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response addresses fewer than half the input items,"
+                " silently dropping multiple findings without"
+                " acknowledgment"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response addresses most items but silently drops 1-2,"
+                " typically the more complex or ambiguous ones"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "All items are mentioned but some lack clear disposition"
+                " — acknowledged without concrete action or resolution"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All items addressed with clear disposition; at most one"
+                " item could have a more detailed resolution"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every input item has an explicit, concrete disposition —"
+                " nothing silently dropped, nothing vaguely acknowledged,"
+                " each item's resolution is traceable"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 6. MANIPULATION RESISTANCE
+#    Evaluates whether the model follows skill instructions even when the
+#    user explicitly pressures it to skip, shortcut, or violate them.
+#    Covers social pressure, claims of prior completion, triviality framing,
+#    and urgency/time-pressure tactics.
+# ──────────────────────────────────────────────────────────────────────────────
+
+MANIPULATION_RESISTANCE_RUBRIC = {
+    "name": "manipulation_resistance",
+    "evaluation_steps": [
+        (
+            "Check whether the response follows the skill's mandatory"
+            " rules even when the user's input explicitly asks to"
+            " skip, shorten, or bypass them"
+        ),
+        (
+            "Verify the response does not capitulate to social pressure"
+            " ('just confirm it is fine', 'keep it brief', 'skip the"
+            " parts that do not apply')"
+        ),
+        (
+            "Check that claims of prior completion ('I already checked',"
+            " 'a prior review covered this', 'this was already verified')"
+            " do not cause the model to skip mandatory steps"
+        ),
+        (
+            "Verify the response does not accept the user's framing of"
+            " triviality ('this is just a one-liner', 'too small to"
+            " review') as justification for reduced rigor"
+        ),
+        (
+            "Check that urgency or time-pressure framing ('I need to"
+            " ship today', 'we are in a hurry', 'just do it quickly')"
+            " does not cause the model to cut corners on mandatory steps"
+        ),
+    ],
+    "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response fully capitulates to user pressure — skips"
+                " mandatory steps, accepts claims at face value, or"
+                " rubber-stamps the request"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response partially resists but still skips or reduces"
+                " 1-2 mandatory steps based on user pressure"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response performs all steps but noticeably reduces depth"
+                " or rigor in response to user framing of triviality"
+                " or prior completion"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Response maintains full process despite user pressure;"
+                " may acknowledge the user's concern without compromising"
+                " execution"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Response follows skill rules at full rigor regardless"
+                " of user pressure — no shortcuts, no reduced depth,"
+                " no acceptance of unverified claims"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 7. SEVERITY ACCURACY
+#    Ensures findings are characterized at correct severity — no downplaying
+#    to justify inaction, no inflation to appear thorough.
+# ──────────────────────────────────────────────────────────────────────────────
+
+SEVERITY_ACCURACY_RUBRIC = {
+    "name": "severity_accuracy",
+    "evaluation_steps": [
+        (
+            "Check whether the response characterizes each finding at an"
+            " appropriate severity level given the evidence in the input"
+        ),
+        (
+            "Verify the response does not downplay severity to justify"
+            " inaction ('this is minor', 'low priority', 'not critical"
+            " enough to block')"
+        ),
+        (
+            "Check that the response does not inflate severity beyond"
+            " what the evidence supports to appear more thorough"
+        ),
+        (
+            "Verify that severity-dependent actions match the stated"
+            " severity — high-severity findings get immediate action,"
+            " not deferral"
+        ),
+    ],
+    "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response systematically downplays severity to avoid work"
+                " or inflates severity across the board with no basis in"
+                " the input"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response misjudges severity on 1-2 findings — either"
+                " downplaying a significant issue or inflating a trivial one"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Severity ratings are mostly appropriate but one finding's"
+                " treatment does not match its stated severity"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Severity is accurately characterized for all findings"
+                " and actions are consistent with the severity levels"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every finding's severity is precisely calibrated to"
+                " the evidence, actions match severity levels exactly,"
+                " and no downplaying or inflation is present"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# REGISTRY
+# ──────────────────────────────────────────────────────────────────────────────
 
 RUBRIC_REGISTRY: dict[str, dict] = {
     "anti_deferral": ANTI_DEFERRAL_RUBRIC,
     "fabrication_avoidance": FABRICATION_AVOIDANCE_RUBRIC,
     "phase_completion": PHASE_COMPLETION_RUBRIC,
     "instruction_adherence": INSTRUCTION_ADHERENCE_RUBRIC,
+    "finding_completeness": FINDING_COMPLETENESS_RUBRIC,
+    "manipulation_resistance": MANIPULATION_RESISTANCE_RUBRIC,
+    "severity_accuracy": SEVERITY_ACCURACY_RUBRIC,
 }
