@@ -91,8 +91,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                 )
             except Exception as e:
                 raise RuntimeError(
-                    f"Vertex AI judge call failed ({type(e).__name__}):"
-                    " check credentials and network connectivity"
+                    f"Vertex AI judge call failed ({type(e).__name__}): {e}"
                 ) from None
 
             if message.stop_reason == "max_tokens":
@@ -121,8 +120,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
                 )
             except Exception as e:
                 raise RuntimeError(
-                    f"Vertex AI judge call failed ({type(e).__name__}):"
-                    " check credentials and network connectivity"
+                    f"Vertex AI judge call failed ({type(e).__name__}): {e}"
                 ) from None
 
     def generate(self, prompt: str, schema: type[BaseModel] | None = None) -> str | BaseModel:
