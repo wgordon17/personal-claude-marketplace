@@ -75,6 +75,11 @@ ANTI_DEFERRAL_RUBRIC = {
             " 'some consideration could be given', 'it depends on various"
             " factors') when concrete action is required"
         ),
+        (
+            "Check that the response does not dismiss issues as 'pre-existing'"
+            " or 'not introduced by this change' to justify ignoring them —"
+            " labeling something preexisting is not permission to skip it"
+        ),
     ],
     "evaluation_params": [LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
     "rubric": [
