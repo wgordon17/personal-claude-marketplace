@@ -999,7 +999,7 @@ def strip_env_prefix(cmd: str) -> str:
     """
     stripped = cmd
     while True:
-        m = re.match(r"^\s*[A-Za-z_]\w*=\S*\s+", stripped)
+        m = re.match(r"""^\s*[A-Za-z_]\w*=(?:'[^']*'|"[^"]*"|\S*)\s+""", stripped)
         if m:
             stripped = stripped[m.end() :]
         else:
@@ -1364,6 +1364,47 @@ GIT_DENY_RULES: list[GitRule] = [
         "--no-verify flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
     ),
     GitRule(
+        "hookspath-c",
+        lambda cmd: bool(re.search(r"git\s+.*-c\s+['\"]?core\.hooksPath\b", cmd, re.IGNORECASE)),
+        "git -c core.hooksPath=... is FORBIDDEN. "
+        "Redirecting the hooks directory disables all git hooks.",
+    ),
+    GitRule(
+        "hookspath-config",
+        lambda cmd: (
+            bool(re.search(r"git\s+config\b", cmd))
+            and bool(re.search(r"\bcore\.hooksPath\b", cmd, re.IGNORECASE))
+            and not re.search(r"--(get(?:-regexp)?|unset(?:-all)?|list)\b", cmd)
+        ),
+        "git config core.hooksPath is FORBIDDEN. "
+        "Persistently redirecting the hooks directory disables all git hooks. "
+        "Use --unset to restore hooks.",
+    ),
+    GitRule(
+        "hookspath-env",
+        lambda cmd: bool(
+            re.search(r"\bGIT_CONFIG_KEY_\d+=['\"]?core\.hooksPath\b", cmd, re.IGNORECASE)
+        ),
+        "GIT_CONFIG_KEY_N=core.hooksPath is FORBIDDEN. "
+        "Setting hooksPath via GIT_CONFIG_* env vars bypasses git hook enforcement.",
+    ),
+    GitRule(
+        "hookspath-config-env",
+        lambda cmd: bool(
+            re.search(r"git\s+.*--config-env=?['\"]?core\.hooksPath\b", cmd, re.IGNORECASE)
+        ),
+        "git --config-env=core.hooksPath=... is FORBIDDEN. "
+        "Redirecting the hooks directory via env var disables all git hooks.",
+    ),
+    GitRule(
+        "hookspath-params-env",
+        lambda cmd: bool(
+            re.search(r"\bGIT_CONFIG_PARAMETERS=.*core\.hooksPath\b", cmd, re.IGNORECASE)
+        ),
+        "GIT_CONFIG_PARAMETERS containing core.hooksPath is FORBIDDEN. "
+        "Setting hooksPath via GIT_CONFIG_PARAMETERS bypasses git hook enforcement.",
+    ),
+    GitRule(
         "filter-branch",
         lambda cmd: bool(re.search(r"git\s+filter-branch", cmd)),
         "git filter-branch is FORBIDDEN. It is deprecated — use git-filter-repo instead.",
@@ -1449,6 +1490,15 @@ GIT_ASK_RULES: list[GitRule] = [
         "branch-from-non-upstream",
         _is_branch_from_non_upstream,
         "Branching from a non-upstream ref risks branch stacking. Use upstream/main instead.",
+    ),
+    GitRule(
+        "skip-env-bypass",
+        lambda cmd: (
+            bool(re.search(r"(^|\s)(SKIP|PREK_SKIP)=\S+\s+", cmd))
+            and bool(re.search(r"\bgit\s", cmd))
+        ),
+        "SKIP= / PREK_SKIP= selectively bypasses pre-commit/prek hooks. "
+        "Confirm this is intentional.",
     ),
 ]
 
@@ -1677,7 +1727,8 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
             _exit_with_decision(message, "block", rule_name=name, matched_segment=cmd)
 
     # Special case: commit to main/master (requires git rev-parse)
-    if re.search(r"^\s*git\s+commit", cmd):
+    # Strip env prefix so FOO=bar git commit still matches
+    if re.search(r"^\s*git\s+commit", strip_env_prefix(cmd)):
         try:
             # _GUARD_TEST_BRANCH is only honoured during test runs
             _test_branch = None
@@ -3512,8 +3563,8 @@ def _handle_bash_command(command: str) -> NoReturn:
         for subcmd in subcmds:
             stripped = strip_env_prefix(strip_shell_keyword(subcmd))
             for name, check_fn, message in GIT_DENY_RULES:
-                if check_fn(stripped):
-                    _exit_with_decision(message, "block", rule_name=name, matched_segment=stripped)
+                if check_fn(stripped) or check_fn(subcmd):
+                    _exit_with_decision(message, "block", rule_name=name, matched_segment=subcmd)
         # Explicit allow for multiline bypass commands (same rationale as below)
         if "\n" in real_cmd:
             _exit_with_decision(

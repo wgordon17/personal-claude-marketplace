@@ -997,6 +997,8 @@ class TestEnvVarPrefix:
             ("A=1 B=2 python script.py", 2, "uv run"),
             ("FOO=bar make build", 0, None),
             ("FOO=bar uv run script.py", 0, None),
+            ("FOO='bar baz' python script.py", 2, "uv run"),
+            ('FOO="bar baz" python script.py', 2, "uv run"),
         ],
         ids=[
             "python",
@@ -1006,6 +1008,8 @@ class TestEnvVarPrefix:
             "multi-prefix",
             "make-allow",
             "uv-run-allow",
+            "single-quoted-value",
+            "double-quoted-value",
         ],
     )
     def test_env_prefix(self, command, expected_exit, expected_msg):
@@ -1054,6 +1058,18 @@ class TestAndonCord:
             ("GUARD_BYPASS=1 bash setup.sh", 0, None),
             ("GUARD_BYPASS=1 uv run /tmp/t.py", 0, None),
             ("GUARD_BYPASS=1 cat f.py && grep p", 0, None),
+            (
+                "GUARD_BYPASS=1 GIT_CONFIG_KEY_0=core.hooksPath "
+                "GIT_CONFIG_VALUE_0=/dev/null git commit -m msg",
+                2,
+                "FORBIDDEN",
+            ),
+            (
+                "GUARD_BYPASS=1 GIT_CONFIG_PARAMETERS=\"'core.hooksPath=/dev/null'\" "
+                "git commit -m msg",
+                2,
+                "FORBIDDEN",
+            ),
             ("cat file.py", 2, "Read tool"),
         ],
         ids=[
@@ -1061,6 +1077,8 @@ class TestAndonCord:
             "bypass-bash-script",
             "bypass-tmp",
             "bypass-full-chain",
+            "bypass-hookspath-env-blocked",
+            "bypass-hookspath-params-blocked",
             "no-bypass-blocked",
         ],
     )
@@ -1337,6 +1355,158 @@ class TestGitSafetyCommitToMain:
         env["_GUARD_TEST_BRANCH"] = "feat/something"
         result = run_guard("Bash", {"command": "git commit -m 'test'"}, env=env)
         assert result.returncode == 0
+
+    def test_commit_to_main_with_env_prefix(self):
+        """Regression: env prefix before git bypasses ^-anchored commit-to-main check."""
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "main"
+        result = run_guard("Bash", {"command": "FOO=bar git commit -m 'test'"}, env=env)
+        assert_guard(result, 2, "FORBIDDEN", "commit-to-main-env-prefix")
+
+    def test_commit_to_main_with_skip_env_prefix(self):
+        """SKIP= on main should hit commit-to-main block (deny runs before ask)."""
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "main"
+        result = run_guard("Bash", {"command": "SKIP=hookid git commit -m 'test'"}, env=env)
+        assert_guard(result, 2, "FORBIDDEN", "commit-to-main-skip-prefix")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Git safety: SKIP / PREK_SKIP env var bypass (ASK)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSkipEnvBypass:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "SKIP=hookid git commit -m 'msg'",
+            "SKIP=hook1,hook2 git commit -m 'msg'",
+            "PREK_SKIP=hookid git commit -m 'msg'",
+            "PREK_SKIP=hook1,hook2 git push origin feature",
+            "SKIP=hookid git push origin feature",
+        ],
+        ids=[
+            "skip-single",
+            "skip-multiple",
+            "prek-skip-single",
+            "prek-skip-push",
+            "skip-push",
+        ],
+    )
+    def test_skip_env_triggers_ask(self, command):
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "feature/test"
+        result = run_guard("Bash", {"command": command}, env=env)
+        assert_ask_decision(result, "SKIP")
+
+    def test_plain_git_commit_no_skip_ask(self):
+        """Plain git commit should NOT trigger the SKIP ask rule."""
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "feature/test"
+        result = run_guard("Bash", {"command": "git commit -m 'msg'"}, env=env)
+        assert "SKIP" not in (result.stderr + result.stdout)
+
+    def test_skip_non_git_command_no_ask(self):
+        """SKIP= before a non-git command should NOT trigger the rule."""
+        result = run_bash("SKIP=hookid make test")
+        assert "SKIP" not in (result.stderr + result.stdout)
+
+    def test_skip_empty_value_no_ask(self):
+        """Empty SKIP= is a no-op in pre-commit — should NOT trigger ask."""
+        env = os.environ.copy()
+        env["_GUARD_TEST_BRANCH"] = "feature/test"
+        result = run_guard("Bash", {"command": "SKIP= git commit -m 'msg'"}, env=env)
+        assert "SKIP" not in (result.stderr + result.stdout)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Git safety: core.hooksPath bypass (DENY)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCoreHooksPathBypass:
+    @pytest.mark.parametrize(
+        "command, expected_exit, expected_msg",
+        [
+            # -c flag bypass (deny)
+            ("git -c core.hooksPath=/dev/null commit -m 'msg'", 2, "FORBIDDEN"),
+            ('git -c core.hooksPath="" commit -m "msg"', 2, "FORBIDDEN"),
+            ("git -c core.hooksPath=/tmp/empty commit -m 'msg'", 2, "FORBIDDEN"),
+            # git config write variants (deny)
+            ("git config core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            ("git config --local core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            ("git config --file /tmp/foo core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            ("git config --worktree core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            # --config-env flag bypass (deny)
+            ("git --config-env=core.hooksPath=MY_VAR commit -m 'msg'", 2, "FORBIDDEN"),
+            # git config --unset (allow — restores hooks)
+            ("git config --unset core.hooksPath", 0, None),
+            ("git config --unset-all core.hooksPath", 0, None),
+            # git config --get (allow — read-only)
+            ("git config --get core.hooksPath", 0, None),
+            # Case-insensitive: git config keys are case-insensitive
+            ("git -c core.hookspath=/dev/null commit -m 'msg'", 2, "FORBIDDEN"),
+            ("git config core.hookspath /dev/null", 2, "FORBIDDEN"),
+            ("git config --get core.hookspath", 0, None),
+            # --global variant: deny fires before config-global-write ask
+            ("git config --global core.hooksPath /dev/null", 2, "FORBIDDEN"),
+            # --get-regexp is read-only (allow)
+            ("git config --get-regexp core.hooksPath", 0, None),
+            # GIT_CONFIG_KEY_N env var bypass
+            (
+                "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath "
+                "GIT_CONFIG_VALUE_0=/dev/null git commit -m 'msg'",
+                2,
+                "FORBIDDEN",
+            ),
+            # GIT_CONFIG_PARAMETERS env var bypass
+            (
+                "GIT_CONFIG_PARAMETERS=\"'core.hooksPath=/dev/null'\" git commit -m 'msg'",
+                2,
+                "FORBIDDEN",
+            ),
+            # Quoted bypass attempts
+            ("git -c 'core.hooksPath=/dev/null' commit -m 'msg'", 2, "FORBIDDEN"),
+            ('git -c "core.hooksPath=/dev/null" commit -m "msg"', 2, "FORBIDDEN"),
+            (
+                "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='core.hooksPath' "
+                "GIT_CONFIG_VALUE_0=/dev/null git commit -m 'msg'",
+                2,
+                "FORBIDDEN",
+            ),
+        ],
+        ids=[
+            "c-hookspath-devnull",
+            "c-hookspath-empty",
+            "c-hookspath-tmpdir",
+            "config-hookspath-write",
+            "config-hookspath-local-write",
+            "config-hookspath-file-write",
+            "config-hookspath-worktree-write",
+            "config-env-hookspath",
+            "config-hookspath-unset-allow",
+            "config-hookspath-unset-all-allow",
+            "config-hookspath-get-allow",
+            "c-hookspath-lowercase",
+            "config-hookspath-lowercase-write",
+            "config-hookspath-lowercase-get-allow",
+            "config-hookspath-global-write",
+            "config-hookspath-get-regexp-allow",
+            "hookspath-env-bypass",
+            "hookspath-params-env-bypass",
+            "c-hookspath-single-quoted",
+            "c-hookspath-double-quoted",
+            "hookspath-env-quoted-key",
+        ],
+    )
+    def test_core_hookspath(self, command, expected_exit, expected_msg):
+        result = run_bash(command)
+        assert_guard(result, expected_exit, expected_msg)
+        if expected_exit == 0:
+            output = result.stderr + result.stdout
+            assert "FORBIDDEN" not in output, f"Unexpected FORBIDDEN in allow case: {output!r}"
+            assert '"ask"' not in result.stdout, f"Unexpected ASK in allow case: {result.stdout!r}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
