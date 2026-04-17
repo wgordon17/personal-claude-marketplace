@@ -17,6 +17,8 @@ import json
 import logging
 import re
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -453,85 +455,100 @@ def run_eval(
     """
     from deepeval.test_case import LLMTestCase
 
-    score_accum: dict[str, list[float]] = {}
-    passes: list[bool] = []
-    details: list[dict] = []
-    infra_error_count: int = 0
-
     total_tc = len(test_cases)
-    for tc_idx, tc in enumerate(test_cases, 1):
+    print_lock = threading.Lock()
+
+    def _score_metric(metric: object, llm_tc: LLMTestCase) -> tuple[str, float, bool, bool]:
+        """Score a single metric. Returns (name, score, passed, infra_error)."""
+        metric_name = getattr(metric, "name", type(metric).__name__)
+        infra = False
+        try:
+            metric.measure(llm_tc)  # type: ignore[union-attr]
+        except Exception as exc:
+            logger.warning("metric %s failed: %s", metric_name, exc)
+            infra = True
+        score = metric.score if metric.score is not None else 0.0  # type: ignore[union-attr]
+        passed = metric.is_successful()  # type: ignore[union-attr]
+        return metric_name, score, passed, infra
+
+    def _eval_tc(tc_idx: int, tc: dict) -> dict:
+        """Evaluate a single test case: execute skill, then score all metrics in parallel."""
         tc_id = tc.get("id", "?")
         prompt = tc.get("prompt", "")
         assertions = tc.get("assertions", [])
 
-        # Step 1: Execute the skill — LLM generates output following
-        # the skill instructions with this test scenario as input.
-        print(
-            f"    tc {tc_id} ({tc_idx}/{total_tc}): executing...",
-            end="",
-            flush=True,
-        )
+        with print_lock:
+            print(f"    tc {tc_id} ({tc_idx}/{total_tc}): executing...", flush=True)
+
+        # Step 1: Execute the skill.
         try:
             response = execute_skill(
                 skill_prompt_bundle, prompt, judge, context_preamble=context_preamble
             )
         except Exception as exc:
-            print(f" EXEC FAILED: {exc}", flush=True)
+            with print_lock:
+                print(f"    tc {tc_id}: EXEC FAILED: {exc}", flush=True)
             logger.warning("skill execution failed for %s tc %s: %s", skill_name, tc_id, exc)
-            infra_error_count += 1
-            passes.append(False)
-            details.append({"id": tc_id, "prompt": prompt, "scores": {}, "passed": False})
-            continue
+            return {"id": tc_id, "prompt": prompt, "scores": {}, "passed": False, "infra": True}
 
-        # Step 2: Evaluate the response (not the prompt).
+        # Step 2: Score all metrics in parallel.
+        # Each tc gets its own metric instances (build_metrics creates new GEval objects).
         geval_metrics = build_metrics(rubric_names, judge)
         contains = build_assertion_metrics(assertions)
         all_metrics = geval_metrics + [contains]
-
         llm_tc = LLMTestCase(input=prompt, actual_output=response)
+
+        with ThreadPoolExecutor(max_workers=len(all_metrics)) as metric_pool:
+            metric_results = list(metric_pool.map(lambda m: _score_metric(m, llm_tc), all_metrics))
 
         tc_scores: dict[str, float] = {}
         tc_pass = True
-        tc_had_infra_error = False
-
-        print(f" scoring {len(all_metrics)} metrics...", end="", flush=True)
-        for metric in all_metrics:
-            metric_name = getattr(metric, "name", type(metric).__name__)
-            try:
-                metric.measure(llm_tc)
-            except Exception as exc:
-                logger.warning("metric %s failed: %s", metric_name, exc)
-                tc_had_infra_error = True
-            score = metric.score if metric.score is not None else 0.0
-            tc_scores[metric_name] = score
-            score_accum.setdefault(metric_name, []).append(score)
-            if not metric.is_successful():
+        tc_infra = False
+        for mname, mscore, mpassed, minfra in metric_results:
+            tc_scores[mname] = mscore
+            if not mpassed:
                 tc_pass = False
+            if minfra:
+                tc_infra = True
 
         status = "PASS" if tc_pass else "FAIL"
-        print(f" {status}", flush=True)
+        with print_lock:
+            print(f"    tc {tc_id} ({tc_idx}/{total_tc}): {status}", flush=True)
 
-        if tc_had_infra_error:
+        return {
+            "id": tc_id,
+            "prompt": prompt,
+            "response_preview": response[:200],
+            "scores": tc_scores,
+            "passed": tc_pass,
+            "infra": tc_infra,
+        }
+
+    # Run all test cases in parallel.
+    tc_results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=total_tc) as tc_pool:
+        futures = [tc_pool.submit(_eval_tc, i, tc) for i, tc in enumerate(test_cases, 1)]
+        for future in futures:
+            tc_results.append(future.result())
+
+    # Aggregate results from all test cases.
+    score_accum: dict[str, list[float]] = {}
+    passes: list[bool] = []
+    details: list[dict] = []
+    infra_error_count = 0
+
+    for result in tc_results:
+        passes.append(result["passed"])
+        if result.get("infra"):
             infra_error_count += 1
+        for mname, mscore in result["scores"].items():
+            score_accum.setdefault(mname, []).append(mscore)
+        details.append(result)
 
-        passes.append(tc_pass)
-        details.append(
-            {
-                "id": tc_id,
-                "prompt": prompt,
-                "response_preview": response[:200],
-                "scores": tc_scores,
-                "passed": tc_pass,
-            }
-        )
-
-    # Aggregate averages.
     avg_scores = {name: sum(vals) / len(vals) for name, vals in score_accum.items()}
     pass_rate = sum(passes) / len(passes) if passes else 0.0
     total_cases = len(test_cases)
     infra_error = total_cases > 0 and infra_error_count >= total_cases / 2
-
-    # Per-test-case scores for statistical analysis (variance, confidence intervals).
     per_case_scores: dict[str, list[float]] = dict(score_accum)
 
     return {
