@@ -606,7 +606,91 @@ class TestScoreAnchoring:
                 )
 
 
-# ── Group 9: Nested baselines format ───────────────────────────────────────
+# ── Group 9: _score_stats ─────────────────────────────────────────────────
+
+
+class TestScoreStats:
+    """_score_stats(values) → (mean, stdev, unique_count)."""
+
+    def test_empty_list(self):
+        from skill_eval.hook import _score_stats
+
+        mean, stdev, uniq = _score_stats([])
+        assert mean == pytest.approx(0.0)
+        assert stdev == pytest.approx(0.0)
+        assert uniq == 0
+
+    def test_single_value(self):
+        from skill_eval.hook import _score_stats
+
+        mean, stdev, uniq = _score_stats([5.0])
+        assert mean == pytest.approx(5.0)
+        assert stdev == pytest.approx(0.0)
+        assert uniq == 1
+
+    def test_multiple_values(self):
+        from skill_eval.hook import _score_stats
+
+        mean, stdev, uniq = _score_stats([2.0, 4.0, 6.0])
+        assert mean == pytest.approx(4.0)
+        assert uniq == 3
+        assert stdev > 0
+
+    def test_all_same_values(self):
+        from skill_eval.hook import _score_stats
+
+        mean, stdev, uniq = _score_stats([3.0, 3.0, 3.0])
+        assert mean == pytest.approx(3.0)
+        assert stdev == pytest.approx(0.0)
+        assert uniq == 1
+
+
+# ── Group 10: load_context_layers ────────────────────────────────────────
+
+
+class TestLoadContextLayers:
+    """load_context_layers discovers and loads CLAUDE.md files."""
+
+    def test_project_claude_md_loaded(self, tmp_path):
+        from skill_eval.runner import load_context_layers
+
+        (tmp_path / "CLAUDE.md").write_text("# Project rules\n")
+        layers = load_context_layers(repo_root=tmp_path)
+        assert "project" in layers
+        assert "Project rules" in layers["project"]
+
+    def test_missing_repo_root_skips_project(self, tmp_path):
+        from skill_eval.runner import load_context_layers
+
+        layers = load_context_layers(repo_root=tmp_path)
+        assert "project" not in layers
+
+    def test_no_repo_root_returns_global_only(self):
+        from skill_eval.runner import load_context_layers
+
+        layers = load_context_layers(repo_root=None)
+        # May or may not have "global" depending on ~/.claude/CLAUDE.md existing.
+        assert "project" not in layers
+
+
+# ── Group 11: build_metrics ──────────────────────────────────────────────
+
+
+class TestBuildMetrics:
+    """build_metrics raises ValueError for unknown rubric names."""
+
+    def test_unknown_rubric_raises(self):
+        from unittest.mock import MagicMock
+
+        from skill_eval.runner import build_metrics
+
+        mock_judge = MagicMock()
+        mock_judge.get_model_name.return_value = "mock-judge"
+        with pytest.raises(ValueError, match="Unknown rubric"):
+            build_metrics(["nonexistent_rubric"], judge=mock_judge)
+
+
+# ── Group 12: Nested baselines format ──────────────────────────────────────
 
 
 class TestNestedBaselinesFormat:
