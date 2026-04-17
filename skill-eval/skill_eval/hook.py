@@ -14,7 +14,8 @@ detection to keep the fast-path (no changed skills) at stdlib speed.
 
 Security constraints:
   - DEEPEVAL_DISABLE_TIMEOUTS set in os.environ BEFORE any deepeval import.
-  - git ref validated against ^[a-zA-Z0-9/_.-]+$ BEFORE any subprocess call.
+  - DEEPEVAL_TELEMETRY_OPT_OUT set to disable telemetry/tracking.
+  - git ref validated against ^[a-zA-Z0-9/_.-~^]+$ BEFORE any subprocess call.
   - All subprocess.run calls use list-form args (never shell=True).
 """
 
@@ -125,8 +126,9 @@ def _verify_eval_integrity(repo_root: Path) -> tuple[bool, list[str]]:
 
 
 def _deferred_imports() -> tuple:
-    """Import eval modules after setting DEEPEVAL env var."""
+    """Import eval modules after setting DEEPEVAL env vars."""
     os.environ["DEEPEVAL_DISABLE_TIMEOUTS"] = "true"
+    os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "YES"
     from skill_eval.judge import VertexSonnetJudge
     from skill_eval.runner import (
         compare_baselines,

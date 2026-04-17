@@ -5,10 +5,11 @@ Reads ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION env vars.
 
 Multi-trial averaging (K-trial):
   When k_samples > 1 and a schema is requested (the GEval scoring path),
-  the judge runs K independent calls at eval_temperature and averages the
-  numeric scores. This produces continuous values from discrete integer
-  outputs, matching the G-Eval paper's Monte Carlo approach for models
-  without logprob access (Claude does not expose logprobs).
+  the judge runs K independent calls at eval_temperature **concurrently**
+  via ThreadPoolExecutor and averages the numeric scores. This produces
+  continuous values from discrete integer outputs, matching the G-Eval
+  paper's Monte Carlo approach for models without logprob access (Claude
+  does not expose logprobs).
 
   Skill execution calls (schema=None) always use a single call at
   temperature=0 for deterministic output.
@@ -17,6 +18,7 @@ Multi-trial averaging (K-trial):
 import asyncio
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import anthropic
 import instructor
@@ -146,25 +148,34 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
         if self._k_samples <= 1:
             return self._single_generate(prompt, schema=schema, temperature=0)
 
-        # Multi-trial averaging: run K times at eval_temperature, average scores.
+        # Multi-trial averaging: run K times at eval_temperature concurrently.
         scores: list[float] = []
         best_reason = ""
         best_score = -1.0
 
-        for i in range(self._k_samples):
+        def _run_trial(trial_idx: int) -> BaseModel | None:
             try:
-                result = self._single_generate(
+                return self._single_generate(
                     prompt, schema=schema, temperature=self._eval_temperature
                 )
-                if hasattr(result, "score"):
+            except Exception:
+                logger.warning(
+                    "Multi-trial sample %d/%d failed — skipping",
+                    trial_idx + 1,
+                    self._k_samples,
+                )
+                return None
+
+        with ThreadPoolExecutor(max_workers=self._k_samples) as pool:
+            futures = [pool.submit(_run_trial, i) for i in range(self._k_samples)]
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None and hasattr(result, "score"):
                     score = float(result.score)
                     scores.append(score)
                     if score > best_score:
                         best_score = score
                         best_reason = getattr(result, "reason", "")
-            except Exception:
-                logger.warning("Multi-trial sample %d/%d failed — skipping", i + 1, self._k_samples)
-                continue
 
         if not scores:
             # All trials failed — fall back to single deterministic call.

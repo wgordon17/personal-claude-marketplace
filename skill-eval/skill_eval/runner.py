@@ -458,18 +458,25 @@ def run_eval(
     details: list[dict] = []
     infra_error_count: int = 0
 
-    for tc in test_cases:
+    total_tc = len(test_cases)
+    for tc_idx, tc in enumerate(test_cases, 1):
         tc_id = tc.get("id", "?")
         prompt = tc.get("prompt", "")
         assertions = tc.get("assertions", [])
 
         # Step 1: Execute the skill — LLM generates output following
         # the skill instructions with this test scenario as input.
+        print(
+            f"    tc {tc_id} ({tc_idx}/{total_tc}): executing...",
+            end="",
+            flush=True,
+        )
         try:
             response = execute_skill(
                 skill_prompt_bundle, prompt, judge, context_preamble=context_preamble
             )
         except Exception as exc:
+            print(f" EXEC FAILED: {exc}", flush=True)
             logger.warning("skill execution failed for %s tc %s: %s", skill_name, tc_id, exc)
             infra_error_count += 1
             passes.append(False)
@@ -487,6 +494,7 @@ def run_eval(
         tc_pass = True
         tc_had_infra_error = False
 
+        print(f" scoring {len(all_metrics)} metrics...", end="", flush=True)
         for metric in all_metrics:
             metric_name = getattr(metric, "name", type(metric).__name__)
             try:
@@ -499,6 +507,9 @@ def run_eval(
             score_accum.setdefault(metric_name, []).append(score)
             if not metric.is_successful():
                 tc_pass = False
+
+        status = "PASS" if tc_pass else "FAIL"
+        print(f" {status}", flush=True)
 
         if tc_had_infra_error:
             infra_error_count += 1
