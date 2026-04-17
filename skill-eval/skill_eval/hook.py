@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 
 # Regex for validating git refs before passing to subprocess.
+# Allows ~ and ^ for revision syntax (HEAD~1, HEAD^2).
 _VALID_REF_RE = re.compile(r"^[a-zA-Z0-9/_.\-~^]+$")
 
 
@@ -101,7 +102,7 @@ def _verify_eval_integrity(repo_root: Path) -> tuple[bool, list[str]]:
     try:
         rel_eval = eval_dir.resolve().relative_to(repo_root)
     except ValueError:
-        return True, []  # eval dir outside repo — can't verify
+        return False, ["skill-eval dir is outside repo root — cannot verify integrity"]
 
     # Check both staged and unstaged changes.
     result = subprocess.run(
@@ -403,7 +404,7 @@ def _mode_compare(repo_root: Path, ref: str) -> bool:
     # SECURITY: validate ref BEFORE any subprocess call.
     if not _VALID_REF_RE.match(ref):
         print(
-            f"[skill-eval] Invalid git ref {ref!r} — must match ^[a-zA-Z0-9/_.-]+$",
+            f"[skill-eval] Invalid git ref {ref!r} — must match ^[a-zA-Z0-9/_.-~^]+$",
             file=sys.stderr,
         )
         sys.exit(1)

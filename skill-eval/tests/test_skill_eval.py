@@ -267,6 +267,16 @@ class TestLoadEvalConfig:
             assert "prompt" in tc
             assert "assertions" in tc
 
+    def test_path_traversal_returns_shell_dict(self):
+        result = load_eval_config("../../../etc/passwd")
+        assert result["rubrics"] == []
+        assert result["test_cases"] == []
+
+    def test_backslash_traversal_returns_shell_dict(self):
+        result = load_eval_config("..\\..\\etc\\passwd")
+        assert result["rubrics"] == []
+        assert result["test_cases"] == []
+
 
 # ── Group 3: load_baselines ───────────────────────────────────────────────────
 
@@ -347,6 +357,12 @@ class TestCompareBaselines:
         results = _run_result("fix", {"instruction_adherence": 0.88})
         _, report = compare_baselines(results, {"fix": {"instruction_adherence": 0.85}})
         assert "fix" in report
+
+    def test_infra_error_returns_false(self):
+        results = {**_run_result("quality-gate", {}), "infra_error": True}
+        passed, report = compare_baselines(results, {"quality-gate": {"anti_deferral": 0.9}})
+        assert passed is False
+        assert "INFRA ERROR" in report
 
 
 # ── Group 5: resolve_skill_bundle ─────────────────────────────────────────────
@@ -831,6 +847,20 @@ class TestHookCompareScoringFlag:
             hook.main()
 
         assert exc.value.code != 0
+
+    def test_with_context_calls_mode(self, tmp_path, tty_stdin):
+        from skill_eval import hook
+
+        with (
+            patch.object(sys, "argv", ["hook", "--with-context"]),
+            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            patch("skill_eval.hook._mode_with_context", return_value=True) as mock_wc,
+            pytest.raises(SystemExit) as exc,
+        ):
+            hook.main()
+
+        mock_wc.assert_called_once_with(tmp_path)
+        assert exc.value.code == 0
 
 
 # ── Group 12: Eval integrity guard (--locked) ──────────────────────────────

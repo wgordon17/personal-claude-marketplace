@@ -552,7 +552,7 @@ def compare_baselines(
     Args:
         results: Output from run_eval() — must have "skill" and "scores" keys.
         baselines: Output from load_baselines() — mapping of skill -> {metric: score}.
-        threshold: Maximum allowed score drop (default 0.05).
+        threshold: Maximum allowed score drop (default 0.15).
 
     Returns:
         Tuple of (passed: bool, report: str). passed is True when no regression
