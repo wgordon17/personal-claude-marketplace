@@ -680,6 +680,10 @@ def _mode_with_context(repo_root: Path) -> bool:
 
 
 def main() -> None:
+    # Force line-buffered stdout/stderr so progress output is visible when piped.
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(description="Skill evaluation pre-push hook (DeepEval-based)")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
