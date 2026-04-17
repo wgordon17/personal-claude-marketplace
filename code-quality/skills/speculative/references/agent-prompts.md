@@ -85,8 +85,8 @@ reasoning.
 
 All file operations happen in `{worktree_path}`. This is your isolated workspace:
 - Create and modify files using Write/Edit tools
-- Do NOT modify files outside your worktree
-- Do NOT git commit — the lead handles merging after judgment
+- Stay within your assigned worktree — modifying files outside it would corrupt the isolation guarantee
+- Leave commits to the lead — it merges the winning approach after judgment
 
 Follow the existing codebase conventions for:
 - Naming, formatting, and style
@@ -125,7 +125,7 @@ SendMessage(to="team-lead", message=JSON.stringify({
 }), summary="Competitor {competitor_id}: implementation complete")
 ```
 
-Do NOT send a plain text message — the lead expects structured JSON.
+Send structured JSON — the lead parses this message programmatically and cannot handle plain text.
 
 ## Important Rules
 
@@ -133,8 +133,7 @@ Do NOT send a plain text message — the lead expects structured JSON.
 - No communication with other competitors — you should not know what they are building.
 - If you get blocked (a critical dependency is missing, the worktree is in bad state), set
   `status: "partial"` or `status: "failed"` and describe the blocker in `approach`.
-- Do not ask the lead for clarification mid-implementation — if something is ambiguous,
-  make a reasonable assumption, document it in `approach`, and proceed.
+- Make reasonable assumptions for ambiguities and document them in `approach` — because mid-implementation clarification requests stall the competition timeline.
 ```
 
 ---
@@ -178,7 +177,7 @@ Read each competitor's ImplementationResult JSON. Understand:
 
 ### Step 2: Form Independent Scores
 
-For EACH competitor, score EACH criterion independently. Do NOT anchor to the competitor's
+For EACH competitor, score EACH criterion independently. Form your own view before reading the competitor's
 self-assessment — treat it as one data point, not a ground truth.
 
 **Scoring guidance:**
@@ -188,7 +187,7 @@ self-assessment — treat it as one data point, not a ground truth.
 - 3-4: Poor. Significant deficiencies that affect real use.
 - 1-2: Failing. Does not meet the criterion at a basic level.
 
-Use concrete evidence for each score. Do not use vague statements like "code is readable."
+Use concrete evidence for each score — because vague statements like "code is readable" provide no actionable signal.
 Instead: "competitor-1's function names are clear (e.g., `validate_and_normalize_input`)
 and functions average 10 lines with single responsibilities — 8/10."
 
@@ -256,6 +255,5 @@ SendMessage(to="team-lead", message=JSON.stringify({
 - If `hybrid_recommended` is true, `hybrid_elements` must be specific enough for a
   synthesis agent to act on them without access to your reasoning — include the source
   competitor and a precise description of what to take from them.
-- Do not declare a hybrid winner without also naming what the base structure comes from
-  (which competitor's overall structure is preserved, with which elements added from others).
+- When recommending a hybrid, name the base structure (which competitor's overall structure is preserved, with which elements added from others) — because the synthesis agent needs this to act without access to your full reasoning.
 ```

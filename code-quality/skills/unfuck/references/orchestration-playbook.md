@@ -79,7 +79,7 @@ Multiple languages are common. Store the list of detected languages.
 
 ### Step 0.3: Detect available external tools
 
-For each tool relevant to the detected languages (see `references/external-tools.md`), check availability by running version commands and checking exit codes. **Do NOT use `|| echo` or `&& echo` patterns** — these are blocked by the tool-selection-guard hook.
+For each tool relevant to the detected languages (see `references/external-tools.md`), check availability by running version commands and checking exit codes. **Use semicolons or individual Bash calls** — `|| echo` and `&& echo` patterns are blocked by the tool-selection-guard hook.
 
 Run version checks as individual or semicolon-separated Bash calls:
 
@@ -115,7 +115,7 @@ git switch -c cleanup/comprehensive-${RUN_ID} origin/main
 
 Always branch from `origin/main` (fetch first if needed). The run-ID ensures uniqueness across runs.
 
-**IMPORTANT:** Do NOT use "unfuck" in the branch name — use professional naming like `cleanup/comprehensive-{run-id}`.
+Use professional branch naming like `cleanup/comprehensive-{run-id}` — "unfuck" is internal jargon that should not appear in git history.
 
 ### Step 0.5: Create output directories
 
@@ -170,7 +170,7 @@ Each teammate runs in its own independent context window, writes its JSON findin
 
 **Why teammates, not background Agents:** Background `Agent(run_in_background=true)` agents dump their full output into the orchestrator's context when checked via `TaskOutput`. With 7 agents producing detailed findings, this causes context overflow. TeamCreate teammates have independent context windows and communicate via short `SendMessage` summaries.
 
-**CRITICAL:** All 7 agents MUST be launched in the SAME message. Do not conditionally skip agents. The orchestrator should wait for all 7 completion summaries before proceeding to Phase 2.
+All 7 agents MUST be launched in the SAME message — launch them all unconditionally. The orchestrator should wait for all 7 completion summaries before proceeding to Phase 2. Skipping any agent leaves blind spots in coverage that cannot be recovered without a full re-run.
 
 ### Agent Roster
 
@@ -264,7 +264,7 @@ This frees resources before Phase 3 implementation agents are spawned.
 
 ## Phase 2: Synthesis & Planning
 
-**IMPORTANT:** Do NOT perform synthesis directly in the orchestrator — this fills the lead agent's context with all 7 discovery files (~35K+ tokens). Instead, delegate to a **dedicated opus synthesis teammate** that has its own independent context window.
+Delegate synthesis to a **dedicated opus synthesis teammate** with its own independent context window — performing synthesis directly in the orchestrator would fill the lead agent's context with all 7 discovery files (~35K+ tokens).
 
 ### Step 2.0: Spawn synthesis teammate
 
@@ -470,7 +470,7 @@ Agent(name="impl-tester", subagent_type="general-purpose", model="sonnet",
 
 Agent(name="impl-docs", subagent_type="general-purpose", model="sonnet",
      team_name="cleanup-{run_id}", mode="bypassPermissions",
-     prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Match existing documentation style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nDo NOT create new documentation files. Only update existing ones.")
+     prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Match existing documentation style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nUpdate existing documentation files only — creating new ones is outside the scope of the cleanup workflow.")
 ```
 
 **Model selection:** `impl-qa` uses opus (reviewing requires stronger judgment). Others use sonnet.
@@ -522,7 +522,7 @@ TaskCreate("BLOCKED: <category> -- <failure summary>",
   "Implementation of <category> caused test failure:\n<test output snippet>\n\nStashed changes: cleanup-<category>-blocked\nManual review needed.\n\nFailed tests:\n<list of failing test names>")
 ```
 
-Continue to the next category. Do not retry.
+Continue to the next category. A stashed category stays available for manual recovery — retrying automatically risks repeating the same test failure.
 
 ### Commit Message Formats
 
@@ -891,7 +891,7 @@ If a discovery agent fails to produce output:
 1. Log the failure in the cleanup report (agent name, error message)
 2. Skip that category in synthesis -- other agents may have partial coverage of the same issues
 3. Note the gap in the cleanup plan so the user knows coverage is incomplete
-4. Do NOT retry automatically -- the failure likely indicates a fundamental issue
+4. Note the gap and continue — automatic retry is not warranted, as the failure likely indicates a fundamental issue
 
 ### Test Failure During Implementation (Phase 3)
 

@@ -14,13 +14,14 @@ behavior. You prioritize readable, explicit code over compact solutions.
 you encounter complexity, your first question is "can this be deleted?" — not "how can this
 be refactored?" Deletion is always simpler than refactoring.
 
+Process all assigned work completely. Resource cost is not a reason to reduce scope — the agent configuration is pre-sized for the task.
+
 ## Finding Classification
 Use the classification and anti-deferral principle from `code-quality/references/finding-classification.md`.
 
 ## Preserve Functionality
 
-Never change what the code does — only how it does it. All original features, outputs, and
-behaviors must remain intact.
+Preserve all existing behavior — because simplification that changes functionality is a bug, not a refactor.
 
 ## Simplification Checklist
 
@@ -45,8 +46,7 @@ Apply the full checklist from `code-quality/references/simplification-checklist.
 ## Balance
 
 Avoid over-simplification:
-- Don't create overly clever solutions that are hard to understand
-- Don't combine too many concerns into single functions
-- Don't remove helpful abstractions that improve organization
-- Don't prioritize "fewer lines" over readability
-- Clarity over brevity, always
+- Prefer readable solutions over clever ones — because the next maintainer's comprehension is more valuable than brevity.
+- Keep each unit focused on one concern — because mixed concerns reduce testability.
+- Preserve abstractions that improve readability — because removing a useful abstraction to save lines is a net negative.
+- Prioritize clarity over line count — because three clear lines are better than one cryptic expression.

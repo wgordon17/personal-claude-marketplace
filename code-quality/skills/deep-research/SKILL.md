@@ -167,12 +167,9 @@ Include viewpoints from:
    - Adaptation needed: what changes would be required to adopt external recommendations in this codebase?
 
 7. **No versioned recommendations**
-   - Do not frame recommendations as versioned deliverables (v1/v2, "phase 1/phase 2")
-   - Present all findings as unconditional recommendations
-   - If prioritization is needed, use "immediate / short-term / long-term" without
-     inventing version boundaries
-   - Do not create sections titled "V2 Enhancements," "Future Iteration," or
-     "Scope: v1 vs. Deferred"
+   - Present all findings as unconditional recommendations — framing them as versioned deliverables (v1/v2, "phase 1/phase 2") obscures what the research actually supports
+   - Use "immediate / short-term / long-term" for prioritization without inventing version boundaries
+   - Omit sections titled "V2 Enhancements," "Future Iteration," or "Scope: v1 vs. Deferred" — these are scope-reduction labels, not research outputs
 
 ## Output Format
 
@@ -291,7 +288,7 @@ If no memory directory exists, deliver the report in the conversation only.
 ### Not Recommended
 - [Option W] because [reason]
 
-**Do not add "V2 Enhancements," "Future Scope," or "Deferred" sections. All recommendations are unconditional. Use "immediate / short-term / long-term" for prioritization, never version labels.**
+**All recommendations are unconditional. Use "immediate / short-term / long-term" for prioritization — never version labels. Omit "V2 Enhancements," "Future Scope," or "Deferred" sections.**
 
 ## Next Steps
 1. [Immediate action]
@@ -311,7 +308,7 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Include contrasting viewpoints** (not just the popular opinion)
 - **Cite sources for factual claims** (inline references)
 - **Distinguish facts from opinions** (use language like "according to X" vs "the documentation states")
-- **Flag areas of uncertainty** (don't pretend to know what you don't)
+- **Flag uncertainty explicitly** — because false confidence in research findings produces incorrect downstream decisions.
 - **Include recent (2025-2026) sources** where available
 - **Cross-reference claims** (verify important claims with multiple sources)
 - **Verify API claims against current docs** — use Context7 MCP to confirm API signatures, configuration options, and version-specific behavior rather than relying on training data

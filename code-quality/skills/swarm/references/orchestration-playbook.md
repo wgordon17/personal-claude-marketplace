@@ -111,7 +111,7 @@ AskUserQuestion(questions=[{
 }])
 ```
 
-**Warn if on main/master:** Do not abort, but note it in the context bundle and remind at completion.
+**Warn if on main/master:** Note it in the context bundle and remind at completion — proceed without aborting.
 
 **Check if branch has open PR:**
 ```bash
@@ -337,7 +337,7 @@ Parse the task description for any of these signals:
 | Breaking changes implied | "refactor the API" | Ask: backwards compat required? |
 | Multiple valid approaches | "add search" | Present top 2-3 options, ask for choice |
 
-Batch ALL ambiguities into a single AskUserQuestion call. Do not ask one question at a time.
+Batch ALL ambiguities into a single AskUserQuestion call — one call total, not one per question.
 
 ### Step 1.2: Auto-detect Optional Reviewers
 
@@ -413,7 +413,7 @@ After Step 1.3 approval, commit to full autonomy. The ONLY allowed interruptions
 3. **Needs-input Fixer items** — findings requiring user decision that the Fixer could not resolve (Phase 5)
 4. **Final completion report** — announcing the swarm is done (Phase 7)
 
-Do NOT interrupt the user for:
+Handle these autonomously without interrupting the user:
 - Implementation decisions the architect covered
 - Review findings that the fixer successfully resolved
 - Test failures that haven't exceeded retry limits
@@ -496,7 +496,7 @@ the winner back into `architect-plan.json`.
 
 ### Step 2.4: Keep Architect Available Through Phase 3
 
-Do NOT shut down the Architect after Phase 2. The Architect remains available throughout Phase 3
+Keep the Architect alive through Phase 3. The Architect remains available throughout Phase 3
 for clarification questions from the Implementer and Reviewer.
 
 Notify the Architect that implementation is starting:
@@ -527,7 +527,7 @@ Evaluate whether this phase applies before spawning any agent:
 | architect-plan.json introduces new trust boundaries or external integrations | Run Phase 2.5 |
 | When in doubt | Run Phase 2.5 |
 
-If skipping: note the reason in the audit trail and proceed to Phase 3. Do NOT spawn a security-design agent.
+If skipping: note the reason in the audit trail and proceed to Phase 3. Leave the security-design agent unspawned.
 
 ### Step 2.5.1: Spawn Security Design Agent
 
@@ -636,7 +636,7 @@ Read `architect-plan.json`. Extract the component(s) that are contested:
   component(s) from the plan's `risks` and `questions` fields.
 
 **Scope rule:** Only contested component(s) enter the speculative fork. All other components
-proceed to Phase 3 directly after Phase 2.7 resolves. Do NOT fork the entire implementation.
+proceed to Phase 3 directly after Phase 2.7 resolves. Forking uncontested components adds cost without decision value.
 
 ### Step 2.7.2: Define Evaluation Criteria
 
@@ -846,9 +846,7 @@ After the Reduction Analyst completes:
 4. For each rejected recommendation: log the rejection and justification in the audit trail
 5. `abstractions_flagged` items: simplify the component spec in `architect-plan.json`
 
-Do NOT AskUserQuestion for Reduction Analyst recommendations unless they fundamentally change
-the scope (e.g., "delete the entire module and use library X instead"). Routine simplification
-is the Lead's judgment call.
+Handle Reduction Analyst recommendations as the Lead's judgment call — use AskUserQuestion only when a recommendation would fundamentally change the scope (e.g., "delete the entire module and use library X instead"). Routine simplification decisions belong to the Lead.
 
 ---
 
@@ -902,8 +900,7 @@ Also delete the watchdog BEFORE any of these transitions:
 - Design-level escalation routing back to Phase 2 (Step 4.5)
 - Any AskUserQuestion abort path
 
-Do NOT leave orphaned cron jobs. If the Lead is about to stop pipeline execution for any
-reason, always CronDelete before transitioning to the next phase or stopping.
+Always CronDelete before transitioning to the next phase or stopping — orphaned cron jobs accumulate across runs and consume unnecessary resources.
 
 ### Step 3.1: Spawn Persistent Pipeline Team
 
@@ -1028,7 +1025,7 @@ TaskCreate(
 )
 ```
 
-Continue to the next component. Do not retry. Record blocked item in audit trail.
+Continue to the next component. Record the blocked item in the audit trail — no retry.
 
 ### Step 3.5: Test Failure Protocol
 
@@ -1108,7 +1105,7 @@ When an agent's `turn_count` exceeds its threshold AND it is between components 
                "=== CONTINUATION FROM PREVIOUS AGENT ===\n"
                "<HandoffSummary JSON>\n"
                "=== END CONTINUATION ===\n\n"
-               "Continue from where the previous agent left off. Do NOT redo completed work.")
+               "Continue from where the previous agent left off. Pick up at the next unstarted task — redoing completed work wastes turns and may create conflicts.")
    ```
 
 5. **Log the recycling** to `{run_dir}/errors.log`:
@@ -1173,7 +1170,7 @@ One commit per successfully completed component. Failed/blocked components get n
 
 ## Phase 3.5: BDD Step Writing (conditional)
 
-**Skip when:** `phase_3_5_enabled = false` (set in Step 0.4.5). Do not spawn any agent.
+**Skip when:** `phase_3_5_enabled = false` (set in Step 0.4.5) — spawn no agent for this phase.
 
 ### Step 3.5.1: Determine .feature Target Directory
 
@@ -1315,7 +1312,7 @@ SendMessage(to="architect", message={"type": "shutdown_request", "reason": "Impl
 
 ### Step 4.2: Spawn All Reviewers
 
-Spawn ALL reviewers simultaneously in a SINGLE message. Do not spawn them sequentially.
+Spawn ALL reviewers simultaneously in a SINGLE message — parallel launch only, never sequential.
 
 **Core reviewers (always spawn):**
 ```
@@ -1446,7 +1443,7 @@ time any finding is routed to Phase 2 or Phase 2.5 (design-level or security des
 | Counter Value | Action |
 |---|---|
 | 0–1 | Route normally per classification rules above |
-| 2 | **Cap reached.** Do NOT route back to Phase 2 or 2.5 again. Escalate remaining design/security findings to human via AskUserQuestion. Route implementation findings to Fixer as normal. |
+| 2 | **Cap reached.** Escalate remaining design/security findings to human via AskUserQuestion — further re-runs of Phase 2/2.5 are blocked at this point. Route implementation findings to Fixer as normal. |
 
 #### Design-Level Escalation (→ Phase 2)
 
@@ -1753,8 +1750,8 @@ addresses it.
 ### Step 5.5.3: Escalate Unaddressed Tasks
 
 For any task not fully addressed by the diff, use `AskUserQuestion` to escalate with: the task
-description, what was done toward it (if anything), and what remains unimplemented. Do NOT
-silently skip unaddressed tasks.
+description, what was done toward it (if anything), and what remains unimplemented. Escalate
+every unaddressed task — silent skips become invisible scope gaps in the final report.
 
 ### Step 5.5.4: Spawn Plan File Updater
 
@@ -1771,13 +1768,13 @@ Agent(
     - Check off tasks that were completed ([x])
     - Mark tasks skipped by user decision as [SKIPPED by user]
     - Mark tasks blocked due to unresolved issues as [BLOCKED: reason]
-    - Do NOT modify the ## Test Plan section or any content below it —
+    - Leave the ## Test Plan section and everything below it untouched —
       it is a machine-readable annotation consumed by downstream skills.
     Reconciliation results: {reconciliation_summary}"
 )
 ```
 
-The Lead does NOT write to the plan file directly (Can Edit: No).
+The Lead delegates plan file writes to the plan-file-updater agent (Can Edit: No for Lead).
 
 ### Step 5.5.5: Clean Up
 
@@ -2164,7 +2161,7 @@ If a plan file was detected in Phase 0.4, adopt its commit strategy exactly. The
 - Never commit `{run_dir}/**` files (they're in hack/ which is gitignored)
 - Keep commit messages under 72 characters for the subject line
 - Use the commit body for details if needed
-- Do NOT use "swarm" in commit messages — use professional terminology
+- Use professional terminology in commit messages — avoid "swarm", which is an internal implementation detail
 
 ---
 

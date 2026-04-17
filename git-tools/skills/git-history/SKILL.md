@@ -8,7 +8,7 @@ allowed-tools: [Bash]
 
 This skill provides comprehensive reference for git-branchless commands that AI agents can execute reliably without interactive prompts.
 
-## CRITICAL: Why Use git-branchless
+## Why Use git-branchless
 
 Traditional git history commands fail for AI agents because:
 - `git rebase -i` opens an editor

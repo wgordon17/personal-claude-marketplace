@@ -16,10 +16,10 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, Tea
 
 # /swarm — Full Agent Swarm Implementation
 
-You MUST use the full TeamCreate swarm described here. Do not take shortcuts. Do not implement
-the task yourself. Your role is orchestration — you route work, relay context, make judgment
-calls, and coordinate the pipeline. Every phase of implementation goes through the appropriate
-specialist agent.
+Use the full TeamCreate swarm described here — because shortcuts produce incomplete implementations
+and bypass the quality gates this skill provides. Your role is orchestration — you route work,
+relay context, make judgment calls, and coordinate the pipeline. Every phase of implementation
+goes through the appropriate specialist agent.
 
 ---
 
@@ -121,8 +121,8 @@ the `**Tracker:**` field is absent from the plan file header (pre-feature plans)
 Finalization Constraint section. If `{tracker}` is a non-terminal state (`github:pending`,
 `github:linked#N`, or `jira:pending`), warn via `AskUserQuestion`: "Plan file has unresolved
 tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or set to 'none'
-to skip issue tracking." Do not proceed to Phase 1 until the tracker is resolved or set to
-`none`.
+to skip issue tracking." Resolve the tracker state before proceeding to Phase 1 — because
+`/swarm` requires a terminal tracker state to link commits correctly.
 
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
@@ -181,7 +181,7 @@ After receiving the plan, the Lead MUST:
    the architect via SendMessage for plan revision if external evidence contradicts the
    recommendation.
 
-Do NOT proceed to Phase 3 until all architect questions are resolved and scope is verified.
+Resolve all architect questions and verify scope before proceeding to Phase 3 — because implementers need a stable plan to avoid rework.
 The Architect remains active through Phase 3 to answer clarification questions from the
 Implementer and Reviewer.
 
@@ -238,8 +238,9 @@ If the user picks one approach directly, skip /speculative and continue to Phase
 components proceed directly to Phase 3 without waiting (if pipeline-feasible).
 
 **Watchdog:** CronDelete the Phase 2.7 watchdog after all competitors complete (or are timed
-out/failed) and before merging the winning approach back into architect-plan.json. Delete on
-all paths including abort — never leave orphaned cron jobs at phase boundaries.
+out/failed) and before merging the winning approach back into architect-plan.json. Clean up
+all cron jobs before completing — because orphaned jobs consume resources. Delete on all paths
+including abort.
 
 **Escalation:** If the judge recommends hybrid AND the Lead agrees it's genuinely better,
 run Phase 3.5 of the speculative skill (synthesis agent) before continuing to swarm Phase 3.
@@ -359,7 +360,7 @@ in the repo root. If not found, check for `tests/acceptance/`. If neither exists
 Before copying each file, verify it is a regular file and not a symlink (SEC-004). If a
 `.feature` file with the same name already exists in `{feature_target_dir}`, use
 `AskUserQuestion` to resolve the collision: offer "Overwrite", "Keep existing", or "Rename
-incoming" for each conflict. Do not overwrite silently.
+incoming" for each conflict — because silent overwrites lose work the user may have customized.
 
 **Step 3.5.3 — BDD dependency installation (if needed):** If `**BDD Setup Needed:** yes`,
 run the recorded install command (from `**BDD Setup Needed:**` annotation value, e.g.,
@@ -420,7 +421,7 @@ After synthesizing findings, classify each finding by type and route accordingly
 |---|---|---|
 | Design-level | Architecture mismatch, wrong abstraction, missing component entirely | Route back to Architect — respawn Phase 2, then re-run Phase 2.5, then re-implement Phase 3 |
 | Security design | Trust boundary violation in architecture, missing auth layer, new attack surface from design decision | Route to Phase 2.5 Security Design Review for design-level fix |
-| Scope creep | Feature implemented that was not in the plan, undiscussed behavior introduced | Escalate to human via AskUserQuestion — do not fix silently |
+| Scope creep | Feature implemented that was not in the plan, undiscussed behavior introduced | Surface via AskUserQuestion — because silent scope changes bypass user consent |
 | Implementation | Bugs, quality issues, code-level security vulnerabilities, performance bottlenecks | Route to Phase 5 Fixer |
 | Test coverage | Missing tests, untested paths, coverage gaps for the deliverable | Route to Phase 5 Test Coverage Agent |
 | Documentation | Missing or incorrect documentation for implemented features | Route to Phase 6 Docs agent |
@@ -517,14 +518,14 @@ If a plan file was found, the Lead performs reconciliation:
 
 3. **Escalate unaddressed tasks** — For any task that is not fully addressed by the diff, use
    `AskUserQuestion` to escalate with: the task description, what was done toward it (if anything),
-   and what remains unimplemented. Do NOT silently skip unaddressed tasks.
+   and what remains unimplemented. Escalate every unaddressed task — because silently skipping them produces a plan that misrepresents completion.
 
 4. **Spawn a plan file updater** — After escalation decisions are made, spawn a general-purpose
    sonnet agent (Can Edit: Yes) with the plan file path and reconciliation results. This agent:
    - Checks off tasks that were completed (`[x]`)
    - Marks tasks skipped by user decision as `[SKIPPED by user]`
    - Marks tasks blocked due to unresolved issues as `[BLOCKED: reason]`
-   - Do NOT modify the `## Test Plan` section or any content below it — it is a
+   - Preserve the `## Test Plan` section and all content below it exactly as-is — it is a
      machine-readable annotation consumed by downstream skills with exact field label matching.
 
    The Lead does NOT write to the plan file directly (Can Edit: No).
@@ -774,7 +775,8 @@ task graph should be visible from the start so the user can see the plan at any 
 Every agent receives a structured context bundle when spawned (see schema in
 `references/communication-schema.md`). The bundle includes: project name, task description,
 current branch, key files from the architect's plan, audit trail path (`run_dir`), and the
-tool guard reminder. Never spawn an agent without the full context bundle.
+tool guard reminder. Always include the full context bundle — because missing context produces
+hallucinated implementations.
 
 ### Judgment Calls
 
@@ -793,8 +795,8 @@ and throttle the Implementer when the Reviewer queue is full.
 Create a CronCreate watchdog (60-second interval) in Phase 3 Step 3.0 before spawning pipeline
 agents. On each tick, check `TaskList` for `in_progress` tasks and cross-reference with agent
 message timestamps. If any agent has been idle for 2+ consecutive checks, alert yourself and
-trigger Silent Failure Detection (Step 3.6). Always CronDelete the watchdog when Phase 3 ends
-or on any abort path — do not leave orphaned cron jobs.
+trigger Silent Failure Detection (Step 3.6). CronDelete the watchdog when Phase 3 ends or on
+any abort path — because orphaned jobs consume resources.
 
 ### Context Health Monitoring
 
@@ -857,7 +859,7 @@ After escalation, wait for user input before proceeding.
 | Phase 5.5: Plan Reconciliation | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. |
 | Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
 | /unfuck sweep | Fewer than 20 files modified and not an architectural change |
-| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
+| Required phases (always execute) | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
 
 ---
 
@@ -889,16 +891,8 @@ prefer opus — one strong pass beats multiple weaker passes.
 | sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Docs, Lessons Extractor |
 | haiku | Test-Runner, Verifier — execution-only tasks |
 
-### Work Completion Principle
-
-Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
-If the task requires an agent, spawn the agent. If a finding needs fixing, fix it.
-If tests need writing, write them. The only valid reasons to skip work are:
-(1) the user explicitly opted out, (2) the skip condition in the phase table applies,
-or (3) the work is genuinely out of scope for the current task.
-
-"It would be expensive" is NEVER a valid reason to skip work. Prefer spawning one opus
-agent that does the job right over multiple sonnet agents that require rework.
+> Scope integrity, phase compliance, and cost framing rules:
+> see `code-quality/references/anti-deferral-rules.md`.
 
 ---
 

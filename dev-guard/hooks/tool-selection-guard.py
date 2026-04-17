@@ -1317,18 +1317,17 @@ GIT_DENY_RULES: list[GitRule] = [
     GitRule(
         "reset-hard",
         lambda cmd: bool(re.search(r"git\s+reset\s+--hard", cmd)),
-        "git reset --hard is FORBIDDEN. "
-        "Use 'git reset --mixed' or 'git stash' to preserve changes.",
+        "Blocked: git reset --hard. Use 'git reset --mixed' or 'git stash' to preserve changes.",
     ),
     GitRule(
         "push-force",
         lambda cmd: bool(re.search(r"git\s+push", cmd)) and _has_force_flag(cmd),
-        "Force push (--force/-f) is FORBIDDEN. Use --force-with-lease for safer force pushing.",
+        "Blocked: force push (--force/-f). Use --force-with-lease for safer force pushing.",
     ),
     GitRule(
         "push-upstream",
         lambda cmd: bool(re.search(r"git\s+push", cmd)) and _get_push_target(cmd)[0] == "upstream",
-        "Pushing to upstream is FORBIDDEN. Push to origin and create a PR instead.",
+        "Blocked: pushing to upstream. Push to origin and create a PR instead.",
     ),
     GitRule(
         "fwl-main",
@@ -1337,7 +1336,7 @@ GIT_DENY_RULES: list[GitRule] = [
             and _has_force_with_lease(cmd)
             and _get_push_target(cmd)[1] in _PROTECTED_BRANCHES
         ),
-        "--force-with-lease to main/master is FORBIDDEN. Use feature branches for rebasing.",
+        "Blocked: --force-with-lease to main/master. Use feature branches for rebasing.",
     ),
     GitRule(
         "branch-D",
@@ -1345,23 +1344,22 @@ GIT_DENY_RULES: list[GitRule] = [
             bool(re.search(r"git\s+branch", cmd))
             and bool(re.search(r"(^|\s)-[a-zA-Z]*D[a-zA-Z]*(\s|$)", cmd))
         ),
-        "git branch -D is FORBIDDEN. Use 'git branch -d' for safe deletion of merged branches.",
+        "Blocked: git branch -D. Use 'git branch -d' for safe deletion of merged branches.",
     ),
     GitRule(
         "branch-force",
         lambda cmd: bool(re.search(r"git\s+branch.*--force", cmd)),
-        "git branch --force is FORBIDDEN. Force operations on branches must be done manually.",
+        "Blocked: git branch --force. Force operations on branches must be done manually.",
     ),
     GitRule(
         "push-origin-main",
         lambda cmd: bool(re.search(r"git\s+push.*origin\s+(main|master)(\s|$)", cmd)),
-        "Pushing directly to origin/main or origin/master is FORBIDDEN. "
-        "Use feature branches and PRs.",
+        "Blocked: pushing directly to origin/main or origin/master. Use feature branches and PRs.",
     ),
     GitRule(
         "no-verify",
         lambda cmd: bool(re.search(r"git\s+", cmd)) and "--no-verify" in cmd,
-        "--no-verify flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
+        "Blocked: --no-verify flag. Git hooks must run for all commits and pushes.",
     ),
     GitRule(
         "hookspath-c",
@@ -1407,12 +1405,12 @@ GIT_DENY_RULES: list[GitRule] = [
     GitRule(
         "filter-branch",
         lambda cmd: bool(re.search(r"git\s+filter-branch", cmd)),
-        "git filter-branch is FORBIDDEN. It is deprecated — use git-filter-repo instead.",
+        "Blocked: git filter-branch. It is deprecated — use git-filter-repo instead.",
     ),
     GitRule(
         "add-force",
         lambda cmd: bool(re.search(r"git\s+add", cmd)) and _has_force_flag(cmd),
-        "git add --force is FORBIDDEN. Files are gitignored for a reason.",
+        "Blocked: git add --force. Files are gitignored for a reason.",
     ),
     GitRule(
         "rm-cached-force",
@@ -1421,19 +1419,19 @@ GIT_DENY_RULES: list[GitRule] = [
             and "--cached" in cmd
             and (_has_force_flag(cmd) or "--force" in cmd)
         ),
-        "git rm --cached --force is FORBIDDEN. Use 'git rm --cached' without --force.",
+        "Blocked: git rm --cached --force. Use 'git rm --cached' without --force.",
     ),
     GitRule(
         "rm-unsafe",
         lambda cmd: bool(re.search(r"git\s+rm", cmd)) and "--cached" not in cmd,
-        "git rm is FORBIDDEN (deletes files). Use 'git rm --cached' to unstage only.",
+        "Blocked: git rm (deletes files). Use 'git rm --cached' to unstage only.",
     ),
     GitRule(
         "clean-ignored",
         lambda cmd: (
             bool(re.search(r"git\s+clean", cmd)) and bool(re.search(r"-[a-zA-Z]*[xX]", cmd))
         ),
-        "git clean with -x or -X is FORBIDDEN. These delete ignored/untracked files irreversibly.",
+        "Blocked: git clean with -x or -X. These delete ignored/untracked files irreversibly.",
     ),
     GitRule(
         "branch-no-base",
@@ -1745,7 +1743,7 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
             )
             if branch in _PROTECTED_BRANCHES:
                 msg = (
-                    f"Committing directly to {branch} is FORBIDDEN. "
+                    f"Blocked: committing directly to {branch}. "
                     "Create a feature branch: git switch -c feature/name"
                 )
                 _exit_with_decision(msg, "block", rule_name="commit-to-main", matched_segment=cmd)

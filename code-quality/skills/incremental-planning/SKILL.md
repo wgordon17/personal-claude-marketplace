@@ -15,7 +15,7 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP
 # Incremental Planning
 
 Replaces native plan mode with a question-first, file-based, incremental workflow.
-The plan lives in a file. Chat contains research, questions, and summaries — never full plan content.
+The plan lives in a file. Chat contains research, questions, and summaries — write plan content to file, not chat — because dumping plan content into chat overwhelms the conversation and hides the user's questions.
 
 ## Activation
 
@@ -34,8 +34,8 @@ This skill activates when:
    Provide 1-2 sentence summaries in chat after each section.
 3. **Never dump plan content into chat.** If the user wants to read the plan, tell them
    the file path. Only paste specific sections if the user explicitly asks to see them.
-4. **Questions before writing.** Do not write ANY plan content until Phase 2 is complete.
-5. **Incremental writing.** Write one section/task at a time, never the whole plan at once.
+4. **Questions before writing.** Complete Phase 2 before writing any plan content — because writing before clarifying produces plans that need immediate revision.
+5. **Incremental writing.** Write one section/task at a time — because writing the whole plan at once prevents checkpoint verification between tasks.
 
 ## Phase 0: Assess
 
@@ -106,7 +106,7 @@ specific questions — not generic ones.
 - Read `PROJECT.md` from the memory directory (detect using `code-quality/references/project-memory-reference.md` Directory Detection section) for past architectural decisions
 - Read `LESSONS.md` (if exists) from the memory directory for relevant past lessons. Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without
-  announcing each one. Do not quote lessons verbatim in chat.
+  announcing each one. Incorporate lessons silently — because quoting lessons verbatim consumes context the user needs for actual answers.
 - Check `{memory_dir}/BUGS.md` (if it exists) for open bug entries whose `### Files Involved`
   paths overlap with the areas being planned. Note any overlaps — these inform Phase 4
   (section 2.5. BUGS.md Cross-Reference).
@@ -192,20 +192,21 @@ via `AskUserQuestion`.
 
 The model does not decide what is in scope. If prioritization is needed, present
 options: "This plan could include [X] (adds ~N tasks) or defer it. Which do you prefer?"
-Do not silently exclude work by relabeling it as out of scope.
+Surface all work to the user — because silently relabeling work as out of scope hides it from the user who asked for it.
 
 ### Question Design
 
 - Use `AskUserQuestion` with structured options when possible (easier to answer)
-- Include research context WITH each question — don't make the user remember Phase 1 findings
+- Include research context WITH each question — because the user cannot remember Phase 1 findings from earlier in the session
 - One primary question per `AskUserQuestion` call
 - Question categories: **Scope** (multi-select), **Approach** (single-select),
   **Constraints** (open-ended ok), **Priority** (single-select)
 
 ### Anti-Pattern: Proposing Approaches Too Early
 
-Do NOT propose "2-3 approaches" during clarification. That's the brainstorming skill's pattern.
-Here, the approach **emerges from answers**. Ask about requirements, not solutions.
+Ask about requirements, not solutions — the approach **emerges from answers**, not from
+pre-packaged options. Proposing "2-3 approaches" during clarification imposes Claude's framing
+before the user's intent is understood (that's the brainstorming skill's pattern, not planning).
 
 Bad: "I see two approaches: A or B. Which do you prefer?"
 Good: "Should sessions replace JWT for web clients, or coexist alongside JWT?"
@@ -266,7 +267,7 @@ Before creating the plan file, check where it belongs:
 3. **If none found:** Fall back to `~/.claude/plans/{run-id}-<feature>.md`
    (create `~/.claude/plans/` if it doesn't exist)
 
-**Do NOT create a `hack/` directory if one doesn't exist.** That's a project-level decision.
+**Respect the existing memory directory structure — creating `hack/` is a project-level decision, not yours to make.**
 
 Announce the location: "Plan file: `hack/plans/feat-auth-1711388400-session-auth.md`"
 
@@ -465,7 +466,7 @@ Assumptions must persist in the file so they survive context recycling.
 
 If a reviewer flags a **scope-level** assumption, treat it as a reactive breakpoint: stop
 and use `AskUserQuestion` immediately (same as agent-initiated scope ambiguity in step 3.5
-below). Do not defer scope assumptions to Phase 6.
+below). Surface scope assumptions immediately via AskUserQuestion — because deferring them to Phase 6 produces a plan built on unresolved assumptions.
 
 #### 3.5 Reactive Breakpoints
 
@@ -475,7 +476,7 @@ While writing a task, if you encounter ambiguity, apply this decision:
 alter the file structure:
 - STOP writing the current task immediately
 - Use `AskUserQuestion` with the specific ambiguity and the context that caused it
-- Do NOT continue writing until the user answers
+- Wait for the user's answer before resuming — because writing through scope ambiguity produces tasks that need immediate revision
 - Example: "While writing Task 4, I realized the auth flow could go through middleware OR
   a decorator pattern. This affects Tasks 5-7. Which approach?"
 
@@ -511,8 +512,7 @@ Mention in the checkpoint: "N assumptions flagged so far — will surface all in
 
 #### 5. Incorporate Feedback Immediately
 
-When the user gives feedback on a specific task, rewrite ONLY that task. Don't regenerate
-the entire plan.
+When the user gives feedback on a specific task, rewrite only that task — because regenerating the entire plan discards all other reviewed and approved content.
 
 ## Phase 5: Validate
 
@@ -559,8 +559,7 @@ The plan is the deliverable. Present the completion report.
      only — do not surface them as flags.
    - Open questions from the plan header marked `[human]`
 3. **AskUserQuestion** — If there are ANY `[human]` open questions or scope-level assumptions
-   remaining, present them via `AskUserQuestion`. Hard requirement — never bury open questions
-   in the plan doc without surfacing them here.
+   remaining, present them via `AskUserQuestion`. Surface all open questions here — because burying them in the plan doc means they go unresolved until implementation.
 
    After receiving answers, update the plan file: resolve open questions in the header and
    apply any scope-level assumption resolutions to affected tasks. Then re-state the summary
@@ -676,8 +675,8 @@ scan for any of the following terms (case-insensitive): `swarm`, `subagent`, `Cl
 `/incremental-planning`, `hack/`, `SKILL.md`, `Cynefin`, `review-cycle`, `fix-cycle`.
 Also check (case-insensitive) whether the title starts with a conventional commit prefix: any of
 `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `style`, `build`, `ci`
-at the start of the title, followed by `:` or `(`. Do not flag these words when they
-appear mid-title (e.g., "File upload crashes when..." is fine).
+at the start of the title, followed by `:` or `(`. Flag only title-start matches — mid-title
+occurrences are fine (e.g., "File upload crashes when..." should not trigger a flag).
 If any match is found, flag the specific terms in the AskUserQuestion approval text so the
 user can see what leaked before approving. This is a two-pass process: generate → check →
 present with flags.
@@ -728,11 +727,11 @@ f. Create the issue (title and body are LLM-generated — use variable assignmen
 g. Extract the issue number from the URL (last path segment)
 h. Update the plan file: change `**Tracker:** github:pending` → `**Tracker:** github:owner/repo#N`
 i. **Error handling:** If `gh issue create` returns non-zero, inform the user via
-   `AskUserQuestion` with the exit code and a short error reason (do not surface the
-   full stderr/API response) and offer: (1) retry (max 3 attempts total — after 3 failures,
-   remove retry option), (2) set Tracker to `none`, (3) provide a manually-created issue
-   number. For rate-limit errors (HTTP 429), suggest waiting before retry.
-   Do not leave `github:pending` in the plan file after Phase 6 completes.
+   `AskUserQuestion` with the exit code and a short error reason (surface only the exit code
+   and reason, not the full stderr/API response) and offer: (1) retry (max 3 attempts total —
+   after 3 failures, remove retry option), (2) set Tracker to `none`, (3) provide a
+   manually-created issue number. For rate-limit errors (HTTP 429), suggest waiting before retry.
+   Resolve `github:pending` to a terminal state before Phase 6 completes.
 
 All `gh` commands use `--repo <owner/repo>` (from repo detection) to handle fork scenarios
 where `upstream` is the target but `origin` is the fork.
@@ -788,7 +787,7 @@ f. Update the plan file: change `**Tracker:** jira:pending` → `**Tracker:** ji
 g. **Error handling:** If `jira:jira-agent` fails to create the card, inform the user via
    `AskUserQuestion` and offer: (1) retry (max 3 attempts total — after 3 failures,
    remove retry option), (2) set Tracker to `none`, (3) provide a manually-created Jira key.
-   Do not leave `jira:pending` in the plan file after Phase 6 completes.
+   Resolve `jira:pending` to a terminal state before Phase 6 completes.
 
 Note: The card is NOT transitioned to "In Progress" at plan time. Transition happens at
 swarm completion (Phase 7) — consistent with GitHub's `in-progress` label timing. See
@@ -817,7 +816,7 @@ After issue creation completes, include in the chat output:
 - "**Tracker:** Created GH issue #N in owner/repo" (or "Linked to GH #N" / "Created Jira PROJ-N" / etc.)
 - The issue URL for easy access
 
-**Do NOT offer execution options. Do NOT ask "should I implement this?"**
+**Stop after delivering the completion report — the plan is the deliverable, not a prompt for execution.**
 
 ## Quick Reference
 
@@ -833,7 +832,7 @@ Phase 5: Validate → Phase 6: Complete (issue creation + completion report)
 ```
 CHAT: Research findings, reasoning, questions, 1-sentence task summaries, checkpoints
 FILE: Plan header, task definitions, code snippets, test commands, commit messages
-NEVER IN CHAT: Full plan content, task details, code blocks from the plan
+Write to file: Full plan content, task details, code blocks from the plan — because full content in chat overwhelms the conversation
 ```
 
 ### Plan File Location

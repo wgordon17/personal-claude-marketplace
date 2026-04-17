@@ -10,9 +10,9 @@ This skill provides comprehensive guidance for running tests efficiently. Use th
 
 ## Core Principles
 
-### 1. Sequential Execution, Never Parallel
+### 1. Sequential Execution
 
-**CRITICAL**: Run test commands ONE AT A TIME, observe output completely before proceeding.
+Always run test commands one at a time, observing output completely before the next — because parallel execution interleaves output and masks which test produced which failure.
 
 ```bash
 # ✅ CORRECT: Sequential execution
@@ -21,14 +21,12 @@ uv run pre-commit run --all-files 2>&1
 uv run pytest --tb=short -v 2>&1
 
 # ❌ WRONG: Parallel execution
-uv run pre-commit run --all-files & uv run pytest  # NEVER DO THIS
+uv run pre-commit run --all-files & uv run pytest  # interleaves output
 ```
 
-**Why**: Parallel execution means you can't observe failures immediately, leading to wasted time running subsequent commands that may be invalidated by earlier failures.
+### 2. Targeted Re-runs
 
-### 2. Targeted Re-runs, Never Full Suite
-
-After fixing a failure, re-run ONLY the tests that failed, not the entire test suite.
+Start with the smallest failing scope (single test > single file > directory) and widen only if needed — because full-suite runs waste time and obscure the signal. After fixing a failure, re-run only the tests that failed.
 
 ```bash
 # ✅ CORRECT: Targeted re-run
@@ -222,8 +220,8 @@ uv run pytest --tb=short -v 2>&1
 
 # [Analyze output, fix any issues, re-run specific tests if needed]
 
-# ❌ NEVER run in parallel:
-# uv run pre-commit run --all-files & uv run pytest  # WRONG!
+# ❌ Parallel execution (interleaves output):
+# uv run pre-commit run --all-files & uv run pytest
 ```
 
 **Why this order**:
@@ -297,8 +295,8 @@ uv run pytest
 uv run pre-commit run --all-files
 
 # ❌ Wrong: Direct execution (bypasses project environment)
-pytest  # NEVER
-pre-commit run  # NEVER
+pytest  # bypasses project environment
+pre-commit run  # bypasses project environment
 
 # ✅ Alternative: Ephemeral execution for tools
 uvx pytest  # if not in a project context

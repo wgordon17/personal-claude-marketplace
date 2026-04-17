@@ -197,7 +197,7 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 
 ## ScriptRunner Functions — NOT Available on Cloud
 
-The following functions existed on Jira Server but are **absent on Atlassian Cloud**. Do not use them — they return zero results or errors:
+The following functions existed on Jira Server but are **absent on Atlassian Cloud**. Avoid these functions — because they return zero results or errors on Atlassian Cloud:
 
 - `issueFieldMatch()` — field comparison
 - `subtasksOf()` — subtask traversal

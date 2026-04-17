@@ -245,7 +245,7 @@ Write Given/When/Then acceptance criteria for each user-facing behavior identifi
 
 ### Scenario ID Format
 
-Assign IDs sequentially: `S1`, `S2`, `S3`, etc. IDs are stable — do not renumber.
+Assign IDs sequentially: `S1`, `S2`, `S3`, etc. IDs are stable — preserve stable IDs — because renumbering invalidates cross-references in dependent test runs.
 
 ### Scenario Structure
 
@@ -302,7 +302,7 @@ Write the finalized scenario list to a staging file before proceeding to Phase 3
 memory directory detected in Phase 0: `{memory_dir}/test-plans/{run-id}-scenarios-draft.md`
 (fallback: `~/.claude/test-plans/{run-id}-scenarios-draft.md`). The `{run-id}` was generated
 in Phase 0 Step 4. This protects against context recycling loss during the multi-step Phase 3-4
-interval and ensures concurrent `/test-plan` runs do not collide. Phase 4 reads from this file
+interval and ensures concurrent `/test-plan` runs use unique run identifiers — because concurrent runs sharing identifiers produce interleaved results. Phase 4 reads from this file
 instead of memory. After Phase 4 writes the full test plan document, delete the staging file.
 
 ---
@@ -359,9 +359,7 @@ present options A and B only (no C/D), with this note:
 determined for {test_runner}. Options C/D require confirmed package compatibility and have been
 omitted. Choose A (no BDD) or B (specification-only .feature files). If you know which BDD
 framework you want, set it up manually after the plan is complete."
-Do NOT fall back to the Phase 5 BDD Toolchain Reference table — that table applies only to
-projects that already have BDD installed; it does not provide install commands suitable for
-fresh BDD setup on arbitrary test runners.
+Use the research findings for fresh BDD setup, not the Phase 5 BDD Toolchain Reference table — that table applies only to projects that already have BDD installed and lacks install commands for arbitrary test runners.
 
 **If research succeeds:** Use the research findings to build a project-aware options list.
 Present via `AskUserQuestion`:
@@ -444,8 +442,7 @@ Use the two-stage fallback:
 
 Use the `{run-id}` generated in Phase 0 Step 4.
 
-**Do NOT create a `hack/` directory if one doesn't exist.** Only write to confirmed existing
-memory directories or the `~/.claude/` fallback.
+**Respect the existing memory directory structure — only write to confirmed existing memory directories or the `~/.claude/` fallback.**
 
 **Fallback limitation:** When the `~/.claude/` fallback is used, downstream skills validate
 test plan paths against their own `{memory_dir}/test-plans/`. If the downstream skill's
@@ -615,8 +612,7 @@ Record:
 These values are written into the plan file annotation in Phase 6 so `/swarm` Phase 0 knows
 what to install and run without re-detecting.
 
-**Do NOT run the install command.** Recording it in the annotation is the contract.
-`/swarm` handles installation on the feature branch.
+**Record the install command in the annotation — `/swarm` handles installation on the feature branch.** Running it here would install BDD on the wrong branch.
 
 ---
 
@@ -641,8 +637,8 @@ Append to the end of `{plan_file}` using the Edit tool:
      - Output Mode & BDD decisions: confirmed Phase 3 (AskUserQuestion)
      All fields below reflect user-confirmed decisions.
      Downstream skills: if you disagree with a choice here, classify as needs-input
-     (require user confirmation before changing), not needs-fix. Do not silently
-     overwrite user decisions. -->
+     (require user confirmation before changing), not needs-fix. Preserve user-confirmed
+     decisions by escalating conflicts as needs-input — because silently overwriting user decisions violates the provenance chain. -->
 
 **Test Plan:** {output_path}
 **Mode:** {Manual UAT | UAT + BDD (feature files only) | UAT + BDD (native integration) | UAT + BDD (standalone)}
@@ -666,8 +662,8 @@ Append to the end of `{plan_file}` using the Edit tool:
 | Task 3: {title} | S3 | {S3 title} |
 ```
 
-**Field label format is fixed.** Downstream skills match on exact bold field names
-(`**Test Plan:**`, `**Mode:**`, `**Feature Files:**`, etc.). Do not reorder or rename.
+**Field label format is fixed.** Preserve field labels exactly — because label changes break downstream parsing. Downstream skills match on exact bold field names
+(`**Test Plan:**`, `**Mode:**`, `**Feature Files:**`, etc.).
 
 **Specification-only mode** (Phase 3 option B): When the user chose Gherkin files as
 documentation only (not executable), write:

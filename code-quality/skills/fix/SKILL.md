@@ -13,7 +13,7 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuesti
 
 # Fix Skill
 
-**Never auto-commits.** All fixes are left in the working tree for user review.
+**Leave commits to the user** — because auto-commits bypass the review step that catches unintended changes. All fixes are left in the working tree for user review.
 
 ## Usage
 
@@ -186,8 +186,7 @@ The `suggested_fix` field maps to the entry's `### Resolution Plan` checklist.
 
 Upstream skills (pr-review, plan-review) resolve ALL `needs-input` findings via `AskUserQuestion`
 before producing terminal output. By the time this skill runs, all findings visible in the terminal
-output are actionable. Normalize all of them as `needs-fix`. Do not re-classify or re-triage based
-on description text.
+output are actionable. Normalize all of them as `needs-fix`. Preserve the original classification — because re-triaging based on description text overrides the reviewer's contextual judgment.
 
 ---
 
@@ -198,8 +197,7 @@ on description text.
 Resolve all finding locations to absolute paths. Normalize paths first: collapse `../` and `./`
 sequences without resolving symlinks. Then verify the normalized path falls within the project
 root. Any path that falls outside the current project root is `out_of_scope` — mark it and
-exclude it from investigation and implementation (Phases 2–3). Never pass out-of-scope paths
-to investigators or fixers. Retain out-of-scope findings in `total_findings_in` for Phase 4
+exclude it from investigation and implementation (Phases 2–3). Restrict investigator and fixer paths to the finding's scope — because out-of-scope paths produce hallucinated fixes. Retain out-of-scope findings in `total_findings_in` for Phase 4
 verification accounting.
 
 **Symlink limitation:** This check validates the textual path, not symlink targets. A symlink
@@ -338,9 +336,8 @@ Agent(
 or plan findings). When one or more findings in a group are tagged UAT validation, include the
 `{plan_test_plan}` content in the `## UAT Context` section of the standard investigator prompt.
 If no findings in the group are UAT validation, omit that section entirely — do not leave a
-literal `{plan_test_plan}` placeholder in the prompt. Do NOT dispatch a separate agent for UAT
-validation findings; they share the standard investigator agent with other findings from the same
-file or plan section.
+literal `{plan_test_plan}` placeholder in the prompt. UAT validation findings share the standard
+investigator agent with other findings from the same file or plan section — dispatching a separate agent adds unnecessary overhead.
 
 > `mode="bypassPermissions"` is required — investigators run in background and cannot prompt for
 > permissions interactively. The read-only constraint is prompt-enforced, not technically enforced
@@ -468,7 +465,7 @@ Detection order for the test command:
 3. Language-specific default — `pytest` (Python), `jest` (JS/TS), `go test ./...` (Go)
 4. Skip with note if none detected
 
-**Test failure** → revert all changes to that file (`git checkout -- <file>`), record ALL co-located findings as `blocked` in the report. Do not retry with alternative fixes — blocked findings surface in the Phase 5 report for user attention.
+**Test failure** → revert all changes to that file (`git checkout -- <file>`), record ALL co-located findings as `blocked` in the report. Surface blocked findings in the Phase 5 report — because alternative fix attempts without reviewer context risk regressions.
 
 **Blast radius:** File-level revert is intentionally conservative. If 3 findings target the same file and the 3rd breaks tests, reverting the file also undoes valid fixes #1 and #2 — all 3 are recorded as `blocked`. This is by design: when tests fail after batched edits, the failing change cannot be isolated without per-finding rollback (significantly more complex). The investigator's resolution quality is the primary defense. Additionally, if the file had pre-existing unstaged changes before /fix ran, those are also reverted. Run `git stash` before invoking /fix if uncommitted work exists.
 
@@ -478,7 +475,7 @@ Apply in dependency order per the investigator's instructions. If investigator d
 
 ### Commit Behavior
 
-Do NOT commit. Leave all changes in the working tree for user review.
+Leave all changes in the working tree for user review — committing before review removes the user's opportunity to inspect and reject individual changes.
 
 ---
 

@@ -158,8 +158,8 @@ Stabilization sequence:
 
 **Response strategy:** Gather information before committing to an approach. Treat as Complex
 by default — use probe design. The Architect's first output should be a clarification request
-or investigation plan rather than an implementation plan. Do not assign implementers until
-the domain is determined.
+or investigation plan rather than an implementation plan. Wait until the domain is determined
+before assigning implementers.
 
 ---
 
@@ -307,8 +307,8 @@ side effects, breaks assumptions, or requires touching more of the system than e
 - Tests fail in modules apparently unrelated to the change
 - The fix for one thing breaks another
 
-**Action:** Immediately escalate to Lead. Reclassify to Complicated or Complex. Do not proceed
-with the original Clear-scoped plan.
+**Action:** Immediately escalate to Lead. Reclassify to Complicated or Complex. Revise the
+plan before proceeding — the original Clear-scoped plan no longer applies.
 
 ---
 

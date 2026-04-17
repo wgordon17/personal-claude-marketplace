@@ -10,7 +10,7 @@ All implementation agents MUST follow these rules:
 
 1. **Verify before modifying.** Always read the current file state before editing. Never assume discovery findings are current — other agents may have already modified files.
 
-2. **Test frequently.** Run affected tests after every significant change. Do not batch too many changes between test runs.
+2. **Test frequently.** Run affected tests after every significant change. Keep change batches small between test runs — this localizes failures and speeds diagnosis.
 
 3. **Rollback on failure.** If tests fail after a change:
    - `git checkout -- <modified files>` to revert
@@ -18,11 +18,11 @@ All implementation agents MUST follow these rules:
    - Move to the next finding
    - Report the failure in your summary
 
-4. **Don't fight other agents.** Other implementation agents run concurrently and may modify the same files. Always re-read current state before editing. If a file has unexpected changes, skip the finding and note the conflict.
+4. **Coordinate with concurrent agents.** Other implementation agents run concurrently and may modify the same files. Always re-read current state before editing. If a file has unexpected changes, skip the finding and note the conflict.
 
 5. **Needs-input escape hatch.** If a finding is ambiguous, risky, or requires human judgment:
-   - Do NOT attempt the fix
    - Log it as `needs-input` in your FixSummary `needs_input_items` with `loe` and `input_needed` description
+   - Skip the fix and send the decision to the Lead for user triage
    - Follow the Fixer Protocol in `code-quality/references/finding-classification.md` — emit FixSummary to Lead, Lead triages with user via AskUserQuestion
 
 6. **Conventional commit messages.** Use present indicative tense ("removes" not "remove", "fixes" not "fix", "consolidates" not "consolidate").
@@ -115,14 +115,14 @@ Run the full test suite one final time before committing.
 
 ## Safety Rules
 
-- NEVER remove anything that has >0 references (even 1 reference means not dead)
-- NEVER remove test fixtures without checking ALL test files for imports
-- NEVER remove public API exports without confirming no external consumers
-- NEVER remove `__init__` / `__new__` / `__del__` / lifecycle methods — they are called implicitly
-- NEVER remove signal handlers, event listeners, or callback registrations — they are called by the framework
-- NEVER remove code guarded by `if TYPE_CHECKING:` — it exists for type checkers only
+- NEVER remove anything that has >0 references — because even 1 reference means the code is live
+- NEVER remove test fixtures without checking ALL test files for imports — because dynamic test collection can reference them without explicit import
+- NEVER remove public API exports without confirming no external consumers — because external callers are invisible to local analysis
+- NEVER remove `__init__` / `__new__` / `__del__` / lifecycle methods — because they are called implicitly by the runtime, not by visible call sites
+- NEVER remove signal handlers, event listeners, or callback registrations — because they are called by the framework, not by visible call sites
+- NEVER remove code guarded by `if TYPE_CHECKING:` — because it exists for type checkers only and is correct to omit from runtime
 - If a finding seems wrong, SKIP it and note why in your output
-- When in doubt, do not remove
+- When in doubt, skip — a false negative is cheaper than a broken codebase
 
 ## Output
 
@@ -244,10 +244,10 @@ After all consolidations, run the project's formatter.
 
 ## Safety Rules
 
-- NEVER modify a function's external behavior while consolidating — only its location changes
-- NEVER consolidate functions that look similar but handle DIFFERENT business logic (e.g., `validate_user_email` and `validate_admin_email` may intentionally differ)
-- NEVER change function signatures in ways that break existing callers — add optional parameters instead
-- NEVER consolidate across architectural boundaries (e.g., do not merge a frontend validator with a backend validator even if they look identical)
+- NEVER modify a function's external behavior while consolidating — because only its location changes; callers must see identical results
+- NEVER consolidate functions that look similar but handle DIFFERENT business logic (e.g., `validate_user_email` and `validate_admin_email` may intentionally differ) — because behavioral differences may be invisible from the code alone
+- NEVER change function signatures in ways that break existing callers — add optional parameters instead — because callers cannot be automatically updated without a full call-site audit
+- NEVER consolidate across architectural boundaries (e.g., do not merge a frontend validator with a backend validator even if they look identical) — because identical logic in different layers may diverge intentionally
 - Use LSP `findReferences` for EVERY function before removing any copy
 - If duplicates have subtle behavioral differences you cannot reconcile safely, flag as `needs-input`
 - Test after EACH consolidation group, not just at the end
@@ -393,11 +393,11 @@ After all fixes, run the formatter, then run the full test suite.
 
 ## Safety Rules
 
-- NEVER auto-fix if the fix could change business logic — create a `needs-input` entry instead
-- NEVER remove existing security middleware, checks, or guards even if they seem redundant (defense in depth)
-- NEVER log or print secret values, even in error messages or debug output
-- NEVER weaken existing security controls (e.g., do not relax a strict CSP to fix a convenience issue)
-- NEVER commit actual secret values — only references to environment variables
+- NEVER auto-fix if the fix could change business logic — create a `needs-input` entry instead — because unintended behavior changes are more dangerous than an unfixed vulnerability
+- NEVER remove existing security middleware, checks, or guards even if they seem redundant — because defense in depth exists to catch failures in adjacent layers
+- NEVER log or print secret values, even in error messages or debug output — because logs are frequently forwarded to aggregation systems and may persist indefinitely
+- NEVER weaken existing security controls (e.g., do not relax a strict CSP to fix a convenience issue) — because the convenience cost is recoverable; a breach is not
+- NEVER commit actual secret values — only references to environment variables — because git history is permanent
 - Test after EVERY security fix, not in batches
 - If a security fix requires architectural changes (e.g., redesigning the auth flow), flag as `needs-input`
 - If you are unsure whether a fix is correct, do not apply it — flag as `needs-input`
@@ -587,12 +587,12 @@ After all simplifications, run the project's formatter, then the full test suite
 
 ## Safety Rules
 
-- NEVER simplify code at system boundaries (API handlers, file I/O, network calls, database queries) — these need their verbosity for error handling
-- NEVER remove error handling that catches errors from external sources (network, filesystem, user input, database)
-- NEVER remove logging that records security events, errors, or audit trails
-- NEVER simplify code that handles concurrent access (locks, semaphores, atomic operations)
-- NEVER simplify code in hot paths without understanding performance implications
-- NEVER change the public API of a module (exported function names, parameter types, return types)
+- NEVER simplify code at system boundaries (API handlers, file I/O, network calls, database queries) — because verbosity at boundaries is error handling, not slop
+- NEVER remove error handling that catches errors from external sources (network, filesystem, user input, database) — because external systems fail unpredictably
+- NEVER remove logging that records security events, errors, or audit trails — because these records are required for incident response and compliance
+- NEVER simplify code that handles concurrent access (locks, semaphores, atomic operations) — because concurrency bugs are subtle and removing guards creates race conditions
+- NEVER simplify code in hot paths without understanding performance implications — because extraction adds call overhead that matters at scale
+- NEVER change the public API of a module (exported function names, parameter types, return types) — because external callers cannot be updated automatically
 - If a simplification would change how errors propagate to callers, flag as `needs-input`
 - If you are unsure whether a pattern is slop or intentional design, flag as `needs-input`
 - Test after every 5 simplifications
@@ -726,8 +726,8 @@ After all unification changes, run the formatter, then the full test suite.
 - Use LSP `findReferences` for EVERY rename or move — no exceptions
 - Architecture changes affect many files — run the FULL test suite after each change, not just affected tests
 - If fixing a circular dependency requires adding a new module, ensure it is properly integrated (added to `__init__.py`, build configs, etc.)
-- NEVER change the external behavior of any function while unifying its implementation pattern
-- NEVER unify patterns across intentional boundaries (e.g., different microservices may intentionally use different patterns)
+- NEVER change the external behavior of any function while unifying its implementation pattern — because callers depend on observable behavior, not internal structure
+- NEVER unify patterns across intentional boundaries (e.g., different microservices may intentionally use different patterns) — because divergence at boundaries is often a deliberate design decision
 - If unifying a pattern would require changing >20 files, flag as `needs-input` first
 - If a naming convention is language-idiomatic in its context (e.g., `camelCase` in JavaScript, `snake_case` in Python), do not cross-language standardize
 - When in doubt about which pattern should be dominant, flag as `needs-input`
@@ -854,7 +854,7 @@ For each:
 1. Match the project's existing documentation style exactly. If the project uses terse single-line docstrings, write terse single-line docstrings. If the project uses detailed Google-style docstrings, write Google-style docstrings.
 2. Focus on WHAT the function does and WHY it exists, not HOW it works
 3. Document parameters and return values only if the types are not self-explanatory
-4. Do NOT add docstrings to private/internal functions
+4. Limit docstrings to public APIs — private/internal functions gain nothing from formal documentation
 
 ### Step 5: Clean Up Stale TODOs and FIXMEs
 
@@ -881,15 +881,15 @@ After all documentation updates, verify markdown formatting is correct:
 
 ## Safety Rules
 
-- Do NOT over-document — match the project's existing documentation density and style
-- Do NOT add docstrings to every function — only undocumented PUBLIC APIs
-- Do NOT modify auto-generated documentation (API docs from code comments, swagger/OpenAPI specs, typedoc output, etc.)
-- Do NOT add documentation for internal helper functions
-- Do NOT change the tone or voice of existing documentation
-- Do NOT add badges, shields, or decorative elements unless the project already uses them
-- Do NOT create new documentation files — only update existing ones (unless the project has zero docs, in which case flag as `needs-input`)
-- Verify every command you document by checking the actual build/config files
-- When in doubt about whether to document something, do not document it
+- Match the project's existing documentation density and style — adding more than peers creates inconsistency
+- Add docstrings only to undocumented PUBLIC APIs — internal functions gain nothing from formal documentation
+- Leave auto-generated documentation (API docs from code comments, swagger/OpenAPI specs, typedoc output, etc.) untouched — it regenerates from source on the next build
+- Focus documentation updates on public APIs — internal helper functions don't need it
+- Preserve the tone and voice of existing documentation — consistency across docs is part of quality
+- Add badges, shields, or decorative elements only if the project already uses them — introducing new styles creates drift
+- Update existing documentation files rather than creating new ones — flag as `needs-input` if the project has zero docs and creation is needed
+- Verify every command you document by checking the actual build/config files — undocumented assumptions cause broken installs
+- When in doubt about whether to document something, skip it — under-documentation is easier to fix than inaccurate documentation
 
 ## Output
 
@@ -1145,10 +1145,10 @@ After all refactorings, run the formatter, then the full test suite.
 - Use LSP `findReferences` when extracting, renaming, or moving any symbol
 - Each extraction MUST be a standalone, testable change — do not combine multiple refactorings into one edit
 - Run tests after EACH refactoring, not just at the end
-- NEVER change the observable behavior of any function while reducing its complexity
-- NEVER change the public API (function names, parameters, return types) without updating all callers
-- NEVER extract a function if the extracted code relies on local variables that would require passing >5 parameters (that trades one complexity for another)
-- NEVER split a file if the result would create circular dependencies — flag as `needs-input`
+- NEVER change the observable behavior of any function while reducing its complexity — because callers depend on the results, not the structure
+- NEVER change the public API (function names, parameters, return types) without updating all callers — because broken callers may be in code you haven't read
+- NEVER extract a function if the extracted code relies on local variables that would require passing >5 parameters — because that trades one complexity for another
+- NEVER split a file if the result would create circular dependencies — flag as `needs-input` instead — because circular imports cause runtime errors that are harder to debug than a long file
 - When extracting guard clauses, ensure the error types and messages are preserved exactly
 - When replacing magic values, verify the constant is not already defined elsewhere in the codebase (avoid duplicating constants)
 - If a complexity finding is in performance-critical code (tight loops, hot paths), flag as `needs-input` — extraction can impact performance

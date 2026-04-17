@@ -812,7 +812,7 @@ class TestPipeSegments:
             # python tooling rules still fire in pipe segments
             ("cmd | pytest tests/", 2, "make py-test"),
             # git safety in pipe segment
-            ("echo y | git reset --hard", 2, "FORBIDDEN"),
+            ("echo y | git reset --hard", 2, "Blocked:"),
             # chain + pipe combo
             (
                 "cd /app && oc get deploy -o json | python3 -c "
@@ -965,8 +965,8 @@ class TestNewlineSeparation:
         "command, expected_exit, expected_msg",
         [
             # Backslash continuation joins lines — guard sees the full command
-            ("git push \\\n--force", 2, "FORBIDDEN"),
-            ("git reset \\\n--hard", 2, "FORBIDDEN"),
+            ("git push \\\n--force", 2, "Blocked:"),
+            ("git reset \\\n--hard", 2, "Blocked:"),
             ("cat \\\nfile.py", 2, "Read tool"),
         ],
         ids=[
@@ -1210,48 +1210,48 @@ class TestGitSafetyDeny:
         "command, expected_exit, expected_msg",
         [
             # reset --hard
-            ("git reset --hard", 2, "FORBIDDEN"),
-            ("git reset --hard HEAD~3", 2, "FORBIDDEN"),
+            ("git reset --hard", 2, "Blocked:"),
+            ("git reset --hard HEAD~3", 2, "Blocked:"),
             ("git reset --mixed HEAD~1", 0, None),
             # force push
-            ("git push --force origin feature", 2, "FORBIDDEN"),
-            ("git push -f origin feature", 2, "FORBIDDEN"),
+            ("git push --force origin feature", 2, "Blocked:"),
+            ("git push -f origin feature", 2, "Blocked:"),
             ("git push origin feature", 0, None),
             # push upstream
-            ("git push upstream main", 2, "FORBIDDEN"),
-            ("git push upstream feature/x", 2, "FORBIDDEN"),
+            ("git push upstream main", 2, "Blocked:"),
+            ("git push upstream feature/x", 2, "Blocked:"),
             # force-with-lease to main
-            ("git push --force-with-lease origin main", 2, "FORBIDDEN"),
-            ("git push --force-with-lease origin master", 2, "FORBIDDEN"),
+            ("git push --force-with-lease origin main", 2, "Blocked:"),
+            ("git push --force-with-lease origin master", 2, "Blocked:"),
             ("git push --force-with-lease origin feature", 0, None),
             # branch -D
-            ("git branch -D feature", 2, "FORBIDDEN"),
+            ("git branch -D feature", 2, "Blocked:"),
             ("git branch -d feature", 0, None),
             # branch --force
-            ("git branch --force feature HEAD~1", 2, "FORBIDDEN"),
+            ("git branch --force feature HEAD~1", 2, "Blocked:"),
             # push origin main
-            ("git push origin main", 2, "FORBIDDEN"),
-            ("git push origin master", 2, "FORBIDDEN"),
+            ("git push origin main", 2, "Blocked:"),
+            ("git push origin master", 2, "Blocked:"),
             # --no-verify
-            ("git commit -m 'test' --no-verify", 2, "FORBIDDEN"),
-            ("git push --no-verify origin feature", 2, "FORBIDDEN"),
+            ("git commit -m 'test' --no-verify", 2, "Blocked:"),
+            ("git push --no-verify origin feature", 2, "Blocked:"),
             # add --force
-            ("git add --force secret.env", 2, "FORBIDDEN"),
-            ("git add -f .env", 2, "FORBIDDEN"),
+            ("git add --force secret.env", 2, "Blocked:"),
+            ("git add -f .env", 2, "Blocked:"),
             ("git add file.py", 0, None),
             # git rm
-            ("git rm important.py", 2, "FORBIDDEN"),
+            ("git rm important.py", 2, "Blocked:"),
             ("git rm --cached file.py", 0, None),
-            ("git rm --cached --force file.py", 2, "FORBIDDEN"),
+            ("git rm --cached --force file.py", 2, "Blocked:"),
             # git clean -x/-X
-            ("git clean -xdf", 2, "FORBIDDEN"),
-            ("git clean -Xdf", 2, "FORBIDDEN"),
+            ("git clean -xdf", 2, "Blocked:"),
+            ("git clean -Xdf", 2, "Blocked:"),
             ("git clean -df", 0, None),
             # chain awareness
-            ("git status && git reset --hard", 2, "FORBIDDEN"),
-            ("git add . && git push -f origin main", 2, "FORBIDDEN"),
+            ("git status && git reset --hard", 2, "Blocked:"),
+            ("git add . && git push -f origin main", 2, "Blocked:"),
             # filter-branch
-            ("git filter-branch --tree-filter 'rm -f x'", 2, "FORBIDDEN"),
+            ("git filter-branch --tree-filter 'rm -f x'", 2, "Blocked:"),
         ],
         ids=[
             "reset-hard",
@@ -1342,13 +1342,13 @@ class TestGitSafetyCommitToMain:
         env = os.environ.copy()
         env["_GUARD_TEST_BRANCH"] = "main"
         result = run_guard("Bash", {"command": "git commit -m 'test'"}, env=env)
-        assert_guard(result, 2, "FORBIDDEN", "commit-to-main")
+        assert_guard(result, 2, "Blocked:", "commit-to-main")
 
     def test_commit_to_master(self):
         env = os.environ.copy()
         env["_GUARD_TEST_BRANCH"] = "master"
         result = run_guard("Bash", {"command": "git commit -m 'test'"}, env=env)
-        assert_guard(result, 2, "FORBIDDEN", "commit-to-main")
+        assert_guard(result, 2, "Blocked:", "commit-to-main")
 
     def test_commit_to_feature_branch_allowed(self):
         env = os.environ.copy()
@@ -2198,7 +2198,7 @@ class TestShellControlStructures:
             # nested: if inside do
             ("for x in a; do if true; then cat f.py; fi; done", 2, "Read tool"),
             # git safety inside control structure
-            ("if true; then git reset --hard; fi", 2, "FORBIDDEN"),
+            ("if true; then git reset --hard; fi", 2, "Blocked:"),
             # safe command inside control structure — passes
             ("for x in a b; do git status; done", 0, None),
             ("if true; then make build; fi", 0, None),

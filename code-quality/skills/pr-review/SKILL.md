@@ -17,7 +17,7 @@ verify findings before reporting. A Sonnet verification agent then reads source 
 or disprove each finding. Results are categorized by type (testing gaps, correctness, security,
 architecture, decisions needed, etc.) and printed as a structured terminal report.
 
-**Never comments on GitHub PRs.** Output is terminal-only.
+**Never post comments on GitHub PRs** — because PR comments from review tools create noise and can't be retracted. Output is terminal-only.
 
 ## Usage
 
@@ -249,8 +249,7 @@ The Plan Adherence Reviewer receives: `{plan_content}`, `{plan_file_path}`, `{pl
 
 When `{plan_test_plan}` is empty string, omit the `UAT CROSS-REFERENCE` section entirely from
 the QA Reviewer prompt, omit the `UAT SCENARIOS` section from the Correctness Reviewer and Plan
-Adherence Reviewer prompts — do not render the heading, label, or empty placeholder in any of
-these reviewers.
+Adherence Reviewer prompts — omit empty sections — because rendering empty placeholders adds visual noise.
 
 ### Collect Findings
 
@@ -265,10 +264,8 @@ classification, evidence, source reviewer.
 If no findings were reported by any reviewer, skip verification and proceed directly to
 Phase 4 with the 'no findings' output path.
 
-Spawn a **single** Sonnet agent with ALL findings in one call. Do NOT spawn one agent per
-finding — that pattern is catastrophically slow in Claude Code where each Agent() has
-significant startup overhead. A single batched call takes ~15 seconds; per-finding agents
-with 15-20 findings would take 2-5 minutes.
+Spawn a **single** Sonnet agent with ALL findings in one call — spawning one agent per finding
+is catastrophically slow in Claude Code where each Agent() has significant startup overhead. A single batched call takes ~15 seconds; per-finding agents with 15-20 findings would take 2-5 minutes.
 
 Build the findings JSON array:
 ```json
@@ -347,8 +344,8 @@ they appear in the Needs Context section with the verification failure note.
 ## Phase 3.5 — Needs-Input Resolution
 
 If any surviving findings (after filtering false positives) have classification `needs-input`,
-present them to the user before producing the report. Do NOT skip this step - the skill must
-not exit with unresolved `needs-input` items.
+present them to the user before producing the report. Resolve all `needs-input` items before
+exiting — because the report's final classification depends on those user decisions.
 
 If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
 
@@ -521,7 +518,7 @@ After output and counter increment, return to the original branch or worktree re
 | All findings false positive | Output "no findings" report format (not an error) |
 | Verification JSON parse fails | All findings get `unverified` verdict, treated as `needs_context` in output |
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
-| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
+| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output — because hidden findings are unaccounted-for work |
 
 ---
 
@@ -529,8 +526,8 @@ After output and counter increment, return to the original branch or worktree re
 
 Prompt templates are in `references/reviewer-prompts.md`. Read that file and substitute
 placeholders before passing to each Agent call. The templates are not executable — they are
-documentation that Claude reads and fills in. Do not reference `quality-gate/references/` at
-runtime; this skill owns its own copies adapted for PR review context.
+documentation that Claude reads and fills in. Reference `references/reviewer-prompts.md` at
+runtime — this skill owns its own copies adapted for PR review context, not `quality-gate/references/`.
 
 ### Placeholder Reference
 

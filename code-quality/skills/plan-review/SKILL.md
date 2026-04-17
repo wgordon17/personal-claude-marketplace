@@ -16,7 +16,7 @@ scope & completeness, dependency ordering, unknown unknowns/spike detection, arc
 — each required to read and analyze the plan independently. A verification agent then cross-checks
 findings against plan content. Results are categorized and printed as a structured terminal report.
 
-**Never modifies plan content.** Exception: increments the `review-cycle` lifecycle counter after review completes.
+**Never modifies plan content** — because changing plan tasks during review would alter the artifact being reviewed. Exception: increments the `review-cycle` lifecycle counter after review completes.
 
 ## Usage
 
@@ -185,8 +185,7 @@ The Unknown Unknowns Reviewer additionally receives: `{plan_open_questions}`, `{
 
 The Scope & Completeness Reviewer and Feasibility Reviewer additionally receive: `{plan_test_plan}`.
 When `{plan_test_plan}` is empty string, omit the `## UAT Context` section entirely from the
-Feasibility and Scope & Completeness reviewer prompts — do not render the heading, `TEST PLAN:`
-label, or empty placeholder.
+Feasibility and Scope & Completeness reviewer prompts — omit empty sections — because rendering empty placeholders adds visual noise.
 
 ### Domain Reviewers (2 parallel, with plan-specific reviewers above)
 
@@ -231,9 +230,8 @@ source reviewer.
 If no findings were reported by any reviewer, skip verification and proceed directly to
 Phase 4 with the 'no findings' output path.
 
-Spawn a **single** Sonnet agent with ALL findings in one call. Do NOT spawn one agent per
-finding — that pattern is catastrophically slow. A single batched call takes ~15 seconds;
-per-finding agents with 15–20 findings would take 2–5 minutes.
+Spawn a **single** Sonnet agent with ALL findings in one call — spawning one agent per finding
+is catastrophically slow. A single batched call takes ~15 seconds; per-finding agents with 15–20 findings would take 2–5 minutes.
 
 Build the findings JSON array:
 ```json
@@ -308,8 +306,8 @@ sections. Keep `needs_context` and `unverified` findings for the Needs Context s
 ## Phase 3.5 — Needs-Input Resolution
 
 If any surviving findings (after filtering false positives) have classification `needs-input`,
-present them to the user before producing the report. Do NOT skip this step - the skill must
-not exit with unresolved `needs-input` items.
+present them to the user before producing the report. Resolve all `needs-input` items before
+exiting — because the report's final classification depends on those user decisions.
 
 If zero `needs-input` findings remain after Phase 3, skip to Phase 4.
 
@@ -465,7 +463,7 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 | All findings false positive | Output "no findings" report format (not an error) |
 | Verification JSON parse fails | All findings get `unverified` verdict, routed to Needs Context section; `{verification_note}` warns in output |
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
-| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
+| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output — because hidden findings are unaccounted-for work |
 
 ### Counter Increment
 

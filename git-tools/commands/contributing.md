@@ -267,7 +267,7 @@ git sl
 
 ## Pull Request Description Guidelines
 
-CRITICAL: Always include this section in CONTRIBUTING.md:
+Always include this section in CONTRIBUTING.md — because the Conventional Commits reference is essential for contributors:
 
 ```markdown
 ### PR Description Guidelines

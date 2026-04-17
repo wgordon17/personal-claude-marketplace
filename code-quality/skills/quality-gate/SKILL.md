@@ -23,8 +23,10 @@ significant artifact creation.
 
 **Skip when:** pure conversation with no deliverables, or user explicitly opts out.
 
-**Never skip "because it's trivial."** Small changes cause real failures. Don't rationalize
-your way out of the process.
+**Run the gate on every change — because small changes cause real failures.**
+
+> Scope integrity, phase compliance, and cost framing rules:
+> see `code-quality/references/anti-deferral-rules.md`.
 
 ---
 
@@ -88,7 +90,7 @@ If no plan file is found for the current branch, set `{plan_test_plan}` to empty
 
 ## Layer 1: Self-Review Loop
 
-**6 rounds (Round 6: Structural applies to Code/Mixed only). All rounds are mandatory — do not exit early.**
+**Complete all rounds in sequence — because early exit masks issues that later rounds catch. (Round 6: Structural applies to Code/Mixed only.)**
 
 Each round uses a different adversarial lens. Rotating lenses prevent anchoring fatigue and ensure
 comprehensive coverage from different angles.
@@ -135,7 +137,7 @@ Execute this protocol for EVERY round:
    "Is this round's review still aligned with the original request?"
 
 2. APPLY THE LENS
-   Think through this EXHAUSTIVELY. Do not stop at the first issue.
+   Examine the entire scope — because stopping at the first issue misses systemic patterns.
    Check every modified file, every function, every edge case.
    Continue until you have genuinely run out of things to check —
    not until you feel like you've done enough.
@@ -179,9 +181,10 @@ Execute this protocol for EVERY round:
    and cross-file consistency are invisible to single-file review.
 
 4. FIX ALL FINDINGS IMMEDIATELY
-   Do not note issues for later. Do not say "could be improved."
-   Fix them NOW. Every identified issue must result in an edit or
-   a documented, specific blocker.
+   Fix issues as you find them. Hedging phrases ("could be improved," "might want to")
+   are unactioned findings — because noting for later is functionally equivalent to not
+   finding them. Every identified issue must result in an edit or a documented, specific
+   blocker.
 
 5. ACTION AUDIT
    Scan ALL output (yours and any subagent output) for
@@ -209,9 +212,10 @@ Execute this protocol for EVERY round:
    with why you couldn't do it yourself.
 
    THE "PREEXISTING" TRAP:
-   Labeling something "preexisting" is NOT permission to ignore it.
+   Labeling something "preexisting" is not permission to ignore it.
+   Fix or report preexisting issues — because noting without action is functionally skipping.
    For every issue labeled preexisting or known:
-   - WHY does it exist? Investigate the root cause, don't just note it.
+   - WHY does it exist? Investigate the root cause.
    - Is it within scope of the current work? If your changes touch the
      same area, fix it.
    - Is it ACTUALLY preexisting? Verify by checking the baseline, not
@@ -271,7 +275,7 @@ Execute this protocol for EVERY round:
 
 ### No Early Exit
 
-**All 6 rounds are mandatory for Code and Mixed work types.** Each round uses a categorically
+**Complete all 6 rounds for Code and Mixed work types.** Each round uses a categorically
 different lens — a clean Round 3 says nothing about Round 4 (Simplicity catches AI slop and
 over-engineering), Round 5 (Adversarial catches what you rationalized away), and Round 6
 (Structural catches integration issues invisible to single-component review).
@@ -279,8 +283,8 @@ over-engineering), Round 5 (Adversarial catches what you rationalized away), and
 For non-Code work types: Rounds 1-5 always run. Round 6 (Structural) is skipped since it
 targets code architecture integration.
 
-Do NOT exit early because a round "produced zero findings." Each lens catches categorically
-different issues. The next round will find what this round cannot see.
+Complete all rounds even if a round finds nothing — because later rounds catch different issue
+categories.
 
 ### Valid Zero Findings
 
@@ -300,7 +304,7 @@ most improvement occurs in early rounds, while preserving lens diversity.
 In scan-only mode:
 - Still apply the full lens checklist — do not skip the analysis
 - Record findings with `[scan-only]` prefix
-- Do NOT apply step 4 (FIX ALL FINDINGS IMMEDIATELY) — instead, carry findings to Layer 2
+- Carry findings to Layer 2 rather than applying step 4 (FIX ALL FINDINGS IMMEDIATELY) — scan-only mode is designed for analysis, not in-place fixes
 - Layer 2 subagents receive scan-only findings as additional context for verification
 - If a scan-only finding is clearly critical (security vulnerability, data loss), override
   scan-only and fix immediately — use judgment, not a blanket rule
@@ -318,7 +322,7 @@ require cost-model thinking; QA issues require test coverage analysis; code revi
 require holistic style and maintainability assessment. Layer 1 cannot replicate these because
 each domain has its own expert heuristics.
 
-**Layer 1.5 is NOT optional for code work.** Do not skip it because Layer 1 "seemed thorough."
+**Always execute Layer 1.5 for code work — because self-review catches systematic errors before subagents are invoked.** Always run Layer 1.5 regardless of Layer 1 results — because different review passes catch different error types.
 
 ### Trigger
 
@@ -369,14 +373,15 @@ After all 4 reviewers complete, synthesize findings by classification
 (see `code-quality/references/finding-classification.md`):
 
 1. Collect all findings across the 4 reviewers
-2. Fix all `needs-fix` findings immediately. Do not carry them forward.
+2. Fix all `needs-fix` findings immediately — resolve all conflicts during synthesis, because carrying forward unresolved issues defers work.
 3. For `needs-input` findings: present each individually via AskUserQuestion (one question
    per finding, batch up to 4 per call). Each question includes full context:
    `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`
    with options "Fix" and "Defer". `multiSelect: false`. User decides per-finding.
    Fix approved items. Record deferred items with user's reason.
-4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
-   `needs-input` items are resolved via user decision.
+4. Complete synthesis before starting Layer 2 — because Layer 2 agents need a clean finding
+   set. Fix all `needs-fix` items and resolve all `needs-input` items via user decision before
+   proceeding.
 
 **Finding completion verification:** After fixing all `needs-fix` items and resolving all
 `needs-input` items, verify completeness per `code-quality/references/finding-classification.md`
@@ -384,10 +389,10 @@ Verification Protocol: count total findings from all 4 reviewers vs (findings fi
 user-deferred items). Delta > 0 → findings were silently dropped → fix them before Layer 2.
 
 If AskUserQuestion is unavailable during synthesis, treat all `needs-input` findings as
-`needs_context` - surface them in the quality gate output report (don't hide them, don't
-block on them). Do NOT silently drop needs-input findings because the tool is unavailable.
+`needs_context` - surface all findings: present needs-input items via AskUserQuestion and
+include needs-fix items in the report — because hidden findings are unaccounted-for work.
 
-**The synthesis step is not optional.** If you find yourself writing "domain review skipped"
+**Complete the synthesis step.** If you find yourself writing "domain review skipped"
 or "findings noted for later," stop. Fix the needs-fix findings now.
 
 ---
@@ -434,9 +439,7 @@ unchecked tasks as `needs-fix` findings.
 Same-context review has an anchoring ceiling. Fresh-context subagents break through it by
 reviewing with no knowledge of your implementation decisions.
 
-**Layer 2 is NEVER optional and NEVER substitutable.** Do not skip it because the change "seems
-trivial" or subagents feel "disproportionate." Do not substitute it with prior review work —
-swarm Phase 4 reviewers, domain reviewer output, or any other earlier review does NOT replace Layer 2.
+**Always execute Layer 2 with fresh-context subagents — never substitute with prior review work** because same-context re-review has diminishing returns. Swarm Phase 4 reviewers, domain reviewer output, and other earlier reviews do NOT replace Layer 2 — they review earlier, now-stale versions of the work.
 
 **Why Layer 2 is distinct from all prior reviews:**
 - **Timing:** Layer 2 reviews the FINAL state — after Layer 1 fixes, after any swarm Phase 5
@@ -475,20 +478,20 @@ Collect:
 
 ### Subagent Execution (2 passes each — BOTH mandatory)
 
-Each subagent runs TWO passes. Pass 2 is NOT optional — it catches issues the subagent
-missed on Pass 1 and verifies your fixes didn't introduce new problems.
+Each subagent runs TWO passes. Execute Pass 2 for every Layer 2 subagent — because Pass 1
+always misses something, and fixes can introduce new issues that Pass 2 catches.
 
 Pass 2 resumes the Pass 1 agent via `SendMessage` using the **agent ID** (not the name).
 This preserves the agent's full conversation history from Pass 1. You MUST use the agent
 ID returned in the Pass 1 result — using the agent name routes to a team inbox instead.
 
-**CRITICAL — Pass 2 synchronization:** `SendMessage` is asynchronous — it returns immediately
-but the agent's response arrives later as a teammate notification. You MUST wait for each
-Pass 2 response before proceeding. Do NOT move to Memory Gate or any subsequent gate until
-BOTH Pass 2 responses are received and all findings are fixed. "Message sent" is not
-"response received." If the agent does not respond within 2 minutes, re-do the Pass 2 check
-yourself: re-read the files you fixed and verify the fixes are semantically correct (not just
-syntactically applied). A self-performed Pass 2 is better than a skipped one.
+**Pass 2 synchronization:** Wait for each Pass 2 response before proceeding — because
+`SendMessage` is asynchronous and results arrive out of order. Wait for BOTH Pass 2 responses
+and confirm all findings are fixed before moving to Memory Gate or any subsequent gate.
+"Message sent" is not "response received." If the agent does not respond within 2 minutes,
+re-do the Pass 2 check yourself: re-read the files you fixed and verify the fixes are
+semantically correct (not just syntactically applied). A self-performed Pass 2 is better than
+a skipped one.
 
 **Subagent A: Completeness Reviewer (opus)**
 
@@ -502,7 +505,7 @@ PASS 1:
   → Save pass1_result.agentId
   → Fix ALL findings
 
-PASS 2 (MANDATORY — do not skip):
+PASS 2 (execute for every Layer 2 subagent — because unverified fixes may introduce regressions):
   SendMessage(
     to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
     message="Here are the fixes I made: {summary_of_fixes}.
@@ -526,7 +529,7 @@ PASS 1:
   → Save pass1_result.agentId
   → Fix ALL findings
 
-PASS 2 (MANDATORY — do not skip):
+PASS 2 (execute for every Layer 2 subagent — because unverified fixes may introduce regressions):
   SendMessage(
     to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
     message="Here are the fixes: {summary_of_fixes}.
@@ -554,8 +557,8 @@ exists (Memory Gate may delete completed plans).
 discovered, skip entire gate with `SKIP (no plan)`.
 
 **Backward compatibility:** If the plan file exists but has no `**Iterations:**` block
-(pre-feature plan), skip with `SKIP (pre-feature plan)`. Do NOT fail structural checks on
-plans created before this feature existed.
+(pre-feature plan), skip with `SKIP (pre-feature plan)` — plans created before this feature
+existed should not be penalized for missing the `**Iterations:**` block.
 
 ### Structural Checks
 
@@ -655,7 +658,7 @@ Round 2 checked project rules during review. This gate re-verifies AFTER all fix
 - Any required companion files (changelogs, migration guides, etc.)
 
 **Upstream state verification (if a PR exists):**
-Do not assume prior pushes landed or that the PR is still open. Verify:
+Verify upstream state before proceeding — because prior pushes may not have landed. Verify:
 - `mcp__plugin_github-mcp_github__pull_request_read` (preferred) or `gh pr view` — is the PR still open, or was it already merged/closed?
 - `git log origin/main..HEAD` — does the branch contain ALL intended commits?
 - If force-pushing to an already-merged branch, commits are silently orphaned
@@ -801,7 +804,7 @@ Layer 1.75 — Plan Adherence: [N/A (no plan) | COMPLETE]
 Layer 2 — Subagent Reviews:
   Subagent A (Completeness): [count] findings across 2 passes — agent ID: [id]
   Subagent B (Adversarial): [count] findings across 2 passes — agent ID: [id]
-  (Layer 2 MUST show agent IDs. "SUBSTITUTED" or "N/A" is NEVER valid here.)
+  (Layer 2 MUST show agent IDs — omission indicates the layer was skipped.)
 
 Lifecycle Gate: [PASS / FAIL / SKIP (no plan) / SKIP (pre-feature plan)]
   (For SKIP variants, omit the sub-lines below — show only the top-level result)

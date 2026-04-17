@@ -58,7 +58,7 @@ mcp__serena__think_about_whether_you_are_done()
 Evaluates: Have I performed all required steps? Should I run tests? Update docs?
 Write new tests? Read completion-related memory files?
 
-**Act on the result.** If steps remain, do them. Don't claim done until this passes.
+**Act on the result.** If steps remain, do them. Complete the reflection before claiming done — because premature completion claims skip the self-check.
 
 ## Optional: Summarize Changes
 

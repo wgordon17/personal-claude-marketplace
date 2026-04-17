@@ -6,8 +6,8 @@ Verifies that:
 3. Both files stay in sync — drift is detected immediately.
 4. Version numbers in each plugin's plugin.json match the entry in marketplace.json.
 5. Every marketplace.json entry has a corresponding plugin.json on disk.
-6. Shared reference files (github-label-definitions.md, tracker-field-spec.md) exist
-   on disk and are referenced by their consumer SKILL.md files.
+6. Shared reference files (github-label-definitions.md, tracker-field-spec.md,
+   anti-deferral-rules.md) exist on disk and are referenced by their consumer SKILL.md files.
 7. Jira self-assignment rules: JIRA_LOGIN capture, -a flag, never-unassigned rule,
    halt-on-empty guard, and post-create verification are present in both files.
 
@@ -168,8 +168,12 @@ INCREMENTAL_PLANNING_SKILL = (
     REPO_ROOT / "code-quality" / "skills" / "incremental-planning" / "SKILL.md"
 )
 SWARM_SKILL = REPO_ROOT / "code-quality" / "skills" / "swarm" / "SKILL.md"
+MAP_REDUCE_SKILL = REPO_ROOT / "code-quality" / "skills" / "map-reduce" / "SKILL.md"
+SPECULATIVE_SKILL = REPO_ROOT / "code-quality" / "skills" / "speculative" / "SKILL.md"
+QUALITY_GATE_SKILL = REPO_ROOT / "code-quality" / "skills" / "quality-gate" / "SKILL.md"
 LABEL_DEFINITIONS = REPO_ROOT / "code-quality" / "references" / "github-label-definitions.md"
 TRACKER_FIELD_SPEC = REPO_ROOT / "code-quality" / "references" / "tracker-field-spec.md"
+ANTI_DEFERRAL_RULES = REPO_ROOT / "code-quality" / "references" / "anti-deferral-rules.md"
 
 
 class TestCodeQualityReferenceIntegrity:
@@ -262,6 +266,43 @@ class TestCodeQualityReferenceIntegrity:
         assert "&lt;/spawn-data&gt;" in content, (
             "incremental-planning/SKILL.md does not contain the spawn-data escape table. "
             "The anti-injection escape mechanism was deleted or altered."
+        )
+
+    def test_anti_deferral_rules_exists(self):
+        assert ANTI_DEFERRAL_RULES.exists(), (
+            f"{ANTI_DEFERRAL_RULES} does not exist on disk. "
+            "swarm, map-reduce, speculative, and quality-gate SKILL.md reference this file."
+        )
+
+    def test_anti_deferral_rules_contains_scope_integrity(self):
+        content = ANTI_DEFERRAL_RULES.read_text()
+        assert "Complete all work the task requires" in content, (
+            f"{ANTI_DEFERRAL_RULES} does not contain 'Complete all work the task requires'. "
+            "The Scope Integrity directive was deleted or altered."
+        )
+
+    def test_anti_deferral_rules_referenced_by_swarm(self):
+        content = SWARM_SKILL.read_text()
+        assert "anti-deferral-rules.md" in content, (
+            "swarm/SKILL.md does not reference anti-deferral-rules.md"
+        )
+
+    def test_anti_deferral_rules_referenced_by_map_reduce(self):
+        content = MAP_REDUCE_SKILL.read_text()
+        assert "anti-deferral-rules.md" in content, (
+            "map-reduce/SKILL.md does not reference anti-deferral-rules.md"
+        )
+
+    def test_anti_deferral_rules_referenced_by_speculative(self):
+        content = SPECULATIVE_SKILL.read_text()
+        assert "anti-deferral-rules.md" in content, (
+            "speculative/SKILL.md does not reference anti-deferral-rules.md"
+        )
+
+    def test_anti_deferral_rules_referenced_by_quality_gate(self):
+        content = QUALITY_GATE_SKILL.read_text()
+        assert "anti-deferral-rules.md" in content, (
+            "quality-gate/SKILL.md does not reference anti-deferral-rules.md"
         )
 
 
