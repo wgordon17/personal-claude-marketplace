@@ -2,14 +2,16 @@
 # /// script
 # requires-python = ">=3.13"
 # ///
-"""Decision Persistence Hook — remembers Fix/Defer decisions across sessions.
+"""Decision Persistence Hook — remembers fix/defer decisions across sessions.
 
 PreToolUse: checks stored decisions and auto-answers AskUserQuestion via updatedInput.
-PostToolUse: captures Fix/Defer decisions to {memory_dir}/review-decisions.json.
+PostToolUse: captures decisions to {memory_dir}/review-decisions.json.
 
 Decisions are persisted as fingerprinted records (file + category + line + skill) so
-that repeated reviews of the same finding auto-apply the prior Fix/Defer decision
-without re-prompting the user.
+that repeated reviews of the same finding auto-apply the prior decision without
+re-prompting the user. Supports both binary Fix/Defer questions and multi-option
+questions (verifier-generated options) — any non-Defer selection is treated as a
+fix-equivalent, with the actual label stored.
 """
 
 import hashlib
@@ -22,7 +24,7 @@ from pathlib import Path
 
 # ── Constants ──
 
-VALID_DECISIONS: frozenset[str] = frozenset({"Fix", "Defer"})
+DEFER_LABEL = "Defer"
 _MAX_FIELD_LEN = 512
 _MAX_DECISION_AGE_DAYS = 30
 
@@ -242,13 +244,21 @@ def _extract_description_snippet(question_text: str) -> str:
     return first_line
 
 
-def _is_fix_defer_question(question: dict) -> bool:
-    """Check if a question has Fix/Defer options (our target pattern)."""
+def _is_dp_question(question: dict) -> bool:
+    """Check if a question is a decision-persistence target.
+
+    Matches questions that have a Defer option and dp: metadata in the question
+    text. Supports both binary Fix/Defer questions and multi-option questions
+    where the verifier generated concrete options (any label other than Defer
+    is treated as a fix-equivalent).
+    """
     options = question.get("options", [])
     if len(options) < 2:
         return False
     labels = {opt.get("label", "").lower() for opt in options}
-    return "fix" in labels and "defer" in labels
+    if DEFER_LABEL.lower() not in labels:
+        return False
+    return METADATA_PREFIX in question.get("question", "")
 
 
 # ── PreToolUse handler ──
@@ -262,16 +272,16 @@ def _handle_pre_tool_use(data: dict) -> None:
     if not questions:
         sys.exit(0)  # passthrough
 
-    # Only process Fix/Defer questions — bail if batch is mixed-type
-    fix_defer_questions = [q for q in questions if _is_fix_defer_question(q)]
-    if not fix_defer_questions:
+    # Only process dp-tagged questions — bail if batch is mixed-type
+    dp_questions = [q for q in questions if _is_dp_question(q)]
+    if not dp_questions:
         sys.exit(0)  # passthrough — not our kind of question
-    if len(fix_defer_questions) != len(questions):
-        sys.exit(0)  # mixed-type batch: answers dict would only cover Fix/Defer subset
+    if len(dp_questions) != len(questions):
+        sys.exit(0)  # mixed-type batch: answers dict would only cover dp subset
 
-    # Parse metadata for all Fix/Defer questions (deduplicated per question text)
+    # Parse metadata for all dp questions (deduplicated per question text)
     parsed: dict[str, dict] = {}
-    for q in fix_defer_questions:
+    for q in dp_questions:
         q_text = q.get("question", "")
         meta = _parse_metadata(q_text)
         if meta is None:
@@ -294,12 +304,12 @@ def _handle_pre_tool_use(data: dict) -> None:
     if not stored:
         sys.exit(0)  # no prior decisions (or all expired) — passthrough
 
-    # Try to match each Fix/Defer question
+    # Try to match each dp question
     answers = {}
     all_matched = True
     code_hash_cache: dict[tuple[str, str], str | None] = {}
 
-    for q in fix_defer_questions:
+    for q in dp_questions:
         q_text = q.get("question", "")
         meta = parsed[q_text]
         skill = meta.get("skill", "unknown")
@@ -308,7 +318,7 @@ def _handle_pre_tool_use(data: dict) -> None:
         if fp in stored:
             prior = stored[fp]
             decision = prior.get("decision")
-            if decision not in VALID_DECISIONS:
+            if not decision or not isinstance(decision, str):
                 all_matched = False
                 break  # corrupted/unexpected stored value — re-ask
             # Staleness check: verify code hasn't changed since decision was made
@@ -388,10 +398,10 @@ def _handle_post_tool_use(data: dict) -> None:
     if not questions or not answers:
         sys.exit(0)
 
-    # Pre-scan: parse metadata for all Fix/Defer questions (deduplicated)
+    # Pre-scan: parse metadata for all dp questions (deduplicated)
     parsed: dict[str, dict | None] = {}
     for q in questions:
-        if _is_fix_defer_question(q):
+        if _is_dp_question(q):
             q_text = q.get("question", "")
             parsed[q_text] = _parse_metadata(q_text)
 
@@ -413,7 +423,7 @@ def _handle_post_tool_use(data: dict) -> None:
     mutated = False
     code_hash_cache: dict[tuple[str, str], str | None] = {}
     for q in questions:
-        if not _is_fix_defer_question(q):
+        if not _is_dp_question(q):
             continue
 
         q_text = q.get("question", "")
@@ -422,8 +432,8 @@ def _handle_post_tool_use(data: dict) -> None:
             continue
 
         answer = answers.get(q_text)
-        if answer is None or answer not in VALID_DECISIONS:
-            continue  # discard unexpected answers
+        if not answer or not isinstance(answer, str):
+            continue  # discard missing or malformed answers
 
         skill = meta.get("skill", "unknown")
         fp = _fingerprint(meta["file"], meta["cat"], meta.get("line", "0"), skill)

@@ -649,8 +649,8 @@ class TestPostToolUseAnswerSource:
         assert len(stored["decisions"]) == 1
         assert stored["decisions"][0]["decision"] == "Fix"
 
-    def test_invalid_answer_not_captured(self, tmp_path):
-        """Answer values not in VALID_DECISIONS are discarded."""
+    def test_empty_answer_not_captured(self, tmp_path):
+        """Empty or missing answers are discarded."""
         project = setup_project_with_hack(tmp_path)
         decisions_file = project / "hack" / "review-decisions.json"
         seed_decisions_file(decisions_file, [])
@@ -658,12 +658,31 @@ class TestPostToolUseAnswerSource:
         q = make_dp_question("Unrelated finding", file="src/misc.py", line="5", cat="Quality")
         q_text = q["question"]
 
-        payload = make_post_payload([q], {q_text: "Skip"})
+        payload = make_post_payload([q], {q_text: ""})
         result = run_hook(payload, cwd=project)
         assert result.returncode == 0
 
         stored = json.loads(decisions_file.read_text())
         assert stored["decisions"] == []
+
+    def test_multi_option_answer_captured(self, tmp_path):
+        """Non-standard option labels (multi-option) are captured as valid decisions."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        q = make_dp_question(
+            "Architecture choice", file="src/arch.py", line="10", cat="Architecture"
+        )
+        q_text = q["question"]
+
+        payload = make_post_payload([q], {q_text: "Extract shared module"})
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert len(stored["decisions"]) == 1
+        assert stored["decisions"][0]["decision"] == "Extract shared module"
 
     def test_expired_decisions_pruned_on_write(self, tmp_path):
         """Decisions older than 30 days are pruned when PostToolUse writes."""
@@ -1080,11 +1099,12 @@ class TestPreToolUseAnswerValues:
 class TestPreToolUseCorruptedRecord:
     """qa-2: Corrupted stored record passthrough."""
 
-    def test_invalid_decision_value_passthroughs(self, tmp_path):
+    def test_non_standard_decision_label_replayed(self, tmp_path):
+        """Stored multi-option label (e.g., 'Extract shared module') is replayed."""
         project = setup_project_with_hack(tmp_path)
         hack = project / "hack"
         record = make_decision_record()
-        record["decision"] = "INVALID"
+        record["decision"] = "Extract shared module"
         seed_decisions_file(hack / "review-decisions.json", [record])
 
         q = make_dp_question("SQL injection")
@@ -1092,7 +1112,26 @@ class TestPreToolUseCorruptedRecord:
         result = run_hook(payload, cwd=project)
 
         assert result.returncode == 0
-        assert result.stdout.strip() == "", "expected passthrough for corrupted decision value"
+        output = json.loads(result.stdout) if result.stdout.strip() else {}
+        answers = output.get("hookSpecificOutput", {}).get("updatedInput", {}).get("answers", {})
+        assert any("Extract shared module" in v for v in answers.values()), (
+            "stored multi-option label should be auto-applied"
+        )
+
+    def test_empty_decision_value_passthroughs(self, tmp_path):
+        """Empty string stored as decision → passthrough (corrupted record)."""
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        record = make_decision_record()
+        record["decision"] = ""
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        q = make_dp_question("SQL injection")
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+
+        assert result.returncode == 0
+        assert result.stdout.strip() == "", "expected passthrough for empty decision value"
 
     def test_missing_decision_key_passthroughs(self, tmp_path):
         """Record with fingerprint but no 'decision' key → passthrough (not crash)."""
@@ -1141,12 +1180,12 @@ class TestPostToolUseCoverageGaps:
         assert result.returncode == 0
         assert result.stdout.strip() == ""
 
-    def test_invalid_answer_preserves_existing_records(self, tmp_path):
+    def test_empty_answer_preserves_existing_records(self, tmp_path):
         """'no mutations' exit path preserves pre-existing records.
 
-        Sends an invalid answer (not in VALID_DECISIONS) when the decisions file
-        already contains a valid record. The hook must exit without writing,
-        preserving the original record exactly.
+        Sends an empty answer when the decisions file already contains a valid
+        record. The hook must exit without writing, preserving the original
+        record exactly.
         """
         project = setup_project_with_hack(tmp_path)
         decisions_file = project / "hack" / "review-decisions.json"
@@ -1155,7 +1194,7 @@ class TestPostToolUseCoverageGaps:
 
         q = make_dp_question("Some finding", file="src/other.py", line="10", cat="Quality")
         q_text = q["question"]
-        payload = make_post_payload([q], {q_text: "Skip"}, source="tool_response")
+        payload = make_post_payload([q], {q_text: ""}, source="tool_response")
         result = run_hook(payload, cwd=project)
         assert result.returncode == 0
 
@@ -1408,34 +1447,50 @@ class TestMemoryDirCandidates:
         )
 
 
-class TestIsFixDeferQuestion:
-    """QA-F5: _is_fix_defer_question contract tests."""
+class TestIsDpQuestion:
+    """QA-F5: _is_dp_question contract tests — metadata-based detection."""
 
-    def test_standard_fix_defer(self):
-        q = {"options": [{"label": "Fix"}, {"label": "Defer"}]}
-        assert _MOD._is_fix_defer_question(q) is True
+    def test_standard_fix_defer_with_metadata(self):
+        q = make_dp_question("Finding desc")
+        assert _MOD._is_dp_question(q) is True
 
-    def test_three_options_with_fix_defer(self):
-        """3+ options including Fix and Defer → True (by design)."""
-        q = {"options": [{"label": "Fix"}, {"label": "Defer"}, {"label": "Skip"}]}
-        assert _MOD._is_fix_defer_question(q) is True
+    def test_multi_option_with_defer_and_metadata(self):
+        """Multi-option question with Defer + dp: metadata → True."""
+        q_text = f"Finding desc {METADATA_PREFIX}file=src/a.py,line=1,cat=QA,skill=pr-review"
+        q = {
+            "question": q_text,
+            "options": [
+                {"label": "Extract shared module"},
+                {"label": "Use dependency injection"},
+                {"label": "Defer"},
+            ],
+        }
+        assert _MOD._is_dp_question(q) is True
 
-    def test_non_fix_defer_options(self):
-        q = {"options": [{"label": "Option A"}, {"label": "Option B"}]}
-        assert _MOD._is_fix_defer_question(q) is False
+    def test_fix_defer_without_metadata(self):
+        """Fix/Defer options but no dp: metadata → False."""
+        q = {"question": "plain question", "options": [{"label": "Fix"}, {"label": "Defer"}]}
+        assert _MOD._is_dp_question(q) is False
+
+    def test_options_without_defer(self):
+        """Options without Defer label → False (even with metadata)."""
+        q_text = f"Finding {METADATA_PREFIX}file=src/a.py,line=1,cat=QA,skill=pr-review"
+        q = {"question": q_text, "options": [{"label": "Option A"}, {"label": "Option B"}]}
+        assert _MOD._is_dp_question(q) is False
 
     def test_single_option(self):
-        q = {"options": [{"label": "Fix"}]}
-        assert _MOD._is_fix_defer_question(q) is False
+        q = {"options": [{"label": "Defer"}]}
+        assert _MOD._is_dp_question(q) is False
 
     def test_empty_options(self):
         q = {"options": []}
-        assert _MOD._is_fix_defer_question(q) is False
+        assert _MOD._is_dp_question(q) is False
 
     def test_no_options_key(self):
         q = {"question": "text only"}
-        assert _MOD._is_fix_defer_question(q) is False
+        assert _MOD._is_dp_question(q) is False
 
-    def test_case_insensitive(self):
-        q = {"options": [{"label": "FIX"}, {"label": "defer"}]}
-        assert _MOD._is_fix_defer_question(q) is True
+    def test_defer_case_insensitive(self):
+        q_text = f"Finding {METADATA_PREFIX}file=src/a.py,line=1,cat=QA,skill=pr-review"
+        q = {"question": q_text, "options": [{"label": "Fix"}, {"label": "DEFER"}]}
+        assert _MOD._is_dp_question(q) is True
