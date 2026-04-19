@@ -26,19 +26,19 @@ prek-install:  ## Install pre-commit + pre-push hooks
 	uvx prek install --install-hooks --hook-type pre-commit --hook-type pre-push
 
 eval:  ## Run skill evals for all skills with test cases
-	cd skill-eval && uv run python -m skill_eval.hook --all
+	cd skill-eval && uv run python -m skill_eval.cli --all
 
 eval-locked:  ## Run skill evals with integrity check (for LLM self-improvement)
-	cd skill-eval && uv run python -m skill_eval.hook --all --locked
+	cd skill-eval && uv run python -m skill_eval.cli --all --locked
 
 eval-compare:  ## A/B compare current skills against origin/main
-	cd skill-eval && uv run python -m skill_eval.hook --compare origin/main
+	cd skill-eval && uv run python -m skill_eval.cli --compare origin/main
 
 eval-update-baselines:  ## Update baselines.json with current scores
-	cd skill-eval && uv run python -m skill_eval.hook --update-baselines
+	cd skill-eval && uv run python -m skill_eval.cli --update-baselines
 
 eval-compare-scoring:  ## Compare single-shot vs multi-trial scoring side-by-side
-	cd skill-eval && uv run python -m skill_eval.hook --compare-scoring
+	cd skill-eval && uv run python -m skill_eval.cli --compare-scoring
 
 eval-with-context:  ## A/B compare skill-only vs skill+CLAUDE.md context
-	cd skill-eval && uv run python -m skill_eval.hook --with-context
+	cd skill-eval && uv run python -m skill_eval.cli --with-context

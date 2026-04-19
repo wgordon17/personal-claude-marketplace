@@ -1,6 +1,6 @@
-"""Pre-push hook module for skill evaluation.
+"""CLI entry point for skill evaluation.
 
-Entry point: python -m skill_eval.hook
+Entry point: python -m skill_eval.cli
 
 Modes:
   (default)              Pre-push: detect changed SKILL.md/reference files and

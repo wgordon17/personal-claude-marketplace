@@ -1,7 +1,7 @@
 """Tests for skill-eval package.
 
 Two test groups:
-  1. In-process hook tests — patch sys.argv, _repo_root, and mode functions
+  1. In-process CLI tests — patch sys.argv, _repo_root, and mode functions
      to test main() dispatch and exit codes without real git or LLM calls.
   2. Unit tests for runner/contains_metric — tmp_path fixtures, no LLM calls.
 
@@ -75,7 +75,7 @@ class _TtyStdin:
 
 @pytest.fixture()
 def tty_stdin():
-    """Patch sys.stdin to appear as a tty, preventing hook.main() from reading it."""
+    """Patch sys.stdin to appear as a tty, preventing cli.main() from reading it."""
     with patch.object(sys, "stdin", _TtyStdin()):
         yield
 
@@ -84,28 +84,28 @@ class TestHookNoChangedSkills:
     """Pre-push and --all with no skills → exit 0."""
 
     def test_prepush_no_changed_skills_exits_0(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._mode_prepush", return_value=True),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_prepush", return_value=True),
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         assert exc.value.code == 0
 
     def test_all_mode_no_test_cases_exits_0(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--all"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._skill_dirs_with_test_cases", return_value=[]),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._skill_dirs_with_test_cases", return_value=[]),
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         assert exc.value.code == 0
 
@@ -114,19 +114,19 @@ class TestHookPassingBaseline:
     """_eval_skills returns True → exit 0."""
 
     def test_passing_exits_0(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--all"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._eval_skills", return_value=True),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._eval_skills", return_value=True),
             patch(
-                "skill_eval.hook._skill_dirs_with_test_cases",
+                "skill_eval.cli._skill_dirs_with_test_cases",
                 return_value=[tmp_path / "skill"],
             ),
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         assert exc.value.code == 0
 
@@ -135,19 +135,19 @@ class TestHookRegression:
     """_eval_skills returns False → exit 1."""
 
     def test_regression_exits_1(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--all"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._eval_skills", return_value=False),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._eval_skills", return_value=False),
             patch(
-                "skill_eval.hook._skill_dirs_with_test_cases",
+                "skill_eval.cli._skill_dirs_with_test_cases",
                 return_value=[tmp_path / "skill"],
             ),
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         assert exc.value.code == 1
 
@@ -156,16 +156,16 @@ class TestHookAllFlag:
     """--all dispatches to _mode_all, not _mode_prepush."""
 
     def test_all_flag_calls_mode_all_not_prepush(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--all"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._mode_all", return_value=True) as mock_all,
-            patch("skill_eval.hook._mode_prepush") as mock_prepush,
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_all", return_value=True) as mock_all,
+            patch("skill_eval.cli._mode_prepush") as mock_prepush,
             pytest.raises(SystemExit),
         ):
-            hook.main()
+            cli.main()
 
         mock_all.assert_called_once_with(tmp_path)
         mock_prepush.assert_not_called()
@@ -175,44 +175,44 @@ class TestHookCompareFlag:
     """--compare REF validates ref then dispatches to _mode_compare."""
 
     def test_valid_ref_calls_mode_compare(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--compare", "main"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._mode_compare", return_value=True) as mock_cmp,
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_compare", return_value=True) as mock_cmp,
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         mock_cmp.assert_called_once_with(tmp_path, "main")
         assert exc.value.code == 0
 
     def test_invalid_ref_semicolon_exits_nonzero(self, tmp_path, tty_stdin):
         """Semicolon fails _VALID_REF_RE → sys.exit(1) inside _mode_compare."""
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--compare", "main;evil"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._eval_skills") as mock_eval,
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._eval_skills") as mock_eval,
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         mock_eval.assert_not_called()
         assert exc.value.code != 0
 
     def test_invalid_ref_backtick_exits_nonzero(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--compare", "`evil`"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._eval_skills") as mock_eval,
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._eval_skills") as mock_eval,
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         mock_eval.assert_not_called()
         assert exc.value.code != 0
@@ -222,15 +222,15 @@ class TestHookPrePushDispatch:
     """No flags → dispatches to _mode_prepush."""
 
     def test_no_flags_calls_mode_prepush(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._mode_prepush", return_value=True) as mock_pp,
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_prepush", return_value=True) as mock_pp,
             pytest.raises(SystemExit),
         ):
-            hook.main()
+            cli.main()
 
         mock_pp.assert_called_once_with(tmp_path)
 
@@ -613,7 +613,7 @@ class TestScoreStats:
     """_score_stats(values) → (mean, stdev, unique_count)."""
 
     def test_empty_list(self):
-        from skill_eval.hook import _score_stats
+        from skill_eval.cli import _score_stats
 
         mean, stdev, uniq = _score_stats([])
         assert mean == pytest.approx(0.0)
@@ -621,7 +621,7 @@ class TestScoreStats:
         assert uniq == 0
 
     def test_single_value(self):
-        from skill_eval.hook import _score_stats
+        from skill_eval.cli import _score_stats
 
         mean, stdev, uniq = _score_stats([5.0])
         assert mean == pytest.approx(5.0)
@@ -629,7 +629,7 @@ class TestScoreStats:
         assert uniq == 1
 
     def test_multiple_values(self):
-        from skill_eval.hook import _score_stats
+        from skill_eval.cli import _score_stats
 
         mean, stdev, uniq = _score_stats([2.0, 4.0, 6.0])
         assert mean == pytest.approx(4.0)
@@ -637,7 +637,7 @@ class TestScoreStats:
         assert stdev > 0
 
     def test_all_same_values(self):
-        from skill_eval.hook import _score_stats
+        from skill_eval.cli import _score_stats
 
         mean, stdev, uniq = _score_stats([3.0, 3.0, 3.0])
         assert mean == pytest.approx(3.0)
@@ -907,41 +907,41 @@ class TestHookCompareScoringFlag:
     """--compare-scoring dispatches to _mode_compare_scoring."""
 
     def test_compare_scoring_calls_mode(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--compare-scoring"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._mode_compare_scoring", return_value=True) as mock_cs,
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_compare_scoring", return_value=True) as mock_cs,
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         mock_cs.assert_called_once_with(tmp_path)
         assert exc.value.code == 0
 
     def test_compare_scoring_mutually_exclusive_with_all(self, tty_stdin):
         """--compare-scoring and --all cannot be used together."""
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--compare-scoring", "--all"]),
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         assert exc.value.code != 0
 
     def test_with_context_calls_mode(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--with-context"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
-            patch("skill_eval.hook._mode_with_context", return_value=True) as mock_wc,
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_with_context", return_value=True) as mock_wc,
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         mock_wc.assert_called_once_with(tmp_path)
         assert exc.value.code == 0
@@ -954,19 +954,19 @@ class TestVerifyEvalIntegrity:
     """_verify_eval_integrity checks for uncommitted changes in skill-eval/."""
 
     def test_clean_repo_returns_true(self):
-        from skill_eval.hook import _verify_eval_integrity
+        from skill_eval.cli import _verify_eval_integrity
 
         # Use real repo root so relative_to() resolves correctly.
         real_repo = Path(__file__).parent.parent.parent.resolve()
         clean_result = type("R", (), {"stdout": "", "returncode": 0})()
-        with patch("skill_eval.hook.subprocess.run", return_value=clean_result):
+        with patch("skill_eval.cli.subprocess.run", return_value=clean_result):
             clean, modified = _verify_eval_integrity(real_repo)
 
         assert clean is True
         assert modified == []
 
     def test_modified_files_returns_false(self):
-        from skill_eval.hook import _verify_eval_integrity
+        from skill_eval.cli import _verify_eval_integrity
 
         # Use the real repo root so Path(__file__).parent.parent resolves
         # as relative_to(repo_root) correctly.
@@ -990,7 +990,7 @@ class TestVerifyEvalIntegrity:
                 {"stdout": "skill-eval/skill_eval/rubrics.py\n", "returncode": 0},
             )()
 
-        with patch("skill_eval.hook.subprocess.run", side_effect=mock_run):
+        with patch("skill_eval.cli.subprocess.run", side_effect=mock_run):
             clean, modified = _verify_eval_integrity(real_repo)
 
         assert clean is False
@@ -1001,47 +1001,47 @@ class TestLockedMode:
     """--locked flag blocks update-baselines and verifies integrity."""
 
     def test_locked_blocks_update_baselines(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--update-baselines", "--locked"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         assert exc.value.code == 1
 
     def test_locked_fails_on_dirty_eval(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--all", "--locked"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
             patch(
-                "skill_eval.hook._verify_eval_integrity",
+                "skill_eval.cli._verify_eval_integrity",
                 return_value=(False, ["skill-eval/test_cases/fix.json"]),
             ),
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         assert exc.value.code == 1
 
     def test_locked_passes_on_clean_eval(self, tmp_path, tty_stdin):
-        from skill_eval import hook
+        from skill_eval import cli
 
         with (
             patch.object(sys, "argv", ["hook", "--all", "--locked"]),
-            patch("skill_eval.hook._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
             patch(
-                "skill_eval.hook._verify_eval_integrity",
+                "skill_eval.cli._verify_eval_integrity",
                 return_value=(True, []),
             ),
-            patch("skill_eval.hook._mode_all", return_value=True) as mock_all,
+            patch("skill_eval.cli._mode_all", return_value=True) as mock_all,
             pytest.raises(SystemExit) as exc,
         ):
-            hook.main()
+            cli.main()
 
         mock_all.assert_called_once_with(tmp_path)
         assert exc.value.code == 0
