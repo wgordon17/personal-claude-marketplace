@@ -57,6 +57,37 @@ Two-tier taxonomy:
 - "This is stylistic" → `needs-fix`. Apply the project's conventions.
 - "The risk is low" → `needs-fix` if there's a fix, or don't report it. Risk assessment is not input.
 
+## Verifier De-escalation
+
+The Finding Verifier is the classification enforcement gate. When a reviewer classifies a
+finding as `needs-input`, the verifier MUST investigate and apply this decision tree:
+
+1. **Does the finding have exactly one correct resolution?** (e.g., missing dependency,
+   wrong task ordering, incorrect prerequisite) → Reclassify to `needs-fix`. Set
+   `investigation_summary` to explain why no decision exists.
+2. **Does the finding have multiple valid resolutions with meaningfully different
+   consequences?** (e.g., two architectures with different tradeoffs, API design choice
+   affecting consumers) → Keep `needs-input`. Generate 2-4 concrete options in the
+   `options` array.
+3. **Is the "decision" actually about effort, priority, or risk tolerance — not about
+   what to do?** (e.g., "should we add this test?", "is this dependency worth adding?")
+   → Reclassify to `needs-fix`. The answer is always "yes, do the work."
+
+**De-escalation test:** "If I gave this to two competent engineers independently, would
+they make different choices?" If no → `needs-fix`. If yes → `needs-input` with options.
+
+## Option Quality
+
+When the verifier generates options for `needs-input` findings:
+
+- Each option must be a concrete, actionable approach — not "fix it" or "investigate further"
+- Options must be mutually exclusive — selecting one rules out the others
+- Options must have meaningfully different consequences — if two options lead to the same
+  outcome, merge them
+- Labels should be short (3-7 words): "Extract shared module", "Use dependency injection"
+- Descriptions should include the key tradeoff: "Simpler but couples A to B"
+- 2 options minimum, 4 maximum (excluding Defer)
+
 **Post-triage states** (assigned after user interaction via AskUserQuestion, not by reviewers):
 
 - `user-confirmed`: User selected the finding as needing work. Promoted to `needs-fix` and placed
@@ -102,7 +133,8 @@ Canonical JSON schema for reviewer output:
       "evidence": "string",
       "suggested_fix": "string",
       "risk": "string — what could go wrong if not addressed",
-      "input_needed": "string | null — what decision the user must make (required when classification is needs-input)"
+      "input_needed": "string | null — what decision the user must make (required when classification is needs-input)",
+      "options": "array | null — concrete fix approaches when classification=needs-input. Each element: {label: string, description: string}. Required when classification=needs-input (verifier generates these). null when needs-fix. 2-4 options (excluding Defer, which is always appended by the orchestrator)."
     }
   ]
 }
@@ -122,7 +154,8 @@ Canonical JSON schema for Fixer output:
       "loe": "trivial | moderate | significant",
       "description": "string",
       "input_needed": "string — what decision the user must make",
-      "suggested_action": "string — what the Fixer recommends"
+      "suggested_action": "string — what the Fixer recommends",
+      "options": "array | null — verifier-generated options passed through from ReviewFindings. Fixer MUST preserve this field when collecting needs-input items. null if the upstream finding had no options."
     }
   ],
   "user_deferred": [
@@ -158,12 +191,19 @@ How the Fixer processes findings:
      question: "[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill={skill_name}"
      header: "{id}"
      options: [
-       {"label": "Fix", "description": "{suggested_action}"},
-       {"label": "Defer", "description": "Skip for now"}
+       {options[0].label}: {options[0].description},
+       {options[1].label}: {options[1].description},
+       ... (all verifier-generated options),
+       {"label": "Defer", "description": "Skip for now — user-deferred"}
      ]
      multiSelect: false
      ```
-   - Fix: Lead sends back to Fixer (or fixes inline if trivial), adds to `findings_fixed`
+   The orchestrator (Lead) appends Defer as the final option. The verifier does NOT include
+   Defer in its `options` array — that's the orchestrator's responsibility.
+   When `options` is `null` (needs-fix findings, or findings from pipelines without a verifier
+   like the swarm Fixer), fall back to the original binary: `[{"label": "Fix"}, {"label": "Defer"}]`.
+   The `▸dp:` metadata suffix MUST be present — it's consumed by the decision-persistence hook.
+   - **Option selected (any non-Defer option):** Lead sends back to Fixer (or fixes inline if trivial), records selected option label in suggested_fix, adds to `findings_fixed`
    - Defer: recorded in `user_deferred` with reason "User declined via triage"
 5. After user triage complete: Lead updates the final FixSummary with `user_deferred` entries
 
