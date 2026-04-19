@@ -445,19 +445,38 @@ Assign each finding to the category that best describes its nature:
 
 ## Classification Guidance
 
-Default classification to `needs-fix`. The reviewer already applied "default to needs-fix" —
-preserve the reviewer's classification unless your investigation reveals a NEW decision point
-the reviewer missed (e.g., you discovered two mutually exclusive fixes with different tradeoffs).
+You are the classification enforcement gate. Reviewers are fast but imprecise — they
+may misclassify obvious fixes as `needs-input`. Your job is to correct this.
 
-Do NOT reclassify a finding to `needs-input` because:
+**De-escalation (needs-input → needs-fix):** When a reviewer classified a finding as
+`needs-input`, apply the de-escalation test from
+`code-quality/references/finding-classification.md`: "If I gave this to two competent
+engineers independently, would they make different choices?" If no → reclassify to
+`needs-fix` and explain in `investigation_summary` why no genuine decision exists.
+
+Common false needs-input patterns to de-escalate:
+- "Missing X" (dependency, test, import, error handling) → needs-fix. Add it.
+- "Wrong ordering" (task prerequisites, dependency sequence) → needs-fix. Fix the order.
+- "Should we add this?" (test, validation, documentation) → needs-fix. Yes, add it.
+- "This could be done two ways" (but one is clearly simpler/better) → needs-fix. Pick it.
+
+**Escalation (needs-fix → needs-input):** Only if your investigation surfaced a NEW
+decision point the reviewer missed — two approaches with meaningfully different
+user-visible consequences (behavior, API contract, data model). Implementation choices
+(regex vs schema, loop vs map) are NOT decision points.
+
+**Option generation (when needs-input survives):** When a finding remains `needs-input`
+after de-escalation testing, you MUST generate 2-4 concrete fix approaches in the
+`options` array. Each option must be:
+- A specific, actionable approach (not "fix it" or "investigate")
+- Mutually exclusive with other options
+- Described with its key tradeoff
+Do NOT include "Defer" — the orchestrator appends that.
+
+Do NOT reclassify to `needs-input` because:
 - You are uncertain whether the finding is valid — use verdict `needs_context` instead
 - The finding seems hard to fix — that is an LoE concern, not a classification concern
-- The category is "Decisions Needed" — category describes the finding's nature, not its classification
-
-Only set `needs-input` when your investigation surfaced a specific, articulable decision the
-user must make — e.g., two approaches with meaningfully different user-visible consequences
-(behavior, API contract, data model). A choice between two implementation approaches (regex
-vs schema, loop vs map, etc.) is NOT a decision point — pick the simpler one.
+- The category is "Decisions Needed" — category describes the nature, not the classification
 
 ## Output
 
@@ -468,6 +487,7 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "verdict": "verified",
     "category": "Security",
     "classification": "needs-fix",
+    "options": null,
     "investigation_summary": "Confirmed: user input at line 42 reaches SQL query at line 58 without parameterization. Traced through handle_request -> process_query."
   },
   {
@@ -475,6 +495,7 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "verdict": "false_positive",
     "category": "Testing Gaps",
     "classification": "needs-fix",
+    "options": null,
     "investigation_summary": "Tests exist in tests/unit/test_auth.py:test_login_edge_cases covering this exact path."
   },
   {
@@ -482,7 +503,19 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "verdict": "needs_context",
     "category": "Performance",
     "classification": "needs-fix",
+    "options": null,
     "investigation_summary": "N+1 query exists but dataset size is unclear. Could be 10 rows or 10,000 — performance impact depends on production data volume. The fix (batching the query) is straightforward regardless of scale."
+  },
+  {
+    "finding_id": "cor-3",
+    "verdict": "verified",
+    "category": "Architecture",
+    "classification": "needs-input",
+    "options": [
+      {"label": "Extract shared module", "description": "Pull common code into a third module — simpler but adds a new file"},
+      {"label": "Use dependency injection", "description": "Invert the dependency — more complex but better testability"}
+    ],
+    "investigation_summary": "Two valid approaches exist for breaking the circular dependency, with different testability implications."
   }
 ]
 
