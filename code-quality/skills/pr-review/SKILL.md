@@ -293,7 +293,7 @@ investigate each finding.
 ```
 Agent(
   description="Finding verification for PR #{number}",
-  model="sonnet",
+  model="opus",
   prompt=<Finding Verifier template from references/reviewer-prompts.md, placeholders substituted>
 )
 ```
@@ -304,7 +304,7 @@ The verifier receives: `{findings_json}` (the array above), `{claude_md_rules}`,
 The verifier **investigates each finding** — it reads the actual source files, traces call
 chains, and checks whether the finding is real. It returns a JSON array with a verdict for
 each finding:
-`[{finding_id, verdict, investigation_summary, category, classification}, ...]`
+`[{finding_id, verdict, investigation_summary, category, classification, options}, ...]`
 
 Verdicts: `verified` (confirmed real), `false_positive` (investigated and disproven),
 `needs_context` (cannot confirm or deny — requires human judgment).
@@ -364,7 +364,7 @@ AskUserQuestion(questions=[
     "question": "[{id}] [{Reviewer}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={Reviewer},skill=pr-review",
     "header": "{id}",
     "options": [
-      {"label": "Fix", "description": "Confirm this finding needs work — promoted to needs-fix"},
+      ... (map each element from the finding's `options` array to {label, description}),
       {"label": "Defer", "description": "Skip for now — user-deferred"}
     ],
     "multiSelect": false
@@ -378,11 +378,10 @@ If more than 4 `needs-input` findings exist, make multiple AskUserQuestion calls
 ### Record Decisions
 
 For each `needs-input` finding:
-- **Fix selected:** Promote to `needs-fix` with verdict `verified`. Place the finding in its
-  normal category section alongside other verified findings. The user has confirmed this
-  finding needs work — it is no longer ambiguous.
+- **Option selected (any non-Defer option):** Promote to `needs-fix` with verdict `verified`.
+  Record the selected option label in the finding's `suggested_fix` field (this tells the
+  Fixer which approach to implement). Place the finding in its normal category section.
 - **Defer selected:** Update the finding's classification to `user-deferred` in the output.
-  The user explicitly chose not to act on it now.
 
 Every `needs-input` item gets a recorded user decision, not silent deferral.
 
