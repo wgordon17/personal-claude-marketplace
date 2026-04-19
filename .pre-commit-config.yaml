@@ -22,3 +22,11 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+
+      - id: skill-eval
+        name: Skill evaluation (DeepEval)
+        language: system
+        entry: make eval-prepush
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
