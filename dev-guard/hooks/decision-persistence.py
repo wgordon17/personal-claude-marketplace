@@ -258,7 +258,8 @@ def _is_dp_question(question: dict) -> bool:
     labels = {opt.get("label", "").lower() for opt in options}
     if DEFER_LABEL.lower() not in labels:
         return False
-    return METADATA_PREFIX in question.get("question", "")
+    q_text = question.get("question") or ""
+    return METADATA_PREFIX in q_text
 
 
 # ── PreToolUse handler ──
