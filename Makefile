@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-locked eval-compare eval-update-baselines eval-compare-scoring eval-with-context
+.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-prepush eval-locked eval-compare eval-update-baselines eval-compare-scoring eval-with-context
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
@@ -24,6 +24,9 @@ prek:  ## Run pre-commit on all files
 
 prek-install:  ## Install pre-commit + pre-push hooks
 	uvx prek install --install-hooks --hook-type pre-commit --hook-type pre-push
+
+eval-prepush:  ## Pre-push: eval only changed skills
+	cd skill-eval && uv run python -m skill_eval.cli
 
 eval:  ## Run skill evals for all skills with test cases
 	cd skill-eval && uv run python -m skill_eval.cli --all
