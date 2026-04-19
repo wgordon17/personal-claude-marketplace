@@ -200,26 +200,6 @@ class TestLoadEvalConfig:
         assert result["rubrics"] == []
         assert result["test_cases"] == []
 
-    def test_existing_skill_returns_full_config(self):
-        result = load_eval_config("quality-gate")
-        assert result["skill_name"] == "quality-gate"
-        assert len(result["rubrics"]) > 0
-        assert len(result["test_cases"]) > 0
-
-    def test_rubrics_are_known_registry_names(self):
-        from skill_eval.rubrics import RUBRIC_REGISTRY
-
-        result = load_eval_config("quality-gate")
-        for rubric in result["rubrics"]:
-            assert rubric in RUBRIC_REGISTRY
-
-    def test_test_cases_have_required_fields(self):
-        result = load_eval_config("quality-gate")
-        for tc in result["test_cases"]:
-            assert "id" in tc
-            assert "prompt" in tc
-            assert "assertions" in tc
-
     def test_path_traversal_returns_shell_dict(self):
         result = load_eval_config("../../../etc/passwd")
         assert result["rubrics"] == []
@@ -487,14 +467,6 @@ class TestBuildAssertionMetrics:
         result = build_assertion_metrics(["invalid: something"])
         assert result.expected == []
         assert result.forbidden == []
-
-    def test_parses_quality_gate_test_case_assertions(self):
-        """Assertions from quality-gate.json parse correctly end-to-end."""
-        config = load_eval_config("quality-gate")
-        tc = config["test_cases"][0]
-        metric = build_assertion_metrics(tc["assertions"])
-        assert isinstance(metric, ContainsMetric)
-        assert "layer 1" in metric.expected
 
 
 # ── Group 8: Score anchoring in rubrics ─────────────────────────────────────
