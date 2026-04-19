@@ -591,7 +591,9 @@ The Docs Reviewer checks:
 Findings are written to `{run_dir}/reviews/docs-review.json` using the standard ReviewFindings
 schema with `DOC-R` prefix. `needs-fix` findings are routed back to the Docs agent for fixes
 (max 1 iteration — the Docs Reviewer re-reviews after fixes). `needs-input` findings are
-presented to the user via AskUserQuestion. All findings are recorded in the audit trail.
+presented to the user via AskUserQuestion using the option-based format from
+`code-quality/references/finding-classification.md` Fixer Protocol. All findings are recorded
+in the audit trail.
 
 After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
 agent scans the swarm run's audit trail and extracts principle-level lessons to

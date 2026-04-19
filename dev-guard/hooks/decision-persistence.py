@@ -374,7 +374,7 @@ def _handle_pre_tool_use(data: dict) -> None:
 
 
 def _handle_post_tool_use(data: dict) -> None:
-    """Capture Fix/Defer decisions from AskUserQuestion responses."""
+    """Capture review finding decisions from AskUserQuestion responses."""
     tool_input = data.get("tool_input", {})
     tool_response = data.get("tool_response", {})
 

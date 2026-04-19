@@ -109,7 +109,10 @@ def make_dp_question(
     cat: str = "Security",
     skill: str = "pr-review",
 ) -> dict:
-    """Return a Fix/Defer question with a valid ▸dp: metadata suffix."""
+    """Return a question with Fix/Defer options and ▸dp: metadata.
+
+    For multi-option questions, construct the dict manually with custom options.
+    """
     q_text = f"{description} {METADATA_PREFIX}file={file},line={line},cat={cat},skill={skill}"
     return make_fix_defer_question(q_text)
 
@@ -683,6 +686,25 @@ class TestPostToolUseAnswerSource:
         stored = json.loads(decisions_file.read_text())
         assert len(stored["decisions"]) == 1
         assert stored["decisions"][0]["decision"] == "Extract shared module"
+
+    def test_multi_option_answer_captured_tool_response(self, tmp_path):
+        """Multi-option label captured via tool_response path (primary path)."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        q = make_dp_question("Arch choice", file="src/arch.py", line="10", cat="Architecture")
+        q_text = q["question"]
+
+        payload = make_post_payload(
+            [q], {q_text: "Use dependency injection"}, source="tool_response"
+        )
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert len(stored["decisions"]) == 1
+        assert stored["decisions"][0]["decision"] == "Use dependency injection"
 
     def test_expired_decisions_pruned_on_write(self, tmp_path):
         """Decisions older than 30 days are pruned when PostToolUse writes."""
@@ -1480,6 +1502,12 @@ class TestIsDpQuestion:
 
     def test_single_option(self):
         q = {"options": [{"label": "Defer"}]}
+        assert _MOD._is_dp_question(q) is False
+
+    def test_single_option_with_metadata(self):
+        """Metadata present but only 1 option → False (len < 2 guard)."""
+        q_text = f"Finding {METADATA_PREFIX}file=src/a.py,line=1,cat=QA,skill=pr-review"
+        q = {"question": q_text, "options": [{"label": "Defer"}]}
         assert _MOD._is_dp_question(q) is False
 
     def test_empty_options(self):

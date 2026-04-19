@@ -365,6 +365,10 @@ AskUserQuestion(questions=[
 When `options` is `null` (findings from pipelines without a verifier), fall back to the binary:
 `[{"label": "Fix"}, {"label": "Defer"}]`.
 
+File-audit has no Finding Verifier — the Lead applies the de-escalation test from
+`code-quality/references/finding-classification.md` inline before presenting to the user.
+If the finding has a single correct resolution, reclassify to `needs-fix` and fix it.
+
 If more than 4 `needs-input` items exist, make multiple AskUserQuestion calls.
 
 For each `needs-input` TODO:

@@ -155,8 +155,10 @@ LEAD (you)
    `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"` with
    options from the verifier's `options` array (if present) plus "Defer" as the last option,
    OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
-   `multiSelect: false`. Note: For needs-input findings with verifier-generated options, use
-   the verifier's options array. Defer is always the last option.
+   `multiSelect: false`. Map-reduce has no Finding Verifier — the Lead applies the
+   de-escalation test from `code-quality/references/finding-classification.md` inline before
+   presenting to the user. If the finding has a single correct resolution, reclassify to
+   `needs-fix` and fix it.
    Do NOT exit with unresolved `needs-input` findings. If AskUserQuestion is unavailable, treat
    all `needs-input` findings as `needs_context` in the final report (surface them, don't hide
    them). Offer to write a detailed report or create actionable TODO items.
@@ -169,8 +171,10 @@ LEAD (you)
      `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"`
      with options from the verifier's `options` array (if present) plus "Defer" as the last
      option, OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
-     `multiSelect: false`. Note: For needs-input findings with verifier-generated options, use
-     the verifier's options array. Defer is always the last option.
+     `multiSelect: false`. Map-reduce has no Finding Verifier — the Lead applies the
+     de-escalation test from `code-quality/references/finding-classification.md` inline before
+     presenting to the user. If the finding has a single correct resolution, reclassify to
+     `needs-fix` and apply it.
      Selected items are applied, then tests re-run. Do NOT apply `needs-input` changes without
      user approval. If AskUserQuestion is unavailable, treat all `needs-input` findings as
      `needs_context` in the final report (surface them, don't hide them).
