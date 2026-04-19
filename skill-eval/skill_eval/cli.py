@@ -6,8 +6,8 @@ Modes:
   (default)              Pre-push: detect changed SKILL.md/reference files and
                          eval only affected skills.
   --all                  Eval all skills that have test cases.
-  --compare REF          A/B compare current skill bundles against a git ref.
   --update-baselines     Run --all and write results to baselines.json.
+  --locked               Verify no uncommitted changes in skill-eval/ before running.
 
 All DeepEval and skill_eval.* imports are DEFERRED until after git-diff
 detection to keep the fast-path (no changed skills) at stdlib speed.
@@ -15,7 +15,6 @@ detection to keep the fast-path (no changed skills) at stdlib speed.
 Security constraints:
   - DEEPEVAL_DISABLE_TIMEOUTS set in os.environ BEFORE any deepeval import.
   - DEEPEVAL_TELEMETRY_OPT_OUT set to disable telemetry/tracking.
-  - git ref validated against ^[a-zA-Z0-9/_.-~^]+$ BEFORE any subprocess call.
   - All subprocess.run calls use list-form args (never shell=True).
 """
 
@@ -24,15 +23,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
-
-# Regex for validating git refs before passing to subprocess.
-# Allows ~ and ^ for revision syntax (HEAD~1, HEAD^2).
-_VALID_REF_RE = re.compile(r"^[a-zA-Z0-9/_.\-~^]+$")
-
 
 # ---------------------------------------------------------------------------
 # Git helpers (stdlib-only, safe for fast-path)
@@ -303,25 +296,6 @@ def _write_baselines(all_results: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Statistical helpers
-# ---------------------------------------------------------------------------
-
-
-def _score_stats(values: list[float]) -> tuple[float, float, int]:
-    """Return (mean, stdev, unique_count) for a list of scores."""
-    n = len(values)
-    if n == 0:
-        return 0.0, 0.0, 0
-    mean = sum(values) / n
-    if n < 2:
-        return mean, 0.0, len(set(round(v, 6) for v in values))
-    variance = sum((x - mean) ** 2 for x in values) / (n - 1)
-    stdev = variance**0.5
-    unique = len(set(round(v, 6) for v in values))
-    return mean, stdev, unique
-
-
-# ---------------------------------------------------------------------------
 # Mode dispatch
 # ---------------------------------------------------------------------------
 
@@ -401,24 +375,6 @@ def _mode_all(repo_root: Path) -> bool:
     return _eval_skills(skill_dirs, repo_root)
 
 
-def _mode_compare(repo_root: Path, ref: str) -> bool:
-    """--compare REF mode: A/B comparison against a git ref."""
-    # SECURITY: validate ref BEFORE any subprocess call.
-    if not _VALID_REF_RE.match(ref):
-        print(
-            f"[skill-eval] Invalid git ref {ref!r} — must match ^[a-zA-Z0-9/_.-~^]+$",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    skill_dirs = _skill_dirs_with_test_cases(repo_root)
-    if not skill_dirs:
-        print("[skill-eval] No skills with test cases found", file=sys.stderr)
-        return True
-    print(f"[skill-eval] Comparing {len(skill_dirs)} skill(s) against {ref}...")
-    return _eval_skills(skill_dirs, repo_root, git_ref=ref)
-
-
 def _mode_update_baselines(repo_root: Path) -> bool:
     """--update-baselines mode: run --all and write baselines.json."""
     skill_dirs = _skill_dirs_with_test_cases(repo_root)
@@ -427,251 +383,6 @@ def _mode_update_baselines(repo_root: Path) -> bool:
         return True
     print(f"[skill-eval] Updating baselines for {len(skill_dirs)} skill(s)...")
     return _eval_skills(skill_dirs, repo_root, update_baselines=True)
-
-
-def _mode_compare_scoring(repo_root: Path) -> bool:
-    """--compare-scoring mode: run each skill twice (k=1 vs k=5), print comparison.
-
-    Demonstrates the value of multi-trial averaging by running the same test
-    cases with two scoring configurations:
-      - Single-shot: k=1, temperature=0 (legacy integer-only scoring)
-      - Multi-trial: k=5, temperature=0.7 (averaged continuous scoring)
-
-    Prints a side-by-side comparison table showing score differences,
-    granularity (unique values), and standard deviation across test cases.
-    """
-    (
-        VertexSonnetJudge,
-        resolve_skill_bundle,
-        load_eval_config,
-        _load_baselines,
-        run_eval,
-        _compare_baselines,
-        _load_context_layers,
-    ) = _deferred_imports()
-
-    skill_dirs = _skill_dirs_with_test_cases(repo_root)
-    if not skill_dirs:
-        print("[skill-eval] No skills with test cases found", file=sys.stderr)
-        return True
-
-    print(f"[skill-eval] Comparing scoring methods for {len(skill_dirs)} skill(s)...\n")
-
-    # Two judges: single-shot (legacy) and multi-trial (new).
-    judge_single = VertexSonnetJudge(k_samples=1, eval_temperature=0.0)
-    judge_multi = VertexSonnetJudge(k_samples=5, eval_temperature=0.7)
-
-    for skill_dir in skill_dirs:
-        skill_name = skill_dir.name
-        config = load_eval_config(skill_name)
-        test_cases = config.get("test_cases", [])
-        rubric_names = config.get("rubrics", [])
-
-        if not test_cases:
-            continue
-
-        bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
-        if bundle is None:
-            continue
-
-        print(f"  === {skill_name} ({len(test_cases)} test cases) ===\n")
-
-        # Run with single-shot judge.
-        print("  Running single-shot (k=1, temp=0)...")
-        results_single = run_eval(skill_name, bundle, test_cases, rubric_names, judge_single)
-
-        # Run with multi-trial judge.
-        print("  Running multi-trial (k=5, temp=0.7)...")
-        results_multi = run_eval(skill_name, bundle, test_cases, rubric_names, judge_multi)
-
-        # Print comparison table.
-        s_scores = results_single.get("scores", {})
-        m_scores = results_multi.get("scores", {})
-        s_per_case = results_single.get("per_case_scores", {})
-        m_per_case = results_multi.get("per_case_scores", {})
-        all_metrics = sorted(set(s_scores) | set(m_scores))
-
-        hdr = (
-            f"  {'Metric':<30} {'Single':>8} {'Multi':>8} {'Delta':>7}"
-            f" {'S-Uniq':>6} {'M-Uniq':>6} {'S-StDev':>7} {'M-StDev':>7}"
-        )
-        print(f"\n{hdr}")
-        print("  " + "-" * (len(hdr) - 2))
-
-        for metric in all_metrics:
-            s_val = s_scores.get(metric, 0.0)
-            m_val = m_scores.get(metric, 0.0)
-            delta = m_val - s_val
-
-            s_cases = s_per_case.get(metric, [])
-            m_cases = m_per_case.get(metric, [])
-            _, s_std, s_uniq = _score_stats(s_cases)
-            _, m_std, m_uniq = _score_stats(m_cases)
-
-            print(
-                f"  {metric:<30} {s_val:>8.3f} {m_val:>8.3f} {delta:>+7.3f}"
-                f" {s_uniq:>6} {m_uniq:>6} {s_std:>7.3f} {m_std:>7.3f}"
-            )
-
-        s_pr = results_single.get("pass_rate", 0.0)
-        m_pr = results_multi.get("pass_rate", 0.0)
-        print(
-            f"  {'pass_rate':<30} {s_pr:>8.3f} {m_pr:>8.3f} {m_pr - s_pr:>+7.3f}"
-            f" {'':>6} {'':>6} {'':>7} {'':>7}"
-        )
-
-        # Print per-test-case detail for GEval metrics (not Contains).
-        geval_metrics = [m for m in all_metrics if m != "Contains Assertion Metric"]
-        if geval_metrics:
-            print("\n  Per-test-case scores (GEval metrics):")
-            for metric in geval_metrics:
-                s_cases = s_per_case.get(metric, [])
-                m_cases = m_per_case.get(metric, [])
-                n = max(len(s_cases), len(m_cases))
-                if n == 0:
-                    continue
-                print(f"    {metric}:")
-                for j in range(n):
-                    s_v = f"{s_cases[j]:.3f}" if j < len(s_cases) else "  N/A"
-                    m_v = f"{m_cases[j]:.3f}" if j < len(m_cases) else "  N/A"
-                    flag = ""
-                    if j < len(s_cases) and j < len(m_cases):
-                        d = m_cases[j] - s_cases[j]
-                        flag = f" ({d:+.3f})"
-                    print(f"      tc[{j}]: single={s_v}  multi={m_v}{flag}")
-
-        print()
-
-    return True
-
-
-def _mode_with_context(repo_root: Path) -> bool:
-    """--with-context mode: A/B compare skill-only vs skill+CLAUDE.md.
-
-    Runs each skill twice — once without any CLAUDE.md context and once
-    with discovered CLAUDE.md layers prepended. Prints a comparison table
-    showing how behavioral context affects skill scores.
-    """
-    (
-        VertexSonnetJudge,
-        resolve_skill_bundle,
-        load_eval_config,
-        _load_baselines,
-        run_eval,
-        _compare_baselines,
-        load_context_layers,
-    ) = _deferred_imports()
-
-    skill_dirs = _skill_dirs_with_test_cases(repo_root)
-    if not skill_dirs:
-        print("[skill-eval] No skills with test cases found", file=sys.stderr)
-        return True
-
-    layers = load_context_layers(repo_root)
-    if not layers:
-        print(
-            "[skill-eval] No CLAUDE.md files found"
-            " (checked ~/.claude/CLAUDE.md and {repo}/CLAUDE.md)",
-            file=sys.stderr,
-        )
-        return True
-
-    # Build the context preamble from all discovered layers.
-    layer_names = sorted(layers.keys())
-    preamble_parts = []
-    for name in layer_names:
-        preamble_parts.append(f"# {name.upper()} CLAUDE.md\n{layers[name]}")
-    preamble = "\n\n".join(preamble_parts)
-
-    print(
-        f"[skill-eval] Context layers: {', '.join(layer_names)}"
-        f" ({sum(len(v) for v in layers.values())} chars total)"
-    )
-    print(f"[skill-eval] Comparing {len(skill_dirs)} skill(s): skill-only vs skill+CLAUDE.md\n")
-
-    judge = VertexSonnetJudge()
-
-    for skill_dir in skill_dirs:
-        skill_name = skill_dir.name
-        config = load_eval_config(skill_name)
-        test_cases = config.get("test_cases", [])
-        rubric_names = config.get("rubrics", [])
-
-        if not test_cases:
-            continue
-
-        bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
-        if bundle is None:
-            continue
-
-        print(f"  === {skill_name} ({len(test_cases)} test cases) ===\n")
-
-        # Run without context.
-        print("  Running skill-only...")
-        results_bare = run_eval(skill_name, bundle, test_cases, rubric_names, judge)
-
-        # Run with CLAUDE.md context.
-        print("  Running skill + CLAUDE.md...")
-        results_ctx = run_eval(
-            skill_name,
-            bundle,
-            test_cases,
-            rubric_names,
-            judge,
-            context_preamble=preamble,
-        )
-
-        # Print comparison table.
-        b_scores = results_bare.get("scores", {})
-        c_scores = results_ctx.get("scores", {})
-        b_per = results_bare.get("per_case_scores", {})
-        c_per = results_ctx.get("per_case_scores", {})
-        all_metrics = sorted(set(b_scores) | set(c_scores))
-
-        hdr = f"  {'Metric':<30} {'Bare':>8} {'+ Ctx':>8} {'Delta':>7} {'Signal':<10}"
-        print(f"\n{hdr}")
-        print("  " + "-" * (len(hdr) - 2))
-
-        for metric in all_metrics:
-            b_val = b_scores.get(metric, 0.0)
-            c_val = c_scores.get(metric, 0.0)
-            delta = c_val - b_val
-            if abs(delta) < 0.02:
-                signal = "neutral"
-            elif delta > 0:
-                signal = "positive"
-            else:
-                signal = "negative"
-            print(f"  {metric:<30} {b_val:>8.3f} {c_val:>8.3f} {delta:>+7.3f} {signal:<10}")
-
-        b_pr = results_bare.get("pass_rate", 0.0)
-        c_pr = results_ctx.get("pass_rate", 0.0)
-        print(f"  {'pass_rate':<30} {b_pr:>8.3f} {c_pr:>8.3f} {c_pr - b_pr:>+7.3f}")
-
-        # Per-test-case detail for GEval metrics.
-        geval_metrics = [m for m in all_metrics if m != "Contains Assertion Metric"]
-        if geval_metrics:
-            print("\n  Per-test-case deltas (GEval):")
-            for metric in geval_metrics:
-                b_cases = b_per.get(metric, [])
-                c_cases = c_per.get(metric, [])
-                n = max(len(b_cases), len(c_cases))
-                if n == 0:
-                    continue
-                deltas = []
-                for j in range(n):
-                    if j < len(b_cases) and j < len(c_cases):
-                        deltas.append(c_cases[j] - b_cases[j])
-                if not deltas:
-                    continue
-                pos = sum(1 for d in deltas if d > 0.02)
-                neg = sum(1 for d in deltas if d < -0.02)
-                neu = len(deltas) - pos - neg
-                print(f"    {metric}: {pos} positive, {neg} negative, {neu} neutral")
-
-        print()
-
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -692,27 +403,9 @@ def main() -> None:
         help="Eval all skills with test cases",
     )
     group.add_argument(
-        "--compare",
-        metavar="REF",
-        help="A/B compare current skills against a git ref",
-    )
-    group.add_argument(
         "--update-baselines",
         action="store_true",
         help="Run --all and write results to baselines.json",
-    )
-    group.add_argument(
-        "--compare-scoring",
-        action="store_true",
-        help="Run each skill twice (k=1 vs k=5) and print comparison table",
-    )
-    group.add_argument(
-        "--with-context",
-        action="store_true",
-        help=(
-            "A/B compare skill-only vs skill+CLAUDE.md to detect"
-            " positive/negative/neutral impact of behavioral context on skills"
-        ),
     )
     parser.add_argument(
         "--locked",
@@ -762,14 +455,8 @@ def main() -> None:
 
     if args.all:
         passed = _mode_all(repo_root)
-    elif args.compare:
-        passed = _mode_compare(repo_root, args.compare)
     elif args.update_baselines:
         passed = _mode_update_baselines(repo_root)
-    elif args.compare_scoring:
-        passed = _mode_compare_scoring(repo_root)
-    elif args.with_context:
-        passed = _mode_with_context(repo_root)
     else:
         passed = _mode_prepush(repo_root)
 

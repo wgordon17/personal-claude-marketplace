@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-prepush eval-locked eval-compare eval-update-baselines eval-compare-scoring eval-with-context
+.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-prepush eval-update-baselines
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
@@ -31,17 +31,5 @@ eval-prepush:  ## Pre-push: eval only changed skills
 eval:  ## Run skill evals for all skills with test cases
 	cd skill-eval && uv run python -m skill_eval.cli --all
 
-eval-locked:  ## Run skill evals with integrity check (for LLM self-improvement)
-	cd skill-eval && uv run python -m skill_eval.cli --all --locked
-
-eval-compare:  ## A/B compare current skills against origin/main
-	cd skill-eval && uv run python -m skill_eval.cli --compare origin/main
-
 eval-update-baselines:  ## Update baselines.json with current scores
 	cd skill-eval && uv run python -m skill_eval.cli --update-baselines
-
-eval-compare-scoring:  ## Compare single-shot vs multi-trial scoring side-by-side
-	cd skill-eval && uv run python -m skill_eval.cli --compare-scoring
-
-eval-with-context:  ## A/B compare skill-only vs skill+CLAUDE.md context
-	cd skill-eval && uv run python -m skill_eval.cli --with-context

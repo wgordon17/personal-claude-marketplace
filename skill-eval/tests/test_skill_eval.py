@@ -171,53 +171,6 @@ class TestHookAllFlag:
         mock_prepush.assert_not_called()
 
 
-class TestHookCompareFlag:
-    """--compare REF validates ref then dispatches to _mode_compare."""
-
-    def test_valid_ref_calls_mode_compare(self, tmp_path, tty_stdin):
-        from skill_eval import cli
-
-        with (
-            patch.object(sys, "argv", ["hook", "--compare", "main"]),
-            patch("skill_eval.cli._repo_root", return_value=tmp_path),
-            patch("skill_eval.cli._mode_compare", return_value=True) as mock_cmp,
-            pytest.raises(SystemExit) as exc,
-        ):
-            cli.main()
-
-        mock_cmp.assert_called_once_with(tmp_path, "main")
-        assert exc.value.code == 0
-
-    def test_invalid_ref_semicolon_exits_nonzero(self, tmp_path, tty_stdin):
-        """Semicolon fails _VALID_REF_RE → sys.exit(1) inside _mode_compare."""
-        from skill_eval import cli
-
-        with (
-            patch.object(sys, "argv", ["hook", "--compare", "main;evil"]),
-            patch("skill_eval.cli._repo_root", return_value=tmp_path),
-            patch("skill_eval.cli._eval_skills") as mock_eval,
-            pytest.raises(SystemExit) as exc,
-        ):
-            cli.main()
-
-        mock_eval.assert_not_called()
-        assert exc.value.code != 0
-
-    def test_invalid_ref_backtick_exits_nonzero(self, tmp_path, tty_stdin):
-        from skill_eval import cli
-
-        with (
-            patch.object(sys, "argv", ["hook", "--compare", "`evil`"]),
-            patch("skill_eval.cli._repo_root", return_value=tmp_path),
-            patch("skill_eval.cli._eval_skills") as mock_eval,
-            pytest.raises(SystemExit) as exc,
-        ):
-            cli.main()
-
-        mock_eval.assert_not_called()
-        assert exc.value.code != 0
-
-
 class TestHookPrePushDispatch:
     """No flags → dispatches to _mode_prepush."""
 
@@ -606,46 +559,7 @@ class TestScoreAnchoring:
                 )
 
 
-# ── Group 9: _score_stats ─────────────────────────────────────────────────
-
-
-class TestScoreStats:
-    """_score_stats(values) → (mean, stdev, unique_count)."""
-
-    def test_empty_list(self):
-        from skill_eval.cli import _score_stats
-
-        mean, stdev, uniq = _score_stats([])
-        assert mean == pytest.approx(0.0)
-        assert stdev == pytest.approx(0.0)
-        assert uniq == 0
-
-    def test_single_value(self):
-        from skill_eval.cli import _score_stats
-
-        mean, stdev, uniq = _score_stats([5.0])
-        assert mean == pytest.approx(5.0)
-        assert stdev == pytest.approx(0.0)
-        assert uniq == 1
-
-    def test_multiple_values(self):
-        from skill_eval.cli import _score_stats
-
-        mean, stdev, uniq = _score_stats([2.0, 4.0, 6.0])
-        assert mean == pytest.approx(4.0)
-        assert uniq == 3
-        assert stdev > 0
-
-    def test_all_same_values(self):
-        from skill_eval.cli import _score_stats
-
-        mean, stdev, uniq = _score_stats([3.0, 3.0, 3.0])
-        assert mean == pytest.approx(3.0)
-        assert stdev == pytest.approx(0.0)
-        assert uniq == 1
-
-
-# ── Group 10: load_context_layers ────────────────────────────────────────
+# ── Group 9: load_context_layers ─────────────────────────────────────────
 
 
 class TestLoadContextLayers:
@@ -900,54 +814,7 @@ class TestMultiTrialAveraging:
             # demonstrating the continuous score benefit
 
 
-# ── Group 11: Hook dispatch for --compare-scoring ──────────────────────────
-
-
-class TestHookCompareScoringFlag:
-    """--compare-scoring dispatches to _mode_compare_scoring."""
-
-    def test_compare_scoring_calls_mode(self, tmp_path, tty_stdin):
-        from skill_eval import cli
-
-        with (
-            patch.object(sys, "argv", ["hook", "--compare-scoring"]),
-            patch("skill_eval.cli._repo_root", return_value=tmp_path),
-            patch("skill_eval.cli._mode_compare_scoring", return_value=True) as mock_cs,
-            pytest.raises(SystemExit) as exc,
-        ):
-            cli.main()
-
-        mock_cs.assert_called_once_with(tmp_path)
-        assert exc.value.code == 0
-
-    def test_compare_scoring_mutually_exclusive_with_all(self, tty_stdin):
-        """--compare-scoring and --all cannot be used together."""
-        from skill_eval import cli
-
-        with (
-            patch.object(sys, "argv", ["hook", "--compare-scoring", "--all"]),
-            pytest.raises(SystemExit) as exc,
-        ):
-            cli.main()
-
-        assert exc.value.code != 0
-
-    def test_with_context_calls_mode(self, tmp_path, tty_stdin):
-        from skill_eval import cli
-
-        with (
-            patch.object(sys, "argv", ["hook", "--with-context"]),
-            patch("skill_eval.cli._repo_root", return_value=tmp_path),
-            patch("skill_eval.cli._mode_with_context", return_value=True) as mock_wc,
-            pytest.raises(SystemExit) as exc,
-        ):
-            cli.main()
-
-        mock_wc.assert_called_once_with(tmp_path)
-        assert exc.value.code == 0
-
-
-# ── Group 12: Eval integrity guard (--locked) ──────────────────────────────
+# ── Group 10: Eval integrity guard (--locked) ─────────────────────────────
 
 
 class TestVerifyEvalIntegrity:
