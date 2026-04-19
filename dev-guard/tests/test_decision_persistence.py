@@ -706,6 +706,66 @@ class TestPostToolUseAnswerSource:
         assert len(stored["decisions"]) == 1
         assert stored["decisions"][0]["decision"] == "Use dependency injection"
 
+    def test_multi_option_question_structure_captured(self, tmp_path):
+        """Realistic multi-option question with verifier options is captured."""
+        project = setup_project_with_hack(tmp_path)
+        decisions_file = project / "hack" / "review-decisions.json"
+        seed_decisions_file(decisions_file, [])
+
+        q_text = (
+            f"Circular dep finding "
+            f"{METADATA_PREFIX}file=src/arch.py,line=10,cat=Architecture,skill=pr-review"
+        )
+        q = {
+            "question": q_text,
+            "options": [
+                {"label": "Extract shared module", "description": "Simpler"},
+                {"label": "Use dependency injection", "description": "Better testability"},
+                {"label": "Defer", "description": "Skip for now"},
+            ],
+        }
+
+        payload = make_post_payload([q], {q_text: "Extract shared module"}, source="tool_response")
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        stored = json.loads(decisions_file.read_text())
+        assert len(stored["decisions"]) == 1
+        assert stored["decisions"][0]["decision"] == "Extract shared module"
+
+    def test_multi_option_question_replayed(self, tmp_path):
+        """Stored multi-option decision is replayed against matching question."""
+        project = setup_project_with_hack(tmp_path)
+        hack = project / "hack"
+        record = make_decision_record(
+            file="src/arch.py",
+            line="10",
+            cat="Architecture",
+            decision="Extract shared module",
+        )
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        q_text = (
+            f"Circular dep "
+            f"{METADATA_PREFIX}file=src/arch.py,line=10,cat=Architecture,skill=pr-review"
+        )
+        q = {
+            "question": q_text,
+            "options": [
+                {"label": "Extract shared module", "description": "Simpler"},
+                {"label": "Use dependency injection", "description": "Better"},
+                {"label": "Defer", "description": "Skip"},
+            ],
+        }
+
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=project)
+        assert result.returncode == 0
+
+        output = json.loads(result.stdout)
+        answers = output["hookSpecificOutput"]["updatedInput"]["answers"]
+        assert answers[q_text] == "Extract shared module"
+
     def test_expired_decisions_pruned_on_write(self, tmp_path):
         """Decisions older than 30 days are pruned when PostToolUse writes."""
         project = setup_project_with_hack(tmp_path)

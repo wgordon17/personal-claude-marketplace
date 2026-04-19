@@ -1640,8 +1640,9 @@ structural verification:
 2. If non-empty, present each item individually via AskUserQuestion (one question per finding,
    batch up to 4 per call). Each question includes full context:
    `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=swarm"`
-   with options: "Fix" (`{suggested_action}`) and "Defer" ("Skip for now"). `multiSelect: false`.
-3. Fix selected: send back to Fixer for resolution (or fix inline if trivial), add to `findings_fixed`
+   with options from the finding's `options` array (if present) plus "Defer" as the last option,
+   OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null. `multiSelect: false`.
+3. Option selected (any non-Defer): send back to Fixer with selected label in `suggested_fix`, add to `findings_fixed`
 4. Defer selected: recorded in `user_deferred` with reason "User declined via triage"
 5. Update the final FixSummary with `user_deferred` entries
 
@@ -1868,9 +1869,10 @@ The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it
 3. Docs Reviewer re-reviews (max 1 iteration)
 
 If `needs-input` findings: present each individually via AskUserQuestion (one question per
-finding, batch up to 4 per call, `multiSelect: false`) with options "Fix" and "Defer". Each
-question includes `▸dp:file={file},line={line},cat=docs,skill=swarm` metadata suffix for
-decision persistence. Proceed after all resolved.
+finding, batch up to 4 per call, `multiSelect: false`) using the option-based format from
+`code-quality/references/finding-classification.md` Fixer Protocol. Each question includes
+`▸dp:file={file},line={line},cat=docs,skill=swarm` metadata suffix for decision persistence.
+Proceed after all resolved.
 If no `needs-fix` findings, proceed.
 
 ### Step 6.6: Shutdown Docs Agent
