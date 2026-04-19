@@ -153,7 +153,10 @@ LEAD (you)
    user. For `needs-input` findings: present each individually via AskUserQuestion (one question
    per finding, batch up to 4 per call). Each question includes full context:
    `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"` with
-   options "Fix" (promoted to `needs-fix`) and "Defer" (`user-deferred`). `multiSelect: false`.
+   options from the verifier's `options` array (if present) plus "Defer" as the last option,
+   OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
+   `multiSelect: false`. Note: For needs-input findings with verifier-generated options, use
+   the verifier's options array. Defer is always the last option.
    Do NOT exit with unresolved `needs-input` findings. If AskUserQuestion is unavailable, treat
    all `needs-input` findings as `needs_context` in the final report (surface them, don't hide
    them). Offer to write a detailed report or create actionable TODO items.
@@ -164,7 +167,10 @@ LEAD (you)
    - For `needs-input` findings: present each individually via AskUserQuestion (one question
      per finding, batch up to 4 per call). Each question includes full context:
      `"[{id}] [{category}] {description}\n\nLocation: {file}:{line}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={category},skill=map-reduce"`
-     with options "Fix" (apply change) and "Defer" (`user-deferred`). `multiSelect: false`.
+     with options from the verifier's `options` array (if present) plus "Defer" as the last
+     option, OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
+     `multiSelect: false`. Note: For needs-input findings with verifier-generated options, use
+     the verifier's options array. Defer is always the last option.
      Selected items are applied, then tests re-run. Do NOT apply `needs-input` changes without
      user approval. If AskUserQuestion is unavailable, treat all `needs-input` findings as
      `needs_context` in the final report (surface them, don't hide them).

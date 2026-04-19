@@ -353,10 +353,12 @@ AskUserQuestion(questions=[
     "question": "[{file}:{issue_type}] {action}\n\nDiagnostic: {diagnostic_level}\nDecision needed: {input_needed}\n▸dp:file={file},line=0,cat={issue_type},skill=file-audit",
     "header": "{file}",
     "options": [
-      {"label": "Fix", "description": "Confirm this needs work — promoted to needs-fix"},
-      {"label": "Defer", "description": "Skip for now — user-deferred"}
+      ...(verifier options if needs-input, OR {"label": "Fix", "description": "{suggested_action}"} if needs-fix),
+      {"label": "Defer", "description": "Skip for now"}
     ],
     "multiSelect": false
+    // Note: For needs-input findings with verifier-generated options, replace the Fix option
+    // with the verifier's options array. Defer is always the last option.
   },
   ... (one question per item, up to 4 per call)
 ])
