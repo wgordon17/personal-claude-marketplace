@@ -351,7 +351,8 @@ def _handle_pre_tool_use(data: dict) -> None:
         if meta is not None:
             safe_line = re.sub(r"[^\w./_-]", "_", str(meta.get("line", "?")))
             safe_cat = re.sub(r"[^\w./_-]", "_", meta["cat"])
-            context_lines.append(f"  {meta['file']}:{safe_line} [{safe_cat}] → {decision}")
+            safe_decision = re.sub(r"[^\w./_\s-]", "_", decision[:_MAX_FIELD_LEN])
+            context_lines.append(f"  {meta['file']}:{safe_line} [{safe_cat}] → {safe_decision}")
 
     output = {
         "hookSpecificOutput": {
@@ -456,7 +457,7 @@ def _handle_post_tool_use(data: dict) -> None:
             "line": line_val,
             "category": re.sub(r"[^\w./_-]", "_", meta["cat"])[:_MAX_FIELD_LEN],
             "skill": re.sub(r"[^\w./_-]", "_", meta.get("skill", "unknown"))[:_MAX_FIELD_LEN],
-            "decision": answer,
+            "decision": answer[:_MAX_FIELD_LEN],
             "description_snippet": re.sub(r"[\x00-\x1f\x7f]", " ", snippet)[:80],
             "decided_at": datetime.now(UTC).isoformat(),
         }

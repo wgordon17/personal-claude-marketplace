@@ -353,21 +353,23 @@ AskUserQuestion(questions=[
     "question": "[{file}:{issue_type}] {action}\n\nDiagnostic: {diagnostic_level}\nDecision needed: {input_needed}\n▸dp:file={file},line=0,cat={issue_type},skill=file-audit",
     "header": "{file}",
     "options": [
-      ...(verifier options if needs-input, OR {"label": "Fix", "description": "{suggested_action}"} if needs-fix),
-      {"label": "Defer", "description": "Skip for now"}
+      ... (map each element from the finding's `options` array to {label, description}),
+      {"label": "Defer", "description": "Skip for now — user-deferred"}
     ],
     "multiSelect": false
-    // Note: For needs-input findings with verifier-generated options, replace the Fix option
-    // with the verifier's options array. Defer is always the last option.
   },
   ... (one question per item, up to 4 per call)
 ])
 ```
 
+When `options` is `null` (findings from pipelines without a verifier), fall back to the binary:
+`[{"label": "Fix"}, {"label": "Defer"}]`.
+
 If more than 4 `needs-input` items exist, make multiple AskUserQuestion calls.
 
 For each `needs-input` TODO:
-- **Fix selected:** Promote to `needs-fix` in inventory.json — the user confirmed this TODO needs work.
+- **Option selected (any non-Defer option):** Promote to `needs-fix` in inventory.json.
+  Record the selected option label in the finding's `suggested_fix` field.
 - **Defer selected:** Update classification to `user-deferred` in inventory.json.
 
 If zero `needs-input` TODOs exist, skip this step. If AskUserQuestion is unavailable, treat
