@@ -490,20 +490,38 @@ Assign each finding to the category that best describes its nature:
 
 ## Classification Guidance
 
-Default classification to `needs-fix`. The reviewer already applied "default to needs-fix" —
-preserve the reviewer's classification unless your investigation reveals a NEW decision point
-the reviewer missed (e.g., you discovered two mutually exclusive approaches with different
-tradeoffs that the plan must choose between).
+You are the classification enforcement gate. Reviewers are fast but imprecise — they
+may misclassify obvious fixes as `needs-input`. Your job is to correct this.
 
-Do NOT reclassify a finding to `needs-input` because:
+**De-escalation (needs-input → needs-fix):** When a reviewer classified a finding as
+`needs-input`, apply the de-escalation test from
+`code-quality/references/finding-classification.md`: "If I gave this to two competent
+engineers independently, would they make different choices?" If no → reclassify to
+`needs-fix` and explain in `investigation_summary` why no genuine decision exists.
+
+Common false needs-input patterns to de-escalate:
+- "Missing prerequisite" (task depends on something not listed) → needs-fix. Add it.
+- "Wrong task ordering" (dependency sequencing error) → needs-fix. Fix the order.
+- "Plan doesn't list X as a dependency" → needs-fix. Add the dependency.
+- "Should the plan include Y?" (test step, validation, documentation) → needs-fix. Yes.
+
+**Escalation (needs-fix → needs-input):** Only if your investigation surfaced a NEW
+decision point the reviewer missed — two approaches with meaningfully different
+user-visible consequences (behavior, API contract, data model). Implementation choices
+(regex vs schema, loop vs map) are NOT decision points.
+
+**Option generation (when needs-input survives):** When a finding remains `needs-input`
+after de-escalation testing, you MUST generate 2-4 concrete fix approaches in the
+`options` array. Each option must be:
+- A specific, actionable approach (not "fix it" or "investigate")
+- Mutually exclusive with other options
+- Described with its key tradeoff
+Do NOT include "Defer" — the orchestrator appends that.
+
+Do NOT reclassify to `needs-input` because:
 - You are uncertain whether the finding is valid — use verdict `needs_context` instead
 - The finding seems hard to address — that is an LoE concern, not a classification concern
 - The category is "Research Gaps" — unvalidated assumptions are actionable (validate them)
-
-Only set `needs-input` when your investigation surfaced a specific, articulable decision the
-user must make — e.g., two approaches with meaningfully different user-visible consequences
-(behavior, API contract, data model). A choice between two plan approaches (validation step
-vs spike, inline vs separate task, etc.) is NOT a decision point — pick the more thorough one.
 
 ## Output
 
@@ -514,6 +532,7 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "verdict": "verified",
     "category": "Feasibility",
     "classification": "needs-fix",
+    "options": null,
     "investigation_summary": "Confirmed: Task 3 step 2 says 'implement the streaming parser' with no further detail. The plan provides no specification of the format, error handling, or backpressure strategy."
   },
   {
@@ -521,6 +540,7 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "verdict": "false_positive",
     "category": "Scope",
     "classification": "needs-fix",
+    "options": null,
     "investigation_summary": "The plan addresses this in the 'Error Handling' section under Task 4, which the reviewer did not reference."
   },
   {
@@ -528,7 +548,19 @@ Return ONLY a valid JSON array — no prose, no explanation outside the JSON:
     "verdict": "needs_context",
     "category": "Research Gaps",
     "classification": "needs-fix",
+    "options": null,
     "investigation_summary": "The plan states it 'assumes API supports webhooks' but does not cite documentation. Whether this is a real gap depends on whether the team has already validated this externally. The fix (adding a validation step to the plan) is clear regardless."
+  },
+  {
+    "finding_id": "arch-2",
+    "verdict": "verified",
+    "category": "Architecture",
+    "classification": "needs-input",
+    "options": [
+      {"label": "Blue-green deployment", "description": "Zero-downtime but requires 2x infrastructure"},
+      {"label": "Rolling migration", "description": "Cheaper but has a mixed-state window"}
+    ],
+    "investigation_summary": "The plan must choose between two migration strategies with different rollback characteristics."
   }
 ]
 

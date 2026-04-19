@@ -373,10 +373,23 @@ After all 4 reviewers complete, synthesize findings by classification
 3. For `needs-input` findings: present each individually via AskUserQuestion (one question
    per finding, batch up to 4 per call). Each question includes full context:
    `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`
-   with options "Fix" and "Defer". `multiSelect: false`. User decides per-finding.
-   Fix approved items. Record deferred items with user's reason.
+   For each `needs-input` finding, the Lead first applies de-escalation (see Note below).
+   For findings that remain `needs-input` after de-escalation, present via AskUserQuestion
+   with the Lead-generated options + Defer appended as the final option. `multiSelect: false`.
+   User selects an approach or defers. Fix approved items using the selected approach —
+   record the selected option label in the finding's `suggested_fix` field per the Record
+   Decisions convention. Record deferred items with reason.
 4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
    `needs-input` items are resolved via user decision.
+
+**Note:** Quality-gate domain reviewers do not go through a Finding Verifier. When a
+domain reviewer classifies a finding as `needs-input`, the Lead applies the de-escalation
+test from `code-quality/references/finding-classification.md` before presenting to the
+user. If the finding has a single correct resolution, reclassify to `needs-fix` and fix
+it. If genuine ambiguity exists, generate 2-4 concrete options per the Option Quality
+section in `code-quality/references/finding-classification.md` (labels 3-7 words, include
+tradeoff in description, mutually exclusive) and present via AskUserQuestion with Defer
+appended.
 
 **Finding completion verification:** After fixing all `needs-fix` items and resolving all
 `needs-input` items, verify completeness per `code-quality/references/finding-classification.md`
