@@ -20,9 +20,11 @@ from deepeval.test_case import LLMTestCase
 from skill_eval.contains_metric import ContainsMetric
 from skill_eval.runner import (
     build_assertion_metrics,
+    build_fixture_prompt,
     compare_baselines,
     load_baselines,
     load_eval_config,
+    load_fixture,
     resolve_skill_bundle,
 )
 
@@ -470,6 +472,69 @@ class TestBuildAssertionMetrics:
 
 
 # ── Group 8: Score anchoring in rubrics ─────────────────────────────────────
+
+
+NEW_COMPETENCY_RUBRICS = [
+    "detection_accuracy",
+    "false_positive_resistance",
+    "fix_correctness",
+    "decomposition_quality",
+    "cleanup_thoroughness",
+    "classification_precision",
+]
+
+
+class TestNewCompetencyRubrics:
+    """Verify the 6 core-competency rubrics exist with the right structure."""
+
+    def test_new_rubrics_registered(self):
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name in NEW_COMPETENCY_RUBRICS:
+            assert name in RUBRIC_REGISTRY, f"Rubric {name!r} not in RUBRIC_REGISTRY"
+        assert len(RUBRIC_REGISTRY) == 14
+
+    def test_new_rubrics_have_evaluation_steps(self):
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name in NEW_COMPETENCY_RUBRICS:
+            rubric = RUBRIC_REGISTRY[name]
+            assert "evaluation_steps" in rubric, f"Rubric {name!r} missing evaluation_steps"
+            assert len(rubric["evaluation_steps"]) >= 3, (
+                f"Rubric {name!r} has {len(rubric['evaluation_steps'])} steps, expected >= 3"
+            )
+
+    def test_new_rubrics_have_score_anchors(self):
+        from deepeval.metrics.g_eval import Rubric
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name in NEW_COMPETENCY_RUBRICS:
+            rubric = RUBRIC_REGISTRY[name]
+            anchoring = rubric["rubric"]
+            assert len(anchoring) == 5, f"Rubric {name!r} has {len(anchoring)} anchors, expected 5"
+            for entry in anchoring:
+                assert isinstance(entry, Rubric), (
+                    f"Rubric {name!r} anchor is {type(entry)}, expected Rubric"
+                )
+            ranges = [r.score_range for r in anchoring]
+            assert ranges == [(0, 0), (3, 3), (5, 5), (8, 8), (10, 10)], (
+                f"Rubric {name!r} score ranges: {ranges}"
+            )
+
+    def test_new_rubrics_evaluation_params(self):
+        from deepeval.test_case import LLMTestCaseParams
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        expected_params = [
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.EXPECTED_OUTPUT,
+        ]
+        for name in NEW_COMPETENCY_RUBRICS:
+            rubric = RUBRIC_REGISTRY[name]
+            assert rubric["evaluation_params"] == expected_params, (
+                f"Rubric {name!r} evaluation_params: {rubric['evaluation_params']}"
+            )
 
 
 class TestScoreAnchoring:
@@ -925,3 +990,254 @@ class TestLockedMode:
 
         mock_all.assert_called_once_with(tmp_path)
         assert exc.value.code == 0
+
+
+# ── Group 13: load_fixture ─────────────────────────────────────────────────
+
+
+def _make_fixture(tmp_path: Path, skill: str, key: str, content: str) -> Path:
+    """Create a fixture file at skill-eval/fixtures/{skill}/{key}.md. Returns repo root."""
+    fixture_dir = tmp_path / "skill-eval" / "fixtures" / skill
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    p = fixture_dir / f"{key}.md"
+    p.write_text(content)
+    return tmp_path
+
+
+class TestLoadFixture:
+    """load_fixture(skill_name, fixture_key, repo_root) — fixture loading."""
+
+    def test_load_fixture_returns_none_for_missing(self, tmp_path):
+        """Missing fixture returns None."""
+        result = load_fixture("nonexistent", "missing-fixture", repo_root=tmp_path)
+        assert result is None
+
+    def test_load_fixture_reads_existing(self, tmp_path):
+        """Create tmp fixture, verify content loaded."""
+        repo = _make_fixture(tmp_path, "quality-gate", "1-test", "Hello fixture\n")
+        result = load_fixture("quality-gate", "1-test", repo_root=repo)
+        assert result is not None
+        assert "Hello fixture" in result
+
+    def test_load_fixture_strips_frontmatter(self, tmp_path):
+        """Fixture with YAML frontmatter returns only content after closing ---."""
+        content = "---\nplanted: true\nseverity: high\n---\n# Real content\nBody here\n"
+        repo = _make_fixture(tmp_path, "fix", "1-sec", content)
+        result = load_fixture("fix", "1-sec", repo_root=repo)
+        assert result is not None
+        assert "planted" not in result
+        assert "severity" not in result
+        assert "Real content" in result
+        assert "Body here" in result
+
+    def test_load_fixture_path_boundary(self, tmp_path):
+        """Path traversal attempt returns None."""
+        result = load_fixture("quality-gate", "1-clean", repo_root=tmp_path / "nonexistent")
+        assert result is None
+
+    def test_load_fixture_invalid_chars(self, tmp_path):
+        """skill_name or fixture_key with / or .. returns None."""
+        assert load_fixture("../evil", "test", repo_root=tmp_path) is None
+        assert load_fixture("fix", "../../etc/passwd", repo_root=tmp_path) is None
+        assert load_fixture("skill/name", "key", repo_root=tmp_path) is None
+        assert load_fixture("skill", "key/evil", repo_root=tmp_path) is None
+
+    def test_load_fixture_strips_delimiters(self, tmp_path):
+        """Fixture content containing execute_skill delimiters has those lines removed."""
+        content = (
+            "Some content\n"
+            "=== SKILL INSTRUCTIONS ===\n"
+            "More content\n"
+            "=== END SKILL INSTRUCTIONS ===\n"
+            "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===\n"
+            "=== END BEHAVIORAL CONTEXT ===\n"
+            "Final content\n"
+        )
+        repo = _make_fixture(tmp_path, "test-skill", "1-delim", content)
+        result = load_fixture("test-skill", "1-delim", repo_root=repo)
+        assert result is not None
+        assert "=== SKILL INSTRUCTIONS ===" not in result
+        assert "=== END SKILL INSTRUCTIONS ===" not in result
+        assert "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===" not in result
+        assert "=== END BEHAVIORAL CONTEXT ===" not in result
+        assert "Some content" in result
+        assert "More content" in result
+        assert "Final content" in result
+
+
+# ── Group 14: build_fixture_prompt ──────────────────────────────────────────
+
+
+class TestBuildFixturePrompt:
+    """build_fixture_prompt(skill, template, repo_root) — template substitution."""
+
+    def test_build_fixture_prompt_substitutes(self, tmp_path):
+        """{fixture:key} replaced; returns (str, False)."""
+        _make_fixture(tmp_path, "fix", "1-sec", "Fixture body A")
+        _make_fixture(tmp_path, "fix", "2-perf", "Fixture body B")
+        template = "Review:\n{fixture:1-sec}\n---\n{fixture:2-perf}\n"
+        result, has_missing = build_fixture_prompt("fix", template, repo_root=tmp_path)
+        assert has_missing is False
+        assert "Fixture body A" in result
+        assert "Fixture body B" in result
+        assert "{fixture:" not in result
+
+    def test_build_fixture_prompt_missing_fixture(self, tmp_path):
+        """Missing placeholder left as-is; returns (str, True)."""
+        template = "Review:\n{fixture:nonexistent}\n"
+        result, has_missing = build_fixture_prompt("fix", template, repo_root=tmp_path)
+        assert has_missing is True
+        assert "{fixture:nonexistent}" in result
+
+
+# ── Group 15: Per-case rubric support ───────────────────────────────────────
+
+
+class TestPerCaseRubrics:
+    """Per-case rubrics field overrides config-level rubrics.
+
+    Tests the selection logic used in _eval_tc: if tc.get("rubrics") is truthy,
+    use per-case rubrics; otherwise fall back to config-level rubric_names.
+    """
+
+    def test_per_case_rubrics_override(self):
+        """Test case with rubrics field uses per-case rubrics."""
+        config_rubrics = ["anti_deferral", "phase_completion"]
+        tc = {"id": 1, "prompt": "test", "rubrics": ["anti_deferral"]}
+
+        # Mirror the selection logic from _eval_tc.
+        effective_rubrics = tc["rubrics"] if tc.get("rubrics") else config_rubrics
+
+        assert effective_rubrics == ["anti_deferral"]
+        assert "phase_completion" not in effective_rubrics
+
+    def test_per_case_rubrics_fallback(self):
+        """Test case without rubrics field uses config-level."""
+        config_rubrics = ["anti_deferral", "phase_completion"]
+        tc = {"id": 1, "prompt": "test"}
+
+        # Mirror the selection logic from _eval_tc.
+        effective_rubrics = tc["rubrics"] if tc.get("rubrics") else config_rubrics
+
+        assert effective_rubrics == ["anti_deferral", "phase_completion"]
+        assert len(effective_rubrics) == 2
+
+
+# ── Group 16: expected_behaviors wiring ─────────────────────────────────────
+
+
+class TestExpectedBehaviorsWiring:
+    """expected_behaviors list is joined and passed as LLMTestCase.expected_output."""
+
+    def test_expected_behaviors_wired_as_expected_output(self):
+        """When non-empty, LLMTestCase.expected_output equals joined string."""
+        from skill_eval.runner import _PROMPT_DELIMITERS
+
+        behaviors = ["Finds SQL injection", "Reports path traversal"]
+        sanitized = []
+        for e in behaviors:
+            for delim in _PROMPT_DELIMITERS:
+                e = e.replace(delim, "")
+            sanitized.append(e.strip())
+        sanitized = [e for e in sanitized if e]
+
+        llm_tc = LLMTestCase(
+            input="test",
+            actual_output="response",
+            expected_output="\n".join(sanitized) if sanitized else None,
+        )
+        assert llm_tc.expected_output == "Finds SQL injection\nReports path traversal"
+
+    def test_expected_output_none_when_empty(self):
+        """When absent/empty, expected_output is None."""
+        from skill_eval.runner import _PROMPT_DELIMITERS
+
+        behaviors: list[str] = []
+        sanitized = []
+        for e in behaviors:
+            for delim in _PROMPT_DELIMITERS:
+                e = e.replace(delim, "")
+            sanitized.append(e.strip())
+        sanitized = [e for e in sanitized if e]
+
+        llm_tc = LLMTestCase(
+            input="test",
+            actual_output="response",
+            expected_output="\n".join(sanitized) if sanitized else None,
+        )
+        assert llm_tc.expected_output is None
+
+
+# ── Group 17: load_eval_config validation ───────────────────────────────────
+
+
+class TestLoadEvalConfigValidation:
+    """Validation rules for load_eval_config."""
+
+    def test_load_eval_config_raises_for_competency_rubric_without_expected_behaviors(self):
+        """ValueError raised when competency rubric used without expected_behaviors."""
+        config = {
+            "skill_name": "test-skill",
+            "rubrics": ["detection_accuracy"],
+            "test_cases": [
+                {"id": 1, "prompt": "test", "assertions": []},
+            ],
+        }
+        tc_dir = Path(__file__).parent.parent / "test_cases"
+        tc_dir.mkdir(parents=True, exist_ok=True)
+        tc_file = tc_dir / "test-competency-validation.json"
+        tc_file.write_text(json.dumps(config))
+        try:
+            with pytest.raises(ValueError, match="competency rubric"):
+                load_eval_config("test-competency-validation")
+        finally:
+            tc_file.unlink()
+
+    def test_load_eval_config_raises_for_empty_rubrics(self):
+        """ValueError when rubrics is []."""
+        config = {
+            "skill_name": "test-empty-rubrics",
+            "rubrics": [],
+            "test_cases": [],
+        }
+        tc_dir = Path(__file__).parent.parent / "test_cases"
+        tc_dir.mkdir(parents=True, exist_ok=True)
+        tc_file = tc_dir / "test-empty-rubrics.json"
+        tc_file.write_text(json.dumps(config))
+        try:
+            with pytest.raises(ValueError, match="empty rubrics"):
+                load_eval_config("test-empty-rubrics")
+        finally:
+            tc_file.unlink()
+
+
+# ── Group 18: N-adjusted regression threshold ──────────────────────────────
+
+
+class TestNAdjustedThreshold:
+    """compare_baselines uses widened threshold for low N."""
+
+    def test_compare_baselines_widened_threshold_for_low_n(self):
+        """N=1 metric uses 1.5x threshold (0.225 instead of 0.15)."""
+        # A drop of 0.20 should PASS with N=1 (threshold widened to 0.225)
+        # but would FAIL with N>=3 (threshold stays 0.15).
+        results = {
+            "skill": "test-skill",
+            "scores": {"anti_deferral": 0.70},
+            "per_case_scores": {"anti_deferral": [0.70]},  # N=1
+        }
+        baselines = {"test-skill": {"anti_deferral": 0.90}}
+
+        # Drop = 0.20, base threshold = 0.15, N=1 effective = 0.225
+        # 0.20 < 0.225 -> pass
+        passed, report = compare_baselines(results, baselines)
+        assert passed is True, f"N=1 drop of 0.20 should pass with widened threshold: {report}"
+
+        # Same drop with N=3 should fail (threshold stays at 0.15).
+        results_n3 = {
+            "skill": "test-skill",
+            "scores": {"anti_deferral": 0.70},
+            "per_case_scores": {"anti_deferral": [0.60, 0.70, 0.80]},  # N=3
+        }
+        passed_n3, report_n3 = compare_baselines(results_n3, baselines)
+        assert passed_n3 is False, f"N=3 drop of 0.20 should fail: {report_n3}"

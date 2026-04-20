@@ -201,8 +201,9 @@ def load_eval_config(skill_name: str) -> dict:
               "id": 1,
               "prompt": "Scenario description used as GEval INPUT",
               "expected_behaviors": ["Human-readable description"],
+              "rubrics": ["anti_deferral"],
               "assertions": [
-                "contains: <substring that must appear in the bundle>",
+                "contains: <substring that must appear in the response>",
                 "not-contains: <substring that must NOT appear>"
               ]
             }
@@ -218,13 +219,19 @@ def load_eval_config(skill_name: str) -> dict:
         test_cases: List of test case objects. Each test case:
             id: Integer identifier, unique within the file.
             prompt: The scenario context string. Passed as LLMTestCase.input;
-                the skill bundle is passed as LLMTestCase.actual_output.
-            expected_behaviors: List of human-readable descriptions (documentation
-                only — not used by the evaluator).
+                the LLM's response is passed as LLMTestCase.actual_output.
+            expected_behaviors: Answer key for competency rubrics -- joined
+                and passed as LLMTestCase.expected_output. Required (non-empty)
+                when rubrics include any of the 6 competency rubrics:
+                detection_accuracy, false_positive_resistance, fix_correctness,
+                decomposition_quality, cleanup_thoroughness,
+                classification_precision.
+            rubrics: Optional per-case list of rubric names. When present,
+                overrides config-level rubrics for this test case only.
             assertions: List of assertion strings. Each must start with
                 ``contains: `` or ``not-contains: `` followed by the substring
                 to check. Assertions are case-insensitive and checked against
-                the skill bundle (actual_output). Evaluated by ContainsMetric.
+                the LLM's response (actual_output). Evaluated by ContainsMetric.
 
     Args:
         skill_name: The skill identifier (e.g. "quality-gate").
@@ -232,13 +239,189 @@ def load_eval_config(skill_name: str) -> dict:
     Returns:
         Full config dict with keys "skill_name", "rubrics", and "test_cases".
         Returns a shell dict with empty rubrics and test_cases if no file found.
+
+    Raises:
+        ValueError: If ``rubrics`` is an empty list ``[]``, or if any test case
+            uses a competency rubric but has no ``expected_behaviors``.
     """
-    if "/" in skill_name or "\\" in skill_name:
+    if not re.match(r"^[a-zA-Z0-9_-]+$", skill_name):
         return {"skill_name": skill_name, "rubrics": [], "test_cases": []}
     config_path = Path(__file__).parent.parent / "test_cases" / f"{skill_name}.json"
     if not config_path.exists():
         return {"skill_name": skill_name, "rubrics": [], "test_cases": []}
-    return json.loads(config_path.read_text(encoding="utf-8"))
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    # Validate: rubrics must not be empty list.
+    rubrics = config.get("rubrics")
+    if isinstance(rubrics, list) and len(rubrics) == 0:
+        raise ValueError(
+            f"Eval config for {skill_name!r} has empty rubrics list []."
+            " Remove the 'rubrics' key or provide at least one rubric."
+        )
+
+    # Validate: competency rubrics require expected_behaviors.
+    competency_rubrics = frozenset(
+        {
+            "detection_accuracy",
+            "false_positive_resistance",
+            "fix_correctness",
+            "decomposition_quality",
+            "cleanup_thoroughness",
+            "classification_precision",
+        }
+    )
+    config_rubrics = set(config.get("rubrics", []))
+    for tc in config.get("test_cases", []):
+        tc_rubrics = set(tc.get("rubrics", [])) or config_rubrics
+        if tc_rubrics & competency_rubrics:
+            behaviors = tc.get("expected_behaviors", [])
+            if not behaviors:
+                tc_id = tc.get("id", "?")
+                used = tc_rubrics & competency_rubrics
+                raise ValueError(
+                    f"Test case {tc_id} in {skill_name!r} uses competency rubric(s)"
+                    f" {sorted(used)} but has no expected_behaviors."
+                    " Competency rubrics require an answer key."
+                )
+
+    return config
+
+
+# ── Fixture loading ──────────────────────────────────────────────────────────
+
+# Allowlist regex for fixture path components.
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+# Regex for YAML frontmatter marker: exactly "---" with optional trailing whitespace.
+_FRONTMATTER_RE = re.compile(r"^---\s*$")
+
+# Prompt delimiters used by execute_skill — must be stripped from fixture content
+# to prevent prompt injection.
+_PROMPT_DELIMITERS = [
+    "=== SKILL INSTRUCTIONS ===",
+    "=== END SKILL INSTRUCTIONS ===",
+    "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===",
+    "=== END BEHAVIORAL CONTEXT ===",
+]
+
+# Regex for fixture placeholders in prompt templates.
+_FIXTURE_PLACEHOLDER_RE = re.compile(r"\{fixture:([^}]+)\}")
+
+
+def load_fixture(
+    skill_name: str,
+    fixture_key: str,
+    repo_root: Path | None = None,
+) -> str | None:
+    """Load a fixture file for a skill test case.
+
+    Fixture files live at ``skill-eval/fixtures/{skill_name}/{fixture_key}.md``.
+    Optional YAML frontmatter (delimited by ``---`` lines) is stripped before
+    returning. Lines matching ``execute_skill`` prompt delimiters are also
+    removed to prevent prompt injection.
+
+    Args:
+        skill_name: The skill identifier (e.g. "quality-gate").
+        fixture_key: The fixture filename stem (e.g. "1-clean-plan").
+        repo_root: Repository root for path resolution. Defaults to
+            ``git rev-parse --show-toplevel``.
+
+    Returns:
+        Fixture content as a string (frontmatter stripped), or None if the
+        file does not exist or inputs are invalid.
+    """
+    # Input validation: both must match safe name pattern.
+    if not _SAFE_NAME_RE.match(skill_name) or not _SAFE_NAME_RE.match(fixture_key):
+        return None
+
+    if repo_root is None:
+        repo_root = _get_repo_root()
+
+    candidate = repo_root / "skill-eval" / "fixtures" / skill_name / f"{fixture_key}.md"
+
+    # Path boundary check BEFORE reading.
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if not resolved.is_relative_to(repo_root):
+        return None
+
+    if not candidate.is_file():
+        return None
+
+    try:
+        content = candidate.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Cannot read fixture %s: %s", candidate, exc)
+        return None
+
+    lines = content.split("\n")
+
+    # Strip YAML frontmatter if present.
+    if lines and _FRONTMATTER_RE.match(lines[0]):
+        for i in range(1, len(lines)):
+            if _FRONTMATTER_RE.match(lines[i]):
+                lines = lines[i + 1 :]
+                break
+
+    # Strip prompt delimiter lines.
+    delimiter_set = set(_PROMPT_DELIMITERS)
+    lines = [line for line in lines if line.rstrip() not in delimiter_set]
+
+    return "\n".join(lines)
+
+
+def build_fixture_prompt(
+    skill_name: str,
+    template: str,
+    repo_root: Path | None = None,
+) -> tuple[str, bool]:
+    """Substitute ``{fixture:KEY}`` placeholders in a prompt template.
+
+    For each ``{fixture:KEY}`` found in the template, loads the corresponding
+    fixture file via ``load_fixture(skill_name, KEY)`` and substitutes the
+    content inline.
+
+    Args:
+        skill_name: The skill identifier for fixture directory lookup.
+        template: The prompt string containing ``{fixture:KEY}`` placeholders.
+        repo_root: Repository root for path resolution.
+
+    Returns:
+        Tuple of (substituted_string, has_missing_fixtures). The bool is True
+        if any placeholder could not be resolved (left as-is in the output).
+    """
+    has_missing = False
+    matches = list(_FIXTURE_PLACEHOLDER_RE.finditer(template))
+    if not matches:
+        return template, False
+
+    # Resolve repo_root once for all fixtures.
+    if repo_root is None:
+        repo_root = _get_repo_root()
+
+    # Build replacements (process in reverse order to preserve offsets).
+    replacements: list[tuple[int, int, str]] = []
+    for m in matches:
+        key = m.group(1)
+        content = load_fixture(skill_name, key, repo_root=repo_root)
+        if content is None:
+            logger.warning(
+                "Missing fixture %r for skill %r — leaving placeholder",
+                key,
+                skill_name,
+            )
+            has_missing = True
+        else:
+            replacements.append((m.start(), m.end(), content))
+
+    # Apply replacements in reverse order.
+    result = template
+    for start, end, content in reversed(replacements):
+        result = result[:start] + content + result[end:]
+
+    return result, has_missing
 
 
 def load_baselines(baselines_path: Path | None = None) -> dict[str, dict[str, float]]:
@@ -428,6 +611,7 @@ def run_eval(
     rubric_names: list[str],
     judge: DeepEvalBaseLLM,
     context_preamble: str | None = None,
+    repo_root: Path | None = None,
 ) -> dict:
     """Run behavioral evaluation: execute skill, then judge the output.
 
@@ -445,6 +629,8 @@ def run_eval(
         judge: DeepEvalBaseLLM instance for both execution and scoring.
         context_preamble: Optional CLAUDE.md content prepended before skill
             instructions during execution. Does not affect scoring prompts.
+        repo_root: Repository root for fixture resolution. Defaults to
+            ``git rev-parse --show-toplevel``.
 
     Returns:
         Dict with keys:
@@ -477,6 +663,13 @@ def run_eval(
         prompt = tc.get("prompt", "")
         assertions = tc.get("assertions", [])
 
+        # Fixture substitution: replace {fixture:KEY} placeholders.
+        tc_infra = False
+        if "{fixture:" in prompt:
+            prompt, has_missing = build_fixture_prompt(skill_name, prompt, repo_root=repo_root)
+            if has_missing:
+                tc_infra = True
+
         with print_lock:
             print(f"    tc {tc_id} ({tc_idx}/{total_tc}): executing...", flush=True)
 
@@ -492,18 +685,33 @@ def run_eval(
             return {"id": tc_id, "prompt": prompt, "scores": {}, "passed": False, "infra": True}
 
         # Step 2: Score all metrics in parallel.
-        # Each tc gets its own metric instances (build_metrics creates new GEval objects).
-        geval_metrics = build_metrics(rubric_names, judge)
+        # Per-case rubrics override config-level rubrics if present.
+        effective_rubrics = tc["rubrics"] if tc.get("rubrics") else rubric_names
+
+        geval_metrics = build_metrics(effective_rubrics, judge)
         contains = build_assertion_metrics(assertions)
         all_metrics = geval_metrics + [contains]
-        llm_tc = LLMTestCase(input=prompt, actual_output=response)
+
+        # Wire expected_behaviors as expected_output for competency rubrics.
+        expected = tc.get("expected_behaviors", [])
+        sanitized = []
+        for e in expected:
+            for delim in _PROMPT_DELIMITERS:
+                e = e.replace(delim, "")
+            sanitized.append(e.strip())
+        sanitized = [e for e in sanitized if e]
+        llm_tc = LLMTestCase(
+            input=prompt,
+            actual_output=response,
+            expected_output="\n".join(sanitized) if sanitized else None,
+        )
 
         with ThreadPoolExecutor(max_workers=len(all_metrics)) as metric_pool:
             metric_results = list(metric_pool.map(lambda m: _score_metric(m, llm_tc), all_metrics))
 
         tc_scores: dict[str, float] = {}
         tc_pass = True
-        tc_infra = False
+        # tc_infra may already be True from missing fixtures above.
         for mname, mscore, mpassed, minfra in metric_results:
             tc_scores[mname] = mscore
             if not mpassed:
@@ -575,7 +783,10 @@ def compare_baselines(
     reduced variance by 65%.
 
     A regression is detected when any metric score drops by more than
-    ``threshold`` below its baseline value.
+    ``threshold`` below its baseline value. The threshold is widened for
+    metrics with few data points (N < 3) to account for higher variance:
+    ``effective_threshold = threshold * min(1.5, max(1.0, 3.0 / N))``.
+    This caps at 1.5x for N=1 (0.225) and converges to 1.0x for N>=3.
 
     Args:
         results: Output from run_eval() — must have "skill" and "scores" keys.
@@ -593,6 +804,7 @@ def compare_baselines(
 
     current_scores: dict[str, float] = results.get("scores", {})
     baseline_scores: dict[str, float] = baselines.get(skill, {})
+    per_case_scores: dict[str, list[float]] = results.get("per_case_scores", {})
 
     if not baseline_scores:
         return True, f"{skill}: no baseline — treating as pass"
@@ -605,11 +817,14 @@ def compare_baselines(
                 f"  {metric}: missing from current results (baseline={baseline:.3f})"
             )
             continue
+        # N-adjusted threshold: widen for low sample counts.
+        n = len(per_case_scores.get(metric, []))
+        effective_threshold = threshold * min(1.5, max(1.0, 3.0 / n)) if n > 0 else threshold
         drop = baseline - current
-        if drop > threshold:
+        if drop > effective_threshold:
             regressions.append(
                 f"  {metric}: {current:.3f} vs baseline {baseline:.3f} "
-                f"(drop={drop:.3f} > threshold={threshold:.3f})"
+                f"(drop={drop:.3f} > threshold={effective_threshold:.3f})"
             )
 
     if regressions:
