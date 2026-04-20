@@ -1,0 +1,92 @@
+name: Sync draw.io Skill
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Weekly, Monday 08:00 UTC
+  workflow_dispatch:  # Manual trigger for testing
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync upstream SKILL.md
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+
+      - name: Fetch upstream SKILL.md
+        run: |
+          curl -sfL \
+            https://raw.githubusercontent.com/jgraph/drawio-mcp/main/skill-cli/drawio/SKILL.md \
+            -o "$RUNNER_TEMP/upstream-skill.md"
+          test -s "$RUNNER_TEMP/upstream-skill.md" || { echo "::error::Fetch failed or empty"; exit 1; }
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if diff -q "$RUNNER_TEMP/upstream-skill.md" drawio/skills/drawio/SKILL.md > /dev/null 2>&1; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update vendored files
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          cp "$RUNNER_TEMP/upstream-skill.md" drawio/skills/drawio/SKILL.md
+
+          UPSTREAM_SHA=$(curl -sf \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/jgraph/drawio-mcp/commits/main \
+            | jq -r '.sha')
+          TODAY=$(date -u +%Y-%m-%d)
+
+          cat > drawio/UPSTREAM.md << UPSTREAM_EOF
+          # Upstream Tracking
+
+          | Field | Value |
+          |-------|-------|
+          | **Source repo** | [jgraph/drawio-mcp](https://github.com/jgraph/drawio-mcp) |
+          | **Source path** | \`skill-cli/drawio/SKILL.md\` |
+          | **License** | Apache 2.0 |
+          | **Vendored SHA** | \`${UPSTREAM_SHA}\` |
+          | **Last synced** | \`${TODAY}\` |
+
+          This file is updated automatically by the \`sync-drawio-skill\` GitHub Actions workflow.
+          UPSTREAM_EOF
+
+      - name: Bump patch version
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          jq '.version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
+            drawio/.claude-plugin/plugin.json > "$RUNNER_TEMP/plugin.json"
+          mv "$RUNNER_TEMP/plugin.json" drawio/.claude-plugin/plugin.json
+
+          jq '(.plugins[] | select(.name == "drawio")).version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
+            .claude-plugin/marketplace.json > "$RUNNER_TEMP/marketplace.json"
+          mv "$RUNNER_TEMP/marketplace.json" .claude-plugin/marketplace.json
+
+      - name: Create PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION=$(jq -r '.version' drawio/.claude-plugin/plugin.json)
+          BRANCH="chore/sync-drawio-skill-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add drawio/skills/drawio/SKILL.md drawio/UPSTREAM.md \
+            drawio/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+          git commit -m "chore(drawio): syncs upstream SKILL.md to v${NEW_VERSION}"
+          git push origin "$BRANCH"
+
+          gh pr create --head "$BRANCH" --base main --draft \
+            --title "chore(drawio): syncs upstream SKILL.md to v${NEW_VERSION}" \
+            --body "## Summary
+          - Syncs vendored SKILL.md from [jgraph/drawio-mcp](https://github.com/jgraph/drawio-mcp) main
+          - Auto-bumps drawio plugin version to ${NEW_VERSION}"
