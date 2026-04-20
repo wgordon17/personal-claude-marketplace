@@ -1,0 +1,72 @@
+{
+  "skill_name": "roadmap",
+  "rubrics": [
+    "decomposition_quality",
+    "detection_accuracy",
+    "false_positive_resistance",
+    "severity_accuracy",
+    "instruction_adherence"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:1-three-plans-with-dependencies}\n\n## Project Context\nThis is a Python/Flask web application. The three plans form a chain: the user model must exist before auth middleware can reference it, and auth middleware must exist before the admin panel can enforce permissions. No project memory directory exists (skip Phase 0).",
+      "rubrics": [
+        "decomposition_quality",
+        "detection_accuracy",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies A\u2192B\u2192C dependency chain",
+        "Does NOT parallelize B and C",
+        "Places A in Phase 1, B in Phase 2, C in Phase 3",
+        "Cites file-level dependencies as evidence"
+      ],
+      "assertions": [
+        "contains: phase 1",
+        "contains: phase 2",
+        "contains: phase 3",
+        "contains: depends"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:2-independent-plans}\n\n## Project Context\nThis is a Python/Flask web application. The three plans touch completely different directories with zero file overlap. No project memory directory exists (skip Phase 0).",
+      "rubrics": [
+        "decomposition_quality",
+        "false_positive_resistance"
+      ],
+      "expected_behaviors": [
+        "Identifies all 3 as independent",
+        "Places all in single parallel phase",
+        "Does NOT create artificial dependencies",
+        "Does NOT serialize them to be safe"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "not-contains: must run before",
+        "not-contains: serialize"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running the roadmap skill to sequence the following 2 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:3-conflicting-plans}\n\n## Project Context\nThis is a Python/Flask web application. Both plans modify src/config.py. Plan A restructures the config loader internals (renames keys, changes parsing logic). Plan B adds new configuration keys that are read by the loader. If B merges before A, the new keys would reference the old internal structure that A is about to remove. No project memory directory exists (skip Phase 0).",
+      "rubrics": [
+        "decomposition_quality",
+        "detection_accuracy",
+        "severity_accuracy"
+      ],
+      "expected_behaviors": [
+        "Detects file conflict on config.py",
+        "Recommends A before B (structure changes before content additions)",
+        "Does NOT allow parallel execution",
+        "Explains why ordering matters"
+      ],
+      "assertions": [
+        "contains: config.py",
+        "contains: conflict",
+        "not-contains: parallel"
+      ]
+    }
+  ]
+}
