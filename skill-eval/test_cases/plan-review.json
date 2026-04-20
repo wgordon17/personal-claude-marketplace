@@ -1,0 +1,109 @@
+{
+  "skill_name": "plan-review",
+  "rubrics": [
+    "detection_accuracy",
+    "false_positive_resistance",
+    "finding_completeness",
+    "severity_accuracy",
+    "fabrication_avoidance",
+    "instruction_adherence",
+    "decomposition_quality"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:1-circular-dependency-plan}",
+      "rubrics": [
+        "detection_accuracy",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Detects circular dependency between Task 3 and Task 5",
+        "Traces the specific chain: Task 3 needs Task 5 output (config validation rules), Task 5 needs Task 3 output (migration schema field names)",
+        "Suggests resolution by extracting shared resource into a separate task"
+      ],
+      "assertions": [
+        "contains: circular",
+        "contains: dependency",
+        "contains: task 3",
+        "contains: task 5"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:2-well-structured-plan}",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "No significant issues exist in the plan",
+        "Dependencies are correctly specified",
+        "File structure mapping is complete"
+      ],
+      "assertions": [
+        "not-contains: issues found",
+        "not-contains: blocking",
+        "not-contains: critical gap"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and security considerations.\n\n## Plan File\n{fixture:3-missing-security-considerations}",
+      "rubrics": [
+        "detection_accuracy",
+        "severity_accuracy",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Identifies missing CSRF/state parameter validation in the OAuth callback handler",
+        "Identifies missing token expiry and refresh token handling",
+        "Flags that the plan header claims no security concerns despite implementing OAuth2 authentication",
+        "Notes absence of a dedicated security review or threat modeling task"
+      ],
+      "assertions": [
+        "contains: csrf",
+        "contains: token",
+        "contains: security"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this plan file for issues with scope alignment, task dependencies, and goal adherence.\n\n## Plan File\n{fixture:4-scope-creep-plan}",
+      "rubrics": [
+        "detection_accuracy",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies that the plan goal is CSV export but Tasks 2-4 expand far beyond that scope",
+        "Flags Task 2 (PDF export) as scope creep beyond the stated CSV export goal",
+        "Flags Task 3 (email delivery) as unrelated to the CSV export goal",
+        "Flags Task 4 (scheduling system) as a major scope expansion",
+        "Notes that Key Decisions rationalize scope creep with phrases like 'while we are building export infrastructure'"
+      ],
+      "assertions": [
+        "contains: scope",
+        "contains: goal",
+        "not-contains: reasonable addition"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Review this plan file for issues with task ordering, parallelism, and file contention.\n\n## Plan File\n{fixture:5-infeasible-task-ordering}",
+      "rubrics": [
+        "detection_accuracy",
+        "decomposition_quality"
+      ],
+      "expected_behaviors": [
+        "Identifies that Tasks 2 and 3 are marked as parallel but both modify src/config.py",
+        "Explains the file contention risk: concurrent modifications to the same file will cause merge conflicts or data loss",
+        "Notes that Task 3 adds config keys (FLAG_ROLLOUT_SALT, FLAG_CACHE_TTL) that Task 2 may need to be aware of, creating an implicit dependency"
+      ],
+      "assertions": [
+        "contains: config.py",
+        "contains: parallel",
+        "contains: contention"
+      ]
+    }
+  ]
+}
