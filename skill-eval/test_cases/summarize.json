@@ -1,0 +1,68 @@
+{
+  "skill_name": "summarize",
+  "rubrics": [
+    "detection_accuracy",
+    "fabrication_avoidance",
+    "instruction_adherence",
+    "finding_completeness"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running /summarize on the following swarm report artifact. Read the report and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:1-completed-swarm-report}",
+      "rubrics": [
+        "detection_accuracy",
+        "fabrication_avoidance",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies 3 deferred findings as incomplete work",
+        "Classifies status as Active, not Completed",
+        "Does NOT accept report's self-assessment of complete at face value"
+      ],
+      "assertions": [
+        "contains: deferred",
+        "contains: active",
+        "not-contains: status: completed"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running /summarize on the following plan artifact. Read the plan and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:2-active-plan-file}",
+      "rubrics": [
+        "fabrication_avoidance",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Accurately counts 3/6 tasks complete",
+        "Classifies as Active",
+        "References review cycle count",
+        "Does NOT round up completion percentage"
+      ],
+      "assertions": [
+        "contains: 3",
+        "contains: 6",
+        "contains: active"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running /summarize on the following pull request. The PR data and associated plan have been provided inline. Produce a summarize output with plan-adherence audit following the skill instructions.\n\n## PR Metadata and Diff\n{fixture:3-pr-with-plan-adherence}",
+      "rubrics": [
+        "detection_accuracy",
+        "finding_completeness",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Identifies missing Task 3 in plan-adherence audit",
+        "Does NOT claim full plan adherence",
+        "Lists the specific missing task with its description"
+      ],
+      "assertions": [
+        "contains: task 3",
+        "contains: missing",
+        "contains: validation"
+      ]
+    }
+  ]
+}
