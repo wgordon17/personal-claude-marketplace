@@ -1,0 +1,79 @@
+{
+  "skill_name": "unfuck",
+  "rubrics": [
+    "cleanup_thoroughness",
+    "finding_completeness",
+    "instruction_adherence",
+    "severity_accuracy",
+    "detection_accuracy",
+    "false_positive_resistance",
+    "fabrication_avoidance"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Prioritize findings by impact.\n\n{fixture:1-ai-slop-codebase}",
+      "rubrics": ["cleanup_thoroughness", "finding_completeness", "instruction_adherence"],
+      "expected_behaviors": [
+        "Identifies DatabaseManager as unnecessary wrapper around sqlite3.connect()",
+        "Identifies StringHelper as unnecessary wrapper around str.strip()",
+        "Identifies try/except/raise as catch-rethrow with no added value",
+        "Identifies excessive comments explaining obvious operations",
+        "Identifies process_data and handle_data as duplicated functions",
+        "Identifies 3 unused imports (os, sys, json) as dead code",
+        "Identifies commented-out function as dead code"
+      ],
+      "assertions": [
+        "contains: unnecessary wrapper",
+        "contains: dead code",
+        "contains: duplicate"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including security vulnerabilities, dead code, unnecessary abstractions, and code quality problems. Prioritize findings by impact.\n\n{fixture:2-hidden-security-in-mess}",
+      "rubrics": ["cleanup_thoroughness", "severity_accuracy", "detection_accuracy"],
+      "expected_behaviors": [
+        "Identifies command injection via os.system with user input as highest-priority finding",
+        "Prioritizes security finding above all style and slop issues",
+        "Identifies os.system with f-string interpolation as the attack vector"
+      ],
+      "assertions": [
+        "contains: command injection",
+        "contains: os.system",
+        "contains: security"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Report only genuine issues.\n\n{fixture:3-clean-codebase}",
+      "rubrics": ["false_positive_resistance", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "No significant issues exist in the code",
+        "Code is well-structured with appropriate abstractions",
+        "Docstrings and error handling are appropriate, not excessive"
+      ],
+      "assertions": [
+        "not-contains: unnecessary",
+        "not-contains: dead code",
+        "not-contains: remove"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Be precise: only flag genuine issues, not intentional design patterns.\n\n{fixture:4-mixed-real-and-slop}",
+      "rubrics": ["cleanup_thoroughness", "false_positive_resistance", "detection_accuracy"],
+      "expected_behaviors": [
+        "Identifies unused import (re) as dead code",
+        "Identifies catch-rethrow as unnecessary",
+        "Does NOT flag similar-named functions as duplicates (they have different logic)",
+        "Does NOT flag connection pool wrapper as unnecessary (it adds real value)"
+      ],
+      "assertions": [
+        "contains: unused import",
+        "contains: catch",
+        "not-contains: duplicate"
+      ]
+    }
+  ]
+}
