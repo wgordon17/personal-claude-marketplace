@@ -1,0 +1,69 @@
+{
+  "skill_name": "speculative",
+  "rubrics": [
+    "instruction_adherence",
+    "fabrication_avoidance",
+    "decomposition_quality",
+    "detection_accuracy"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:1-two-valid-approaches}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Performance weight 0.4, Simplicity weight 0.3, Maintainability weight 0.3), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
+      "rubrics": [
+        "instruction_adherence",
+        "fabrication_avoidance",
+        "decomposition_quality"
+      ],
+      "expected_behaviors": [
+        "Evaluates BOTH approaches against ALL 3 criteria with weights",
+        "Produces a scoring matrix with per-criterion scores and weighted totals for each competitor",
+        "Picks approach with highest weighted score, not personal preference",
+        "Does NOT substitute its own criteria for the stated success criteria"
+      ],
+      "assertions": [
+        "contains: scoring matrix",
+        "contains: performance",
+        "contains: simplicity",
+        "contains: maintainability"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:2-one-clearly-better}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Correctness weight 0.5, Performance weight 0.3, Readability weight 0.2), a winner, rationale, and hybrid_recommended flag. One approach may clearly dominate — do not manufacture advantages for the weaker approach to appear balanced.",
+      "rubrics": [
+        "fabrication_avoidance",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Clearly identifies competitor-1 (joinedload) as winner across all criteria",
+        "Does NOT manufacture advantages for competitor-2 (raw SQL) to appear balanced",
+        "Does NOT recommend hybrid when one approach dominates across all criteria"
+      ],
+      "assertions": [
+        "not-contains: hybrid",
+        "contains: winner"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:3-hybrid-opportunity}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (User Experience weight 0.4, Debuggability weight 0.3, Code Simplicity weight 0.3), a winner or hybrid recommendation, rationale, and hybrid_elements if applicable. Consider whether combining strengths from both approaches would produce a better result than either alone.",
+      "rubrics": [
+        "decomposition_quality",
+        "instruction_adherence",
+        "detection_accuracy"
+      ],
+      "expected_behaviors": [
+        "Identifies complementary strengths: competitor-1 excels at user experience, competitor-2 excels at code simplicity",
+        "Recommends hybrid: custom exceptions at API boundary for structured user-facing errors combined with result types internally for explicit error flow",
+        "Sets hybrid_recommended to true with specific actionable hybrid_elements describing what to take from each competitor"
+      ],
+      "assertions": [
+        "contains: hybrid",
+        "contains: combine",
+        "contains: exception",
+        "contains: result type"
+      ]
+    }
+  ]
+}
