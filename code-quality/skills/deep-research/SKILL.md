@@ -151,10 +151,10 @@ Include viewpoints from:
    - Side-by-side feature comparison
    - Quantitative metrics where available
    - **For dependency/tool comparisons:** include rows from
-     [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria — recent
-     commits (6-month threshold from today), recent releases (12-month threshold), license,
-     CVE status, popularity, bus factor, release integrity. Use the Date Verification Protocol:
-     state the actual gap in months, not "recently updated"
+     [dependency-evaluation.md](../../references/dependency-evaluation.md) Must-Have criteria —
+     recent commits (6-month threshold from today), recent releases (12-month threshold),
+     license, CVE status — plus bus factor and release integrity from Supply Chain Assessment.
+     Use the Date Verification Protocol: state the actual gap in months, not "recently updated"
 
 2. **Identify consensus opinions**
    - What do most sources agree on?
