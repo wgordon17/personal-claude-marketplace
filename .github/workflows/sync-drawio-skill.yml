@@ -41,8 +41,6 @@ jobs:
       - name: Update vendored files
         if: steps.diff.outputs.changed == 'true'
         run: |
-          cp "$RUNNER_TEMP/upstream-skill.md" drawio/skills/drawio/SKILL.md
-
           UPSTREAM_SHA=$(curl -sf \
             https://api.github.com/repos/jgraph/drawio-mcp/commits/main \
             | jq -r '.sha')
@@ -50,6 +48,12 @@ jobs:
             echo "::error::Could not extract valid commit SHA from GitHub API"
             exit 1
           fi
+
+          curl -sfL \
+            "https://raw.githubusercontent.com/jgraph/drawio-mcp/${UPSTREAM_SHA}/skill-cli/drawio/SKILL.md" \
+            -o drawio/skills/drawio/SKILL.md
+          test -s drawio/skills/drawio/SKILL.md || { echo "::error::SHA-pinned fetch failed"; exit 1; }
+
           TODAY=$(date -u +%Y-%m-%d)
 
           cat > drawio/UPSTREAM.md << UPSTREAM_EOF
