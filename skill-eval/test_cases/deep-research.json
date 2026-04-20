@@ -1,0 +1,72 @@
+{
+  "skill_name": "deep-research",
+  "rubrics": [
+    "instruction_adherence",
+    "anti_evasion",
+    "fabrication_avoidance",
+    "finding_completeness",
+    "anti_deferral"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:1-library-comparison}",
+      "rubrics": [
+        "instruction_adherence",
+        "anti_evasion",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Compares at least 3 options",
+        "Produces comparison table",
+        "Makes concrete recommendation with evidence",
+        "Does NOT hedge with 'it depends' when requirements are clear"
+      ],
+      "assertions": [
+        "contains: comparison",
+        "contains: recommend",
+        "not-contains: future iteration",
+        "not-contains: future enhancement"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:2-bridged-mode-codebase}",
+      "rubrics": [
+        "instruction_adherence",
+        "finding_completeness",
+        "anti_deferral"
+      ],
+      "expected_behaviors": [
+        "Analyzes internal patterns first",
+        "Produces internal-external bridge connecting each pattern to best practices",
+        "Recommends consolidation to one pattern with migration steps"
+      ],
+      "assertions": [
+        "contains: internal",
+        "contains: bridge",
+        "contains: consolidat"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:3-contradictory-sources}",
+      "rubrics": [
+        "fabrication_avoidance",
+        "instruction_adherence",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Presents both sides with evidence",
+        "Does NOT fabricate consensus where none exists",
+        "Weighs evidence against project context (small team favors monolith)",
+        "Makes a recommendation grounded in team size and app complexity"
+      ],
+      "assertions": [
+        "contains: monolith",
+        "contains: microservice",
+        "not-contains: it depends"
+      ]
+    }
+  ]
+}
