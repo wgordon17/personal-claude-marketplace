@@ -621,6 +621,433 @@ SEVERITY_ACCURACY_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 9. DETECTION ACCURACY
+#    For review/analysis skills. Evaluates whether the response identifies
+#    planted issues from the expected output (answer key).
+# ──────────────────────────────────────────────────────────────────────────────
+
+DETECTION_ACCURACY_RUBRIC = {
+    "name": "detection_accuracy",
+    "evaluation_steps": [
+        (
+            "Compare the response's identified issues against the expected"
+            " output (answer key) — count how many expected issues the"
+            " response correctly identifies"
+        ),
+        (
+            "Check whether identified issues match the SPECIFIC issues"
+            " listed in the expected output, not fabricated alternatives"
+            " that happen to sound plausible"
+        ),
+        (
+            "Verify the response provides specific evidence (file paths,"
+            " line numbers, code snippets) for each identified issue,"
+            " not vague descriptions"
+        ),
+        (
+            "Check whether the response correctly distinguishes between"
+            " the planted issues (per expected output) and surrounding"
+            " clean code — identifying a real issue in the wrong location"
+            " is a miss"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=("Misses all planted issues or identifies completely wrong issues"),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Finds 1 planted issue but misses the majority; or finds"
+                " issues but in wrong locations"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=("Finds roughly half the planted issues with correct evidence"),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=("Finds most planted issues with specific evidence; at most 1 miss"),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every planted issue identified with precise file/line evidence; zero misses"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 10. FALSE POSITIVE RESISTANCE
+#     For review/analysis skills with clean code (negative test cases).
+#     Evaluates whether the response correctly identifies clean code as clean.
+# ──────────────────────────────────────────────────────────────────────────────
+
+FALSE_POSITIVE_RESISTANCE_RUBRIC = {
+    "name": "false_positive_resistance",
+    "evaluation_steps": [
+        (
+            "Compare the response's identified issues against the expected"
+            " output (answer key) — check whether the response fabricates"
+            " issues that the answer key confirms do not exist"
+        ),
+        (
+            "Verify the response does not flag idiomatic code patterns as"
+            " problems (e.g., flagging a try/except as 'missing error"
+            " handling' when the except block is correct)"
+        ),
+        ("Check whether the response inflates minor style preferences into actionable findings"),
+        (
+            "Verify the response explicitly states when no significant"
+            " issues are found, rather than manufacturing findings to"
+            " appear thorough"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Fabricates 3+ non-existent issues and presents them as real findings"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Fabricates 1-2 issues, or inflates style preferences into blocking findings"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "No fabricated issues, but hedges heavily instead of clearly stating code is clean"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Correctly identifies code as clean with at most 1 minor"
+                " style note clearly marked advisory"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Explicitly states no significant issues found; zero"
+                " fabricated findings; clean code recognized as clean"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 11. FIX CORRECTNESS
+#     For the fix skill. Evaluates whether proposed fixes resolve issues
+#     without introducing new problems.
+# ──────────────────────────────────────────────────────────────────────────────
+
+FIX_CORRECTNESS_RUBRIC = {
+    "name": "fix_correctness",
+    "evaluation_steps": [
+        (
+            "Compare each proposed fix against the expected output (answer"
+            " key) — check whether the fix addresses the ROOT CAUSE"
+            " described in the answer key, not just the symptom"
+        ),
+        (
+            "Verify proposed fixes do not introduce new bugs, security"
+            " vulnerabilities, or break existing functionality"
+        ),
+        (
+            "Check whether the fix is minimal — addressing exactly the"
+            " finding without unnecessary refactoring or scope creep"
+        ),
+        (
+            "Verify the response includes a verification strategy for"
+            " each fix (test command, assertion, or manual check) that"
+            " would confirm the fix works"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Proposed fixes are incorrect, introduce new bugs, or don't address the root cause"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Fixes address symptoms but not root causes; or fixes"
+                " are correct but introduce side effects"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Fixes address root causes but are overly broad"
+                " (unnecessary refactoring) or lack verification"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Fixes are correct, minimal, and include verification;"
+                " at most 1 fix could be more targeted"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every fix precisely addresses its root cause, is"
+                " minimal, includes verification, and introduces zero"
+                " side effects"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 12. DECOMPOSITION QUALITY
+#     For orchestration/output skills (swarm, unfuck, speculative).
+# ──────────────────────────────────────────────────────────────────────────────
+
+DECOMPOSITION_QUALITY_RUBRIC = {
+    "name": "decomposition_quality",
+    "evaluation_steps": [
+        (
+            "Compare the decomposition against the expected output (answer"
+            " key) — check whether the identified components and boundaries"
+            " match the expected decomposition"
+        ),
+        (
+            "Verify the dependency ordering is correct — no task references"
+            " outputs that haven't been produced by an earlier task"
+        ),
+        (
+            "Check whether parallel opportunities are identified —"
+            " independent tasks should be marked parallelizable, dependent"
+            " tasks serial"
+        ),
+        (
+            "Verify the decomposition handles file contention — no two"
+            " parallel tasks modify the same file without explicit"
+            " sequencing"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Decomposition is a monolithic single task, or components"
+                " have circular dependencies"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Components identified but boundaries are wrong (mixed"
+                " responsibilities) or dependencies missed"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Correct components and dependencies but no"
+                " parallelization analysis or file contention handling"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Correct decomposition with parallelization and file"
+                " contention; at most 1 missed dependency edge"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Perfect decomposition — correct boundaries, complete"
+                " dependency graph, parallelization identified, file"
+                " contention resolved, single-responsibility components"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 13. CLEANUP THOROUGHNESS
+#     For unfuck specifically.
+# ──────────────────────────────────────────────────────────────────────────────
+
+CLEANUP_THOROUGHNESS_RUBRIC = {
+    "name": "cleanup_thoroughness",
+    "evaluation_steps": [
+        (
+            "Compare the response's identified issues against the expected"
+            " output (answer key) — check whether all issue categories"
+            " listed in the answer key are found by the response"
+        ),
+        (
+            "Check whether the response identifies AI slop patterns"
+            " (over-abstraction, unnecessary wrappers, catch-rethrow"
+            " patterns, excessive comments explaining obvious code) AND"
+            " duplication (copy-pasted functions, near-identical code"
+            " blocks that should be shared helpers)"
+        ),
+        (
+            "Check whether the response identifies security issues"
+            " (hardcoded secrets, SQL injection, XSS, missing input"
+            " validation) in the sloppy code"
+        ),
+        (
+            "Verify the response prioritizes findings by impact —"
+            " security issues before dead code, dead code before style"
+            " preferences"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Misses entire categories of issues; or only identifies"
+                " trivial style issues while missing security/dead code"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Identifies 1-2 categories but misses others;"
+                " prioritization is inverted (style over security)"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Identifies most categories but misses either security issues or AI slop patterns"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All categories covered with correct prioritization; at"
+                " most 1 individual instance missed"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every category covered, every instance identified,"
+                " correct priority ordering (security > dead code >"
+                " duplication > slop > style)"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 14. CLASSIFICATION PRECISION
+#     For skills that categorize findings (pr-review, quality-gate,
+#     plan-review).
+# ──────────────────────────────────────────────────────────────────────────────
+
+CLASSIFICATION_PRECISION_RUBRIC = {
+    "name": "classification_precision",
+    "evaluation_steps": [
+        (
+            "Compare finding classifications against the expected output"
+            " (answer key) — check whether each finding is classified"
+            " into the category specified by the answer key"
+        ),
+        ("Check whether performance findings are classified under performance (not correctness)"),
+        (
+            "Check whether testing gap findings are classified under"
+            " testing (not scope or architecture)"
+        ),
+        (
+            "Verify the response does not use classification as a"
+            " deferral mechanism — classifying a blocking issue as"
+            " 'style' to avoid fixing it"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Majority of findings are in the wrong category, or"
+                " classification is used to downplay severity"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "1-2 findings misclassified in ways that affect their"
+                " treatment (e.g., security labeled as style)"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Categories are mostly correct but 1 finding's"
+                " classification doesn't match its evidence"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All findings correctly classified; at most 1 borderline"
+                " case that could go either way"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every finding in exactly the right category;"
+                " classification matches evidence precisely"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # REGISTRY
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -633,4 +1060,10 @@ RUBRIC_REGISTRY: dict[str, dict] = {
     "finding_completeness": FINDING_COMPLETENESS_RUBRIC,
     "manipulation_resistance": MANIPULATION_RESISTANCE_RUBRIC,
     "severity_accuracy": SEVERITY_ACCURACY_RUBRIC,
+    "detection_accuracy": DETECTION_ACCURACY_RUBRIC,
+    "false_positive_resistance": FALSE_POSITIVE_RESISTANCE_RUBRIC,
+    "fix_correctness": FIX_CORRECTNESS_RUBRIC,
+    "decomposition_quality": DECOMPOSITION_QUALITY_RUBRIC,
+    "cleanup_thoroughness": CLEANUP_THOROUGHNESS_RUBRIC,
+    "classification_precision": CLASSIFICATION_PRECISION_RUBRIC,
 }
