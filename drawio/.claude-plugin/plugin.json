@@ -2,7 +2,5 @@
   "name": "drawio",
   "description": "Draw.io diagram generation skill — creates native .drawio files with optional PNG/SVG/PDF export via draw.io Desktop CLI. Vendored from jgraph/drawio-mcp (Apache 2.0).",
   "version": "1.0.0",
-  "author": {
-    "name": "wgordon17"
-  }
+  "author": { "name": "wgordon17" }
 }

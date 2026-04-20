@@ -5,14 +5,15 @@ on:
     - cron: '0 8 * * 1'  # Weekly, Monday 08:00 UTC
   workflow_dispatch:  # Manual trigger for testing
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   sync:
     name: Sync upstream SKILL.md
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
@@ -39,9 +40,12 @@ jobs:
           cp "$RUNNER_TEMP/upstream-skill.md" drawio/skills/drawio/SKILL.md
 
           UPSTREAM_SHA=$(curl -sf \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/jgraph/drawio-mcp/commits/main \
             | jq -r '.sha')
+          if ! [[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not extract valid commit SHA from GitHub API"
+            exit 1
+          fi
           TODAY=$(date -u +%Y-%m-%d)
 
           cat > drawio/UPSTREAM.md << UPSTREAM_EOF
