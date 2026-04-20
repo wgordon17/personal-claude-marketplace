@@ -39,7 +39,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 
 ## Repository Structure
 
-Personal Claude Code plugin marketplace with 10 plugins. Master registry: `.claude-plugin/marketplace.json`.
+Personal Claude Code plugin marketplace with 11 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
 - **dev-guard/** — Tool selection guard, commit validation, pre-push review, subagent completion verification (only plugin with tests)
@@ -47,6 +47,7 @@ Personal Claude Code plugin marketplace with 10 plugins. Master registry: `.clau
 - **git-tools/** — Git history, hooks, commit review, contributing guide; SessionStart git instructions
 - **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
 - **jira/** — Jira integration via jira CLI (MCP temporarily disabled); OSAC defaults (project=MGMT, component=OSAC); skill (`/jira:jira`) and spawnable agent (`jira:jira-agent`)
+- **drawio/** — Vendored draw.io diagram generation skill from jgraph/drawio-mcp (Apache 2.0); weekly upstream sync via GHA
 
 Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 
