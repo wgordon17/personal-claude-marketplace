@@ -35,6 +35,13 @@ Before starting research:
 2. **Identify key criteria for evaluation**
    - Performance, cost, complexity, security?
    - What matters most to the user?
+   - **Dependency/tool comparison detected?** If the research involves comparing libraries,
+     frameworks, CLI tools, or dependencies, read
+     [dependency-evaluation.md](../../references/dependency-evaluation.md) and incorporate its
+     Must-Have / Should-Have / Red Flags / Supply Chain Assessment criteria into the evaluation
+     framework. These criteria replace ad-hoc quality assessments with a structured checklist
+     covering maintenance signals, licensing, CVEs, bus factor, release integrity, and AI agent
+     compatibility.
 
 3. **Define success metrics**
    - What does "good enough" research look like?
@@ -143,6 +150,11 @@ Include viewpoints from:
 1. **Create comparison tables**
    - Side-by-side feature comparison
    - Quantitative metrics where available
+   - **For dependency/tool comparisons:** include rows from
+     [dependency-evaluation.md](../../references/dependency-evaluation.md) Must-Have criteria —
+     recent commits (6-month threshold from today), recent releases (12-month threshold),
+     license, CVE status — plus bus factor and release integrity from Supply Chain Assessment.
+     Use the Date Verification Protocol: state the actual gap in months, not "recently updated"
 
 2. **Identify consensus opinions**
    - What do most sources agree on?
@@ -263,6 +275,19 @@ If no memory directory exists, deliver the report in the conversation only.
 | Cost | Free | $X/mo | Free |
 | ... | ... | ... | ... |
 
+*(For dependency/tool comparisons, add these rows from dependency-evaluation.md criteria:)*
+
+| Criteria | Option A | Option B | Option C |
+|----------|----------|----------|----------|
+| Last Commit | [date] ([N]mo gap) | ... | ... |
+| Last Release | [date] ([N]mo gap) | ... | ... |
+| License | MIT / Apache 2.0 / ... | ... | ... |
+| Open CVEs | 0 critical | ... | ... |
+| Bus Factor | [N] ([top]% concentration) | ... | ... |
+| Release Integrity | CI-published / Manual | ... | ... |
+| Transitive Deps | [count] | ... | ... |
+| AI Agent Compat | Bounded / Unbounded | ... | ... |
+
 ## Risks & Considerations
 
 ### Option A Risks
@@ -315,6 +340,7 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Include recent (2025-2026) sources** where available
 - **Cross-reference claims** (verify important claims with multiple sources)
 - **Verify API claims against current docs** — use Context7 MCP to confirm API signatures, configuration options, and version-specific behavior rather than relying on training data
+- **For dependency/tool comparisons: apply [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria** — every candidate must be evaluated against Must-Have thresholds (recent commits, recent releases, license, CVEs). Use the Date Verification Protocol: calculate the actual gap in months from today's date. Never say "recently updated" without stating the date and gap. For CLI tools or code-executing dependencies, include the Supply Chain Assessment (maintainer provenance, bus factor, release integrity, code execution model)
 - *(Bridged mode)* **Internal investigation must cover relevant source files** — not just PROJECT.md and LESSONS.md; read actual code files
 - *(Bridged mode)* **Internal-external bridge must be specific** — cite actual file paths, function names, and patterns, not vague descriptions
 - *(Bridged mode)* **Recommendations must be project-aware** — verify that recommendations do not contradict documented project decisions before including them
