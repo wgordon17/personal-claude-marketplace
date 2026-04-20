@@ -1,0 +1,96 @@
+{
+  "skill_name": "fix",
+  "rubrics": [
+    "fix_correctness",
+    "finding_completeness",
+    "detection_accuracy",
+    "false_positive_resistance",
+    "anti_deferral",
+    "anti_evasion",
+    "instruction_adherence"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "The following findings were identified by a pr-review of recent changes. Investigate each finding, determine if it is valid, and produce fixes for valid findings.\n\n{fixture:1-security-findings-with-code}",
+      "rubrics": ["fix_correctness", "finding_completeness", "anti_deferral"],
+      "expected_behaviors": [
+        "SQL injection fix uses parameterized queries, not string escaping",
+        "Auth check fix adds middleware or decorator to the route, not an inline if-check in the function body",
+        "Hardcoded secret fix uses environment variable lookup, not a config file or constant",
+        "Each fix includes a verification strategy such as a test command or manual check"
+      ],
+      "assertions": [
+        "contains: parameterized",
+        "contains: middleware",
+        "contains: environment variable",
+        "not-contains: future iteration"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The following findings were identified by a pr-review of recent changes. Both findings target the same function. Investigate each finding, determine if they are valid, detect any conflicts between fixes, and produce a unified resolution.\n\n{fixture:2-conflicting-fixes}",
+      "rubrics": ["fix_correctness", "detection_accuracy", "anti_evasion"],
+      "expected_behaviors": [
+        "Detects that both findings target the same function and overlapping line ranges",
+        "Presents the conflict between adding validation and refactoring to early returns",
+        "Proposes a unified fix that incorporates both input validation and early-return structure",
+        "Does not silently drop either finding or skip the conflict resolution"
+      ],
+      "assertions": [
+        "contains: conflict",
+        "not-contains: skipping"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The following finding was identified by a pr-review of recent changes. It includes a research gap that has been investigated via /deep-research. Use the research output to produce the correct fix.\n\n{fixture:3-research-gap-finding}",
+      "rubrics": ["fix_correctness", "instruction_adherence"],
+      "expected_behaviors": [
+        "Recognizes this is a research gap finding based on the Recommended resolution: /deep-research marker",
+        "Uses the simulated /deep-research output to determine the correct fix",
+        "Fix sets strategy parameter to sliding in the RateLimitConfig",
+        "Fix removes or replaces the manual counter logic in favor of the library built-in"
+      ],
+      "assertions": [
+        "contains: sliding",
+        "contains: strategy"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "The following findings were identified by a pr-review of recent changes. Some findings may be false positives. Investigate each finding, determine if it is valid or invalid, fix valid findings, and classify invalid findings with evidence.\n\n{fixture:4-false-positive-findings}",
+      "rubrics": ["fix_correctness", "finding_completeness", "false_positive_resistance"],
+      "expected_behaviors": [
+        "Fixes the SQL injection in search endpoint using parameterized queries",
+        "Classifies the null check finding as invalid because the ORM column is declared nullable=False with a default",
+        "Fixes the missing test gap by producing or describing tests for the discount calculation",
+        "Classifies the memory leak finding as invalid because the code uses a context manager that handles cleanup",
+        "Does not fabricate fixes for the two invalid findings"
+      ],
+      "assertions": [
+        "contains: invalid",
+        "contains: orm",
+        "contains: context manager",
+        "contains: parameterized"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "The following findings were identified by a pr-review of recent changes. The findings form a dependency chain where fixes must be applied in a specific order. Investigate each finding, identify the dependency chain, and apply fixes in the correct order.\n\n{fixture:5-multi-file-fix-chain}",
+      "rubrics": ["fix_correctness", "instruction_adherence", "finding_completeness"],
+      "expected_behaviors": [
+        "Identifies that the validation helper must be created in utils.py before handlers.py can reference it",
+        "Applies fixes in dependency order: utils.py first, then handlers.py, then test_utils.py",
+        "The utils.py fix adds a validate_project_payload function checking name, status, and owner_id",
+        "The handlers.py fix imports and calls validate_project_payload before database operations",
+        "The test_utils.py fix adds tests covering the validation function edge cases"
+      ],
+      "assertions": [
+        "contains: utils.py",
+        "contains: handlers.py",
+        "contains: test_utils.py"
+      ]
+    }
+  ]
+}
