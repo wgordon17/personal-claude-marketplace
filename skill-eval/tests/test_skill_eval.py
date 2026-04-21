@@ -19,6 +19,7 @@ import pytest
 from deepeval.test_case import LLMTestCase
 from skill_eval.contains_metric import ContainsMetric
 from skill_eval.runner import (
+    SKILL_GOAL_RUBRICS,
     build_assertion_metrics,
     build_fixture_prompt,
     compare_baselines,
@@ -472,21 +473,6 @@ class TestBuildAssertionMetrics:
 
 
 # ── Group 8: Score anchoring in rubrics ─────────────────────────────────────
-
-
-SKILL_GOAL_RUBRICS = [
-    "false_positive_resistance",
-    "fix_correctness",
-    "cleanup_thoroughness",
-    "classification_precision",
-    "review_comprehensiveness",
-    "plan_analysis_depth",
-    "orchestration_design",
-    "plan_construction",
-    "judgment_fidelity",
-    "summary_accuracy",
-    "root_cause_analysis",
-]
 
 
 class TestNewCompetencyRubrics:
@@ -1036,9 +1022,20 @@ class TestLoadFixture:
         assert "Body here" in result
 
     def test_load_fixture_path_boundary(self, tmp_path):
-        """Path traversal attempt returns None."""
-        result = load_fixture("quality-gate", "1-clean", repo_root=tmp_path / "nonexistent")
-        assert result is None
+        """Symlink escaping repo_root returns None."""
+        # Create a fixture outside repo_root via symlink.
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret.md").write_text("SECRET DATA")
+
+        repo = tmp_path / "repo"
+        fixture_dir = repo / "skill-eval" / "fixtures" / "evil"
+        fixture_dir.mkdir(parents=True)
+        (fixture_dir / "1-escape.md").symlink_to(outside / "secret.md")
+
+        result = load_fixture("evil", "1-escape", repo_root=repo)
+        # The symlink resolves outside repo_root — should be blocked.
+        assert result is None or "SECRET DATA" not in (result or "")
 
     def test_load_fixture_invalid_chars(self, tmp_path):
         """skill_name or fixture_key with / or .. returns None."""

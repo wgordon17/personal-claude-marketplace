@@ -44,6 +44,25 @@ _RE_ANGLE = re.compile(
 )
 
 
+# Skill-goal rubrics that use EXPECTED_OUTPUT and require expected_behaviors.
+# Shared between load_eval_config() validation and tests.
+SKILL_GOAL_RUBRICS: frozenset[str] = frozenset(
+    {
+        "false_positive_resistance",
+        "fix_correctness",
+        "cleanup_thoroughness",
+        "classification_precision",
+        "review_comprehensiveness",
+        "plan_analysis_depth",
+        "orchestration_design",
+        "plan_construction",
+        "judgment_fidelity",
+        "summary_accuracy",
+        "root_cause_analysis",
+    }
+)
+
+
 def _get_repo_root() -> Path:
     """Return the git repository root as an absolute Path."""
     result = subprocess.run(
@@ -258,30 +277,15 @@ def load_eval_config(skill_name: str) -> dict:
             " Remove the 'rubrics' key or provide at least one rubric."
         )
 
-    # Validate: competency rubrics require expected_behaviors.
-    competency_rubrics = frozenset(
-        {
-            "false_positive_resistance",
-            "fix_correctness",
-            "cleanup_thoroughness",
-            "classification_precision",
-            "review_comprehensiveness",
-            "plan_analysis_depth",
-            "orchestration_design",
-            "plan_construction",
-            "judgment_fidelity",
-            "summary_accuracy",
-            "root_cause_analysis",
-        }
-    )
+    # Validate: skill-goal rubrics require expected_behaviors.
     config_rubrics = set(config.get("rubrics", []))
     for tc in config.get("test_cases", []):
         tc_rubrics = set(tc.get("rubrics", [])) or config_rubrics
-        if tc_rubrics & competency_rubrics:
+        if tc_rubrics & SKILL_GOAL_RUBRICS:
             behaviors = tc.get("expected_behaviors", [])
             if not behaviors:
                 tc_id = tc.get("id", "?")
-                used = tc_rubrics & competency_rubrics
+                used = tc_rubrics & SKILL_GOAL_RUBRICS
                 raise ValueError(
                     f"Test case {tc_id} in {skill_name!r} uses competency rubric(s)"
                     f" {sorted(used)} but has no expected_behaviors."
@@ -348,7 +352,7 @@ def load_fixture(
         resolved = candidate.resolve()
     except OSError:
         return None
-    if not resolved.is_relative_to(repo_root):
+    if not resolved.is_relative_to(repo_root.resolve()):
         return None
 
     if not candidate.is_file():
