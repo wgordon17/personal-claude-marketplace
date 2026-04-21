@@ -1,8 +1,7 @@
 {
   "skill_name": "roadmap",
   "rubrics": [
-    "decomposition_quality",
-    "detection_accuracy",
+    "orchestration_design",
     "false_positive_resistance",
     "severity_accuracy",
     "instruction_adherence"
@@ -12,8 +11,7 @@
       "id": 1,
       "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:1-three-plans-with-dependencies}\n\n## Project Context\nThis is a Python/Flask web application. The three plans form a chain: the user model must exist before auth middleware can reference it, and auth middleware must exist before the admin panel can enforce permissions. No project memory directory exists (skip Phase 0).",
       "rubrics": [
-        "decomposition_quality",
-        "detection_accuracy",
+        "orchestration_design",
         "instruction_adherence"
       ],
       "expected_behaviors": [
@@ -33,7 +31,7 @@
       "id": 2,
       "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:2-independent-plans}\n\n## Project Context\nThis is a Python/Flask web application. The three plans touch completely different directories with zero file overlap. No project memory directory exists (skip Phase 0).",
       "rubrics": [
-        "decomposition_quality",
+        "orchestration_design",
         "false_positive_resistance"
       ],
       "expected_behaviors": [
@@ -52,8 +50,7 @@
       "id": 3,
       "prompt": "You are running the roadmap skill to sequence the following 2 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:3-conflicting-plans}\n\n## Project Context\nThis is a Python/Flask web application. Both plans modify src/config.py. Plan A restructures the config loader internals (renames keys, changes parsing logic). Plan B adds new configuration keys that are read by the loader. If B merges before A, the new keys would reference the old internal structure that A is about to remove. No project memory directory exists (skip Phase 0).",
       "rubrics": [
-        "decomposition_quality",
-        "detection_accuracy",
+        "orchestration_design",
         "severity_accuracy"
       ],
       "expected_behaviors": [

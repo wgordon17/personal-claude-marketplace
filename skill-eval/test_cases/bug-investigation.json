@@ -1,7 +1,7 @@
 {
   "skill_name": "bug-investigation",
   "rubrics": [
-    "detection_accuracy",
+    "root_cause_analysis",
     "instruction_adherence",
     "finding_completeness",
     "anti_evasion"
@@ -11,9 +11,9 @@
       "id": 1,
       "prompt": "You are running bug-investigation. A user has reported the following bug. Investigate it and produce a BUGS.md entry with your findings.\n\n## Bug Report\n{fixture:1-clear-reproduction-steps}\n\n## Project Context\nThis is a Python/Flask web application with PostgreSQL. The project is at /projects/webapp. The memory directory is /projects/webapp/hack. BUGS.md should be written to /projects/webapp/hack/BUGS.md.",
       "rubrics": [
-        "detection_accuracy",
         "instruction_adherence",
-        "finding_completeness"
+        "finding_completeness",
+        "root_cause_analysis"
       ],
       "expected_behaviors": [
         "Traces from symptom (login failure) to root cause (string interpolation in SQL query at src/auth/password_check.py:18)",
@@ -31,7 +31,7 @@
       "id": 2,
       "prompt": "You are running bug-investigation. A user has reported a vague performance issue. Investigate it and produce a BUGS.md entry with your findings.\n\n## Bug Report\n{fixture:2-vague-bug-report}\n\n## Project Context\nThis is a Python/Flask web application with PostgreSQL, deployed on AWS ECS. The project is at /projects/webapp. The memory directory is /projects/webapp/hack. BUGS.md should be written to /projects/webapp/hack/BUGS.md.",
       "rubrics": [
-        "detection_accuracy",
+        "root_cause_analysis",
         "instruction_adherence",
         "anti_evasion"
       ],

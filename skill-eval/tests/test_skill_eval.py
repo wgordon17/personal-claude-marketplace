@@ -474,30 +474,35 @@ class TestBuildAssertionMetrics:
 # ── Group 8: Score anchoring in rubrics ─────────────────────────────────────
 
 
-NEW_COMPETENCY_RUBRICS = [
-    "detection_accuracy",
+SKILL_GOAL_RUBRICS = [
     "false_positive_resistance",
     "fix_correctness",
-    "decomposition_quality",
     "cleanup_thoroughness",
     "classification_precision",
+    "review_comprehensiveness",
+    "plan_analysis_depth",
+    "orchestration_design",
+    "plan_construction",
+    "judgment_fidelity",
+    "summary_accuracy",
+    "root_cause_analysis",
 ]
 
 
 class TestNewCompetencyRubrics:
-    """Verify the 6 core-competency rubrics exist with the right structure."""
+    """Verify skill-goal rubrics exist with the right structure."""
 
     def test_new_rubrics_registered(self):
         from skill_eval.rubrics import RUBRIC_REGISTRY
 
-        for name in NEW_COMPETENCY_RUBRICS:
+        for name in SKILL_GOAL_RUBRICS:
             assert name in RUBRIC_REGISTRY, f"Rubric {name!r} not in RUBRIC_REGISTRY"
-        assert len(RUBRIC_REGISTRY) == 14
+        assert len(RUBRIC_REGISTRY) == 19
 
     def test_new_rubrics_have_evaluation_steps(self):
         from skill_eval.rubrics import RUBRIC_REGISTRY
 
-        for name in NEW_COMPETENCY_RUBRICS:
+        for name in SKILL_GOAL_RUBRICS:
             rubric = RUBRIC_REGISTRY[name]
             assert "evaluation_steps" in rubric, f"Rubric {name!r} missing evaluation_steps"
             assert len(rubric["evaluation_steps"]) >= 3, (
@@ -508,7 +513,7 @@ class TestNewCompetencyRubrics:
         from deepeval.metrics.g_eval import Rubric
         from skill_eval.rubrics import RUBRIC_REGISTRY
 
-        for name in NEW_COMPETENCY_RUBRICS:
+        for name in SKILL_GOAL_RUBRICS:
             rubric = RUBRIC_REGISTRY[name]
             anchoring = rubric["rubric"]
             assert len(anchoring) == 5, f"Rubric {name!r} has {len(anchoring)} anchors, expected 5"
@@ -530,7 +535,7 @@ class TestNewCompetencyRubrics:
             LLMTestCaseParams.ACTUAL_OUTPUT,
             LLMTestCaseParams.EXPECTED_OUTPUT,
         ]
-        for name in NEW_COMPETENCY_RUBRICS:
+        for name in SKILL_GOAL_RUBRICS:
             rubric = RUBRIC_REGISTRY[name]
             assert rubric["evaluation_params"] == expected_params, (
                 f"Rubric {name!r} evaluation_params: {rubric['evaluation_params']}"
@@ -1178,7 +1183,7 @@ class TestLoadEvalConfigValidation:
         """ValueError raised when competency rubric used without expected_behaviors."""
         config = {
             "skill_name": "test-skill",
-            "rubrics": ["detection_accuracy"],
+            "rubrics": ["review_comprehensiveness"],
             "test_cases": [
                 {"id": 1, "prompt": "test", "assertions": []},
             ],

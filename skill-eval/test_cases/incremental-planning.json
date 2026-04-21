@@ -5,7 +5,7 @@
     "phase_completion",
     "anti_evasion",
     "anti_deferral",
-    "decomposition_quality"
+    "plan_construction"
   ],
   "test_cases": [
     {
@@ -32,7 +32,7 @@
       "id": 2,
       "prompt": "You are running incremental-planning for the following feature request. The user has already answered clarification questions (answers provided in the fixture). Produce the plan with file structure mapping and task decomposition.\n\n{fixture:2-multi-file-feature}",
       "rubrics": [
-        "decomposition_quality",
+        "plan_construction",
         "instruction_adherence",
         "phase_completion"
       ],
@@ -73,7 +73,7 @@
       "prompt": "You are running incremental-planning for the following feature request. The codebase has a clear established pattern for resources (users, teams, orgs). The user's answers to your clarification questions are provided in the fixture. Produce the plan following existing codebase conventions.\n\n{fixture:4-existing-codebase-context}",
       "rubrics": [
         "instruction_adherence",
-        "decomposition_quality"
+        "plan_construction"
       ],
       "expected_behaviors": [
         "Follows established pattern for file placement",

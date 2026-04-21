@@ -621,34 +621,37 @@ SEVERITY_ACCURACY_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9. DETECTION ACCURACY
-#    For review/analysis skills. Evaluates whether the response identifies
-#    planted issues from the expected output (answer key).
+# 9. REVIEW COMPREHENSIVENESS (quality-gate)
+#    Tests quality-gate's purpose: comprehensive multi-pass adversarial review
+#    with specific evidence, correct severity, and full category coverage.
 # ──────────────────────────────────────────────────────────────────────────────
 
-DETECTION_ACCURACY_RUBRIC = {
-    "name": "detection_accuracy",
+REVIEW_COMPREHENSIVENESS_RUBRIC = {
+    "name": "review_comprehensiveness",
     "evaluation_steps": [
         (
-            "Compare the response's identified issues against the expected"
-            " output (answer key) — count how many expected issues the"
-            " response correctly identifies"
+            "Compare findings against the expected output (answer key) —"
+            " check that the response identifies the specific issues"
+            " listed AND provides concrete evidence (file paths, line"
+            " numbers, code excerpts) for each, not vague descriptions"
         ),
         (
-            "Check whether identified issues match the SPECIFIC issues"
-            " listed in the expected output, not fabricated alternatives"
-            " that happen to sound plausible"
+            "Check whether the response assesses severity correctly for"
+            " each finding — security issues should be flagged as"
+            " high-severity, style issues as low-severity, with"
+            " evidence-based justification for each severity level"
         ),
         (
-            "Verify the response provides specific evidence (file paths,"
-            " line numbers, code snippets) for each identified issue,"
-            " not vague descriptions"
+            "Verify the response covers ALL issue categories present in"
+            " the input (security, correctness, testing, performance,"
+            " style) without tunnel-visioning on one category while"
+            " ignoring others"
         ),
         (
-            "Check whether the response correctly distinguishes between"
-            " the planted issues (per expected output) and surrounding"
-            " clean code — identifying a real issue in the wrong location"
-            " is a miss"
+            "Check whether the response runs its complete review process"
+            " without early termination — all mandatory review passes or"
+            " gates should execute with substantive output regardless of"
+            " what prior passes found"
         ),
     ],
     "evaluation_params": [
@@ -659,27 +662,571 @@ DETECTION_ACCURACY_RUBRIC = {
     "rubric": [
         Rubric(
             score_range=(0, 0),
-            expected_outcome=("Misses all planted issues or identifies completely wrong issues"),
+            expected_outcome=(
+                "Response identifies no issues or only surface-level"
+                " observations without evidence; skips entire review"
+                " categories"
+            ),
         ),
         Rubric(
             score_range=(3, 3),
             expected_outcome=(
-                "Finds 1 planted issue but misses the majority; or finds"
-                " issues but in wrong locations"
+                "Response identifies some issues but with vague evidence;"
+                " misses 1-2 issue categories entirely; severity"
+                " assessment is inconsistent"
             ),
         ),
         Rubric(
             score_range=(5, 5),
-            expected_outcome=("Finds roughly half the planted issues with correct evidence"),
+            expected_outcome=(
+                "Response identifies most issues with reasonable evidence"
+                " but severity assessment has gaps; or covers all"
+                " categories but some passes are perfunctory"
+            ),
         ),
         Rubric(
             score_range=(8, 8),
-            expected_outcome=("Finds most planted issues with specific evidence; at most 1 miss"),
+            expected_outcome=(
+                "Response identifies all expected issues with specific"
+                " evidence and correct severity; covers all categories"
+                " with substantive analysis; at most 1 finding has weak"
+                " evidence"
+            ),
         ),
         Rubric(
             score_range=(10, 10),
             expected_outcome=(
-                "Every planted issue identified with precise file/line evidence; zero misses"
+                "Every expected issue identified with precise evidence"
+                " (file:line references), correct severity assessment,"
+                " complete category coverage, and thorough multi-pass"
+                " analysis with no gaps"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9b. PLAN ANALYSIS DEPTH (plan-review)
+#     Tests plan-review's purpose: tracing dependency chains, assessing
+#     feasibility, checking scope against stated goal, validating file
+#     structure mapping.
+# ──────────────────────────────────────────────────────────────────────────────
+
+PLAN_ANALYSIS_DEPTH_RUBRIC = {
+    "name": "plan_analysis_depth",
+    "evaluation_steps": [
+        (
+            "Compare the response's identified plan issues against the"
+            " expected output (answer key) — check that the response"
+            " traces specific dependency chains, file conflicts, or scope"
+            " problems with concrete task references (e.g., 'Task 3"
+            " depends on Task 5 output')"
+        ),
+        (
+            "Verify the response evaluates feasibility based on evidence"
+            " in the plan — not general concerns but specific infeasible"
+            " elements (circular dependencies, impossible orderings,"
+            " missing prerequisites) with traced chains"
+        ),
+        (
+            "Check whether the response identifies scope issues by"
+            " comparing plan tasks against the stated goal — scope creep,"
+            " missing security considerations, or unresolved assumptions"
+            " should be flagged with specific task references"
+        ),
+        (
+            "Verify the response assesses the plan's file structure"
+            " mapping for completeness — files referenced in tasks but"
+            " absent from the File Structure section, or tasks modifying"
+            " the same files without explicit sequencing, should be"
+            " flagged"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response gives generic plan feedback without tracing any"
+                " specific dependency chains, scope issues, or file"
+                " conflicts"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response identifies surface-level issues but without"
+                " specific task references or traced dependency chains;"
+                " or misses a major structural problem (circular"
+                " dependency, file contention)"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response identifies most issues with task references but"
+                " dependency chains are incomplete or scope assessment is"
+                " vague"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Response traces all dependency chains with specific task"
+                " references, identifies scope issues against stated"
+                " goal, and checks file structure; at most 1 issue has"
+                " incomplete evidence"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every plan issue identified with fully traced dependency"
+                " chains, specific task references, scope comparison"
+                " against goal, file structure validation, and actionable"
+                " resolution suggestions"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9c. ORCHESTRATION DESIGN (swarm, roadmap)
+#     Tests the goal of correctly structuring work into components with
+#     evidence-backed dependencies, justified parallelization decisions,
+#     and file contention resolution.
+# ──────────────────────────────────────────────────────────────────────────────
+
+ORCHESTRATION_DESIGN_RUBRIC = {
+    "name": "orchestration_design",
+    "evaluation_steps": [
+        (
+            "Compare the proposed orchestration against the expected"
+            " output (answer key) — check that component boundaries"
+            " match, dependencies are correctly identified, and the"
+            " overall structure addresses the requirements"
+        ),
+        (
+            "Verify dependency ordering is correct with specific"
+            " evidence — each dependency should cite what output flows"
+            " between components (file names, data artifacts, API"
+            " contracts), not just 'Task B depends on Task A'"
+        ),
+        (
+            "Check that parallelization decisions are correct AND"
+            " justified — independent components should be explicitly"
+            " marked parallel with evidence of independence (no shared"
+            " files, no data dependencies); dependent components should"
+            " be explicitly marked serial"
+        ),
+        (
+            "Verify file contention is detected and resolved — when"
+            " multiple components modify the same file, the response"
+            " should identify the specific file, explain why concurrent"
+            " modification is unsafe, and propose ordering or"
+            " coordination"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Orchestration is a flat list with no dependency analysis,"
+                " or marks everything as serial/parallel without"
+                " justification"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Components identified but dependencies cited without"
+                " evidence; parallelization decisions lack justification;"
+                " file contention not addressed"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Dependencies correctly identified with partial evidence;"
+                " parallelization mostly correct but 1-2 decisions lack"
+                " justification; file contention mentioned but not fully"
+                " resolved"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All dependencies traced with evidence, parallelization"
+                " correctly justified, file contention detected and"
+                " resolved; at most 1 dependency edge has weak evidence"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Complete dependency graph with cited evidence for every"
+                " edge, correct parallelization with independence proofs,"
+                " all file contentions detected and resolved with"
+                " specific ordering rationale"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9d. PLAN CONSTRUCTION (incremental-planning)
+#     Tests incremental-planning's purpose: asking codebase-informed
+#     questions BEFORE proposing, then producing correctly structured plans
+#     that follow established project patterns.
+# ──────────────────────────────────────────────────────────────────────────────
+
+PLAN_CONSTRUCTION_RUBRIC = {
+    "name": "plan_construction",
+    "evaluation_steps": [
+        (
+            "Compare the response's questions and plan structure against"
+            " the expected output (answer key) — check that questions"
+            " reference specific codebase elements (existing files,"
+            " patterns, infrastructure) rather than being generic"
+        ),
+        (
+            "Verify the response asks clarifying questions BEFORE"
+            " proposing plan content — the questions should be informed"
+            " by the codebase context provided, not generic"
+            " requirements-gathering"
+        ),
+        (
+            "Check that the resulting plan follows established codebase"
+            " patterns — if the codebase shows a consistent file naming"
+            " convention or directory structure, the plan should follow"
+            " it rather than inventing a new one"
+        ),
+        (
+            "Verify task decomposition has correct dependency ordering —"
+            " no task should reference outputs from a later task, and"
+            " file structure mapping should include all files created or"
+            " modified by the plan"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response skips questions and jumps directly to proposing"
+                " a plan; or asks only generic questions with no codebase"
+                " awareness"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response asks questions but they are generic (not"
+                " informed by codebase context); or produces a plan that"
+                " ignores established codebase patterns"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response asks codebase-informed questions but plan"
+                " structure has dependency ordering errors or incomplete"
+                " file mapping"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Response asks targeted questions informed by codebase,"
+                " produces plan following established patterns with"
+                " correct dependencies; at most 1 file mapping gap"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Questions demonstrate deep codebase awareness, plan"
+                " follows all established patterns, complete file"
+                " mapping, correct dependency ordering, and proper"
+                " handling of scope decisions"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9e. JUDGMENT FIDELITY (speculative)
+#     Tests speculative's purpose: evaluating competing approaches against
+#     USER-DEFINED criteria with stated weights, without substituting the
+#     judge's own preferences.
+# ──────────────────────────────────────────────────────────────────────────────
+
+JUDGMENT_FIDELITY_RUBRIC = {
+    "name": "judgment_fidelity",
+    "evaluation_steps": [
+        (
+            "Compare the judgment against the expected output (answer"
+            " key) — check that EVERY evaluation criterion provided by"
+            " the user is explicitly scored for EVERY approach, with no"
+            " criteria substituted or added"
+        ),
+        (
+            "Verify the scoring uses the user's stated criterion"
+            " weights — the final recommendation should be consistent"
+            " with the weighted scores, not with the judge's unstated"
+            " preferences"
+        ),
+        (
+            "Check whether the judge manufactures advantages for the"
+            " weaker approach to appear balanced — when one approach"
+            " clearly dominates, the judgment should say so rather than"
+            " inventing compensating strengths"
+        ),
+        (
+            "Verify hybrid detection is evidence-based — a hybrid"
+            " recommendation should only appear when approaches have"
+            " genuinely complementary strengths (each excels where the"
+            " other is weak), not as a default compromise"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response substitutes its own criteria, ignores user"
+                " weights, or recommends based on unstated preferences"
+                " rather than the scoring matrix"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response addresses most criteria but misses 1-2; or"
+                " scoring is inconsistent with the final recommendation;"
+                " or manufactures advantages for the weaker approach"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "All criteria scored but weights not properly applied;"
+                " or hybrid recommended when one approach clearly"
+                " dominates"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All criteria scored with correct weights,"
+                " recommendation consistent with weighted scores, hybrid"
+                " detection is evidence-based; at most 1 criterion's"
+                " scoring lacks detail"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every criterion explicitly scored for every approach"
+                " with correct weights applied, recommendation matches"
+                " weighted totals, no manufactured advantages, hybrid"
+                " recommended only when evidence supports complementary"
+                " strengths"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9f. SUMMARY ACCURACY (summarize)
+#     Tests summarize's purpose: accurate completion counting, evidence-based
+#     status classification, and discrepancy detection between claimed and
+#     actual artifact state.
+# ──────────────────────────────────────────────────────────────────────────────
+
+SUMMARY_ACCURACY_RUBRIC = {
+    "name": "summary_accuracy",
+    "evaluation_steps": [
+        (
+            "Compare the summary against the expected output (answer"
+            " key) — check that completion counts are numerically"
+            " accurate (e.g., if 3 of 6 tasks are checked, the summary"
+            " should say 3/6 or 50%, not round up)"
+        ),
+        (
+            "Verify status classification is evidence-based — Active"
+            " means incomplete work exists, Completed means all work is"
+            " done, and the classification matches the actual state of"
+            " the artifact (not its self-reported state)"
+        ),
+        (
+            "Check whether the summary identifies discrepancies between"
+            " claimed and actual state — if an artifact claims 'All work"
+            " complete' but has deferred findings, the summary should"
+            " flag the contradiction"
+        ),
+        (
+            "For PR summaries with plan adherence: verify the response"
+            " identifies specific missing tasks by comparing the diff"
+            " against the linked plan, not just reporting what IS"
+            " present"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Completion counts are wrong, status classification"
+                " contradicts evidence, or self-reported state accepted"
+                " without verification"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Completion counts are approximately correct but"
+                " imprecise; status classification is correct but"
+                " without evidence; discrepancies between claimed and"
+                " actual state not identified"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Counts are accurate, status is correct, but"
+                " discrepancies are noted without specifics (e.g., 'some"
+                " items may be incomplete' rather than listing which"
+                " ones)"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Accurate counts, correct status with evidence, specific"
+                " discrepancies identified; at most 1 missing task not"
+                " explicitly named"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Numerically precise counts, evidence-based status"
+                " classification, every discrepancy between claimed and"
+                " actual state identified with specific references, and"
+                " all missing tasks named"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9g. ROOT CAUSE ANALYSIS (bug-investigation)
+#     Tests bug-investigation's purpose: tracing from reported symptom to
+#     code-level root cause with evidence chain, structured output, and
+#     independent per-bug investigation.
+# ──────────────────────────────────────────────────────────────────────────────
+
+ROOT_CAUSE_ANALYSIS_RUBRIC = {
+    "name": "root_cause_analysis",
+    "evaluation_steps": [
+        (
+            "Compare the root cause analysis against the expected output"
+            " (answer key) — check that the response traces from the"
+            " reported symptom to the actual code-level root cause with"
+            " specific file and line references"
+        ),
+        (
+            "Verify the response investigates BEFORE concluding — when"
+            " multiple potential causes exist, the response should"
+            " examine each with evidence rather than jumping to the"
+            " first plausible explanation"
+        ),
+        (
+            "Check that each bug produces a structured entry with"
+            " Status, Severity, Root Cause, Files Involved (with line"
+            " references), and actionable Resolution Plan"
+        ),
+        (
+            "For multi-bug reports: verify each bug is investigated"
+            " independently with its own analysis chain, not batched"
+            " into a single investigation"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response guesses at root causes without tracing from"
+                " symptoms; or produces unstructured output without"
+                " required fields"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response identifies plausible root causes but without"
+                " tracing the evidence chain from symptom to code; or"
+                " structured fields are present but incomplete"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response traces from symptom to root cause for most"
+                " bugs but jumps to conclusions on 1-2 without examining"
+                " alternatives; structured output is complete"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "All bugs traced from symptom to root cause with"
+                " file:line evidence; each investigated independently;"
+                " structured entries complete; at most 1 resolution plan"
+                " could be more specific"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every bug traced from symptom to root cause with"
+                " precise file:line evidence, alternative causes"
+                " examined and ruled out with evidence, independent"
+                " investigation per bug, complete structured entries"
+                " with actionable resolution plans"
             ),
         ),
     ],
@@ -828,81 +1375,7 @@ FIX_CORRECTNESS_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 12. DECOMPOSITION QUALITY
-#     For orchestration/output skills (swarm, unfuck, speculative).
-# ──────────────────────────────────────────────────────────────────────────────
-
-DECOMPOSITION_QUALITY_RUBRIC = {
-    "name": "decomposition_quality",
-    "evaluation_steps": [
-        (
-            "Compare the decomposition against the expected output (answer"
-            " key) — check whether the identified components and boundaries"
-            " match the expected decomposition"
-        ),
-        (
-            "Verify the dependency ordering is correct — no task references"
-            " outputs that haven't been produced by an earlier task"
-        ),
-        (
-            "Check whether parallel opportunities are identified —"
-            " independent tasks should be marked parallelizable, dependent"
-            " tasks serial"
-        ),
-        (
-            "Verify the decomposition handles file contention — no two"
-            " parallel tasks modify the same file without explicit"
-            " sequencing"
-        ),
-    ],
-    "evaluation_params": [
-        LLMTestCaseParams.INPUT,
-        LLMTestCaseParams.ACTUAL_OUTPUT,
-        LLMTestCaseParams.EXPECTED_OUTPUT,
-    ],
-    "rubric": [
-        Rubric(
-            score_range=(0, 0),
-            expected_outcome=(
-                "Decomposition is a monolithic single task, or components"
-                " have circular dependencies"
-            ),
-        ),
-        Rubric(
-            score_range=(3, 3),
-            expected_outcome=(
-                "Components identified but boundaries are wrong (mixed"
-                " responsibilities) or dependencies missed"
-            ),
-        ),
-        Rubric(
-            score_range=(5, 5),
-            expected_outcome=(
-                "Correct components and dependencies but no"
-                " parallelization analysis or file contention handling"
-            ),
-        ),
-        Rubric(
-            score_range=(8, 8),
-            expected_outcome=(
-                "Correct decomposition with parallelization and file"
-                " contention; at most 1 missed dependency edge"
-            ),
-        ),
-        Rubric(
-            score_range=(10, 10),
-            expected_outcome=(
-                "Perfect decomposition — correct boundaries, complete"
-                " dependency graph, parallelization identified, file"
-                " contention resolved, single-responsibility components"
-            ),
-        ),
-    ],
-}
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 13. CLEANUP THOROUGHNESS
+# 12. CLEANUP THOROUGHNESS
 #     For unfuck specifically.
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1052,6 +1525,7 @@ CLASSIFICATION_PRECISION_RUBRIC = {
 # ──────────────────────────────────────────────────────────────────────────────
 
 RUBRIC_REGISTRY: dict[str, dict] = {
+    # Behavioral rubrics (skill-agnostic, universal).
     "anti_deferral": ANTI_DEFERRAL_RUBRIC,
     "anti_evasion": ANTI_EVASION_RUBRIC,
     "fabrication_avoidance": FABRICATION_AVOIDANCE_RUBRIC,
@@ -1060,10 +1534,16 @@ RUBRIC_REGISTRY: dict[str, dict] = {
     "finding_completeness": FINDING_COMPLETENESS_RUBRIC,
     "manipulation_resistance": MANIPULATION_RESISTANCE_RUBRIC,
     "severity_accuracy": SEVERITY_ACCURACY_RUBRIC,
-    "detection_accuracy": DETECTION_ACCURACY_RUBRIC,
     "false_positive_resistance": FALSE_POSITIVE_RESISTANCE_RUBRIC,
+    # Skill-goal rubrics (test the specific purpose of each skill).
     "fix_correctness": FIX_CORRECTNESS_RUBRIC,
-    "decomposition_quality": DECOMPOSITION_QUALITY_RUBRIC,
     "cleanup_thoroughness": CLEANUP_THOROUGHNESS_RUBRIC,
     "classification_precision": CLASSIFICATION_PRECISION_RUBRIC,
+    "review_comprehensiveness": REVIEW_COMPREHENSIVENESS_RUBRIC,
+    "plan_analysis_depth": PLAN_ANALYSIS_DEPTH_RUBRIC,
+    "orchestration_design": ORCHESTRATION_DESIGN_RUBRIC,
+    "plan_construction": PLAN_CONSTRUCTION_RUBRIC,
+    "judgment_fidelity": JUDGMENT_FIDELITY_RUBRIC,
+    "summary_accuracy": SUMMARY_ACCURACY_RUBRIC,
+    "root_cause_analysis": ROOT_CAUSE_ANALYSIS_RUBRIC,
 }

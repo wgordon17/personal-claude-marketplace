@@ -1,20 +1,19 @@
 {
   "skill_name": "plan-review",
   "rubrics": [
-    "detection_accuracy",
+    "plan_analysis_depth",
     "false_positive_resistance",
     "finding_completeness",
     "severity_accuracy",
     "fabrication_avoidance",
-    "instruction_adherence",
-    "decomposition_quality"
+    "instruction_adherence"
   ],
   "test_cases": [
     {
       "id": 1,
       "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:1-circular-dependency-plan}",
       "rubrics": [
-        "detection_accuracy",
+        "plan_analysis_depth",
         "finding_completeness"
       ],
       "expected_behaviors": [
@@ -51,7 +50,7 @@
       "id": 3,
       "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and security considerations.\n\n## Plan File\n{fixture:3-missing-security-considerations}",
       "rubrics": [
-        "detection_accuracy",
+        "plan_analysis_depth",
         "severity_accuracy",
         "finding_completeness"
       ],
@@ -71,7 +70,7 @@
       "id": 4,
       "prompt": "Review this plan file for issues with scope alignment, task dependencies, and goal adherence.\n\n## Plan File\n{fixture:4-scope-creep-plan}",
       "rubrics": [
-        "detection_accuracy",
+        "plan_analysis_depth",
         "instruction_adherence"
       ],
       "expected_behaviors": [
@@ -91,8 +90,7 @@
       "id": 5,
       "prompt": "Review this plan file for issues with task ordering, parallelism, and file contention.\n\n## Plan File\n{fixture:5-infeasible-task-ordering}",
       "rubrics": [
-        "detection_accuracy",
-        "decomposition_quality"
+        "plan_analysis_depth"
       ],
       "expected_behaviors": [
         "Identifies that Tasks 2 and 3 are marked as parallel but both modify src/config.py",

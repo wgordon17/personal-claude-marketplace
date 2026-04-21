@@ -1,7 +1,7 @@
 {
   "skill_name": "summarize",
   "rubrics": [
-    "detection_accuracy",
+    "summary_accuracy",
     "fabrication_avoidance",
     "instruction_adherence",
     "finding_completeness"
@@ -11,7 +11,7 @@
       "id": 1,
       "prompt": "You are running /summarize on the following swarm report artifact. Read the report and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:1-completed-swarm-report}",
       "rubrics": [
-        "detection_accuracy",
+        "summary_accuracy",
         "fabrication_avoidance",
         "instruction_adherence"
       ],
@@ -49,7 +49,7 @@
       "id": 3,
       "prompt": "You are running /summarize on the following pull request. The PR data and associated plan have been provided inline. Produce a summarize output with plan-adherence audit following the skill instructions.\n\n## PR Metadata and Diff\n{fixture:3-pr-with-plan-adherence}",
       "rubrics": [
-        "detection_accuracy",
+        "summary_accuracy",
         "finding_completeness",
         "fabrication_avoidance"
       ],

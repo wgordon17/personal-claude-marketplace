@@ -3,7 +3,6 @@
   "rubrics": [
     "fix_correctness",
     "finding_completeness",
-    "detection_accuracy",
     "false_positive_resistance",
     "anti_deferral",
     "anti_evasion",
@@ -30,7 +29,7 @@
     {
       "id": 2,
       "prompt": "The following findings were identified by a pr-review of recent changes. Both findings target the same function. Investigate each finding, determine if they are valid, detect any conflicts between fixes, and produce a unified resolution.\n\n{fixture:2-conflicting-fixes}",
-      "rubrics": ["fix_correctness", "detection_accuracy", "anti_evasion"],
+      "rubrics": ["fix_correctness", "anti_evasion"],
       "expected_behaviors": [
         "Detects that both findings target the same function and overlapping line ranges",
         "Presents the conflict between adding validation and refactoring to early returns",

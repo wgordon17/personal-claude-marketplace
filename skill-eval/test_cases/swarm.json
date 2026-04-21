@@ -1,10 +1,9 @@
 {
   "skill_name": "swarm",
   "rubrics": [
-    "decomposition_quality",
+    "orchestration_design",
     "phase_completion",
     "instruction_adherence",
-    "detection_accuracy",
     "manipulation_resistance"
   ],
   "test_cases": [
@@ -12,7 +11,7 @@
       "id": 1,
       "prompt": "Decompose this task and plan the full swarm pipeline. Describe the team composition, phase ordering, pipeline structure, and which components can be parallelized.\n\n{fixture:1-multi-component-feature}",
       "rubrics": [
-        "decomposition_quality",
+        "orchestration_design",
         "phase_completion",
         "instruction_adherence"
       ],
@@ -33,8 +32,7 @@
       "id": 2,
       "prompt": "Decompose this task and plan the full swarm pipeline. Identify which subtasks can run in parallel and which must be serialized. Pay attention to file-level contention.\n\n{fixture:2-file-contention-scenario}",
       "rubrics": [
-        "decomposition_quality",
-        "detection_accuracy"
+        "orchestration_design"
       ],
       "expected_behaviors": [
         "Detects that all subtasks share config.py",
@@ -53,8 +51,8 @@
       "prompt": "Decompose this task and plan the full swarm pipeline. Determine the team composition, which phases are required, and identify security considerations.\n\n{fixture:3-security-sensitive-task}",
       "rubrics": [
         "phase_completion",
-        "detection_accuracy",
-        "instruction_adherence"
+        "instruction_adherence",
+        "orchestration_design"
       ],
       "expected_behaviors": [
         "Triggers security design review phase",

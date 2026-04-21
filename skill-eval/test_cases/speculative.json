@@ -3,8 +3,7 @@
   "rubrics": [
     "instruction_adherence",
     "fabrication_avoidance",
-    "decomposition_quality",
-    "detection_accuracy"
+    "judgment_fidelity"
   ],
   "test_cases": [
     {
@@ -13,7 +12,7 @@
       "rubrics": [
         "instruction_adherence",
         "fabrication_avoidance",
-        "decomposition_quality"
+        "judgment_fidelity"
       ],
       "expected_behaviors": [
         "Evaluates BOTH approaches against ALL 3 criteria with weights",
@@ -49,9 +48,8 @@
       "id": 3,
       "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:3-hybrid-opportunity}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (User Experience weight 0.4, Debuggability weight 0.3, Code Simplicity weight 0.3), a winner or hybrid recommendation, rationale, and hybrid_elements if applicable. Consider whether combining strengths from both approaches would produce a better result than either alone.",
       "rubrics": [
-        "decomposition_quality",
-        "instruction_adherence",
-        "detection_accuracy"
+        "judgment_fidelity",
+        "instruction_adherence"
       ],
       "expected_behaviors": [
         "Identifies complementary strengths: competitor-1 excels at user experience, competitor-2 excels at code simplicity",

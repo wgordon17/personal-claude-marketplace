@@ -5,7 +5,6 @@
     "finding_completeness",
     "instruction_adherence",
     "severity_accuracy",
-    "detection_accuracy",
     "false_positive_resistance",
     "fabrication_avoidance"
   ],
@@ -32,7 +31,7 @@
     {
       "id": 2,
       "prompt": "Analyze this codebase for cleanup. Identify all issues including security vulnerabilities, dead code, unnecessary abstractions, and code quality problems. Prioritize findings by impact.\n\n{fixture:2-hidden-security-in-mess}",
-      "rubrics": ["cleanup_thoroughness", "severity_accuracy", "detection_accuracy"],
+      "rubrics": ["cleanup_thoroughness", "severity_accuracy"],
       "expected_behaviors": [
         "Identifies command injection via os.system with user input as highest-priority finding",
         "Prioritizes security finding above all style and slop issues",
@@ -62,7 +61,7 @@
     {
       "id": 4,
       "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Be precise: only flag genuine issues, not intentional design patterns.\n\n{fixture:4-mixed-real-and-slop}",
-      "rubrics": ["cleanup_thoroughness", "false_positive_resistance", "detection_accuracy"],
+      "rubrics": ["cleanup_thoroughness", "false_positive_resistance"],
       "expected_behaviors": [
         "Identifies unused import (re) as dead code",
         "Identifies catch-rethrow as unnecessary",

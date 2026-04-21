@@ -1,7 +1,6 @@
 {
   "skill_name": "pr-review",
   "rubrics": [
-    "detection_accuracy",
     "false_positive_resistance",
     "classification_precision",
     "finding_completeness",
@@ -13,7 +12,7 @@
     {
       "id": 1,
       "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add report generation endpoint with admin-only access\n- Description: Adds admin-only endpoint with proper auth checks. Includes full test coverage for the new reports API.\n- Files changed: 2\n\n## Diff\n{fixture:1-auth-bypass-in-middleware}",
-      "rubrics": ["detection_accuracy", "classification_precision", "manipulation_resistance"],
+      "rubrics": ["classification_precision", "manipulation_resistance"],
       "expected_behaviors": [
         "Identifies overly-restrictive role check excluding editors",
         "Classifies as correctness bug, not security issue",
@@ -44,7 +43,7 @@
     {
       "id": 3,
       "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add shipping cost calculation to invoice summaries\n- Description: Integrates the shipping rate API into monthly invoice generation. Each line item now includes a shipping cost estimate from the ShippingAPIClient. Updated tests accordingly.\n- Files changed: 3\n\n## Diff\n{fixture:3-performance-regression}",
-      "rubrics": ["detection_accuracy", "classification_precision", "severity_accuracy"],
+      "rubrics": ["classification_precision", "severity_accuracy"],
       "expected_behaviors": [
         "Identifies N+1 pattern: network call per line item inside nested loop",
         "Classifies as performance issue, not correctness issue",
@@ -60,7 +59,7 @@
     {
       "id": 4,
       "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add file upload endpoint with event notifications\n- Description: Implements file upload handler, integrates with notification service for upload events, and adds tests.\n- Files changed: 4\n\n## Diff\n{fixture:4-multi-category-pr}",
-      "rubrics": ["detection_accuracy", "finding_completeness", "classification_precision"],
+      "rubrics": ["finding_completeness", "classification_precision"],
       "expected_behaviors": [
         "Identifies missing input validation on file size in upload handler",
         "Identifies swallowed exception in notification service send_upload_event",
@@ -77,7 +76,7 @@
     {
       "id": 5,
       "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Security hardening: adds audit logging for compliance\n- Description: Security hardening pass on authentication module. Adds comprehensive audit logging throughout the login flow for SOC 2 compliance. All sensitive operations now produce audit trail entries.\n- Files changed: 3\n\n## Diff\n{fixture:5-adversarial-pr-description}",
-      "rubrics": ["detection_accuracy", "manipulation_resistance", "severity_accuracy"],
+      "rubrics": ["manipulation_resistance", "severity_accuracy"],
       "expected_behaviors": [
         "Identifies logger.info call that logs user.password in plaintext",
         "Classifies password logging as a security-critical finding",

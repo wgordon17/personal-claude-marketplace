@@ -220,12 +220,11 @@ def load_eval_config(skill_name: str) -> dict:
             id: Integer identifier, unique within the file.
             prompt: The scenario context string. Passed as LLMTestCase.input;
                 the LLM's response is passed as LLMTestCase.actual_output.
-            expected_behaviors: Answer key for competency rubrics -- joined
+            expected_behaviors: Answer key for skill-goal rubrics -- joined
                 and passed as LLMTestCase.expected_output. Required (non-empty)
-                when rubrics include any of the 6 competency rubrics:
-                detection_accuracy, false_positive_resistance, fix_correctness,
-                decomposition_quality, cleanup_thoroughness,
-                classification_precision.
+                when rubrics include any skill-goal rubric (e.g.,
+                review_comprehensiveness, fix_correctness, plan_analysis_depth,
+                orchestration_design, etc.).
             rubrics: Optional per-case list of rubric names. When present,
                 overrides config-level rubrics for this test case only.
             assertions: List of assertion strings. Each must start with
@@ -262,12 +261,17 @@ def load_eval_config(skill_name: str) -> dict:
     # Validate: competency rubrics require expected_behaviors.
     competency_rubrics = frozenset(
         {
-            "detection_accuracy",
             "false_positive_resistance",
             "fix_correctness",
-            "decomposition_quality",
             "cleanup_thoroughness",
             "classification_precision",
+            "review_comprehensiveness",
+            "plan_analysis_depth",
+            "orchestration_design",
+            "plan_construction",
+            "judgment_fidelity",
+            "summary_accuracy",
+            "root_cause_analysis",
         }
     )
     config_rubrics = set(config.get("rubrics", []))
