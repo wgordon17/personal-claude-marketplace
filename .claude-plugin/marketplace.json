@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "3.2.0"
+    "version": "3.3.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -115,6 +115,17 @@
       "description": "Jira integration via jira CLI — OSAC defaults with full redhat.atlassian.net support (MCP temporarily disabled)",
       "category": "productivity",
       "tags": ["jira", "cli", "issue-tracking", "osac"],
+      "author": {
+        "name": "wgordon17"
+      }
+    },
+    {
+      "name": "drawio",
+      "version": "1.0.0",
+      "source": "./drawio",
+      "description": "Draw.io diagram generation skill — creates native .drawio files with optional PNG/SVG/PDF export via draw.io Desktop CLI. Vendored from jgraph/drawio-mcp (Apache 2.0).",
+      "category": "productivity",
+      "tags": ["drawio", "diagrams", "diagramming", "mxgraph"],
       "author": {
         "name": "wgordon17"
       }

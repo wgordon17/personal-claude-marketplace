@@ -1,0 +1,124 @@
+name: Sync draw.io Skill
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Weekly, Monday 08:00 UTC
+  workflow_dispatch:  # Manual trigger for testing
+
+permissions: {}
+
+concurrency:
+  group: sync-drawio-skill
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync upstream skill files
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+
+      - name: Fetch upstream files
+        run: |
+          curl -sfL \
+            https://raw.githubusercontent.com/jgraph/drawio-mcp/main/skill-cli/drawio/SKILL.md \
+            -o "$RUNNER_TEMP/upstream-skill.md"
+          test -s "$RUNNER_TEMP/upstream-skill.md" || { echo "::error::SKILL.md fetch failed or empty"; exit 1; }
+
+          curl -sfL \
+            https://raw.githubusercontent.com/jgraph/drawio-mcp/main/shared/xml-reference.md \
+            -o "$RUNNER_TEMP/upstream-xml-reference.md"
+          test -s "$RUNNER_TEMP/upstream-xml-reference.md" || { echo "::error::xml-reference.md fetch failed or empty"; exit 1; }
+
+      - name: Check for changes
+        id: diff
+        run: |
+          # Patch the upstream URL to match our local vendored reference (same regex as "Update vendored files" step)
+          perl -0777 -i -pe 's|fetch and follow the instructions at:\nhttps://raw\.githubusercontent\.com/jgraph/drawio-mcp/main/shared/xml-reference\.md|read and follow the instructions in the vendored sibling file `xml-reference.md` located in the same directory as this skill file.|s' "$RUNNER_TEMP/upstream-skill.md"
+          changed=false
+          diff -q "$RUNNER_TEMP/upstream-skill.md" drawio/skills/drawio/SKILL.md > /dev/null 2>&1 || changed=true
+          diff -q "$RUNNER_TEMP/upstream-xml-reference.md" drawio/skills/drawio/xml-reference.md > /dev/null 2>&1 || changed=true
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Update vendored files
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          UPSTREAM_SHA=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/jgraph/drawio-mcp/commits/main \
+            | jq -r '.sha')
+          if ! [[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not extract valid commit SHA from GitHub API"
+            exit 1
+          fi
+
+          curl -sfL \
+            "https://raw.githubusercontent.com/jgraph/drawio-mcp/${UPSTREAM_SHA}/skill-cli/drawio/SKILL.md" \
+            -o drawio/skills/drawio/SKILL.md
+          test -s drawio/skills/drawio/SKILL.md || { echo "::error::SHA-pinned SKILL.md fetch failed"; exit 1; }
+
+          curl -sfL \
+            "https://raw.githubusercontent.com/jgraph/drawio-mcp/${UPSTREAM_SHA}/shared/xml-reference.md" \
+            -o drawio/skills/drawio/xml-reference.md
+          test -s drawio/skills/drawio/xml-reference.md || { echo "::error::SHA-pinned xml-reference.md fetch failed"; exit 1; }
+
+          # Patch upstream URL to local vendored reference (same regex as "Check for changes" step)
+          perl -0777 -i -pe 's|fetch and follow the instructions at:\nhttps://raw\.githubusercontent\.com/jgraph/drawio-mcp/main/shared/xml-reference\.md|read and follow the instructions in the vendored sibling file `xml-reference.md` located in the same directory as this skill file.|s' drawio/skills/drawio/SKILL.md
+          if grep -q 'raw.githubusercontent.com.*xml-reference' drawio/skills/drawio/SKILL.md; then
+            echo "::error::SKILL.md still contains upstream xml-reference URL after patching — upstream may have changed the surrounding text"
+            exit 1
+          fi
+
+          TODAY=$(date -u +%Y-%m-%d)
+
+          cat > drawio/UPSTREAM.md << UPSTREAM_EOF
+          # Upstream Tracking
+
+          | Field | Value |
+          |-------|-------|
+          | **Source repo** | [jgraph/drawio-mcp](https://github.com/jgraph/drawio-mcp) |
+          | **Source paths** | \`skill-cli/drawio/SKILL.md\`, \`shared/xml-reference.md\` |
+          | **License** | Apache 2.0 |
+          | **Vendored SHA** | \`${UPSTREAM_SHA}\` |
+          | **Last synced** | \`${TODAY}\` |
+
+          This file is updated automatically by the \`sync-drawio-skill\` GitHub Actions workflow.
+          UPSTREAM_EOF
+
+      - name: Bump patch version
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          jq '.version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
+            drawio/.claude-plugin/plugin.json > "$RUNNER_TEMP/plugin.json"
+          mv "$RUNNER_TEMP/plugin.json" drawio/.claude-plugin/plugin.json
+
+          jq '(.plugins[] | select(.name == "drawio")).version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
+            .claude-plugin/marketplace.json > "$RUNNER_TEMP/marketplace.json"
+          mv "$RUNNER_TEMP/marketplace.json" .claude-plugin/marketplace.json
+
+      - name: Create PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION=$(jq -r '.version' drawio/.claude-plugin/plugin.json)
+          BRANCH="chore/sync-drawio-skill-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add drawio/skills/drawio/SKILL.md drawio/skills/drawio/xml-reference.md \
+            drawio/UPSTREAM.md drawio/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+          git commit -m "chore(drawio): syncs upstream skill files to v${NEW_VERSION}"
+          git push origin "$BRANCH"
+
+          gh pr create --head "$BRANCH" --base main --draft \
+            --title "chore(drawio): syncs upstream skill files to v${NEW_VERSION}" \
+            --body "## Summary
+          - Syncs vendored skill files from [jgraph/drawio-mcp](https://github.com/jgraph/drawio-mcp) main
+          - Auto-bumps drawio plugin version to ${NEW_VERSION}"
