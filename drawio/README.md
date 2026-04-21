@@ -36,10 +36,10 @@ The vendored SKILL.md is synced weekly from
 [jgraph/drawio-mcp](https://github.com/jgraph/drawio-mcp) via the
 `sync-drawio-skill` GitHub Actions workflow. Changes arrive as PRs.
 
-The skill also fetches
+The skill also vendors
 [`shared/xml-reference.md`](https://github.com/jgraph/drawio-mcp/blob/main/shared/xml-reference.md)
-from upstream at runtime via GitHub raw URL. This reference is intentionally
-NOT vendored — it stays fresh automatically without sync PRs.
+from upstream alongside SKILL.md, synced at the same SHA. Both files are
+updated together by the `sync-drawio-skill` workflow.
 
 See [UPSTREAM.md](UPSTREAM.md) for the current vendored commit SHA.
 
