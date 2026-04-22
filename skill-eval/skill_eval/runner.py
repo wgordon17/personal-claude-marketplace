@@ -205,7 +205,7 @@ def resolve_skill_bundle(
     return bundle
 
 
-def load_eval_config(skill_name: str) -> dict:
+def load_eval_config(skill_name: str, tc_dir: Path | None = None) -> dict:
     """Load the evaluation config for a skill from the test_cases directory.
 
     Test case JSON format
@@ -266,7 +266,8 @@ def load_eval_config(skill_name: str) -> dict:
     """
     if not re.match(r"^[a-zA-Z0-9_-]+$", skill_name):
         return {"skill_name": skill_name, "rubrics": [], "test_cases": []}
-    config_path = Path(__file__).parent.parent / "test_cases" / f"{skill_name}.json"
+    base = tc_dir if tc_dir is not None else Path(__file__).parent.parent / "test_cases"
+    config_path = base / f"{skill_name}.json"
     if not config_path.exists():
         return {"skill_name": skill_name, "rubrics": [], "test_cases": []}
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -320,6 +321,9 @@ _FIXTURE_PLACEHOLDER_RE = re.compile(r"\{fixture:([^}]+)\}")
 # Regex for codebase placeholders: {codebase:REPO/PATH}
 # REPO is validated with _SAFE_NAME_RE. PATH components validated individually.
 _CODEBASE_PLACEHOLDER_RE = re.compile(r"\{codebase:([^}]+)\}")
+
+# Path component regex for codebase files (extends _SAFE_NAME_RE with dots).
+_SAFE_PATH_COMPONENT_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
 
 def load_fixture(
@@ -391,26 +395,26 @@ def build_fixture_prompt(
     template: str,
     repo_root: Path | None = None,
 ) -> tuple[str, bool]:
-    """Substitute ``{fixture:KEY}`` placeholders in a prompt template.
+    """Substitute ``{fixture:KEY}`` and ``{codebase:REPO/PATH}`` placeholders.
 
-    For each ``{fixture:KEY}`` found in the template, loads the corresponding
-    fixture file via ``load_fixture(skill_name, KEY)`` and substitutes the
-    content inline.
+    Two-pass resolution: first ``{fixture:KEY}`` placeholders are resolved
+    via ``load_fixture``, then ``{codebase:REPO/PATH}`` placeholders are
+    resolved via ``load_codebase_file`` in the post-substitution result.
 
     Args:
         skill_name: The skill identifier for fixture directory lookup.
-        template: The prompt string containing ``{fixture:KEY}`` placeholders.
+        template: The prompt string with ``{fixture:KEY}`` and/or
+            ``{codebase:REPO/PATH}`` placeholders.
         repo_root: Repository root for path resolution.
 
     Returns:
-        Tuple of (substituted_string, has_missing_fixtures). The bool is True
-        if any placeholder could not be resolved (left as-is in the output).
+        Tuple of (substituted_string, has_missing). The bool is True
+        if any placeholder could not be resolved (left as-is in output).
     """
     has_missing = False
     fixture_matches = list(_FIXTURE_PLACEHOLDER_RE.finditer(template))
-    codebase_only = not fixture_matches and "{codebase:" in template
 
-    if not fixture_matches and not codebase_only:
+    if not fixture_matches and "{codebase:" not in template:
         return template, False
 
     # Resolve repo_root once for all placeholder types.
@@ -502,7 +506,7 @@ def load_codebase_file(
             return None
         if part in (".", ".."):
             return None
-        if not re.match(r"^[a-zA-Z0-9_.-]+$", part):
+        if not _SAFE_PATH_COMPONENT_RE.match(part):
             return None
 
     if repo_root is None:

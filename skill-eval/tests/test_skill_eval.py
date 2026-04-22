@@ -1177,7 +1177,9 @@ class TestExpectedBehaviorsWiring:
 class TestLoadEvalConfigValidation:
     """Validation rules for load_eval_config."""
 
-    def test_load_eval_config_raises_for_competency_rubric_without_expected_behaviors(self):
+    def test_load_eval_config_raises_for_competency_rubric_without_expected_behaviors(
+        self, tmp_path
+    ):
         """ValueError raised when competency rubric used without expected_behaviors."""
         config = {
             "skill_name": "test-skill",
@@ -1186,32 +1188,22 @@ class TestLoadEvalConfigValidation:
                 {"id": 1, "prompt": "test", "assertions": []},
             ],
         }
-        tc_dir = Path(__file__).parent.parent / "test_cases"
-        tc_dir.mkdir(parents=True, exist_ok=True)
-        tc_file = tc_dir / "test-competency-validation.json"
+        tc_file = tmp_path / "test-competency-validation.json"
         tc_file.write_text(json.dumps(config))
-        try:
-            with pytest.raises(ValueError, match="competency rubric"):
-                load_eval_config("test-competency-validation")
-        finally:
-            tc_file.unlink()
+        with pytest.raises(ValueError, match="competency rubric"):
+            load_eval_config("test-competency-validation", tc_dir=tmp_path)
 
-    def test_load_eval_config_raises_for_empty_rubrics(self):
+    def test_load_eval_config_raises_for_empty_rubrics(self, tmp_path):
         """ValueError when rubrics is []."""
         config = {
             "skill_name": "test-empty-rubrics",
             "rubrics": [],
             "test_cases": [],
         }
-        tc_dir = Path(__file__).parent.parent / "test_cases"
-        tc_dir.mkdir(parents=True, exist_ok=True)
-        tc_file = tc_dir / "test-empty-rubrics.json"
+        tc_file = tmp_path / "test-empty-rubrics.json"
         tc_file.write_text(json.dumps(config))
-        try:
-            with pytest.raises(ValueError, match="empty rubrics"):
-                load_eval_config("test-empty-rubrics")
-        finally:
-            tc_file.unlink()
+        with pytest.raises(ValueError, match="empty rubrics"):
+            load_eval_config("test-empty-rubrics", tc_dir=tmp_path)
 
 
 # ── Group 18: N-adjusted regression threshold ──────────────────────────────

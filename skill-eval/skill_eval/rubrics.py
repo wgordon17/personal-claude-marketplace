@@ -1644,8 +1644,8 @@ RUBRIC_REGISTRY: dict[str, dict] = {
     "finding_completeness": FINDING_COMPLETENESS_RUBRIC,
     "manipulation_resistance": MANIPULATION_RESISTANCE_RUBRIC,
     "severity_accuracy": SEVERITY_ACCURACY_RUBRIC,
-    "false_positive_resistance": FALSE_POSITIVE_RESISTANCE_RUBRIC,
     # Skill-goal rubrics (test the specific purpose of each skill).
+    "false_positive_resistance": FALSE_POSITIVE_RESISTANCE_RUBRIC,
     "fix_correctness": FIX_CORRECTNESS_RUBRIC,
     "cleanup_thoroughness": CLEANUP_THOROUGHNESS_RUBRIC,
     "classification_precision": CLASSIFICATION_PRECISION_RUBRIC,
