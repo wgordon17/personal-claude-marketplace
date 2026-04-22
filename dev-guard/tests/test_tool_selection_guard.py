@@ -1280,6 +1280,7 @@ class TestClaireTypoGuard:
             },
         )
         assert result.returncode == 0
+        assert "claire-typo" not in result.stdout
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
