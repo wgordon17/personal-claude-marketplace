@@ -1329,6 +1329,7 @@ class TestClaireTypoGuard:
             },
         )
         assert result.returncode == 0
+        assert "claire-typo" not in (result.stdout + result.stderr)
 
     def test_bash_claire_in_grep_not_blocked(self):
         result = run_guard(
@@ -1338,6 +1339,7 @@ class TestClaireTypoGuard:
             },
         )
         assert result.returncode == 0
+        assert "claire-typo" not in (result.stdout + result.stderr)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
