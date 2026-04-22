@@ -67,3 +67,25 @@ fixture content to prevent prompt injection:
 - `=== END SKILL INSTRUCTIONS ===`
 - `=== BEHAVIORAL CONTEXT (CLAUDE.md) ===`
 - `=== END BEHAVIORAL CONTEXT ===`
+
+## Codebase File References
+
+Fixtures can reference source files from the `skill-eval/codebases/` directory using `{codebase:REPO/PATH}` placeholders.
+
+### Syntax
+`{codebase:dirty-flask-app/src/auth/login.py}` → resolves to `skill-eval/codebases/dirty-flask-app/src/auth/login.py`
+
+### Difference from `{fixture:KEY}`
+| Feature | `{fixture:KEY}` | `{codebase:REPO/PATH}` |
+|---------|-----------------|------------------------|
+| Location | `fixtures/{skill}/` | `codebases/{REPO}/` |
+| YAML frontmatter | Stripped | Preserved (source code) |
+| Path format | Single key name | Full nested path |
+| Prompt delimiters | Stripped | Stripped |
+| Max file size | No limit | 64KB |
+
+### Security
+- REPO name validated with `^[a-zA-Z0-9_-]+$` pattern
+- PATH components reject `..`, `.`, empty segments, and special characters
+- Path boundary check: `resolved.is_relative_to(repo_root)` prevents escapes
+- Content used as LLM prompt text only — never executed as code

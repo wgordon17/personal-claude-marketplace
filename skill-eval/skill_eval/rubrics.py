@@ -679,27 +679,22 @@ REVIEW_COMPREHENSIVENESS_RUBRIC = {
         Rubric(
             score_range=(5, 5),
             expected_outcome=(
-                "Response identifies most issues with reasonable evidence"
-                " but severity assessment has gaps; or covers all"
-                " categories but some passes are perfunctory"
+                "Identifies issues at the file level but without cross-file"
+                " tracing or impact chain analysis"
             ),
         ),
         Rubric(
             score_range=(8, 8),
             expected_outcome=(
-                "Response identifies all expected issues with specific"
-                " evidence and correct severity; covers all categories"
-                " with substantive analysis; at most 1 finding has weak"
-                " evidence"
+                "Provides evidence at file:line level for each finding;"
+                " traces impact within individual files"
             ),
         ),
         Rubric(
             score_range=(10, 10),
             expected_outcome=(
-                "Every expected issue identified with precise evidence"
-                " (file:line references), correct severity assessment,"
-                " complete category coverage, and thorough multi-pass"
-                " analysis with no gaps"
+                "Traces impact chains across files with file:line evidence;"
+                " identifies systemic patterns not just individual issues"
             ),
         ),
     ],
@@ -769,18 +764,15 @@ PLAN_ANALYSIS_DEPTH_RUBRIC = {
         Rubric(
             score_range=(5, 5),
             expected_outcome=(
-                "Response identifies most issues with task references but"
-                " dependency chains are incomplete or scope assessment is"
-                " vague"
+                "Identifies structural issues but without tracing specific"
+                " dependency chains between tasks"
             ),
         ),
         Rubric(
             score_range=(8, 8),
             expected_outcome=(
-                "Response traces all dependency chains with specific task"
-                " references, identifies scope issues against stated"
-                " goal, and checks file structure; at most 1 issue has"
-                " incomplete evidence"
+                "Fully traces dependency chains with specific task references;"
+                " identifies which tasks block which"
             ),
         ),
         Rubric(
@@ -867,18 +859,15 @@ ORCHESTRATION_DESIGN_RUBRIC = {
         Rubric(
             score_range=(8, 8),
             expected_outcome=(
-                "All dependencies traced with evidence, parallelization"
-                " correctly justified, file contention detected and"
-                " resolved; at most 1 dependency edge has weak evidence"
+                "Evidence-backed dependency edges citing what output flows"
+                " between components; independence rationale for parallel groups"
             ),
         ),
         Rubric(
             score_range=(10, 10),
             expected_outcome=(
-                "Complete dependency graph with cited evidence for every"
-                " edge, correct parallelization with independence proofs,"
-                " all file contentions detected and resolved with"
-                " specific ordering rationale"
+                "Independence proofs for parallel components; dependency edges"
+                " cite specific data artifacts flowing between stages"
             ),
         ),
     ],
@@ -953,18 +942,15 @@ PLAN_CONSTRUCTION_RUBRIC = {
         Rubric(
             score_range=(8, 8),
             expected_outcome=(
-                "Response asks targeted questions informed by codebase,"
-                " produces plan following established patterns with"
-                " correct dependencies; at most 1 file mapping gap"
+                "Codebase-specific questions referencing existing files and"
+                " patterns; complete file structure mapping with few gaps"
             ),
         ),
         Rubric(
             score_range=(10, 10),
             expected_outcome=(
-                "Questions demonstrate deep codebase awareness, plan"
-                " follows all established patterns, complete file"
-                " mapping, correct dependency ordering, and proper"
-                " handling of scope decisions"
+                "Questions demonstrate deep codebase understanding; complete"
+                " file mapping with no gaps; every task traceable to a requirement"
             ),
         ),
     ],
@@ -1039,20 +1025,15 @@ JUDGMENT_FIDELITY_RUBRIC = {
         Rubric(
             score_range=(8, 8),
             expected_outcome=(
-                "All criteria scored with correct weights,"
-                " recommendation consistent with weighted scores, hybrid"
-                " detection is evidence-based; at most 1 criterion's"
-                " scoring lacks detail"
+                "Every user-defined criterion explicitly scored with weights"
+                " applied as specified; no manufactured advantages for weaker approach"
             ),
         ),
         Rubric(
             score_range=(10, 10),
             expected_outcome=(
-                "Every criterion explicitly scored for every approach"
-                " with correct weights applied, recommendation matches"
-                " weighted totals, no manufactured advantages, hybrid"
-                " recommended only when evidence supports complementary"
-                " strengths"
+                "Perfect criterion-by-criterion scoring with user weights; trade-offs"
+                " stated without bias; no criteria invented beyond what user specified"
             ),
         ),
     ],
@@ -1129,18 +1110,15 @@ SUMMARY_ACCURACY_RUBRIC = {
         Rubric(
             score_range=(8, 8),
             expected_outcome=(
-                "Accurate counts, correct status with evidence, specific"
-                " discrepancies identified; at most 1 missing task not"
-                " explicitly named"
+                "Numerically precise counts with specific discrepancies named"
+                " and their location identified"
             ),
         ),
         Rubric(
             score_range=(10, 10),
             expected_outcome=(
-                "Numerically precise counts, evidence-based status"
-                " classification, every discrepancy between claimed and"
-                " actual state identified with specific references, and"
-                " all missing tasks named"
+                "Every missing or incomplete task explicitly identified by name;"
+                " no false completion claims"
             ),
         ),
     ],
@@ -1213,10 +1191,9 @@ ROOT_CAUSE_ANALYSIS_RUBRIC = {
         Rubric(
             score_range=(8, 8),
             expected_outcome=(
-                "All bugs traced from symptom to root cause with"
-                " file:line evidence; each investigated independently;"
-                " structured entries complete; at most 1 resolution plan"
-                " could be more specific"
+                "Identifies root cause with alternative hypotheses examined"
+                " and ruled out with evidence, not just the first plausible"
+                " explanation"
             ),
         ),
         Rubric(
@@ -1521,6 +1498,139 @@ CLASSIFICATION_PRECISION_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 9h. MULTI-PASS EXECUTION (quality-gate)
+#     Tests quality-gate's multi-pass review: distinct analytical lenses,
+#     no finding duplication, and cross-pass synthesis.
+# ──────────────────────────────────────────────────────────────────────────────
+
+MULTI_PASS_EXECUTION_RUBRIC = {
+    "name": "multi_pass_execution",
+    "evaluation_steps": [
+        (
+            "Check whether the response contains multiple distinct review"
+            " passes or sections with different focus areas"
+        ),
+        (
+            "Verify each pass applies a genuinely different analytical lens"
+            " (e.g., security vs performance vs correctness)"
+        ),
+        (
+            "Check that findings from later passes are not duplicates or"
+            " rephrased versions of earlier findings"
+        ),
+        (
+            "Verify the response synthesizes or prioritizes findings across"
+            " passes rather than just listing them sequentially"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome="No distinct review passes; single monolithic analysis",
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Multiple sections exist but all apply the same lens or repeat the same findings"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Multiple passes with somewhat different focus areas but significant finding"
+                " overlap between passes"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Distinct passes with clearly different lenses; minimal finding duplication;"
+                " basic cross-pass prioritization"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Each pass applies a unique analytical lens with zero finding duplication;"
+                " cross-pass synthesis identifies the highest-priority issues across all lenses"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9i. PR DEPTH (pr-review)
+#     Tests pr-review's cross-file impact tracing: data flow between files,
+#     cross-file interaction issues, and PR-introduced vs pre-existing.
+# ──────────────────────────────────────────────────────────────────────────────
+
+PR_DEPTH_RUBRIC = {
+    "name": "pr_depth",
+    "evaluation_steps": [
+        ("Check whether the response traces data flow connections between files in the diff"),
+        (
+            "Verify the response identifies cross-file interaction issues"
+            " (not just per-file issues listed sequentially)"
+        ),
+        (
+            "Check whether the response distinguishes issues introduced"
+            " by the diff from pre-existing code issues"
+        ),
+        (
+            "Verify file:line references point to actual locations"
+            " in the diff, not fabricated line numbers"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome="Each file analyzed in complete isolation; no cross-file observations",
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Mentions that files are related but does not trace specific data flow between them"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Identifies some cross-file issues but analysis is shallow;"
+                " does not trace full impact chain"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Traces data flow across files with specific references;"
+                " identifies interaction issues;"
+                " distinguishes PR-introduced from pre-existing"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Complete cross-file impact analysis with traced data flow"
+                " chains, interaction issues identified with evidence, and"
+                " clear separation of new versus pre-existing issues"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # REGISTRY
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1546,4 +1656,6 @@ RUBRIC_REGISTRY: dict[str, dict] = {
     "judgment_fidelity": JUDGMENT_FIDELITY_RUBRIC,
     "summary_accuracy": SUMMARY_ACCURACY_RUBRIC,
     "root_cause_analysis": ROOT_CAUSE_ANALYSIS_RUBRIC,
+    "multi_pass_execution": MULTI_PASS_EXECUTION_RUBRIC,
+    "pr_depth": PR_DEPTH_RUBRIC,
 }

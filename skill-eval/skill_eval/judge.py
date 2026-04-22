@@ -28,7 +28,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 _MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS_EXECUTE = 24576  # Skill execution — must be large enough for full output.
+_MAX_TOKENS_EXECUTE = 65536  # Skill execution — must be large enough for full output.
 _MAX_TOKENS_SCORE = 4096  # Scoring — ReasonScore JSON is small.
 
 # Defaults for multi-trial averaging.

@@ -59,6 +59,8 @@ SKILL_GOAL_RUBRICS: frozenset[str] = frozenset(
         "judgment_fidelity",
         "summary_accuracy",
         "root_cause_analysis",
+        "multi_pass_execution",
+        "pr_depth",
     }
 )
 
@@ -315,6 +317,10 @@ _PROMPT_DELIMITERS = [
 # Regex for fixture placeholders in prompt templates.
 _FIXTURE_PLACEHOLDER_RE = re.compile(r"\{fixture:([^}]+)\}")
 
+# Regex for codebase placeholders: {codebase:REPO/PATH}
+# REPO is validated with _SAFE_NAME_RE. PATH components validated individually.
+_CODEBASE_PLACEHOLDER_RE = re.compile(r"\{codebase:([^}]+)\}")
+
 
 def load_fixture(
     skill_name: str,
@@ -401,17 +407,19 @@ def build_fixture_prompt(
         if any placeholder could not be resolved (left as-is in the output).
     """
     has_missing = False
-    matches = list(_FIXTURE_PLACEHOLDER_RE.finditer(template))
-    if not matches:
+    fixture_matches = list(_FIXTURE_PLACEHOLDER_RE.finditer(template))
+    codebase_only = not fixture_matches and "{codebase:" in template
+
+    if not fixture_matches and not codebase_only:
         return template, False
 
-    # Resolve repo_root once for all fixtures.
+    # Resolve repo_root once for all placeholder types.
     if repo_root is None:
         repo_root = _get_repo_root()
 
-    # Build replacements (process in reverse order to preserve offsets).
+    # First pass: resolve {fixture:KEY} placeholders.
     replacements: list[tuple[int, int, str]] = []
-    for m in matches:
+    for m in fixture_matches:
         key = m.group(1)
         content = load_fixture(skill_name, key, repo_root=repo_root)
         if content is None:
@@ -429,7 +437,114 @@ def build_fixture_prompt(
     for start, end, content in reversed(replacements):
         result = result[:start] + content + result[end:]
 
+    # Second pass: resolve {codebase:REPO/PATH} placeholders in the result.
+    codebase_matches = list(_CODEBASE_PLACEHOLDER_RE.finditer(result))
+    if codebase_matches:
+        codebase_replacements: list[tuple[int, int, str]] = []
+        for m in codebase_matches:
+            ref = m.group(1)
+            content = load_codebase_file(ref, repo_root=repo_root)
+            if content is None:
+                logger.warning(
+                    "Missing codebase file %r — leaving placeholder",
+                    ref,
+                )
+                has_missing = True
+            else:
+                codebase_replacements.append((m.start(), m.end(), content))
+        for start, end, content in reversed(codebase_replacements):
+            result = result[:start] + content + result[end:]
+
     return result, has_missing
+
+
+# ── Codebase file loading ─────────────────────────────────────────────────────
+
+# Max file size for codebase files (64KB).
+_MAX_CODEBASE_FILE_BYTES = 65536
+
+
+def load_codebase_file(
+    codebase_ref: str,
+    repo_root: Path | None = None,
+) -> str | None:
+    """Load a source file from a codebase directory.
+
+    Codebase files live at ``skill-eval/codebases/{REPO}/{PATH}``.
+    Content is used as LLM prompt text only — never executed as code.
+    Unlike fixtures, YAML frontmatter is NOT stripped (source code files).
+    Prompt delimiter lines ARE stripped to prevent prompt boundary escape.
+
+    Args:
+        codebase_ref: Reference in REPO/PATH format (e.g. "dirty-flask-app/src/auth/login.py").
+        repo_root: Repository root for path resolution.
+
+    Returns:
+        File content as string, or None if invalid/missing/too large.
+    """
+    # Split into REPO and PATH.
+    slash_idx = codebase_ref.find("/")
+    if slash_idx < 1:
+        return None
+    repo_name = codebase_ref[:slash_idx]
+    file_path = codebase_ref[slash_idx + 1 :]
+
+    # Validate REPO with existing safe name pattern.
+    if not _SAFE_NAME_RE.match(repo_name):
+        return None
+
+    # Validate PATH components.
+    if not file_path or file_path.startswith("/"):
+        return None
+    path_parts = file_path.split("/")
+    for part in path_parts:
+        if not part:  # empty segment (double slash)
+            return None
+        if part in (".", ".."):
+            return None
+        if not re.match(r"^[a-zA-Z0-9_.-]+$", part):
+            return None
+
+    if repo_root is None:
+        repo_root = _get_repo_root()
+
+    candidate = repo_root / "skill-eval" / "codebases" / repo_name / file_path
+
+    # Path boundary check BEFORE reading.
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if not resolved.is_relative_to(repo_root.resolve()):
+        return None
+
+    if not candidate.is_file():
+        return None
+
+    # File size guard.
+    try:
+        if candidate.stat().st_size > _MAX_CODEBASE_FILE_BYTES:
+            logger.warning(
+                "Codebase file %r exceeds %d bytes — skipping",
+                codebase_ref,
+                _MAX_CODEBASE_FILE_BYTES,
+            )
+            return None
+    except OSError:
+        return None
+
+    try:
+        content = candidate.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Cannot read codebase file %r: %s", codebase_ref, exc)
+        return None
+
+    # Strip prompt delimiter lines (same as fixtures — prevents prompt boundary escape).
+    lines = content.split("\n")
+    delimiter_set = set(_PROMPT_DELIMITERS)
+    lines = [line for line in lines if line.rstrip() not in delimiter_set]
+
+    return "\n".join(lines)
 
 
 def load_baselines(baselines_path: Path | None = None) -> dict[str, dict[str, float]]:
@@ -671,9 +786,9 @@ def run_eval(
         prompt = tc.get("prompt", "")
         assertions = tc.get("assertions", [])
 
-        # Fixture substitution: replace {fixture:KEY} placeholders.
+        # Fixture and codebase substitution: replace placeholders.
         tc_infra = False
-        if "{fixture:" in prompt:
+        if "{fixture:" in prompt or "{codebase:" in prompt:
             prompt, has_missing = build_fixture_prompt(skill_name, prompt, repo_root=repo_root)
             if has_missing:
                 tc_infra = True

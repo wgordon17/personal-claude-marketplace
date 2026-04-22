@@ -24,6 +24,7 @@ from skill_eval.runner import (
     build_fixture_prompt,
     compare_baselines,
     load_baselines,
+    load_codebase_file,
     load_eval_config,
     load_fixture,
     resolve_skill_bundle,
@@ -483,7 +484,7 @@ class TestNewCompetencyRubrics:
 
         for name in SKILL_GOAL_RUBRICS:
             assert name in RUBRIC_REGISTRY, f"Rubric {name!r} not in RUBRIC_REGISTRY"
-        assert len(RUBRIC_REGISTRY) == 19
+        assert len(RUBRIC_REGISTRY) == 21
 
     def test_new_rubrics_have_evaluation_steps(self):
         from skill_eval.rubrics import RUBRIC_REGISTRY
@@ -1243,3 +1244,170 @@ class TestNAdjustedThreshold:
         }
         passed_n3, report_n3 = compare_baselines(results_n3, baselines)
         assert passed_n3 is False, f"N=3 drop of 0.20 should fail: {report_n3}"
+
+
+# ── Group 19: load_codebase_file ─────────────────────────────────────────────
+
+
+class TestLoadCodebaseFile:
+    """Tests for load_codebase_file()."""
+
+    def test_valid_codebase_ref(self, tmp_path):
+        """Valid ref resolves correctly."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("print('hello')")
+        result = load_codebase_file("test-repo/src/app.py", repo_root=tmp_path)
+        assert result == "print('hello')"
+
+    def test_path_traversal_rejected(self, tmp_path):
+        """.. in path is rejected."""
+        result = load_codebase_file("../evil/file.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_dotdot_in_path_rejected(self, tmp_path):
+        """.. in nested path is rejected."""
+        result = load_codebase_file("repo/../evil.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_absolute_path_rejected(self, tmp_path):
+        """Leading / is rejected."""
+        result = load_codebase_file("repo//etc/passwd", repo_root=tmp_path)
+        assert result is None
+
+    def test_double_slash_rejected(self, tmp_path):
+        """Empty path segment is rejected."""
+        result = load_codebase_file("repo//file.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_dot_segment_rejected(self, tmp_path):
+        """Single . in path is rejected."""
+        result = load_codebase_file("repo/./file.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_missing_file_returns_none(self, tmp_path):
+        """Non-existent file returns None."""
+        result = load_codebase_file("repo/nonexistent.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_no_slash_rejected(self, tmp_path):
+        """Ref without slash is rejected (must be REPO/PATH)."""
+        result = load_codebase_file("justfile.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_symlink_escape_blocked(self, tmp_path):
+        """Symlink pointing outside repo_root is blocked."""
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as f:
+            f.write(b"evil content")
+            evil_path = f.name
+        try:
+            codebases = tmp_path / "skill-eval" / "codebases" / "evil-repo"
+            codebases.mkdir(parents=True)
+            link = codebases / "escape.py"
+            link.symlink_to(evil_path)
+            result = load_codebase_file("evil-repo/escape.py", repo_root=tmp_path)
+            assert result is None
+        finally:
+            Path(evil_path).unlink(missing_ok=True)
+
+    def test_size_limit_enforced(self, tmp_path):
+        """Files exceeding MAX size return None."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "big-repo"
+        codebases.mkdir(parents=True)
+        big_file = codebases / "huge.py"
+        big_file.write_text("x" * 70000)  # > 65536
+        result = load_codebase_file("big-repo/huge.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_delimiter_stripping(self, tmp_path):
+        """Prompt delimiter lines are stripped from codebase content."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo"
+        codebases.mkdir(parents=True)
+        content = "line1\n=== SKILL INSTRUCTIONS ===\nline3"
+        (codebases / "file.py").write_text(content)
+        result = load_codebase_file("test-repo/file.py", repo_root=tmp_path)
+        assert result == "line1\nline3"
+
+    def test_frontmatter_not_stripped(self, tmp_path):
+        """YAML frontmatter is preserved (not stripped like fixtures)."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo"
+        codebases.mkdir(parents=True)
+        content = "---\nkey: value\n---\ncode here"
+        (codebases / "file.py").write_text(content)
+        result = load_codebase_file("test-repo/file.py", repo_root=tmp_path)
+        assert "---" in result
+        assert "key: value" in result
+
+
+# ── Group 20: build_fixture_prompt codebase support ──────────────────────────
+
+
+class TestBuildFixturePromptCodebase:
+    """Tests for {codebase:} placeholder resolution in build_fixture_prompt."""
+
+    def test_codebase_placeholder_substituted(self, tmp_path):
+        """Codebase placeholder is resolved."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("from flask import Flask")
+        template = "Review this: {codebase:test-repo/src/app.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "from flask import Flask" in result
+        assert not has_missing
+
+    def test_missing_codebase_leaves_placeholder(self, tmp_path):
+        """Missing codebase file leaves placeholder and sets has_missing."""
+        template = "Review: {codebase:nonexistent/file.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "{codebase:nonexistent/file.py}" in result
+        assert has_missing
+
+    def test_mixed_fixture_and_codebase(self, tmp_path):
+        """Both fixture and codebase placeholders resolve."""
+        # Create fixture
+        fixtures = tmp_path / "skill-eval" / "fixtures" / "test-skill"
+        fixtures.mkdir(parents=True)
+        (fixtures / "1-test.md").write_text("fixture content here")
+        # Create codebase file
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("codebase content here")
+        template = "{fixture:1-test} and {codebase:test-repo/app.py}"
+        result, has_missing = build_fixture_prompt("test-skill", template, repo_root=tmp_path)
+        assert "fixture content here" in result
+        assert "codebase content here" in result
+        assert not has_missing
+
+    def test_codebase_only_prompt_resolved(self, tmp_path):
+        """Prompt with only codebase placeholders (no fixtures) is resolved."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "main.py").write_text("def main(): pass")
+        template = "Analyze: {codebase:repo/src/main.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "def main(): pass" in result
+        assert not has_missing
+
+
+# ── Group 21: Codebase Python syntax regression ───────────────────────────────
+
+
+class TestCodebasePythonSyntax:
+    """Regression test: all .py files under skill-eval/codebases/ must parse."""
+
+    def test_codebase_python_syntax(self):
+        import ast
+
+        codebases_dir = Path(__file__).parent.parent / "codebases"
+        if not codebases_dir.exists():
+            pytest.skip("No codebases directory yet")
+        py_files = list(codebases_dir.rglob("*.py"))
+        if not py_files:
+            pytest.skip("No .py files found under skill-eval/codebases/")
+        for path in py_files:
+            try:
+                ast.parse(path.read_text())
+            except SyntaxError as e:
+                raise AssertionError(f"Syntax error in {path}: {e}") from e
