@@ -1173,6 +1173,206 @@ class TestNonBashTmpBlocking:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# .claire → .claude hallucination guard
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestClaireTypoGuard:
+    """LLM hallucination mitigation: .claire → .claude path rewriting."""
+
+    def test_write_claire_rewritten(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "/Users/foo/.claire/worktrees/agent-1/src/api/notifications.ts",
+                "content": "export {}",
+            },
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook = output["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "allow"
+        assert hook["updatedInput"]["file_path"] == (
+            "/Users/foo/.claude/worktrees/agent-1/src/api/notifications.ts"
+        )
+        assert hook["updatedInput"]["content"] == "export {}"
+        assert ".claire" in result.stderr
+
+    def test_edit_claire_rewritten(self):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "/Users/foo/.claire/settings.json",
+                "old_string": "a",
+                "new_string": "b",
+            },
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook = output["hookSpecificOutput"]
+        assert hook["updatedInput"]["file_path"] == "/Users/foo/.claude/settings.json"
+        assert hook["updatedInput"]["old_string"] == "a"
+        assert hook["updatedInput"]["new_string"] == "b"
+
+    def test_notebook_claire_rewritten(self):
+        result = run_guard(
+            "NotebookEdit",
+            {
+                "notebook_path": "/Users/foo/.claire/notebooks/test.ipynb",
+                "command": "add",
+            },
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook = output["hookSpecificOutput"]
+        assert hook["updatedInput"]["notebook_path"] == ("/Users/foo/.claude/notebooks/test.ipynb")
+        assert hook["updatedInput"]["command"] == "add"
+
+    def test_relative_claire_rewritten(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": ".claire/worktrees/agent-1/file.ts",
+                "content": "",
+            },
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["hookSpecificOutput"]["updatedInput"]["file_path"] == (
+            ".claude/worktrees/agent-1/file.ts"
+        )
+
+    def test_multiple_claire_segments_rewritten(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "/Users/foo/.claire/projects/.claire/file.py",
+                "content": "",
+            },
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["hookSpecificOutput"]["updatedInput"]["file_path"] == (
+            "/Users/foo/.claude/projects/.claude/file.py"
+        )
+
+    def test_claude_path_not_rewritten(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "/Users/foo/.claude/worktrees/agent-1/file.ts",
+                "content": "",
+            },
+        )
+        assert result.returncode == 0
+        assert not result.stdout.strip()
+
+    def test_claire_in_filename_not_rewritten(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "/Users/foo/project/claire_report.md",
+                "content": "",
+            },
+        )
+        assert result.returncode == 0
+        assert not result.stdout.strip()
+
+    def test_read_claire_rewritten(self):
+        result = run_guard(
+            "Read",
+            {
+                "file_path": "/Users/foo/.claire/settings.json",
+            },
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook = output["hookSpecificOutput"]
+        assert hook["updatedInput"]["file_path"] == "/Users/foo/.claude/settings.json"
+
+    def test_read_claude_not_rewritten(self):
+        result = run_guard(
+            "Read",
+            {
+                "file_path": "/Users/foo/.claude/settings.json",
+            },
+        )
+        assert result.returncode == 0
+        assert "claire-typo" not in (result.stdout + result.stderr)
+
+    def test_bash_claire_path_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "mkdir -p /Users/foo/.claire/worktrees/agent-1/",
+            },
+        )
+        assert result.returncode == 2
+        assert ".claire" in result.stderr
+        assert ".claude" in result.stderr
+
+    def test_bash_claire_relative_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "cp file.ts .claire/worktrees/agent-1/",
+            },
+        )
+        assert result.returncode == 2
+        assert ".claire" in result.stderr
+
+    def test_bash_claire_with_semicolon_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "mkdir .claire;ls",
+            },
+        )
+        assert result.returncode == 2
+        assert "claire-typo" in result.stderr
+
+    def test_bash_claire_with_pipe_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "ls .claire|wc -l",
+            },
+        )
+        assert result.returncode == 2
+        assert "claire-typo" in result.stderr
+
+    def test_bash_clairewood_not_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "git status .clairewood/",
+            },
+        )
+        assert result.returncode == 0
+        assert "claire-typo" not in (result.stdout + result.stderr)
+
+    def test_bash_claude_path_not_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "git status .claude/",
+            },
+        )
+        assert result.returncode == 0
+        assert "claire-typo" not in (result.stdout + result.stderr)
+
+    def test_bash_claire_in_grep_not_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": 'git log -S ".claire"',
+            },
+        )
+        assert result.returncode == 0
+        assert "claire-typo" not in (result.stdout + result.stderr)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Whitespace edge cases
 # ═══════════════════════════════════════════════════════════════════════════════
 

@@ -1844,6 +1844,59 @@ def _guard_plan_mode(tool_name: str) -> None:
         )
 
 
+_CLAIRE_PATH_RE = re.compile(
+    r"(?<=[\s/])\.claire(?=[^a-zA-Z0-9_-]|$)|^\.claire(?=[^a-zA-Z0-9_-]|$)"
+)
+
+
+def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
+    """Correct .claire → .claude hallucinations (anthropics/claude-code#17893).
+
+    Write/Edit/NotebookEdit/Read: silently rewrites the file_path via updatedInput.
+    Bash: blocks the command and tells the model to use .claude (cannot use updatedInput
+    for Bash because permissionDecision "allow" would bypass all other Bash guards).
+    """
+    if tool_name in ("Write", "Edit", "NotebookEdit", "Read"):
+        path_key = "notebook_path" if tool_name == "NotebookEdit" else "file_path"
+        file_path = tool_input.get(path_key, "")
+        if not file_path:
+            return
+
+        parts = file_path.split("/")
+        if ".claire" not in parts:
+            return
+
+        corrected_parts = [".claude" if p == ".claire" else p for p in parts]
+        corrected = "/".join(corrected_parts)
+
+        corrected_input = dict(tool_input)
+        corrected_input[path_key] = corrected
+
+        _log_event("guard", "rewrite", rule="claire-typo", command=f"{file_path} → {corrected}")
+        print(
+            _hook_output(
+                "allow",
+                "Corrected .claire → .claude hallucination",
+                updated_input=corrected_input,
+            )
+        )
+        print(f"[claire-typo-guard] Corrected .claire → .claude: {corrected}", file=sys.stderr)
+        sys.exit(0)
+
+    elif tool_name == "Bash":
+        command = tool_input.get("command", "")
+        if not command or not _CLAIRE_PATH_RE.search(command):
+            return
+        _exit_with_decision(
+            ".claire is a known LLM hallucination of .claude "
+            "(anthropics/claude-code#17893). "
+            "Replace .claire with .claude in your command and retry.",
+            "block",
+            rule_name="claire-typo-bash",
+            matched_segment=command[:80],
+        )
+
+
 _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
 
 
@@ -3717,15 +3770,18 @@ def main() -> None:
         _handle_post_tool_use(data)
         sys.exit(0)
 
-    # Increment tool call counter (PreToolUse only — Post hooks don't count)
-    if _session_id:
-        _increment_tool_counter(_session_id)
-
     tool_name = data.get("tool_name", "")
+
+    # Increment tool call counter (PreToolUse only — Post hooks don't count).
+    # Skip Read: it was added to PreToolUse solely for .claire path correction
+    # and counting it would inflate the metric vs its established baseline.
+    if _session_id and tool_name != "Read":
+        _increment_tool_counter(_session_id)
     tool_input = data.get("tool_input", {})
 
     _guard_tmp_path(tool_name, tool_input)
     _guard_plan_mode(tool_name)
+    _guard_claire_typo(tool_name, tool_input)
 
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
