@@ -88,6 +88,47 @@
         "contains: plaintext",
         "contains: security"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n{fixture:6-dirty-app-subtle-security}\n\nThis PR adds task export (webhook delivery) and search functionality to the Flask task management app.",
+      "rubrics": [
+        "classification_precision",
+        "review_comprehensiveness",
+        "pr_depth",
+        "false_positive_resistance"
+      ],
+      "expected_behaviors": [
+        "Identifies SSRF in export.py: URL validation only checks startswith('https://') without blocking internal IP ranges",
+        "Identifies second-order SQL injection in search.py: stored user input f-string interpolated into later query",
+        "Identifies PII exposure in logging.py: passwords and tokens in DEBUG log output",
+        "Traces cross-file impact: search stored data flows to a vulnerable query path",
+        "Does NOT flag the task model structure as a security issue"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "contains: injection",
+        "contains: pii"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n{fixture:7-clean-app-feature}\n\nThis PR adds ticket management API endpoints with proper validation and access control.",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Recognizes parameterized queries are correctly used throughout",
+        "Does NOT fabricate security vulnerabilities in well-written code",
+        "Does NOT flag SSRF protection in validation.py as insufficient — it correctly checks private IP ranges",
+        "May note minor style observations but marks them as non-blocking"
+      ],
+      "assertions": [
+        "not-contains: needs-fix",
+        "not-contains: critical",
+        "not-contains: vulnerability"
+      ]
     }
   ]
 }

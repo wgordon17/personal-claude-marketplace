@@ -102,6 +102,46 @@
         "contains: parallel",
         "contains: contention"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Review this implementation plan for structural issues, dependency problems, and completeness.\n\n{fixture:6-dirty-app-implementation-plan}",
+      "rubrics": [
+        "plan_analysis_depth",
+        "finding_completeness",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Identifies phantom file reference: Task 3 references src/notifications/email.py not in File Structure",
+        "Identifies circular dependency: Task 4 depends on Task 5 and Task 5 depends on Task 4",
+        "Flags the unresolved [ASSUMPTION: scope] about SMS notifications",
+        "Does NOT fabricate issues with the correctly structured Tasks 1 and 2"
+      ],
+      "assertions": [
+        "contains: circular",
+        "contains: email.py",
+        "contains: assumption"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review this implementation plan for structural issues, dependency problems, and completeness.\n\n{fixture:7-clean-app-well-structured-plan}",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance",
+        "plan_analysis_depth"
+      ],
+      "expected_behaviors": [
+        "Recognizes the plan has correct dependency ordering (1 -> 2 -> 3)",
+        "Does NOT fabricate circular dependencies where none exist",
+        "Does NOT flag file references that correctly match the File Structure",
+        "May suggest minor improvements but marks them as non-blocking"
+      ],
+      "assertions": [
+        "not-contains: circular",
+        "not-contains: missing file",
+        "not-contains: needs-fix"
+      ]
     }
   ]
 }
