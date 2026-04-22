@@ -785,6 +785,47 @@ class TestMultiTrialAveraging:
             # 4.5 is not one of the 11 discrete values (0.0, 0.1, ..., 1.0)
             # demonstrating the continuous score benefit
 
+    def test_constructor_default_region_is_global(self):
+        """When CLOUD_ML_REGION is absent, AnthropicVertex is called with region='global'."""
+        import os
+
+        env = {k: v for k, v in os.environ.items() if k != "CLOUD_ML_REGION"}
+        env["ANTHROPIC_VERTEX_PROJECT_ID"] = "test-project"
+        with (
+            patch("skill_eval.judge.anthropic.AnthropicVertex") as mock_vertex,
+            patch("skill_eval.judge.instructor.from_anthropic"),
+            patch.dict("os.environ", env, clear=True),
+        ):
+            from skill_eval.judge import VertexSonnetJudge
+
+            VertexSonnetJudge()
+            mock_vertex.assert_called_once_with(
+                project_id="test-project",
+                region="global",
+                timeout=600.0,
+            )
+
+    def test_constructor_cloud_ml_region_override(self):
+        """When CLOUD_ML_REGION is set, AnthropicVertex receives that region."""
+        import os
+
+        env = {k: v for k, v in os.environ.items()}
+        env["CLOUD_ML_REGION"] = "us-central1"
+        env["ANTHROPIC_VERTEX_PROJECT_ID"] = "test-project"
+        with (
+            patch("skill_eval.judge.anthropic.AnthropicVertex") as mock_vertex,
+            patch("skill_eval.judge.instructor.from_anthropic"),
+            patch.dict("os.environ", env, clear=True),
+        ):
+            from skill_eval.judge import VertexSonnetJudge
+
+            VertexSonnetJudge()
+            mock_vertex.assert_called_once_with(
+                project_id="test-project",
+                region="us-central1",
+                timeout=600.0,
+            )
+
 
 # ── Group 10: Eval integrity guard (--locked) ─────────────────────────────
 

@@ -1854,6 +1854,74 @@ class TestBuildPromptCriteria:
         assert "See </assistant-message> for details." not in prompt
 
 
+# ── Unit tests for _call_vertex region default ────────────────────────────────
+
+
+class TestCallVertexRegion:
+    """Unit tests for _call_vertex region parameter — default and env var override."""
+
+    @staticmethod
+    def _load_llm_module():
+        spec = importlib.util.spec_from_file_location("stop_hook_llm", LLM_SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @staticmethod
+    def _make_mock_client():
+        from unittest.mock import MagicMock
+
+        mock_block = MagicMock()
+        mock_block.text = '{"decision": "pass", "reasoning": "ok", "findings": null}'
+        mock_message = MagicMock()
+        mock_message.content = [mock_block]
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+        return mock_client
+
+    def test_default_region_is_global(self, monkeypatch):
+        """CLOUD_ML_REGION absent → AnthropicVertex constructed with region='global'."""
+        import sys
+        import types
+        from unittest.mock import MagicMock
+
+        monkeypatch.setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-project")
+        monkeypatch.delenv("CLOUD_ML_REGION", raising=False)
+
+        mock_client = self._make_mock_client()
+        mock_cls = MagicMock(return_value=mock_client)
+        fake_anthropic = types.ModuleType("anthropic")
+        fake_anthropic.AnthropicVertex = mock_cls
+        monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
+
+        mod = self._load_llm_module()
+        result = mod._call_vertex("test prompt")
+
+        mock_cls.assert_called_once_with(project_id="test-project", region="global")
+        assert result["decision"] == "pass"
+
+    def test_region_from_env_var(self, monkeypatch):
+        """CLOUD_ML_REGION='us-central1' → AnthropicVertex constructed with that region."""
+        import sys
+        import types
+        from unittest.mock import MagicMock
+
+        monkeypatch.setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-project")
+        monkeypatch.setenv("CLOUD_ML_REGION", "us-central1")
+
+        mock_client = self._make_mock_client()
+        mock_cls = MagicMock(return_value=mock_client)
+        fake_anthropic = types.ModuleType("anthropic")
+        fake_anthropic.AnthropicVertex = mock_cls
+        monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
+
+        mod = self._load_llm_module()
+        result = mod._call_vertex("test prompt")
+
+        mock_cls.assert_called_once_with(project_id="test-project", region="us-central1")
+        assert result["decision"] == "pass"
+
+
 # ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
 
 

@@ -1,7 +1,7 @@
 """Vertex AI judge adapter for DeepEval skill evaluation.
 
 Uses claude-sonnet-4-6 via AnthropicVertex for LLM-as-judge assessments.
-Reads ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION env vars.
+Reads ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION env vars (default: global).
 
 Multi-trial averaging (K-trial):
   When k_samples > 1 and a schema is requested (the GEval scoring path),
@@ -56,7 +56,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
         self._k_samples = k_samples
         self._eval_temperature = eval_temperature
         project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID", "")
-        region = os.environ.get("CLOUD_ML_REGION", "us-east5")
+        region = os.environ.get("CLOUD_ML_REGION", "global")
         try:
             self.client = anthropic.AnthropicVertex(
                 project_id=project_id,
