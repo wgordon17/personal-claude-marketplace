@@ -67,6 +67,24 @@
         "contains: microservice",
         "not-contains: it depends"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Evaluate this technology choice based on the internal investigation and external research.\n\n{fixture:4-dirty-app-technology-choice}",
+      "rubrics": [
+        "fabrication_avoidance",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies the algorithm confusion vulnerability in the current PyJWT implementation",
+        "Synthesizes the comparison data: PyJWT is actively maintained, python-jose is stale",
+        "Recommends staying with PyJWT and fixing the algorithms parameter rather than migrating",
+        "Does NOT fabricate features or CVEs not present in the provided research data"
+      ],
+      "assertions": [
+        "contains: algorithm",
+        "contains: pyjwt"
+      ]
     }
   ]
 }

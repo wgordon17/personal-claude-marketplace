@@ -62,6 +62,24 @@
         "contains: exception",
         "contains: result type"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Evaluate these competing approaches using the user-defined criteria and weights.\n\n{fixture:4-dirty-app-fix-approaches}",
+      "rubrics": [
+        "judgment_fidelity",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Scores both approaches against each user-defined criterion (correctness, performance, complexity)",
+        "Applies the user-defined weights (0.5, 0.3, 0.2) to compute weighted scores",
+        "Does NOT manufacture advantages for the weaker approach to create artificial balance",
+        "Recommends Approach B as the winner based on weighted scoring (better on performance and correctness)"
+      ],
+      "assertions": [
+        "contains: weight",
+        "contains: correctness"
+      ]
     }
   ]
 }

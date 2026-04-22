@@ -64,6 +64,24 @@
         "contains: conflict",
         "not-contains: parallel"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Sequence these implementation plans into a roadmap. Identify dependencies, file contention, and optimal execution order.\n\n{fixture:4-dirty-app-multi-plan-sequence}",
+      "rubrics": [
+        "orchestration_design",
+        "severity_accuracy"
+      ],
+      "expected_behaviors": [
+        "Identifies that Plan A must complete before Plan B (shared auth files, A fixes what B builds on)",
+        "Identifies file contention between Plan B and Plan C (shared logging.py)",
+        "Proposes sequence: A first, then B, then C (or B and C partially parallel if contention is managed)",
+        "Recognizes Plan A is critical priority and must not be delayed by other plans"
+      ],
+      "assertions": [
+        "contains: plan a",
+        "contains: contention"
+      ]
     }
   ]
 }

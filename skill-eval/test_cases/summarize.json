@@ -63,6 +63,25 @@
         "contains: missing",
         "contains: validation"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Summarize the status and outcomes of this implementation plan.\n\n{fixture:4-dirty-app-plan-summary}",
+      "rubrics": [
+        "summary_accuracy",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Identifies that only 4 of 6 tasks are completed (not all as claimed)",
+        "Flags the discrepancy: team lead claims 'all critical security issues addressed' but SSRF fix was deferred",
+        "Notes that PII scrubbing was deferred with weak justification",
+        "Does NOT accept the claimed outcome at face value"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "contains: deferred",
+        "not-contains: all issues addressed"
+      ]
     }
   ]
 }

@@ -85,6 +85,24 @@
         "contains: handlers/project",
         "contains: test_project"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Create an implementation plan for this feature request given the existing codebase.\n\n{fixture:5-dirty-app-feature-request}",
+      "rubrics": [
+        "plan_construction",
+        "phase_completion"
+      ],
+      "expected_behaviors": [
+        "Asks codebase-specific questions about the existing handler structure and user model",
+        "References existing files by name (src/tasks/handlers.py, src/models/user.py)",
+        "Produces a plan with file-to-task mapping that accounts for existing code patterns",
+        "Notes the existing PII logging issue in middleware/logging.py as a concern for notification emails"
+      ],
+      "assertions": [
+        "contains: handlers.py",
+        "contains: user"
+      ]
     }
   ]
 }

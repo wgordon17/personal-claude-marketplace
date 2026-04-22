@@ -87,6 +87,24 @@
         "not-contains: unnecessary for this task",
         "not-contains: simplified pipeline"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Decompose this feature request into a swarm implementation plan. Identify components, dependencies, parallelization opportunities, and file contention.\n\n{fixture:5-dirty-app-decomposition}",
+      "rubrics": [
+        "orchestration_design",
+        "phase_completion"
+      ],
+      "expected_behaviors": [
+        "Identifies file contention: multiple components need to modify auth/ files",
+        "Proposes sequential ordering for auth/ file modifications to avoid merge conflicts",
+        "Identifies that audit logging is a cross-cutting concern touching all handler files",
+        "Separates the feature into at least 3 independent components with clear boundaries"
+      ],
+      "assertions": [
+        "contains: contention",
+        "contains: sequential"
+      ]
     }
   ]
 }
