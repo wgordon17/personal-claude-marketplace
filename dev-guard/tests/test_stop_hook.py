@@ -1881,34 +1881,42 @@ class TestCallVertexRegion:
 
     def test_default_region_is_global(self, monkeypatch):
         """CLOUD_ML_REGION absent → AnthropicVertex constructed with region='global'."""
-        from unittest.mock import MagicMock, patch
+        import sys
+        import types
+        from unittest.mock import MagicMock
 
-        mod = self._load_llm_module()
         monkeypatch.setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-project")
         monkeypatch.delenv("CLOUD_ML_REGION", raising=False)
 
         mock_client = self._make_mock_client()
         mock_cls = MagicMock(return_value=mock_client)
+        fake_anthropic = types.ModuleType("anthropic")
+        fake_anthropic.AnthropicVertex = mock_cls
+        monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
 
-        with patch("anthropic.AnthropicVertex", mock_cls):
-            result = mod._call_vertex("test prompt")
+        mod = self._load_llm_module()
+        result = mod._call_vertex("test prompt")
 
         mock_cls.assert_called_once_with(project_id="test-project", region="global")
         assert result["decision"] == "pass"
 
     def test_region_from_env_var(self, monkeypatch):
         """CLOUD_ML_REGION='us-central1' → AnthropicVertex constructed with that region."""
-        from unittest.mock import MagicMock, patch
+        import sys
+        import types
+        from unittest.mock import MagicMock
 
-        mod = self._load_llm_module()
         monkeypatch.setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-project")
         monkeypatch.setenv("CLOUD_ML_REGION", "us-central1")
 
         mock_client = self._make_mock_client()
         mock_cls = MagicMock(return_value=mock_client)
+        fake_anthropic = types.ModuleType("anthropic")
+        fake_anthropic.AnthropicVertex = mock_cls
+        monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
 
-        with patch("anthropic.AnthropicVertex", mock_cls):
-            result = mod._call_vertex("test prompt")
+        mod = self._load_llm_module()
+        result = mod._call_vertex("test prompt")
 
         mock_cls.assert_called_once_with(project_id="test-project", region="us-central1")
         assert result["decision"] == "pass"
