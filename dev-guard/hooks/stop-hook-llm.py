@@ -35,7 +35,7 @@ Fails open (exits 0) on any infrastructure error (import, auth, timeout, parse).
 
 Environment variables:
   ANTHROPIC_VERTEX_PROJECT_ID      -- GCP project ID (required)
-  CLOUD_ML_REGION                  -- Vertex AI region (default: us-east5)
+  CLOUD_ML_REGION                  -- Vertex AI region (default: global)
   ANTHROPIC_DEFAULT_SONNET_MODEL   -- model override (default: claude-sonnet-4-6)
 """
 
@@ -347,7 +347,7 @@ def _call_vertex(prompt: str) -> dict:
         _fail_open(f"anthropic[vertex] not available: {e}")
 
     project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID", "")
-    region = os.environ.get("CLOUD_ML_REGION", "us-east5")
+    region = os.environ.get("CLOUD_ML_REGION", "global")
 
     if not project_id:
         _fail_open("ANTHROPIC_VERTEX_PROJECT_ID env var not set")

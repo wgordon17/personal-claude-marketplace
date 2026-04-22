@@ -77,7 +77,7 @@ def _call_evaluator(ctx: dict) -> dict:
     from anthropic import AnthropicVertex
 
     project_id = os.environ["ANTHROPIC_VERTEX_PROJECT_ID"]
-    region = os.environ.get("CLOUD_ML_REGION", "us-east5")
+    region = os.environ.get("CLOUD_ML_REGION", "global")
 
     client = AnthropicVertex(project_id=project_id, region=region)
     message = client.messages.create(
