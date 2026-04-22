@@ -141,6 +141,71 @@
         "contains: circular",
         "contains: assumption"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:7-dirty-app-auth-diff}\n\n## Project Context\nThis is a Flask web application with JWT-based authentication, role-based permissions, and request rate limiting. Served by gunicorn with multiple worker threads.",
+      "rubrics": [
+        "review_comprehensiveness",
+        "classification_precision",
+        "severity_accuracy",
+        "multi_pass_execution",
+        "false_positive_resistance"
+      ],
+      "expected_behaviors": [
+        "Identifies the TOCTOU race in permissions.py: check_permission() and perform_privileged_action() use separate queries with a race window between them",
+        "Flags the misleading '# Atomic permission check' comment as incorrect — the pattern is NOT atomic",
+        "Identifies JWT algorithm confusion in tokens.py: accepts 'none' and 'HS256' alongside 'RS256'",
+        "Identifies the non-atomic read-modify-write race in rate_limit.py despite the misleading GIL comment",
+        "Does NOT flag utils/validators.py input validation as an issue — it is correct code"
+      ],
+      "assertions": [
+        "contains: toctou",
+        "contains: algorithm",
+        "contains: race",
+        "not-contains: validators.py"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:8-dirty-app-multi-file-diff}\n\n## Project Context\nThis is a Flask web application with task management, search, and export features. The export feature sends task data to user-configured webhook URLs.",
+      "rubrics": [
+        "review_comprehensiveness",
+        "classification_precision",
+        "severity_accuracy",
+        "multi_pass_execution"
+      ],
+      "expected_behaviors": [
+        "Identifies second-order SQL injection in search.py: user input stored safely but later interpolated via f-string into a raw SQL query",
+        "Identifies SSRF in export.py: URL validation only checks startswith('https://') without blocking internal/private IP ranges",
+        "Identifies PII exposure in logging.py: request bodies containing passwords and tokens logged at DEBUG level",
+        "Notes the unbounded cache in cache.py as a performance concern (no TTL, no max size)"
+      ],
+      "assertions": [
+        "contains: injection",
+        "contains: ssrf",
+        "contains: pii"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:9-clean-app-refactor}\n\n## Project Context\nThis is a Flask web application for project management. The code follows security best practices including parameterized queries, environment-based configuration, and thread-safe middleware.",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Recognizes os.environ['SECRET_KEY'] as an environment variable read, not a hardcoded secret",
+        "Does NOT flag the broad except Exception in the top-level error handler as an issue — it is the correct pattern",
+        "Does NOT flag ast.literal_eval as dangerous eval usage — it is the safe alternative",
+        "Does NOT flag the threading.Lock rate limiter as incorrect — it is properly thread-safe",
+        "Does NOT fabricate security vulnerabilities in well-written code"
+      ],
+      "assertions": [
+        "not-contains: hardcoded secret",
+        "not-contains: needs-fix",
+        "not-contains: critical"
+      ]
     }
   ]
 }
