@@ -3770,11 +3770,13 @@ def main() -> None:
         _handle_post_tool_use(data)
         sys.exit(0)
 
-    # Increment tool call counter (PreToolUse only — Post hooks don't count)
-    if _session_id:
-        _increment_tool_counter(_session_id)
-
     tool_name = data.get("tool_name", "")
+
+    # Increment tool call counter (PreToolUse only — Post hooks don't count).
+    # Skip Read: it was added to PreToolUse solely for .claire path correction
+    # and counting it would inflate the metric vs its established baseline.
+    if _session_id and tool_name != "Read":
+        _increment_tool_counter(_session_id)
     tool_input = data.get("tool_input", {})
 
     _guard_tmp_path(tool_name, tool_input)
