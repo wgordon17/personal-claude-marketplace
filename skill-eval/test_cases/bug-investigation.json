@@ -65,6 +65,45 @@
         "contains: bug-002",
         "contains: bug-003"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Investigate this bug report and identify the root cause.\n\n{fixture:4-dirty-app-race-condition}",
+      "rubrics": [
+        "root_cause_analysis",
+        "fabrication_avoidance",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Identifies TOCTOU race in permissions.py as the root cause: separate check and action queries allow race window",
+        "Explains why the issue is sporadic: depends on timing between concurrent requests",
+        "Does NOT blame the rate limiter for the permission issue — it is a separate bug",
+        "Examines the login.py session management as a potential alternative hypothesis but rules it out"
+      ],
+      "assertions": [
+        "contains: race",
+        "contains: permission",
+        "not-contains: rate limit"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Investigate this bug report and identify the root cause.\n\n{fixture:5-dirty-app-subtle-ssrf}",
+      "rubrics": [
+        "root_cause_analysis",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Identifies SSRF as the root cause: URL validation only checks startswith('https://') without blocking internal IP ranges",
+        "Explains the security implication: internal network access through webhook URLs, not just a functional bug",
+        "Notes that the 'failing URLs' are all internal/private IP addresses (10.x, 172.16.x, 192.168.x)",
+        "Does NOT just explain the functional failure — identifies the security surface"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "contains: internal",
+        "contains: security"
+      ]
     }
   ]
 }

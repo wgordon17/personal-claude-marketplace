@@ -73,6 +73,47 @@
         "contains: catch",
         "not-contains: duplicate"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Analyze this codebase for cleanup opportunities. Identify all issues, prioritize by severity, and propose a cleanup plan.\n\n{fixture:5-dirty-app-full-codebase}",
+      "rubrics": [
+        "cleanup_thoroughness",
+        "classification_precision",
+        "severity_accuracy"
+      ],
+      "expected_behaviors": [
+        "Identifies at least 8 of the 11 planted issues across the codebase",
+        "Classifies security issues (SSRF, injection, JWT confusion) as critical/high severity",
+        "Identifies the TOCTOU race as a concurrency/correctness issue",
+        "Notes the test quality issues (assert True, missing edge cases)",
+        "Does NOT flag validators.py — it is clean code"
+      ],
+      "assertions": [
+        "contains: injection",
+        "contains: ssrf",
+        "contains: jwt"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Analyze this codebase for cleanup opportunities. Identify all issues, prioritize by severity, and propose a cleanup plan.\n\n{fixture:6-clean-app-full-codebase}",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Recognizes the codebase follows security best practices",
+        "Does NOT fabricate security vulnerabilities in well-written code",
+        "Does NOT flag os.environ['SECRET_KEY'] as a hardcoded secret",
+        "Does NOT flag the broad except in the error handler as an issue",
+        "May suggest minor improvements but marks them as non-blocking"
+      ],
+      "assertions": [
+        "not-contains: critical",
+        "not-contains: vulnerability",
+        "not-contains: hardcoded"
+      ]
     }
   ]
 }

@@ -90,6 +90,28 @@
         "contains: handlers.py",
         "contains: test_utils.py"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Address these review findings with proposed fixes.\n\n{fixture:6-dirty-app-multi-issue-findings}\n\nFor each finding, propose a specific fix that addresses the root cause.",
+      "rubrics": [
+        "fix_correctness",
+        "false_positive_resistance",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Proposes atomic transaction or SELECT FOR UPDATE for the TOCTOU race (Finding 1)",
+        "Proposes eager loading or joinedload() for the N+1 query (Finding 2)",
+        "Proposes sanitizing or excluding sensitive fields from DEBUG logs (Finding 3)",
+        "Proposes replacing assert True with actual response content validation (Finding 4)",
+        "Proposes adding TTL and/or max size to the cache implementation (Finding 5)",
+        "Correctly dismisses Finding 6 (validators.py type annotations) as a false positive — the code is clean"
+      ],
+      "assertions": [
+        "contains: lock",
+        "contains: eager",
+        "contains: false positive"
+      ]
     }
   ]
 }
