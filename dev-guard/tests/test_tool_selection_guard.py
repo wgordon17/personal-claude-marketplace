@@ -1212,6 +1212,7 @@ class TestClaireTypoGuard:
         hook = output["hookSpecificOutput"]
         assert hook["updatedInput"]["file_path"] == "/Users/foo/.claude/settings.json"
         assert hook["updatedInput"]["old_string"] == "a"
+        assert hook["updatedInput"]["new_string"] == "b"
 
     def test_notebook_claire_rewritten(self):
         result = run_guard(
@@ -1238,6 +1239,20 @@ class TestClaireTypoGuard:
         output = json.loads(result.stdout)
         assert output["hookSpecificOutput"]["updatedInput"]["file_path"] == (
             ".claude/worktrees/agent-1/file.ts"
+        )
+
+    def test_multiple_claire_segments_rewritten(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "/Users/foo/.claire/projects/.claire/file.py",
+                "content": "",
+            },
+        )
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["hookSpecificOutput"]["updatedInput"]["file_path"] == (
+            "/Users/foo/.claude/projects/.claude/file.py"
         )
 
     def test_claude_path_not_rewritten(self):
