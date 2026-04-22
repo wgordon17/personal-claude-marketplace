@@ -1383,7 +1383,53 @@ class TestBuildFixturePromptCodebase:
         assert not has_missing
 
 
-# ── Group 21: Codebase Python syntax regression ───────────────────────────────
+# ── Group 21: Integration — codebase-only prompts through run_eval ────────────
+
+
+class TestCodebaseOnlyRunEval:
+    """Verifies _eval_tc guard triggers build_fixture_prompt for codebase-only prompts."""
+
+    def test_codebase_placeholder_resolved_through_eval_tc(self, tmp_path):
+        """Codebase-only prompt is resolved when run_eval calls _eval_tc."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("print('resolved')")
+
+        captured_prompts = []
+
+        def fake_execute(bundle, prompt, judge, context_preamble=None):
+            captured_prompts.append(prompt)
+            return "Looks good, no issues found."
+
+        from skill_eval import runner
+
+        mock_judge = type("MockJudge", (), {"get_model_name": lambda self: "mock"})()
+
+        with patch.object(runner, "execute_skill", side_effect=fake_execute):
+            from skill_eval.runner import run_eval
+
+            run_eval(
+                skill_name="test-skill",
+                skill_prompt_bundle="# test bundle",
+                test_cases=[
+                    {
+                        "id": 1,
+                        "prompt": "Review: {codebase:repo/src/app.py}",
+                        "rubrics": [],
+                        "assertions": [],
+                    }
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert len(captured_prompts) == 1
+        assert "print('resolved')" in captured_prompts[0]
+        assert "{codebase:" not in captured_prompts[0]
+
+
+# ── Group 22: Codebase Python syntax regression ───────────────────────────────
 
 
 class TestCodebasePythonSyntax:
