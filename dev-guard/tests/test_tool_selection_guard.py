@@ -1226,6 +1226,7 @@ class TestClaireTypoGuard:
         output = json.loads(result.stdout)
         hook = output["hookSpecificOutput"]
         assert hook["updatedInput"]["notebook_path"] == ("/Users/foo/.claude/notebooks/test.ipynb")
+        assert hook["updatedInput"]["command"] == "add"
 
     def test_relative_claire_rewritten(self):
         result = run_guard(
