@@ -1,5 +1,5 @@
 {
-  "description": "Global hooks: git safety, commit validation, pre-push review, tool selection, quality stop gate, subagent completion verification, decision persistence, shared behavioral feedback",
+  "description": "Global hooks: git safety, commit validation, pre-push review, tool selection, quality stop gate, subagent completion verification, decision persistence, shared behavioral feedback, path hallucination guard",
   "hooks": {
     "SessionStart": [
       {

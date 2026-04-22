@@ -1844,6 +1844,44 @@ def _guard_plan_mode(tool_name: str) -> None:
         )
 
 
+def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
+    """Rewrite .claire → .claude in file paths (LLM hallucination mitigation).
+
+    Claude models occasionally transpose '.claude' → '.claire' when constructing
+    paths from memory (anthropics/claude-code#17893). The Write tool auto-creates
+    intermediate directories, silently producing stray .claire/ trees. This guard
+    intercepts the typo and rewrites it before the tool executes.
+    """
+    if tool_name not in ("Write", "Edit", "NotebookEdit"):
+        return
+
+    path_key = "notebook_path" if tool_name == "NotebookEdit" else "file_path"
+    file_path = tool_input.get(path_key, "")
+    if not file_path:
+        return
+
+    parts = file_path.split("/")
+    if ".claire" not in parts:
+        return
+
+    corrected_parts = [".claude" if p == ".claire" else p for p in parts]
+    corrected = "/".join(corrected_parts)
+
+    corrected_input = dict(tool_input)
+    corrected_input[path_key] = corrected
+
+    _log_event("guard", "rewrite", rule="claire-typo", command=f"{file_path} → {corrected}")
+    print(
+        _hook_output(
+            "allow",
+            "Corrected .claire → .claude hallucination",
+            updated_input=corrected_input,
+        )
+    )
+    print(f"[claire-typo-guard] Corrected .claire → .claude: {corrected}", file=sys.stderr)
+    sys.exit(0)
+
+
 _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
 
 
@@ -3726,6 +3764,7 @@ def main() -> None:
 
     _guard_tmp_path(tool_name, tool_input)
     _guard_plan_mode(tool_name)
+    _guard_claire_typo(tool_name, tool_input)
 
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
