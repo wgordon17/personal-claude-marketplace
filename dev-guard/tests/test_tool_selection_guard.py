@@ -1278,7 +1278,7 @@ class TestClaireTypoGuard:
         assert result.returncode == 0
         assert not result.stdout.strip()
 
-    def test_read_tool_not_affected(self):
+    def test_read_claire_rewritten(self):
         result = run_guard(
             "Read",
             {
@@ -1286,17 +1286,58 @@ class TestClaireTypoGuard:
             },
         )
         assert result.returncode == 0
-        assert not result.stdout.strip()
+        output = json.loads(result.stdout)
+        hook = output["hookSpecificOutput"]
+        assert hook["updatedInput"]["file_path"] == "/Users/foo/.claude/settings.json"
 
-    def test_bash_tool_not_affected(self):
+    def test_read_claude_not_rewritten(self):
         result = run_guard(
-            "Bash",
+            "Read",
             {
-                "command": "git status .claire/",
+                "file_path": "/Users/foo/.claude/settings.json",
             },
         )
         assert result.returncode == 0
-        assert "claire-typo" not in result.stdout
+        assert "claire-typo" not in (result.stdout + result.stderr)
+
+    def test_bash_claire_path_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "mkdir -p /Users/foo/.claire/worktrees/agent-1/",
+            },
+        )
+        assert result.returncode == 2
+        assert ".claire" in result.stderr
+        assert ".claude" in result.stderr
+
+    def test_bash_claire_relative_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "cp file.ts .claire/worktrees/agent-1/",
+            },
+        )
+        assert result.returncode == 2
+        assert ".claire" in result.stderr
+
+    def test_bash_claude_path_not_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "git status .claude/",
+            },
+        )
+        assert result.returncode == 0
+
+    def test_bash_claire_in_grep_not_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": 'git log -S ".claire"',
+            },
+        )
+        assert result.returncode == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
