@@ -21,6 +21,7 @@ def create_token(user_id, role, expiry_hours=TOKEN_EXPIRY_HOURS):
 
 
 def verify_token(token):
+    # Enforce RS256 only — reject HS256/none to prevent algorithm confusion
     secret = current_app.config["JWT_SECRET"]
     try:
         payload = jwt.decode(

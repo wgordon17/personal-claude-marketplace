@@ -5,19 +5,19 @@
 
 ## Planted Issues
 
-| # | File | Lines | Type | CWE | Severity | Subtlety | Distractor Note |
-|---|------|-------|------|-----|----------|----------|-----------------|
-| 1 | src/auth/permissions.py | L22-35 | Security (TOCTOU) | CWE-367 | Critical | Adversarial | Comment says "Atomic permission check"; `perform_privileged_action` re-queries user after the check |
-| 2 | src/auth/login.py | L38-40 | Security (Session Fixation) | CWE-384 | High | Moderate | Session is mutated in place after auth—no `session.clear()` or regeneration of session ID before writing user data |
-| 3 | src/auth/tokens.py | L26-30 | Security (JWT Algorithm Confusion) | CWE-327 | Critical | Adversarial | `verify_token` passes `algorithms=["HS256", "RS256", "none"]`; accepts unsigned tokens; `create_token` correctly uses HS256 only |
-| 4 | src/tasks/handlers.py | L26-30 | Performance (N+1 Query) | CWE-1073 | Medium | Moderate | `list_tasks()` fetches all tasks then accesses `task.comments` in a loop, triggering one SELECT per task via lazy load |
-| 5 | src/tasks/export.py | L60-65 | Security (SSRF) | CWE-918 | Critical | Moderate | `validate_webhook_url` only checks `startswith("https://")` — does not block 10.x, 172.16.x, 192.168.x, 127.0.0.1 |
-| 6 | src/tasks/search.py | L36-43 | Security (Second-Order SQL Injection) | CWE-89 | Critical | Adversarial | `save_search_term` uses parameterized queries (safe); `search_tasks_by_saved_term` retrieves stored term and f-string interpolates it into raw SQL at L41 |
-| 7 | src/middleware/rate_limit.py | L34-41 | Concurrency (Non-Atomic Counter) | CWE-362 | Medium | Adversarial | Comment says "GIL protects this"; `get` then `set` on module-level dict is not atomic under threading or async; window reset at L37-38 is also a race |
-| 8 | src/middleware/logging.py | L37-45 | Privacy (PII in Logs) | CWE-532 | High | Moderate | Comment says "DEBUG logging disabled in production"; code logs full request body (including passwords and tokens) whenever DEBUG level is enabled |
-| 9 | src/utils/cache.py | L7-8 | Reliability (Unbounded Cache) | CWE-400 | Medium | Subtle | `_cache` dict has no TTL, no max size, no eviction policy; grows without bound under load; `cache_set` uses a lock but never evicts |
-| 10 | tests/test_handlers.py | L74-80 | Testing (Meaningless Assertion) | CWE-617 | Low | Moderate | `test_create_task_response_shape` makes a real request then asserts `True` — always passes regardless of response content |
-| 11 | tests/test_auth.py | — | Testing (Missing Edge Cases) | CWE-1091 | Low | Subtle | Happy-path login/register/logout covered; missing: SQL injection in username, expired token acceptance, concurrent sessions, permission revocation mid-session |
+| # | File | Lines | Type | CWE | Severity | Subtlety | Skills | Distractor Note |
+|---|------|-------|------|-----|----------|----------|--------|-----------------|
+| 1 | src/auth/permissions.py | L22-35 | Security (TOCTOU) | CWE-367 | Critical | Adversarial | quality-gate, bug-investigation, fix, unfuck, speculative | Comment says "Atomic permission check"; `perform_privileged_action` re-queries user after the check |
+| 2 | src/auth/login.py | L38-40 | Security (Session Fixation) | CWE-384 | High | Moderate | quality-gate, unfuck | Session is mutated in place after auth—no `session.clear()` or regeneration of session ID before writing user data |
+| 3 | src/auth/tokens.py | L27-31 | Security (JWT Algorithm Confusion) | CWE-327 | Critical | Adversarial | quality-gate, unfuck, deep-research | Comment says "Enforce RS256 only" but `algorithms=` accepts HS256, RS256, and none |
+| 4 | src/tasks/handlers.py | L26-30 | Performance (N+1 Query) | CWE-1073 | Medium | Moderate | quality-gate, fix, unfuck, swarm | `list_tasks()` fetches all tasks then accesses `task.comments` in a loop, triggering one SELECT per task via lazy load |
+| 5 | src/tasks/export.py | L60-65 | Security (SSRF) | CWE-918 | Critical | Moderate | quality-gate, pr-review, bug-investigation, unfuck | `validate_webhook_url` only checks `startswith("https://")` — does not block 10.x, 172.16.x, 192.168.x, 127.0.0.1 |
+| 6 | src/tasks/search.py | L36-43 | Security (Second-Order SQL Injection) | CWE-89 | Critical | Adversarial | quality-gate, pr-review, unfuck | `save_search_term` uses parameterized queries (safe); `search_tasks_by_saved_term` retrieves stored term and f-string interpolates it into raw SQL at L41 |
+| 7 | src/middleware/rate_limit.py | L34-41 | Concurrency (Non-Atomic Counter) | CWE-362 | Medium | Adversarial | quality-gate, fix, unfuck, roadmap | Comment says "GIL protects this"; `get` then `set` on module-level dict is not atomic under threading or async; window reset at L37-38 is also a race |
+| 8 | src/middleware/logging.py | L37-45 | Privacy (PII in Logs) | CWE-532 | High | Moderate | quality-gate, pr-review, fix, unfuck, roadmap | Comment says "DEBUG logging disabled in production"; code logs full request body (including passwords and tokens) whenever DEBUG level is enabled |
+| 9 | src/utils/cache.py | L7-8 | Reliability (Unbounded Cache) | CWE-400 | Medium | Subtle | quality-gate, fix, unfuck | `_cache` dict has no TTL, no max size, no eviction policy; grows without bound under load; `cache_set` uses a lock but never evicts |
+| 10 | tests/test_handlers.py | L74-80 | Testing (Meaningless Assertion) | CWE-617 | Low | Moderate | fix, unfuck | `test_create_task_response_shape` makes a real request then asserts `True` — always passes regardless of response content |
+| 11 | tests/test_auth.py | — | Testing (Missing Edge Cases) | CWE-1091 | Low | Subtle | unfuck | Happy-path login/register/logout covered; missing: SQL injection in username, expired token acceptance, concurrent sessions, permission revocation mid-session |
 
 ## Clean Distractor Files
 
@@ -39,8 +39,8 @@ The following files contain **no planted vulnerabilities** and should NOT be fla
 ### Issue 2 — Session Fixation (login.py L38-40)
 After credential verification, the code writes to `session["user_id"]`, `session["role"]`, and `session["logged_in"]` without first calling `session.clear()` or equivalent. Flask's `session` object inherits the session ID from the pre-authentication request. An attacker who plants a session ID before login can adopt the authenticated session.
 
-### Issue 3 — JWT Algorithm Confusion (tokens.py L26-30)
-`jwt.decode()` is passed `algorithms=["HS256", "RS256", "none"]`. Accepting `"none"` means a token with header `{"alg": "none"}` and no signature is accepted as valid. An attacker can forge arbitrary claims by signing with `alg=none`. The `create_token` function (L11-20) correctly uses HS256 only, making the discrepancy easy to miss.
+### Issue 3 — JWT Algorithm Confusion (tokens.py L27-31)
+The comment at L24 says `# Enforce RS256 only — reject HS256/none to prevent algorithm confusion` but the actual `algorithms=` parameter at L30 accepts `["HS256", "RS256", "none"]`. Accepting `"none"` means a token with header `{"alg": "none"}` and no signature is accepted as valid. An attacker can forge arbitrary claims by signing with `alg=none`. The `create_token` function (L11-20) correctly uses HS256 only, making the discrepancy easy to miss. The misleading comment is the adversarial element — it claims the exact opposite of what the code does.
 
 ### Issue 4 — N+1 Query (handlers.py L26-30)
 `list_tasks()` runs one query to fetch all tasks. The loop then accesses `task.comments` (L28-29) on each task object. Because `comments` is defined as `lazy="select"` on the Task model, SQLAlchemy issues one additional `SELECT` per task. For N tasks, this results in N+1 total database queries.
