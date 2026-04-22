@@ -1321,6 +1321,36 @@ class TestClaireTypoGuard:
         assert result.returncode == 2
         assert ".claire" in result.stderr
 
+    def test_bash_claire_with_semicolon_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "mkdir .claire;ls",
+            },
+        )
+        assert result.returncode == 2
+        assert "claire-typo" in result.stderr
+
+    def test_bash_claire_with_pipe_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "ls .claire|wc -l",
+            },
+        )
+        assert result.returncode == 2
+        assert "claire-typo" in result.stderr
+
+    def test_bash_clairewood_not_blocked(self):
+        result = run_guard(
+            "Bash",
+            {
+                "command": "git status .clairewood/",
+            },
+        )
+        assert result.returncode == 0
+        assert "claire-typo" not in (result.stdout + result.stderr)
+
     def test_bash_claude_path_not_blocked(self):
         result = run_guard(
             "Bash",

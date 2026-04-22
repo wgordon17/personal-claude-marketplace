@@ -1844,7 +1844,9 @@ def _guard_plan_mode(tool_name: str) -> None:
         )
 
 
-_CLAIRE_PATH_RE = re.compile(r"(?<=[\s/])\.claire(?=[\s/]|$)|^\.claire(?=[\s/]|$)")
+_CLAIRE_PATH_RE = re.compile(
+    r"(?<=[\s/])\.claire(?=[^a-zA-Z0-9_-]|$)|^\.claire(?=[^a-zA-Z0-9_-]|$)"
+)
 
 
 def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
