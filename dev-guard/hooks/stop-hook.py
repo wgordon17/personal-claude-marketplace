@@ -831,7 +831,7 @@ def _invoke_llm(
 
         reasoning = response.get("reasoning", "")
         if _FAIL_OPEN_SENTINEL in reasoning:
-            return decision, findings, True, reasoning
+            return decision, findings, True, reasoning[:500]
 
         return decision, findings, False, None
 
