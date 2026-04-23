@@ -414,7 +414,7 @@ dev = [
     { name = "pytest-xdist", specifier = ">=3" },
     { name = "ruff", specifier = ">=0.9" },
 ]
-llm = [{ name = "anthropic", extras = ["vertex"], specifier = ">=0.40.0" }]
+llm = [{ name = "anthropic", extras = ["vertex"], specifier = ">=0.59.0" }]
 
 [[package]]
 name = "pluggy"
