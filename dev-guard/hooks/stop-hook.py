@@ -777,6 +777,7 @@ def _log_stop_event(
 # ── LLM Delegation ───────────────────────────────────────────────────────────
 
 
+# Must match the f-string prefix in stop-hook-llm.py:_fail_open
 _FAIL_OPEN_SENTINEL = "LLM evaluator failed open:"
 
 

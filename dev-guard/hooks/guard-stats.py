@@ -151,7 +151,7 @@ def _stop_hook_stats(conn: sqlite3.Connection, since: str) -> None:
     fails = stats.get("llm_fail", 0)
     errors = stats.get("llm_error", 0)
     fail_opens = stats.get("llm_fail_open", 0)
-    infra_errors = errors + fail_opens
+    infra_errors = errors + fail_opens  # as pct of all LLM evaluations below
     print(
         f"  LLM evaluations: {total}   Pass: {passes}   Fail: {fails}"
         f"   Error: {errors}   Fail-open: {fail_opens}"
