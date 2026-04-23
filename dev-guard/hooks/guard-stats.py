@@ -189,6 +189,18 @@ def _stop_hook_stats(conn: sqlite3.Connection, since: str) -> None:
                 first = str(detail)[:60]
             print(f"    {ts[:10]}: {first}")
 
+    # Recent fail-opens
+    fail_open_rows = conn.execute(
+        "SELECT ts, detail FROM stop_hook_events "
+        "WHERE ts > ? AND outcome = 'llm_fail_open' AND detail IS NOT NULL "
+        "ORDER BY ts DESC LIMIT 3",
+        (since,),
+    ).fetchall()
+    if fail_open_rows:
+        print("  Recent fail-opens:")
+        for ts, detail in fail_open_rows:
+            print(f"    {ts[:10]}: {str(detail)[:80]}")
+
 
 def _session_summaries(conn: sqlite3.Connection, since: str) -> None:
     rows = conn.execute(

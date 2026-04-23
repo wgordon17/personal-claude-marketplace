@@ -8,6 +8,7 @@ LLM subprocess invocation tested via a mock stop-hook-llm.py stub.
 import importlib.util
 import json
 import os
+import sqlite3
 import subprocess
 import textwrap
 import time
@@ -817,7 +818,7 @@ class TestLLMSubprocess:
         assert result.returncode == 0
 
     def test_fail_open_sentinel_detected_in_reasoning(self, tmp_path):
-        """LLM returns pass with fail-open sentinel → exit 0 but logged as llm_fail_open."""
+        """LLM returns pass with fail-open sentinel → exit 0, logged as llm_fail_open."""
         plugin_root = tmp_path / "plugin"
         write_mock_llm(
             plugin_root,
@@ -827,9 +828,17 @@ class TestLLMSubprocess:
         payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
         result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
         assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_fail_open"
 
     def test_fail_open_sentinel_not_triggered_by_quoted_text(self, tmp_path):
-        """LLM reasoning quoting the sentinel mid-text → NOT classified as fail-open."""
+        """LLM reasoning quoting the sentinel mid-text → logged as llm_pass, not fail-open."""
         plugin_root = tmp_path / "plugin"
         write_mock_llm(
             plugin_root,
@@ -842,6 +851,14 @@ class TestLLMSubprocess:
         payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
         result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
         assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_pass"
 
 
 # ── State file management ────────────────────────────────────────────────────
