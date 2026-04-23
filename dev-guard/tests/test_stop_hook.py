@@ -8,6 +8,7 @@ LLM subprocess invocation tested via a mock stop-hook-llm.py stub.
 import importlib.util
 import json
 import os
+import sqlite3
 import subprocess
 import textwrap
 import time
@@ -96,6 +97,7 @@ def write_mock_llm(
     *,
     decision: str = "pass",
     findings: list[str] | None = None,
+    reasoning: str = "mock",
 ) -> None:
     """Write a mock stop-hook-llm.py stub to plugin_root/hooks/.
 
@@ -105,7 +107,7 @@ def write_mock_llm(
     hooks_dir = plugin_root / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
     # Embed as a JSON string constant parsed at runtime — avoids null/None mismatch
-    result_json = json.dumps({"decision": decision, "reasoning": "mock", "findings": findings})
+    result_json = json.dumps({"decision": decision, "reasoning": reasoning, "findings": findings})
     stub = textwrap.dedent(f"""\
         #!/usr/bin/env -S uv run
         # /// script
@@ -802,18 +804,145 @@ class TestLLMSubprocess:
         assert output["reason"]  # non-empty reason
 
     def test_missing_llm_script_fails_open(self, tmp_path):
-        """No stop-hook-llm.py → subprocess fails → fail-open → exit 0."""
+        """No stop-hook-llm.py → subprocess fails → fail-open → exit 0, logged as llm_error."""
         (tmp_path / "plugin" / "hooks").mkdir(parents=True, exist_ok=True)
         # No llm script written
         payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
         result = run_hook(payload, state_path=state_path, plugin_root=str(tmp_path / "plugin"))
         assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome, detail FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_error"
+        assert row[1] is not None
 
     def test_llm_unreachable_fails_open(self, tmp_path):
-        """LLM script at unreachable path → FileNotFoundError → fail-open → exit 0."""
+        """Unreachable path → FileNotFoundError → fail-open → exit 0, logged as llm_error."""
         payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
         result = run_hook(payload, state_path=state_path, plugin_root="/nonexistent/path")
         assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome, detail FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_error"
+        assert row[1] is not None
+
+    def test_fail_open_sentinel_detected_in_reasoning(self, tmp_path):
+        """LLM returns pass with fail-open sentinel → exit 0, logged as llm_fail_open."""
+        plugin_root = tmp_path / "plugin"
+        write_mock_llm(
+            plugin_root,
+            decision="pass",
+            reasoning="LLM evaluator failed open: Vertex AI call failed: TimeoutError",
+        )
+        payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
+        result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
+        assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome, detail FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_fail_open"
+        assert row[1] is not None
+        assert row[1].startswith("LLM evaluator failed open:")
+
+    def test_fail_open_sentinel_not_triggered_by_quoted_text(self, tmp_path):
+        """LLM reasoning quoting the sentinel mid-text → logged as llm_pass, not fail-open."""
+        plugin_root = tmp_path / "plugin"
+        write_mock_llm(
+            plugin_root,
+            decision="pass",
+            reasoning=(
+                "The assistant discussed the LLM evaluator failed open: pattern "
+                "in stop-hook-llm.py source code. This is legitimate code review."
+            ),
+        )
+        payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
+        result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
+        assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_pass"
+
+    def test_llm_nonzero_returncode_logs_llm_error_with_stderr(self, tmp_path):
+        """LLM subprocess exits with returncode 1 → llm_error, detail contains stderr text."""
+        plugin_root = tmp_path / "plugin"
+        hooks_dir = plugin_root / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        stub = textwrap.dedent("""\
+            #!/usr/bin/env -S uv run
+            # /// script
+            # requires-python = ">=3.13"
+            # ///
+            import sys
+            print("subprocess failed hard", file=sys.stderr)
+            sys.exit(1)
+        """)
+        llm_script = hooks_dir / "stop-hook-llm.py"
+        llm_script.write_text(stub)
+        llm_script.chmod(0o755)
+
+        payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
+        result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
+        assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome, detail FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_error"
+        assert row[1] is not None
+        assert "subprocess failed hard" in row[1]
+
+    def test_llm_empty_stdout_logs_llm_error_with_stderr(self, tmp_path):
+        """LLM subprocess exits 0 but produces no stdout → llm_error, detail contains stderr."""
+        plugin_root = tmp_path / "plugin"
+        hooks_dir = plugin_root / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        stub = textwrap.dedent("""\
+            #!/usr/bin/env -S uv run
+            # /// script
+            # requires-python = ">=3.13"
+            # ///
+            import sys
+            print("no json available", file=sys.stderr)
+            sys.exit(0)
+        """)
+        llm_script = hooks_dir / "stop-hook-llm.py"
+        llm_script.write_text(stub)
+        llm_script.chmod(0o755)
+
+        payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
+        result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
+        assert result.returncode == 0
+        db_path = state_path.parent / "test-guard.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT outcome, detail FROM stop_hook_events ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "llm_error"
+        assert row[1] is not None
+        assert "no json available" in row[1]
 
 
 # ── State file management ────────────────────────────────────────────────────

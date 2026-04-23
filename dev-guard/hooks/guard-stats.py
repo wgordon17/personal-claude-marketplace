@@ -150,20 +150,23 @@ def _stop_hook_stats(conn: sqlite3.Connection, since: str) -> None:
     passes = stats.get("llm_pass", 0)
     fails = stats.get("llm_fail", 0)
     errors = stats.get("llm_error", 0)
-    print(f"  LLM evaluations: {total}   Pass: {passes}   Fail: {fails}   Error: {errors}")
+    fail_opens = stats.get("llm_fail_open", 0)
+    infra_errors = errors + fail_opens  # as pct of all LLM evaluations below
+    print(
+        f"  LLM evaluations: {total}   Pass: {passes}   Fail: {fails}"
+        f"   Error: {errors}   Fail-open: {fail_opens}"
+    )
     print("  (fast-exit invocations not counted — only events reaching LLM)")
 
-    if errors > 0:
-        error_pct = 100 * errors // total
-        print(
-            f"  ERROR RATE: {error_pct}% — LLM may be unreachable, "
-            f"stop hook is silently failing open"
-        )
+    if infra_errors > 0:
+        error_pct = 100 * infra_errors // total
+        print(f"  ERROR RATE: {error_pct}% — LLM may be unreachable, stop hook is failing open")
 
-    # Average LLM time (exclude errors)
+    # Average LLM time (exclude infrastructure errors)
     row = conn.execute(
         "SELECT AVG(llm_duration_ms) FROM stop_hook_events "
-        "WHERE ts > ? AND outcome != 'llm_error' AND llm_duration_ms IS NOT NULL",
+        "WHERE ts > ? AND outcome NOT IN ('llm_error', 'llm_fail_open') "
+        "AND llm_duration_ms IS NOT NULL",
         (since,),
     ).fetchone()
     if row and row[0]:
@@ -185,6 +188,18 @@ def _stop_hook_stats(conn: sqlite3.Connection, since: str) -> None:
             except (json.JSONDecodeError, IndexError):
                 first = str(detail)[:60]
             print(f"    {ts[:10]}: {first}")
+
+    # Recent fail-opens
+    fail_open_rows = conn.execute(
+        "SELECT ts, detail FROM stop_hook_events "
+        "WHERE ts > ? AND outcome = 'llm_fail_open' AND detail IS NOT NULL "
+        "ORDER BY ts DESC LIMIT 3",
+        (since,),
+    ).fetchall()
+    if fail_open_rows:
+        print("  Recent fail-opens:")
+        for ts, detail in fail_open_rows:
+            print(f"    {ts[:10]}: {str(detail)[:80]}")
 
 
 def _session_summaries(conn: sqlite3.Connection, since: str) -> None:

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["anthropic[vertex]>=0.40.0"]
+# dependencies = ["anthropic[vertex]>=0.59.0"]
 # ///
 """Stop Hook LLM Evaluator -- Sonnet quality gate via Vertex AI.
 
@@ -35,7 +35,7 @@ Fails open (exits 0) on any infrastructure error (import, auth, timeout, parse).
 
 Environment variables:
   ANTHROPIC_VERTEX_PROJECT_ID      -- GCP project ID (required)
-  CLOUD_ML_REGION                  -- Vertex AI region (default: global)
+  CLOUD_ML_REGION                  -- Vertex AI region (default: global; requires SDK >=0.59.0)
   ANTHROPIC_DEFAULT_SONNET_MODEL   -- model override (default: claude-sonnet-4-6)
 """
 

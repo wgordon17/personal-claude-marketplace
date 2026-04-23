@@ -5,7 +5,7 @@ requires-python = ">=3.13"
 
 [dependency-groups]
 dev = ["ruff>=0.9", "pytest>=8", "pytest-xdist>=3", "pyright>=1.1.408"]
-llm = ["anthropic[vertex]>=0.40.0"]
+llm = ["anthropic[vertex]>=0.59.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["dev-guard/tests"]

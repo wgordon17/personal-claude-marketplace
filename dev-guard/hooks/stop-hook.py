@@ -777,16 +777,21 @@ def _log_stop_event(
 # ── LLM Delegation ───────────────────────────────────────────────────────────
 
 
+# Must match the f-string prefix in stop-hook-llm.py:_fail_open
+_FAIL_OPEN_SENTINEL = "LLM evaluator failed open:"
+
+
 def _invoke_llm(
     context: dict,
     plugin_root: str,
-) -> tuple[str, list[str] | None, bool]:
+) -> tuple[str, list[str] | None, bool, str | None]:
     """Invoke stop-hook-llm.py subprocess.
 
-    Returns (decision, findings, error) where:
+    Returns (decision, findings, error, detail) where:
       decision: 'pass' or 'fail'
       findings: list of finding strings, or None
       error: True if the LLM was unreachable/broken (fail-open)
+      detail: diagnostic string on error (stderr or fail-open reason)
     """
     llm_script = Path(plugin_root) / "hooks" / "stop-hook-llm.py"
 
@@ -797,20 +802,25 @@ def _invoke_llm(
             capture_output=True,
             timeout=_LLM_TIMEOUT,
         )
+
+        stderr_text = (
+            result.stderr.decode(errors="replace").strip()[:500] if result.stderr else None
+        )
+
         if result.returncode not in (0, 2):
-            return "pass", None, True
+            return "pass", None, True, stderr_text
 
         stdout = result.stdout.strip()
         if not stdout:
-            return "pass", None, True
+            return "pass", None, True, stderr_text
 
         try:
             response = json.loads(stdout)
         except (json.JSONDecodeError, ValueError):
-            return "pass", None, True
+            return "pass", None, True, stderr_text
 
         if not isinstance(response, dict):
-            return "pass", None, True
+            return "pass", None, True, stderr_text
 
         decision = response.get("decision", "pass")
         if decision not in ("pass", "fail"):
@@ -820,10 +830,14 @@ def _invoke_llm(
         if not isinstance(findings, list):
             findings = None
 
-        return decision, findings, False
+        reasoning = response.get("reasoning", "")
+        if isinstance(reasoning, str) and reasoning.startswith(_FAIL_OPEN_SENTINEL):
+            return decision, findings, True, reasoning[:500]
 
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return "pass", None, True
+        return decision, findings, False, None
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        return "pass", None, True, f"{type(e).__name__}: {e}"
 
 
 # ── Exit Helpers ─────────────────────────────────────────────────────────────
@@ -1087,13 +1101,14 @@ def main() -> None:
     # ── Invoke LLM ───────────────────────────────────────────────────────────
     plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
     t0 = time.monotonic()
-    decision, findings, llm_error = _invoke_llm(llm_context, plugin_root)
+    decision, findings, llm_error, llm_detail = _invoke_llm(llm_context, plugin_root)
     llm_ms = int((time.monotonic() - t0) * 1000)
 
     # ── Log the outcome ──────────────────────────────────────────────────────
     if llm_error:
-        outcome = "llm_error"
-        detail = None
+        is_fail_open = isinstance(llm_detail, str) and llm_detail.startswith(_FAIL_OPEN_SENTINEL)
+        outcome = "llm_fail_open" if is_fail_open else "llm_error"
+        detail = llm_detail
     elif decision == "fail":
         outcome = "llm_fail"
         detail = json.dumps(findings) if findings else None

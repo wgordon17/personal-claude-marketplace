@@ -5791,6 +5791,46 @@ class TestGuardStats:
         assert result.returncode == 0
         assert "last 1 days" in result.stdout
 
+    def test_stop_hook_stats_fail_open(self, session_db):
+        """Stop hook stats shows fail-open count, combined error rate, and recent fail-opens."""
+        env, db_path = session_db
+        run_guard("Bash", {"command": "date"}, env=env, payload_extra={"session_id": "s1"})
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS stop_hook_events "
+            "(id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, session_id TEXT, "
+            "outcome TEXT NOT NULL, trigger_reasons TEXT, work_type TEXT, "
+            "llm_duration_ms INTEGER, detail TEXT)"
+        )
+        conn.commit()
+        ts = datetime.datetime.now(datetime.UTC).isoformat()
+        rows = [
+            (ts, "s1", "llm_pass", None, None, 120, None),
+            (ts, "s1", "llm_fail", None, None, 200, None),
+            (ts, "s1", "llm_error", None, None, None, "connection refused"),
+            (ts, "s1", "llm_fail_open", None, None, None, "timeout after 30s"),
+            (ts, "s1", "llm_fail_open", None, None, None, "API unreachable"),
+        ]
+        conn.executemany(
+            "INSERT INTO stop_hook_events "
+            "(ts, session_id, outcome, trigger_reasons, work_type, llm_duration_ms, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+        conn.close()
+
+        result = subprocess.run(
+            ["uv", "run", GUARD_STATS_SCRIPT],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "Fail-open: 2" in result.stdout
+        assert "ERROR RATE: 60%" in result.stdout
+        assert "Recent fail-opens:" in result.stdout
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MCP tool auto-approval guard
