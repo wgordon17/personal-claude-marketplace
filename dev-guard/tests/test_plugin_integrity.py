@@ -170,6 +170,7 @@ INCREMENTAL_PLANNING_SKILL = (
 SWARM_SKILL = REPO_ROOT / "code-quality" / "skills" / "swarm" / "SKILL.md"
 LABEL_DEFINITIONS = REPO_ROOT / "code-quality" / "references" / "github-label-definitions.md"
 TRACKER_FIELD_SPEC = REPO_ROOT / "code-quality" / "references" / "tracker-field-spec.md"
+PROJECT_MEMORY_REFERENCE = REPO_ROOT / "code-quality" / "references" / "project-memory-reference.md"
 
 
 class TestCodeQualityReferenceIntegrity:
@@ -262,6 +263,76 @@ class TestCodeQualityReferenceIntegrity:
         assert "&lt;/spawn-data&gt;" in content, (
             "incremental-planning/SKILL.md does not contain the spawn-data escape table. "
             "The anti-injection escape mechanism was deleted or altered."
+        )
+
+    def test_incremental_planning_contains_workflow_field(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "**Workflow:**" in content, (
+            "incremental-planning/SKILL.md does not contain '**Workflow:**'. "
+            "The Workflow plan header field definition was deleted or altered."
+        )
+
+    def test_incremental_planning_contains_pr_boundaries_field(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "**PR Boundaries:**" in content, (
+            "incremental-planning/SKILL.md does not contain '**PR Boundaries:**'. "
+            "The PR Boundaries plan header field definition was deleted or altered."
+        )
+
+    def test_incremental_planning_contains_prs_field(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "**PRs:**" in content, (
+            "incremental-planning/SKILL.md does not contain '**PRs:**'. "
+            "The PRs tracking plan header field definition was deleted or altered."
+        )
+
+    def test_swarm_detects_workflow_field(self):
+        content = SWARM_SKILL.read_text()
+        assert "**Workflow:**" in content, (
+            "swarm/SKILL.md does not contain '**Workflow:**'. "
+            "The Workflow field detection for incremental mode was deleted or altered."
+        )
+
+    def test_swarm_detects_pr_boundaries_field(self):
+        content = SWARM_SKILL.read_text()
+        assert "**PR Boundaries:**" in content, (
+            "swarm/SKILL.md does not contain '**PR Boundaries:**'. "
+            "The PR Boundaries extraction for incremental mode was deleted or altered."
+        )
+
+    def test_swarm_detects_prs_field(self):
+        content = SWARM_SKILL.read_text()
+        assert "**PRs:**" in content, (
+            "swarm/SKILL.md does not contain '**PRs:**'. "
+            "The PRs field extraction for incremental mode was deleted or altered."
+        )
+
+    def test_project_memory_reference_contains_checkpoint_schema(self):
+        content = PROJECT_MEMORY_REFERENCE.read_text()
+        assert "checkpoint.json" in content, (
+            f"{PROJECT_MEMORY_REFERENCE} does not contain 'checkpoint.json'. "
+            "The checkpoint schema section was deleted or altered."
+        )
+
+    def test_project_memory_reference_checkpoint_has_plan_file_field(self):
+        content = PROJECT_MEMORY_REFERENCE.read_text()
+        assert '"plan_file"' in content, (
+            f"{PROJECT_MEMORY_REFERENCE} does not contain '\"plan_file\"'. "
+            "The checkpoint.json plan_file field was removed from the schema."
+        )
+
+    def test_project_memory_reference_checkpoint_has_tasks_remaining_field(self):
+        content = PROJECT_MEMORY_REFERENCE.read_text()
+        assert '"tasks_remaining"' in content, (
+            f"{PROJECT_MEMORY_REFERENCE} does not contain '\"tasks_remaining\"'. "
+            "The checkpoint.json tasks_remaining field was removed from the schema."
+        )
+
+    def test_project_memory_reference_checkpoint_has_context_summary_field(self):
+        content = PROJECT_MEMORY_REFERENCE.read_text()
+        assert '"context_summary"' in content, (
+            f"{PROJECT_MEMORY_REFERENCE} does not contain '\"context_summary\"'. "
+            "The checkpoint.json context_summary field was removed from the schema."
         )
 
 

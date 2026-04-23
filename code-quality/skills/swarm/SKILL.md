@@ -3,9 +3,9 @@ name: swarm
 description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
   of 21+ specialized agents (Architect, Security Design Reviewer, Reduction Analyst,
-  Implementer, Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer,
-  Performance, Plan Adherence, Fixer, Test Coverage Agent, Code-Simplifier,
-  Boundary Updater, Docs, Docs Reviewer, Lessons Extractor, Verifier, BDD-Step-Writer) with structured JSON
+  Implementer, Reviewer, Test-Writer, Test-Runner, Boundary Updater, Security, QA,
+  Code-Reviewer, Performance, Plan Adherence, Fixer, Test Coverage Agent,
+  Code-Simplifier, Docs, Docs Reviewer, Lessons Extractor, Verifier, BDD-Step-Writer) with structured JSON
   communication, Cynefin domain classification, audit trails, and early user
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
@@ -39,6 +39,7 @@ specialist agent.
 | 3 | Reviewer | general-purpose | opus | No | Review each component before testing |
 | 3 | Test-Writer | general-purpose | sonnet | Yes | Write tests for reviewed components |
 | 3 | Test-Runner | code-quality:test-runner | haiku | No | Execute tests, report results |
+| 3 | Boundary Updater (incremental only) | general-purpose | sonnet | Yes | Write checkpoint.json and update plan file at PR boundary stops |
 | 4 | Security | code-quality:security | opus | No | OWASP, auth, secrets, injection review |
 | 4 | QA | code-quality:qa | opus | No | Patterns, conventions, code quality |
 | 4 | Code-Reviewer | code-quality:code-reviewer | sonnet | No | Broader review, complements QA |
@@ -48,7 +49,6 @@ specialist agent.
 | 5 | Fixer | general-purpose | sonnet | Yes | Address ALL review findings |
 | 5 | Test Coverage Agent | general-purpose | sonnet | Yes | Write tests for coverage gaps from Phase 4 |
 | 5 | Code-Simplifier | code-quality:code-simplifier | sonnet | Yes | Post-fix simplification pass |
-| 3 | Boundary Updater (incremental only) | general-purpose | sonnet | Yes | Write checkpoint.json and update plan file at PR boundary stops |
 | 5.5 | Plan File Updater (conditional) | general-purpose | sonnet | Yes | Update plan file checkboxes after Lead reconciliation |
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
@@ -1073,7 +1073,7 @@ prefer opus — one strong pass beats multiple weaker passes.
 | Model | Used For |
 |-------|---------|
 | opus | Architect, Reduction Analyst, Reviewer, Security, QA, Structural Analysts, **Plan Adherence** — judgment-heavy tasks |
-| sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Boundary Updater, Docs, Lessons Extractor |
+| sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Boundary Updater, Plan File Updater, Docs, Docs Reviewer, Lessons Extractor |
 | haiku | Test-Runner, Verifier — execution-only tasks |
 
 ### Work Completion Principle
@@ -1094,7 +1094,7 @@ agent that does the job right over multiple sonnet agents that require rework.
 | File | Content |
 |------|---------|
 | `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, TeamCreate config, and git workflow |
-| `references/agent-prompts.md` | Full prompt templates for all 17+ agents — role, boundaries, communication protocol, output format |
+| `references/agent-prompts.md` | Full prompt templates for all 21+ agents — role, boundaries, communication protocol, output format |
 | `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
 | `references/cynefin-reference.md` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |
