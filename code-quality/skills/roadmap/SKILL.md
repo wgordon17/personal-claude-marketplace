@@ -392,6 +392,17 @@ independent.
 Completion tracking for intra-plan tracks uses the same branch merge detection as inter-plan
 tracks (primary: `gh pr list --state merged`, fallback: `git branch --merged main`).
 
+**Mixed phases** (incremental + non-incremental tracks in the same phase):
+
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | plan-a.md | Tasks 1-3 | PR 1 | feat/{slug-a}-pr1 | None | /swarm | Complicated |
+| B | plan-a.md | Tasks 4-6 | PR 2 | feat/{slug-a}-pr2 | Track A | /swarm | Complicated |
+| C | plan-b.md | All | — | roadmap/phase-1/plan-b | None | /swarm | Clear |
+
+Track C (non-incremental) runs independently of Tracks A/B. Tracks A and B are sequential
+(same plan, PR boundaries). The phase completes when all tracks merge.
+
 ### User checkpoint
 
 After constructing phase groupings but before writing the document, use `AskUserQuestion`:

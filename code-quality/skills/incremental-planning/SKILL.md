@@ -563,6 +563,9 @@ After all tasks are written:
 5. **PR boundary validation (incremental workflow only):**
    - Verify every task has a `**PR:** N` field
    - Verify PR numbers are sequential starting from 1
+   - Populate the `**PR Boundaries:**` header field from the actual task-to-PR assignments
+     (format: `PR 1: Tasks 1-3, PR 2: Tasks 4-6`). This field was left blank during header
+     writing and is now finalized.
    - Verify `**PR Boundaries:**` header matches the actual task-to-PR mapping
    - Verify each PR boundary's tasks form a coherent unit (all dependencies within a PR are
      satisfied by earlier tasks in the same or previous PRs)

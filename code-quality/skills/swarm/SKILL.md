@@ -410,9 +410,12 @@ tasks. The Lead decides based on the dependency graph — never based on cost or
 
 **PR boundary handling (incremental only):** After completing all tasks in the current PR
 boundary (all components for tasks in `**PR:** {current_pr}`):
-1. Run Phase 4 reviews scoped to the current boundary's files only (the Lead spawns review
-   agents directly with `pr_boundary_files` — NOT via /pr-review skill, which reviews
-   existing PRs)
+1. Run Phase 4 reviews scoped to the current boundary's files only. The Lead spawns the
+   same core review agents as full Phase 4 (Security, QA, Code-Reviewer, Performance, plus
+   any auto-detected domain reviewers from Phase 1) with `pr_boundary_files` — NOT via
+   /pr-review skill, which reviews existing PRs. Plan Adherence and Phase 4.5 structural
+   analysts also run at boundary stops (structural analysts receive partial-feature briefing
+   per the Phase 4.5 incremental workflow section).
 2. Run Phase 5 Fixer scoped to the current boundary's files only — the Lead passes
    `pr_boundary_files` to the Fixer agent's prompt (same mechanism as Phase 4 reviewers).
    Structural scoping per finding-classification.md Fixer Protocol.
@@ -449,8 +452,9 @@ boundary (all components for tasks in `**PR:** {current_pr}`):
    ```
 6. If tracker issue exists: add comment to the issue with the PR reference
    (`gh issue comment {issue_number} --repo {repo} --body "PR #{pr_number}: [title]"`)
-   Sanitize the PR title before interpolation: strip shell metacharacters from any plan-derived
-   text used in `--body` arguments.
+   Sanitize the PR title before interpolation: strip backticks, dollar signs, double quotes,
+   and backslashes from any plan-derived text used in `--body` arguments to prevent shell
+   interpretation.
 7. Update checkpoint and plan file via the Boundary Updater agent: set `pr_number` for the
    current boundary in `completed_prs` (was `null` from step 4), and update `**PRs:**` field
    in the plan file with `#{pr_number}`.
