@@ -6,6 +6,12 @@ Cross-project behavioral rules injected into every session via the SessionStart 
 
 **No self-scoping deferral.** Do not use version-boundary language (v1/v2, "future iteration," "future enhancement," "next version," "phase N enhancement," "deferred to future," "out of scope for this implementation") to scope or defer work. If scope is genuinely uncertain, use `AskUserQuestion` to let the user decide — do not make unilateral scope decisions by labeling work as a future version. Legitimate exception: referring to actual software versions (API v1, Pydantic v2, Claude Code v2.1.85).
 
+**Scope-bounded delivery is not deferral.** When a plan specifies `**Workflow:** incremental` with
+PR boundaries, completing work within the current PR boundary and proceeding to the next boundary
+is the designed workflow, not scope reduction. The plan structure determines delivery order — the
+agent does not decide what belongs in which PR. All planned work is completed; only the delivery
+sequence changes.
+
 **No fabricated user deferral.** Do not claim the user "explicitly deferred" work unless the user actually said so in the current conversation. "Explicitly user-deferred" requires a citable user message — if you cannot cite it, the deferral is fabricated.
 
 **Scope decisions belong to the user.** The model does not decide what is in scope. Present all work as tasks. If prioritization is needed, use `AskUserQuestion` with options — do not silently exclude work.

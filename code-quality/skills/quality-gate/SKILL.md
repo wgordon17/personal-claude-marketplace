@@ -84,6 +84,12 @@ read the test plan file and store its content as `{plan_test_plan}`. This
 value is available to all subsequent layers (Layer 1 Rounds 2 and 5, and Layer 2 Subagent A).
 If no plan file is found for the current branch, set `{plan_test_plan}` to empty string.
 
+**Incremental workflow scoping:** When invoked during an incremental swarm run (the swarm Lead
+passes a `pr_boundary_files` list), scope all review passes to only the files in that list.
+Findings for files outside the boundary are not collected, not reviewed, and not counted.
+When invoked standalone (no `pr_boundary_files` context): existing behavior unchanged — review
+all changed files.
+
 ---
 
 ## Layer 1: Self-Review Loop

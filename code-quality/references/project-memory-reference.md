@@ -180,6 +180,37 @@ Files that may appear in a memory directory. Skills read only what they need; se
 | `BUGS.md` | bug-investigation | Active and resolved bug tracking |
 | `WORK_ETHIC.md` | session-start | Agent behavior rules for this project |
 
+### Checkpoint Files
+
+Created by the swarm skill at each PR boundary during an incremental workflow run.
+
+**Location:** `{memory_dir}/swarm/{run-id}/checkpoint.json`
+
+**Schema:**
+```json
+{
+  "plan_file": "{memory_dir}/plans/plan.md",
+  "workflow": "incremental",
+  "run_dir": "{memory_dir}/swarm/{run-id}/",
+  "completed_prs": [
+    {"pr_number": 42, "branch": "feat/plan-slug-pr1", "tasks": [1, 2, 3], "merged": true}
+  ],
+  "current_pr": 2,
+  "tasks_remaining": [4, 5, 6],
+  "branch_base": "main",
+  "architect_plan": "{run_dir}/architect-plan.json",
+  "context_summary": "brief summary of work completed so far"
+}
+```
+
+**Field notes:**
+- `current_pr` represents the next PR boundary to process on resume, not the one currently being worked on.
+- The `branch` field in `completed_prs` entries stores the branch name used for that boundary's PR. The `merged` field is updated by the resume flow when verifying PR merge status.
+
+**Lifecycle:** Created by swarm at each PR boundary stop. Read by swarm on resume to restore state. Deleted at final swarm completion (after Phase 7), not at the start of the final boundary's run.
+
+For `run-id` format, see [Run-ID Naming Convention](#run-id-naming-convention).
+
 ---
 
 ## Worktree Resolution

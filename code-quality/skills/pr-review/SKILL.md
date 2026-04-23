@@ -258,6 +258,10 @@ After all agents complete, collect all findings into a consolidated list. Assign
 unique ID (e.g., `sec-1`, `qa-1`, `perf-1`, `cq-1`, `cor-1`, `pa-1`). Preserve: description, file:line,
 classification, evidence, source reviewer.
 
+**Incremental workflow note:** When reviewing a PR created by an incremental swarm run, the
+PR naturally contains only the files for that PR boundary — no additional scoping needed.
+pr-review analyzes the PR diff as-is, which is already boundary-scoped.
+
 ---
 
 ## Phase 3 — Verification (batched)

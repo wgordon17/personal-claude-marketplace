@@ -171,6 +171,21 @@ Present these 5 options:
 If the user selects "Link existing" for either GH or Jira, follow up with an
 `AskUserQuestion` asking for the issue number/key.
 
+### Workflow Question
+
+After the Tracker Question, detect the project's workflow mode. This question does NOT count
+toward the 3-round minimum.
+
+1. Check WORK_ETHIC.md for `**Workflow:**` field
+2. Check project CLAUDE.md for `## Workflow` section
+3. If found and set to `incremental`, inform the user: "Detected incremental workflow mode.
+   I'll add PR boundary markers to the plan."
+4. If not found or set to `fast`, inform the user: "Using fast workflow (no PR boundaries).
+   You can override this by setting `**Workflow:** incremental` in your WORK_ETHIC.md,
+   or adding a `## Workflow` section with `mode: incremental` to your project CLAUDE.md."
+5. Allow the user to override via `AskUserQuestion` if they want to change the detected mode
+   for this specific plan.
+
 ### Exit Condition
 
 You can proceed to Phase 3 (or Phase 4 directly for light planning) when you can articulate ALL of:
@@ -309,6 +324,25 @@ Write the plan file with a header containing:
 - **Tracker:** — The issue tracking selection from Phase 2's Tracker Question. See
   `code-quality/references/tracker-field-spec.md` for the full field value table, parsing
   spec, validation regex, and finalization constraint.
+- **Workflow:** — `fast` (default) or `incremental`. When `incremental`, PR boundary markers
+  are required in tasks. When absent, defaults to `fast`. For light planning, `**Workflow:**`
+  defaults to `fast` regardless of project configuration — light plans are inherently small
+  enough that PR boundaries add no value.
+  Precedence for determining the value:
+  1. Explicit `**Workflow:**` answer in Phase 2 (if the user specifies it)
+  2. WORK_ETHIC.md `**Workflow:**` field in the memory directory
+  3. Project CLAUDE.md `## Workflow` section with `mode: incremental` or `mode: fast`
+  4. Default: `fast`
+- **PR Boundaries:** — (only when `**Workflow:** incremental`) Summary of task-to-PR mapping.
+  Format: `PR 1: Tasks 1-3, PR 2: Tasks 4-6, PR 3: Tasks 7-9`. Each PR boundary groups
+  tasks that form a coherent, independently-reviewable unit targeting 200-400 lines changed.
+  The grouping is determined during Phase 4 task writing based on logical cohesion, file
+  overlap, and dependency structure — not mechanical line counting. Initially left blank in
+  the header — populated after all tasks are written and PR assignments are finalized during
+  Phase 5 validation.
+- **PRs:** — (only when `**Workflow:** incremental`, populated during implementation)
+  Tracks created PR numbers. Format: `PR 1: #42, PR 2: pending, PR 3: pending`. Updated
+  by swarm as PRs are created. Initially all `pending`.
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
@@ -407,6 +441,7 @@ for each task. Each task should follow this structure:
 - Create: `path/to/new.ts`
 
 **Depends on:** Task N-1 (if applicable, or "None")
+**PR:** 1 (only when **Workflow:** incremental; omit for fast workflow)
 
 - [ ] **Step 1: [action]**
   [details]
@@ -525,17 +560,28 @@ After all tasks are written:
 4. **File structure reconciliation:** Compare the `## File Structure` section against the
    files actually referenced in all tasks. If tasks discovered new files not in the original
    mapping, update the File Structure section. If planned files were dropped, remove them.
-5. **Documentation coverage check:** For every task whose changes match the documentation
+5. **PR boundary validation (incremental workflow only):**
+   - Verify every task has a `**PR:** N` field
+   - Verify PR numbers are sequential starting from 1
+   - Populate the `**PR Boundaries:**` header field from the actual task-to-PR assignments
+     (format: `PR 1: Tasks 1-3, PR 2: Tasks 4-6`). This field was left blank during header
+     writing and is now finalized.
+   - Verify `**PR Boundaries:**` header matches the actual task-to-PR mapping
+   - Verify each PR boundary's tasks form a coherent unit (all dependencies within a PR are
+     satisfied by earlier tasks in the same or previous PRs)
+   - Estimate lines changed per PR boundary (from File Structure). Flag if any boundary
+     exceeds ~500 lines with a suggestion to split further — but do not auto-split.
+6. **Documentation coverage check:** For every task whose changes match the documentation
    triggers in `code-quality/references/documentation-taxonomy.md`, verify the plan includes
    corresponding documentation updates. Cross-reference surfaces discovered in Phase 1.
    Check both trigger coverage (every trigger has a doc update) and surface coverage (every
    affected surface is updated).
-6. **Collect flags for Phase 6:**
+7. **Collect flags for Phase 6:**
    - Collect all `[ASSUMPTION: ...]` flags from the plan file (from Phase 4 breakpoints and
      reviewer-detected assumptions)
    - Collect all open questions from the plan header's "Open Questions" section marked `[human]`
    - Build a consolidated flags report to present in Phase 6
-7. **Suggest `/test-plan` if applicable:** If this plan involves user-facing behavior changes
+8. **Suggest `/test-plan` if applicable:** If this plan involves user-facing behavior changes
    (new features, modified user workflows, UI changes), output in chat:
    "This plan includes user-facing changes. Consider running `/test-plan` with this plan file
    to generate UAT scenarios and acceptance criteria before implementation."
