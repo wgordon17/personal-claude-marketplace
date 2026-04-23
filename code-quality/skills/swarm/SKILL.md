@@ -134,10 +134,13 @@ If `incremental`:
   path. Use the matching checkpoint (there should be at most one per plan file). This handles
   the cross-run-ID case where the original run_dir has a different run-id than the current
   session's run-id. Store the original `run_dir` from the checkpoint's `run_dir` field.
-- **Initial branch naming:** For the first PR boundary (no checkpoint exists), rename the
-  Phase 0-created branch to `feat/{plan-slug}-pr1` (via `git branch -m`). This rename
-  happens AFTER TeamCreate and test baseline — the team name uses the run-id, not the branch
-  name. The rename is a git-only operation that does not affect the team or audit trail.
+- **Initial branch naming:** For the first PR boundary (no checkpoint exists), derive
+  `{plan-slug}` from the plan file path using the same algorithm as checkpoint resume:
+  extract the basename, strip the run-id prefix (`{branch-slug}-{timestamp}-`) and `.md`
+  extension, then apply the Branch Slug Sanitization Rules from `project-memory-reference.md`.
+  Rename the Phase 0-created branch to `feat/{plan-slug}-pr1` (via `git branch -m`). This
+  rename happens AFTER TeamCreate and test baseline — the team name uses the run-id, not the
+  branch name. The rename is a git-only operation that does not affect the team or audit trail.
   This establishes the naming convention that resume uses for subsequent boundaries.
 If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
 
@@ -663,10 +666,16 @@ If a plan file was found, the Lead performs reconciliation:
 
    The Lead does NOT write to the plan file directly (Can Edit: No).
 
-**PR tracking reconciliation (incremental only):** At final completion, verify the `**PRs:**`
-field in the plan header is fully populated (all boundaries have PR numbers, no `pending`
-entries remain). Cross-reference against `{run_dir}/checkpoint.json` completed_prs if
-available. Check off all tasks from all PR boundaries (not just the final boundary's tasks).
+**PR tracking reconciliation (incremental only):** At final completion:
+- **Scope the cumulative diff correctly:** `git diff origin/main..HEAD` only contains the
+  FINAL boundary's changes (earlier boundaries were merged via separate PRs). For step 2
+  (cross-reference tasks against diff), check only the current boundary's tasks against the
+  diff. Tasks from earlier boundaries were already completed and merged — verify them via
+  the checkpoint's `completed_prs` entries (each with `merged: true`) rather than the diff.
+- Verify the `**PRs:**` field in the plan header is fully populated (all boundaries have PR
+  numbers, no `pending` entries remain). Cross-reference against `{run_dir}/checkpoint.json`
+  `completed_prs` if available.
+- Check off all tasks from all PR boundaries (not just the final boundary's tasks).
 
 ### Phase 6: Docs & Memory
 
