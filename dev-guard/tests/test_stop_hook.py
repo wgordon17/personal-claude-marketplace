@@ -96,6 +96,7 @@ def write_mock_llm(
     *,
     decision: str = "pass",
     findings: list[str] | None = None,
+    reasoning: str = "mock",
 ) -> None:
     """Write a mock stop-hook-llm.py stub to plugin_root/hooks/.
 
@@ -105,7 +106,7 @@ def write_mock_llm(
     hooks_dir = plugin_root / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
     # Embed as a JSON string constant parsed at runtime — avoids null/None mismatch
-    result_json = json.dumps({"decision": decision, "reasoning": "mock", "findings": findings})
+    result_json = json.dumps({"decision": decision, "reasoning": reasoning, "findings": findings})
     stub = textwrap.dedent(f"""\
         #!/usr/bin/env -S uv run
         # /// script
@@ -813,6 +814,33 @@ class TestLLMSubprocess:
         """LLM script at unreachable path → FileNotFoundError → fail-open → exit 0."""
         payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
         result = run_hook(payload, state_path=state_path, plugin_root="/nonexistent/path")
+        assert result.returncode == 0
+
+    def test_fail_open_sentinel_detected_in_reasoning(self, tmp_path):
+        """LLM returns pass with fail-open sentinel → exit 0 but logged as llm_fail_open."""
+        plugin_root = tmp_path / "plugin"
+        write_mock_llm(
+            plugin_root,
+            decision="pass",
+            reasoning="LLM evaluator failed open: Vertex AI call failed: TimeoutError",
+        )
+        payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
+        result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
+        assert result.returncode == 0
+
+    def test_fail_open_sentinel_not_triggered_by_quoted_text(self, tmp_path):
+        """LLM reasoning quoting the sentinel mid-text → NOT classified as fail-open."""
+        plugin_root = tmp_path / "plugin"
+        write_mock_llm(
+            plugin_root,
+            decision="pass",
+            reasoning=(
+                "The assistant discussed the LLM evaluator failed open: pattern "
+                "in stop-hook-llm.py source code. This is legitimate code review."
+            ),
+        )
+        payload, state_path = self._setup_with_edit_tool(tmp_path, "I've completed the changes.")
+        result = run_hook(payload, state_path=state_path, plugin_root=str(plugin_root))
         assert result.returncode == 0
 
 

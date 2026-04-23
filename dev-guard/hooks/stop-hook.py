@@ -830,7 +830,7 @@ def _invoke_llm(
             findings = None
 
         reasoning = response.get("reasoning", "")
-        if _FAIL_OPEN_SENTINEL in reasoning:
+        if isinstance(reasoning, str) and reasoning.startswith(_FAIL_OPEN_SENTINEL):
             return decision, findings, True, reasoning[:500]
 
         return decision, findings, False, None
@@ -1105,7 +1105,7 @@ def main() -> None:
 
     # ── Log the outcome ──────────────────────────────────────────────────────
     if llm_error:
-        is_fail_open = llm_detail and _FAIL_OPEN_SENTINEL in llm_detail
+        is_fail_open = isinstance(llm_detail, str) and llm_detail.startswith(_FAIL_OPEN_SENTINEL)
         outcome = "llm_fail_open" if is_fail_open else "llm_error"
         detail = llm_detail
     elif decision == "fail":
