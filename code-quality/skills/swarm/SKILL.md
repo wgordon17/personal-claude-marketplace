@@ -152,10 +152,10 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
   for the boundary's branch (`gh pr list --head feat/{plan-slug}-pr{N} --state open --json number`).
   If found, use that PR number. If not found, create the draft PR (check branch exists via
   `git branch -l`, push if needed). Then update the checkpoint with the PR number.
-- Verify merged PRs: for entries with non-null `pr_number`, `git fetch origin main` then
-  confirm they are merged (primary: `gh pr view <number> --json state` checking for
-  `"state": "MERGED"`, fallback: `git branch --merged main` — same two-method strategy
-  as roadmap SKILL.md's completion tracking section).
+- Verify merged PRs: for entries with non-null `pr_number`, `git fetch origin {branch_base}`
+  then confirm they are merged (primary: `gh pr view <number> --json state` checking for
+  `"state": "MERGED"`, fallback: `git branch --merged {branch_base}` — same two-method
+  strategy as roadmap SKILL.md's completion tracking section).
 - If `tasks_remaining` is empty (all boundaries completed but checkpoint was not cleaned up),
   delete the stale checkpoint and proceed with normal completion flow (Phase 6 and 7) rather
   than attempting resume.
@@ -164,8 +164,11 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
   `.md` extension. Example: `hack/plans/feat-auth-1711388400-session-auth.md` → basename
   `feat-auth-1711388400-session-auth.md` → strip prefix and extension → `session-auth`.
   Apply the Branch Slug Sanitization Rules from `project-memory-reference.md`.
-- Create new branch for the next PR boundary: `feat/{plan-slug}-pr{N}` from `origin/main`
+- Create new branch for the next PR boundary: `feat/{plan-slug}-pr{N}` from
+  `origin/{branch_base}` (using the `branch_base` field from the checkpoint, typically `main`)
 - Announce: "Resuming swarm from PR boundary {N}. PRs 1-{N-1} merged. Tasks remaining: {list}."
+  Include the checkpoint's `context_summary` in the Implementer's briefing so it has context
+  about what was built in earlier boundaries.
 - **Resume Phase 0 variant:** Still run these Phase 0 steps for the new session:
   TeamCreate with session-scoped name (`swarm-{original_run_id}-s{session_counter}` where
   `{original_run_id}` is extracted from the checkpoint's `run_dir` field and

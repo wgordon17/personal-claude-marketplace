@@ -185,8 +185,9 @@ How the Fixer processes findings:
 **Structural scoping (incremental workflow):** When `**Workflow:** incremental` is active, the
 Fixer receives ONLY findings whose `file` field matches a file in the current PR boundary's tasks
 (the `**Files:**` blocks for tasks assigned to the current `**PR:** N`). Findings for out-of-boundary
-files are not deferred — the Lead filters them structurally before passing findings to the Fixer.
-The binary needs-fix/needs-input taxonomy is unchanged.
+files are not deferred — they are not in scope for this Fixer run and will be processed when
+their PR boundary's turn comes. This is structural filtering by the Lead, not classification
+by the reviewer. The binary needs-fix/needs-input taxonomy is unchanged.
 
 2. Collect all `needs-input` findings into `needs_input_items` in the FixSummary
 3. Emit FixSummary via SendMessage to the Lead (the Fixer does NOT have AskUserQuestion — only
