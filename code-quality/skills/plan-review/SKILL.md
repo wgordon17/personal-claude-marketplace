@@ -147,6 +147,14 @@ Read `references/reviewer-prompts.md`. For each applicable reviewer, locate the 
 prompt template, substitute all placeholders with actual values, and spawn an agent. Most
 reviewers use `model="sonnet"`; the Unknown Unknowns Reviewer uses `model="opus"`.
 
+**Incremental workflow awareness:** When reviewing a plan with `**Workflow:** incremental`,
+include the following guidance in each reviewer's prompt: treat PR boundary markers
+(`**PR:** N`, `**PR Boundaries:**`) as expected structure, not scope gaps. The scope reviewer
+should validate that each PR boundary is coherent (files form a logical unit). The dependency
+reviewer should verify cross-boundary dependency ordering (tasks in PR N+1 can depend on tasks
+in PR N, but not vice versa). The feasibility reviewer should assess whether 200-400 line
+targets per boundary are realistic given the file structure.
+
 Spawn all applicable reviewers simultaneously (parallel Agent calls).
 
 ### Plan-Specific Reviewers (4 parallel)

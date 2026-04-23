@@ -41,10 +41,10 @@ Each phase follows this exact structure:
 **Prerequisites:** Phase N-1 completed (or "None" for Phase 1)
 **Parallel tracks:** N plans execute concurrently in this phase
 
-| Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
-|-------|------|-------|-----------------|------------|-------|--------|
-| A | /path/to/plan-a.md | Tasks 1-3 | roadmap/phase-1/plan-a | None | /swarm | Complicated |
-| B | /path/to/plan-b.md | Tasks 1-5 | roadmap/phase-1/plan-b | None | /swarm | Clear |
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | /path/to/plan-a.md | Tasks 1-3 | — | roadmap/phase-1/plan-a | None | /swarm | Complicated |
+| B | /path/to/plan-b.md | Tasks 1-5 | — | roadmap/phase-1/plan-b | None | /swarm | Clear |
 
 **Sync point:** All tracks must complete before Phase N+1 begins.
 **Merge order:** Track A first (no conflicts expected), then Track B.
@@ -60,6 +60,7 @@ must appear as columns — do not add per-track metadata outside the table.
 | Track | Yes | Letter identifier (A, B, C...) |
 | Plan | Yes | Absolute path to the plan file |
 | Tasks | Yes | Task range from that plan (e.g., "Tasks 1-3", "Tasks 4-7", "All") |
+| PR | No | PR boundary number from the plan's `**PR:**` task field (e.g., "PR 1", "PR 2"). Use "—" when the plan has no `**Workflow:** incremental` header. For intra-plan PR boundary tracks, this identifies which PR boundary the track implements. |
 | Worktree Branch | Yes | Convention: `roadmap/phase-N/plan-name` (derived from plan filename) |
 | Depends On | Yes | Intra-phase track dependencies only — other tracks *within this phase* that must complete before this track starts. Inter-phase ordering is handled by the Prerequisites field. Use "None" when the track has no dependencies on other tracks in the same phase. |
 | Skill | Yes | Execution skill. Valid values: `/swarm` (full agent swarm — default for most implementation work), `/speculative` (competing implementations), or a custom skill path. The orchestrator invokes the specified skill in the track's worktree with the plan file and task range as arguments. |
@@ -219,9 +220,9 @@ storage depends on the auth middleware interface defined in Tasks 1-2 of Auth Re
 **Prerequisites:** None
 **Parallel tracks:** 1 plan executes in this phase
 
-| Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
-|-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/{run-id}-auth-refactor.md | Tasks 1-2 | roadmap/phase-1/auth-refactor | None | /swarm | Complicated |
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | /home/user/project/hack/plans/{run-id}-auth-refactor.md | Tasks 1-2 | — | roadmap/phase-1/auth-refactor | None | /swarm | Complicated |
 
 **Sync point:** All tracks must complete before Phase 2 begins.
 **Merge order:** Track A only.
@@ -231,10 +232,10 @@ storage depends on the auth middleware interface defined in Tasks 1-2 of Auth Re
 **Prerequisites:** Phase 1 completed
 **Parallel tracks:** 2 plans execute concurrently in this phase
 
-| Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
-|-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/{run-id}-auth-refactor.md | Tasks 3-5 | roadmap/phase-2/auth-refactor | None | /swarm | Complicated |
-| B | /home/user/project/hack/plans/{run-id}-session-storage.md | All | roadmap/phase-2/session-storage | None | /swarm | Clear |
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | /home/user/project/hack/plans/{run-id}-auth-refactor.md | Tasks 3-5 | — | roadmap/phase-2/auth-refactor | None | /swarm | Complicated |
+| B | /home/user/project/hack/plans/{run-id}-session-storage.md | All | — | roadmap/phase-2/session-storage | None | /swarm | Clear |
 
 **Sync point:** All tracks must complete before merging to main. Final phase.
 **Merge order:** Track A first (touches middleware layer), then Track B (additive session layer, no conflicts expected).
@@ -264,10 +265,10 @@ each layer depends on the contract defined by the layer below it.
 **Prerequisites:** None
 **Parallel tracks:** 2 plans execute concurrently in this phase
 
-| Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
-|-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/{run-id}-db-schema.md | All | roadmap/phase-1/db-schema | None | /swarm | Complicated |
-| B | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 1-2 | roadmap/phase-1/api-layer | None | /swarm | Complicated |
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | /home/user/project/hack/plans/{run-id}-db-schema.md | All | — | roadmap/phase-1/db-schema | None | /swarm | Complicated |
+| B | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 1-2 | — | roadmap/phase-1/api-layer | None | /swarm | Complicated |
 
 **Sync point:** All tracks must complete before Phase 2 begins.
 **Merge order:** Track A first (schema migrations must land before API references them), then Track B.
@@ -277,9 +278,9 @@ each layer depends on the contract defined by the layer below it.
 **Prerequisites:** Phase 1 completed
 **Parallel tracks:** 1 plan executes in this phase
 
-| Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
-|-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 3-7 | roadmap/phase-2/api-layer | None | /swarm | Complicated |
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 3-7 | — | roadmap/phase-2/api-layer | None | /swarm | Complicated |
 
 **Sync point:** All tracks must complete before Phase 3 begins.
 **Merge order:** Track A only.
@@ -289,10 +290,10 @@ each layer depends on the contract defined by the layer below it.
 **Prerequisites:** Phase 2 completed
 **Parallel tracks:** 2 plans execute concurrently in this phase
 
-| Track | Plan | Tasks | Worktree Branch | Depends On | Skill | Domain |
-|-------|------|-------|-----------------|------------|-------|--------|
-| A | /home/user/project/hack/plans/{run-id}-frontend-ui.md | All | roadmap/phase-3/frontend-ui | None | /swarm | Complex |
-| B | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 8-9 | roadmap/phase-3/api-layer | None | /swarm | Clear |
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | /home/user/project/hack/plans/{run-id}-frontend-ui.md | All | — | roadmap/phase-3/frontend-ui | None | /swarm | Complex |
+| B | /home/user/project/hack/plans/{run-id}-api-layer.md | Tasks 8-9 | — | roadmap/phase-3/api-layer | None | /swarm | Clear |
 
 **Sync point:** All tracks must complete before merging to main. Final phase.
 **Merge order:** Track B first (API hardening is additive), then Track A (frontend may reference finalized API contracts).

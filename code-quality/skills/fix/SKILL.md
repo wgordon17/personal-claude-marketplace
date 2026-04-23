@@ -189,6 +189,12 @@ before producing terminal output. By the time this skill runs, all findings visi
 output are actionable. Normalize all of them as `needs-fix`. Do not re-classify or re-triage based
 on description text.
 
+**Incremental workflow scoping:** When the Lead provides a `pr_boundary_files` list (during
+incremental swarm execution), the Fixer processes ONLY findings whose `file` field matches
+a file in the list. This is structural filtering by the Lead per the Fixer Protocol in
+finding-classification.md — the Fixer does not make scoping decisions.
+When invoked standalone: existing behavior unchanged — process all findings.
+
 ---
 
 ## Phase 1 — Triage, CWD Validation, and Scope Assessment

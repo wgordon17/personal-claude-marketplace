@@ -124,6 +124,72 @@ tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or s
 to skip issue tracking." Do not proceed to Phase 1 until the tracker is resolved or set to
 `none`.
 
+**Workflow detection:** After discovering the plan file, extract `**Workflow:**` from the header.
+If `incremental`:
+- Extract `**PR Boundaries:**` and parse task-to-PR mapping
+- Extract `**PRs:**` for any already-created PR numbers
+- Set `{workflow_mode}` = `incremental`, `{pr_boundaries}` = parsed mapping
+- **Checkpoint discovery:** Glob `{memory_dir}/swarm/*/checkpoint.json` for any checkpoint
+  files. For each found, read the `plan_file` field and match against the current plan file
+  path. Use the matching checkpoint (there should be at most one per plan file). This handles
+  the cross-run-ID case where the original run_dir has a different run-id than the current
+  session's run-id. Store the original `run_dir` from the checkpoint's `run_dir` field.
+- **Initial branch naming:** For the first PR boundary (no checkpoint exists), rename the
+  Phase 0-created branch to `feat/{plan-slug}-pr1` (via `git branch -m`). This rename
+  happens AFTER TeamCreate and test baseline — the team name uses the run-id, not the branch
+  name. The rename is a git-only operation that does not affect the team or audit trail.
+  This establishes the naming convention that resume uses for subsequent boundaries.
+If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
+
+**Checkpoint resume (incremental only):** If checkpoint discovered via glob:
+- Read checkpoint, extract `completed_prs`, `current_pr`, `tasks_remaining`
+- **Null PR recovery:** If the most recent `completed_prs` entry has `pr_number: null`,
+  the previous session completed implementation but crashed before creating the PR. The
+  branch with the work should still exist. Before creating a PR: check if one already exists
+  for the boundary's branch (`gh pr list --head feat/{plan-slug}-pr{N} --state open --json number`).
+  If found, use that PR number. If not found, create the draft PR (check branch exists via
+  `git branch -l`, push if needed). Then update the checkpoint with the PR number.
+- Verify merged PRs: for entries with non-null `pr_number`, `git fetch origin main` then
+  confirm they are merged (primary: `gh pr view <number> --json state` checking for
+  `"state": "MERGED"`, fallback: `git branch --merged main` — same two-method strategy
+  as roadmap SKILL.md's completion tracking section).
+- If `tasks_remaining` is empty (all boundaries completed but checkpoint was not cleaned up),
+  delete the stale checkpoint and proceed with normal completion flow (Phase 6 and 7) rather
+  than attempting resume.
+- Derive `{plan-slug}` from the checkpoint's `plan_file` path: extract the basename
+  (filename only), then strip the run-id prefix (`{branch-slug}-{timestamp}-`) and the
+  `.md` extension. Example: `hack/plans/feat-auth-1711388400-session-auth.md` → basename
+  `feat-auth-1711388400-session-auth.md` → strip prefix and extension → `session-auth`.
+  Apply the Branch Slug Sanitization Rules from `project-memory-reference.md`.
+- Create new branch for the next PR boundary: `feat/{plan-slug}-pr{N}` from `origin/main`
+- Announce: "Resuming swarm from PR boundary {N}. PRs 1-{N-1} merged. Tasks remaining: {list}."
+- **Resume Phase 0 variant:** Still run these Phase 0 steps for the new session:
+  TeamCreate with session-scoped name (`swarm-{original_run_id}-s{session_counter}` where
+  `{original_run_id}` is extracted from the checkpoint's `run_dir` field and
+  session_counter increments from the count of completed_prs + 1), test baseline, git
+  status check. Reuse the original run-id's `{run_dir}` (from checkpoint's `run_dir` field)
+  for audit trail continuity — do NOT generate a new run-id. Read `architect-plan.json`
+  from the original run_dir (path stored in checkpoint's `architect_plan` field) to restore
+  architectural context.
+- **Plan file discovery:** During incremental resume, do NOT rely on `**Branch:**` header
+  matching (the branch name changes per boundary). Use the checkpoint's `plan_file` path
+  directly. Pass this path to all downstream consumers (Phase 4 Plan Adherence, Phase 5.5
+  Plan Reconciliation, quality-gate) rather than relying on branch-header discovery.
+  Note: The `**Branch:**` header in the plan file is stale after boundary 1 (it was updated
+  to boundary 1's branch by the Boundary Updater). During resume, update `**Branch:**` to the
+  new boundary's branch name via the Boundary Updater at the start of Phase 3, not just at
+  boundary stop.
+- Skip Phase 1 (composition already decided), skip Phase 2 (architecture already done)
+- Jump to Phase 3 implementation with only the current PR boundary's tasks
+
+If checkpoint exists but a completed PR is NOT merged: announce the blocker and pause
+via AskUserQuestion ("PR #{X} is not yet merged. Merge it first, then re-invoke /swarm.").
+
+`--fresh` flag: If the user's invocation prompt contains the token `--fresh` (detected via
+simple string match on the initial task description), ignore any existing checkpoint and
+start a new swarm run. The old checkpoint is archived to
+`{run_dir}/checkpoint.json.abandoned-{timestamp}`.
+
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
 Use `AskUserQuestion` to resolve any ambiguity in the task before spawning agents. Auto-detect
@@ -339,6 +405,59 @@ ELSE:
 This reduces context pressure on individual Implementers and improves output quality for large
 tasks. The Lead decides based on the dependency graph — never based on cost or token concerns.
 
+**PR boundary handling (incremental only):** After completing all tasks in the current PR
+boundary (all components for tasks in `**PR:** {current_pr}`):
+1. Run Phase 4 reviews scoped to the current boundary's files only (the Lead spawns review
+   agents directly with `pr_boundary_files` — NOT via /pr-review skill, which reviews
+   existing PRs)
+2. Run Phase 5 Fixer scoped to the current boundary's files only — the Lead passes
+   `pr_boundary_files` to the Fixer agent's prompt (same mechanism as Phase 4 reviewers).
+   Structural scoping per finding-classification.md Fixer Protocol.
+   Note: Phase 5.5 (Plan Reconciliation) does NOT run at non-final boundary stops — it
+   runs only at final completion, scoped to all tasks across all boundaries.
+3. Spawn Verifier agent (tests + lint) — same agent as Phase 7 but invoked inline at
+   boundary stop. Full test suite, not scoped. This is a Verifier agent invocation only,
+   NOT the full Phase 7 pipeline (Phase 6 docs run only at final completion).
+   **Partial-feature test failures:** Compare test results against the Phase 0 baseline.
+   Any test that was passing in baseline and now fails is a regression — blocking. Any NEW
+   test (added by the current boundary's tasks) that fails is blocking. Tests that were
+   already failing in baseline are pre-existing (handled by existing swarm convention).
+   This baseline comparison sidesteps the "which boundary owns this test" problem.
+4. **Save checkpoint and update plan file via helper agent** (the Lead has Can Edit: No):
+   Spawn a brief Boundary Updater agent (sonnet, bypassPermissions) that:
+   a. Writes checkpoint to `{run_dir}/checkpoint.json` with `completed_prs` for ALL prior
+      boundaries plus the current one (with `pr_number: null` until step 5 succeeds).
+   b. Updates `**PRs:**` field in the plan file to mark the current boundary as `pending`
+      (the real PR number is written by step 7 after PR creation).
+   c. Updates `**Branch:**` field in plan file to `feat/{plan-slug}-pr{current_pr}`.
+   The Lead provides all values; the helper agent only writes files.
+   The Boundary Updater may ONLY write to: (a) `{run_dir}/checkpoint.json`, and (b) the plan
+   file at `{plan_file}`. It must not create, modify, or delete any other files.
+   The Boundary Updater agent remains alive through step 7 — the Lead sends it a follow-up
+   message at step 7 with the PR number to write. It is shut down after step 7 completes.
+5. Create draft PR:
+   ```bash
+   BRANCH=$(git branch --show-current)
+   gh pr create --head "$BRANCH" --draft \
+     --title "type(scope): description covering boundary's tasks" \
+     --body "## Summary
+   - [boundary scope description]
+   - Part {current_pr} of {total_prs} for [feature]"
+   ```
+6. If tracker issue exists: add comment to the issue with the PR reference
+   (`gh issue comment {issue_number} --repo {repo} --body "PR #{pr_number}: [title]"`)
+   Sanitize the PR title before interpolation: strip shell metacharacters from any plan-derived
+   text used in `--body` arguments.
+7. Update checkpoint and plan file via the Boundary Updater agent: set `pr_number` for the
+   current boundary in `completed_prs` (was `null` from step 4), and update `**PRs:**` field
+   in the plan file with `#{pr_number}`.
+8. Announce: "PR #{pr_number} created for PR boundary {current_pr}. Checkpoint saved.
+   Merge the PR, then invoke /swarm to continue with PR boundary {next_pr}."
+9. Clean up: TeamDelete, exit swarm gracefully
+
+If this is the LAST PR boundary: do NOT checkpoint. Instead, proceed with normal Phase 6
+(docs) and Phase 7 (verification) completion flow. Clean up any existing checkpoint file.
+
 ### Phase 3.5: BDD Step Writing (conditional)
 
 (Not to be confused with /speculative's internal Phase 3.5 synthesis within Phase 2.7.)
@@ -435,6 +554,11 @@ Phase 3 re-implementations at 2 regardless of escalation type.
 All escalation events are recorded in `{run_dir}/escalations.json`
 (see schema in `references/communication-schema.md` under "Escalation Events Schema").
 
+**Incremental workflow scoping:** When `{workflow_mode}` is `incremental`, reviewers receive
+only the diff for the current PR boundary's files (not the full branch diff). The Lead
+constructs the file list from the current PR boundary's tasks' `**Files:**` blocks and passes
+it to each reviewer's prompt as `pr_boundary_files`. Reviewers analyze only those files.
+
 ### Phase 4.5: Structural Design Review
 
 This phase always runs after Phase 4 escalation routing completes. It is not conditional on
@@ -465,6 +589,16 @@ and are written to `{run_dir}/reviews/structural-concurrency.json` and
 If Phase 4 escalation routing triggers a return to Phase 2, Phase 4.5 runs on the re-implemented version after the next Phase 4 completes — not on the current (superseded) implementation.
 
 Phase 5 receives findings from both Phase 4 AND Phase 4.5 in its consolidated findings list.
+
+**Incremental workflow — partial feature handling:** At non-final PR boundaries, Phase 4.5
+structural analysts review a partial feature. The Lead briefs analysts: "This is PR boundary
+{N} of {total}. Only the task numbers assigned to PR boundary {N} are implemented. The task
+numbers assigned to subsequent PR boundaries will be implemented in subsequent boundaries.
+Flag structural issues in the CURRENT boundary's code, but do not flag missing integration
+points or incomplete data flows that are addressed by remaining tasks." Findings about
+genuinely missing contracts within the current boundary are valid; findings about
+not-yet-implemented future boundary work are not.
+At the FINAL PR boundary: Phase 4.5 runs normally (full system review).
 
 ### Phase 5: Fix, Test Coverage & Simplify
 
@@ -528,6 +662,11 @@ If a plan file was found, the Lead performs reconciliation:
      machine-readable annotation consumed by downstream skills with exact field label matching.
 
    The Lead does NOT write to the plan file directly (Can Edit: No).
+
+**PR tracking reconciliation (incremental only):** At final completion, verify the `**PRs:**`
+field in the plan header is fully populated (all boundaries have PR numbers, no `pending`
+entries remain). Cross-reference against `{run_dir}/checkpoint.json` completed_prs if
+available. Check off all tasks from all PR boundaries (not just the final boundary's tasks).
 
 ### Phase 6: Docs & Memory
 
@@ -662,6 +801,19 @@ Phase 0: Pre-flight
   +-- Generate run-ID, create {memory_dir}/swarm/{run-id}/
   +-- TeamCreate + TaskGraph
   +-- Extract {tracker} from plan file (default: none)
+  +-- Workflow detection: extract **Workflow:** from plan header
+       |
+       +-- [incremental] Checkpoint glob: {memory_dir}/swarm/*/checkpoint.json
+       |        |
+       |        +-- [checkpoint found, PR not merged] --> AskUserQuestion (blocker)
+       |        |
+       |        +-- [checkpoint found, PRs merged] --> Resume:
+       |        |     fetch origin/main, create feat/{plan-slug}-pr{N} branch
+       |        |     skip Phase 1 + Phase 2, jump to Phase 3 (current PR boundary tasks)
+       |        |
+       |        +-- [no checkpoint] --> rename branch to feat/{plan-slug}-pr1, continue
+       |
+       +-- [fast / absent] --> existing behavior unchanged
      |
      v
 Phase 1: Clarify & Checkpoint <-- AskUserQuestion (ambiguity resolution)
@@ -710,7 +862,20 @@ Phase 3: Pipelined Implementation
   |      <-------- reject ----------------------------------  |
   +-------------------------------------------------------+
      |
-     v
+     +-- [incremental, non-final PR boundary] ---------------+
+     |   PR boundary stop:                                   |
+     |   +-- Phase 4 review (scoped to boundary files)       |
+     |   +-- Phase 5 Fixer (scoped to boundary files)        |
+     |   +-- Verifier (full test suite, baseline comparison) |
+     |   +-- Boundary Updater agent: write checkpoint.json   |
+     |   +-- gh pr create --draft feat/{slug}-pr{N}          |
+     |   +-- gh issue comment (if tracker exists)            |
+     |   +-- Boundary Updater: set pr_number in checkpoint + update plan **PRs:**   |
+     |   +-- Announce PR + checkpoint, TeamDelete, exit      |
+     |   [user merges PR, invokes /swarm again → Phase 0]    |
+     +-------------------------------------------------------+
+     |
+     v  [fast workflow OR final PR boundary]
 Phase 3.5: BDD Step Writing (conditional — only when Feature Files in Test Plan annotation)
   +-- Promote .feature files from staging → {feature_target_dir}
   +-- Install BDD dependency if BDD Setup Needed: yes
@@ -724,11 +889,13 @@ Phase 4: Parallel Review
   +-- Code-Reviewer (sonnet) -------------------------+--> Lead synthesizes findings
   +-- Performance (sonnet) ---------------------------|
   +-- Optional: UI / API / DB reviewers -------------+
+  [incremental: reviewers receive pr_boundary_files, analyze only those files]
      |
      v
 Phase 4.5: Structural Design Review (always runs)
   +-- Analyst 1: Concurrency & State (opus) ---------+
   +-- Analyst 2: Integration & Contract (opus) -------+--> Lead merges STRUCT findings
+  [incremental non-final: analysts briefed on partial feature — don't flag future-boundary gaps]
      |
      v
 Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
@@ -742,6 +909,7 @@ Phase 5.5: Plan Reconciliation (if incremental plan file found)
   +-- Lead: cross-reference tasks against git diff origin/main..HEAD
   +-- Lead: AskUserQuestion for any unaddressed tasks
   +-- Plan File Updater (sonnet): check off completed, mark skipped/blocked
+  [incremental: verify **PRs:** fully populated, check off tasks from ALL boundaries]
      |
      v
 Phase 6: Docs & Memory
