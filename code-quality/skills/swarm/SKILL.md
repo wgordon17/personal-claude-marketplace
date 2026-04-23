@@ -4,8 +4,8 @@ description: >-
   Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
   of 21+ specialized agents (Architect, Security Design Reviewer, Reduction Analyst,
   Implementer, Reviewer, Test-Writer, Test-Runner, Security, QA, Code-Reviewer,
-  Performance, Plan Adherence, Fixer, Test Coverage Agent, Code-Simplifier, Docs,
-  Docs Reviewer, Lessons Extractor, Verifier, BDD-Step-Writer) with structured JSON
+  Performance, Plan Adherence, Fixer, Test Coverage Agent, Code-Simplifier,
+  Boundary Updater, Docs, Docs Reviewer, Lessons Extractor, Verifier, BDD-Step-Writer) with structured JSON
   communication, Cynefin domain classification, audit trails, and early user
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
@@ -48,6 +48,7 @@ specialist agent.
 | 5 | Fixer | general-purpose | sonnet | Yes | Address ALL review findings |
 | 5 | Test Coverage Agent | general-purpose | sonnet | Yes | Write tests for coverage gaps from Phase 4 |
 | 5 | Code-Simplifier | code-quality:code-simplifier | sonnet | Yes | Post-fix simplification pass |
+| 3 | Boundary Updater (incremental only) | general-purpose | sonnet | Yes | Write checkpoint.json and update plan file at PR boundary stops |
 | 5.5 | Plan File Updater (conditional) | general-purpose | sonnet | Yes | Update plan file checkboxes after Lead reconciliation |
 | 6 | Docs | general-purpose | sonnet | Yes | Update repo docs and hack/ memory |
 | 6 | Docs Reviewer | general-purpose | sonnet | No | Verify Docs agent's work against architect's documentation_impact |
@@ -1040,7 +1041,7 @@ After escalation, wait for user input before proceeding.
 | Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings |
 | Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
 | Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |
-| Phase 5.5: Plan Reconciliation | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. |
+| Phase 5.5: Plan Reconciliation | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. Also skipped at non-final PR boundary stops during incremental workflow (runs only at final completion). |
 | Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
 | /unfuck sweep | Fewer than 20 files modified and not an architectural change |
 | NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
@@ -1072,7 +1073,7 @@ prefer opus — one strong pass beats multiple weaker passes.
 | Model | Used For |
 |-------|---------|
 | opus | Architect, Reduction Analyst, Reviewer, Security, QA, Structural Analysts, **Plan Adherence** — judgment-heavy tasks |
-| sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Docs, Lessons Extractor |
+| sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Boundary Updater, Docs, Lessons Extractor |
 | haiku | Test-Runner, Verifier — execution-only tasks |
 
 ### Work Completion Principle
