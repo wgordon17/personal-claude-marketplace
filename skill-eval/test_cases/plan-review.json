@@ -209,6 +209,26 @@
         "not-contains: unnecessary abstraction",
         "not-contains: custom pattern"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "Review this implementation plan for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:12-missing-operational-concerns}",
+      "rubrics": ["finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Identifies that the dispatcher (Task 4) has no error handling — what happens when the webhook URL is unreachable or returns 500?",
+        "Identifies missing retry/backoff logic — a single failed POST silently loses the notification",
+        "Identifies missing timeout on requests.post() — the synchronous call in a signal handler blocks the HTTP response indefinitely",
+        "Identifies that synchronous signal handlers (Task 5) block the user's HTTP request until all webhooks are delivered — needs async dispatch",
+        "Identifies missing URL validation — no SSRF protection on user-configured webhook URLs",
+        "Identifies no rate limiting — a user could configure many webhooks causing outbound request storms",
+        "Does NOT fabricate structural issues — dependencies are correct, file mapping is complete, no circular deps"
+      ],
+      "assertions": [
+        "contains: timeout",
+        "contains: retry",
+        "contains: error handling",
+        "not-contains: circular dependency"
+      ]
     }
   ]
 }

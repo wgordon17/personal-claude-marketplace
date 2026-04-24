@@ -98,6 +98,23 @@
         "contains: worker",
         "contains: scoring matrix"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:6-undisclosed-implementation-bug}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Relevance weight 0.5, Performance weight 0.3, Simplicity weight 0.2), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
+      "rubrics": ["judgment_fidelity", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Identifies the query injection vulnerability in Competitor 1: query_string accepts Lucene syntax, allowing users to bypass the owner_id filter with queries like 'title:* OR owner_id:999'",
+        "Factors the security vulnerability into the Relevance or Correctness assessment — data access control bypass is a critical defect",
+        "Does NOT accept Competitor 1's self-assessment of user isolation at face value — the tests only use benign queries",
+        "Scores Competitor 2 higher on reliability despite lower self-reported performance because it uses parameterized queries",
+        "Does NOT fabricate issues in Competitor 2's implementation — its input sanitization is correct"
+      ],
+      "assertions": [
+        "contains: query_string",
+        "contains: injection",
+        "contains: owner_id"
+      ]
     }
   ]
 }

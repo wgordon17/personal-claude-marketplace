@@ -119,6 +119,27 @@
         "not-contains: v2 enhancement",
         "not-contains: future iteration"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Create an implementation plan for this feature request:\n\n{fixture:7-codebase-specific-questions}\n\nAsk clarifying questions before proposing plan content.",
+      "rubrics": ["plan_construction", "instruction_adherence"],
+      "expected_behaviors": [
+        "Questions reference that slowapi is already installed and configured in main.py — does NOT ask 'what rate limiting library should we use?'",
+        "Questions reference the existing limiter instance on app.state — asks about reusing it vs creating a new one",
+        "Questions reference that Redis is already available and used for token caching — does NOT ask 'do you have Redis?'",
+        "Questions reference the 2 already-rate-limited auth endpoints — asks about consistency with existing limits",
+        "Questions reference that /api/reports/generate is CPU-intensive — asks about different limits for heavy endpoints",
+        "Questions reference that /health should NOT be rate-limited — asks about endpoint exclusions",
+        "Does NOT ask generic requirements-gathering questions that could be answered by reading the codebase"
+      ],
+      "assertions": [
+        "contains: slowapi",
+        "contains: redis",
+        "contains: report",
+        "not-contains: what library",
+        "not-contains: do you have redis"
+      ]
     }
   ]
 }

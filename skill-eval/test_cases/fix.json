@@ -183,6 +183,23 @@
         "not-contains: too broad",
         "not-contains: dedicated effort"
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes. Pay attention to existing callers of modified functions.\n\n{fixture:11-fix-breaks-callers}",
+      "rubrics": ["fix_correctness", "finding_completeness"],
+      "expected_behaviors": [
+        "Identifies that naively rejecting empty titles would break 4 existing callers: CSV importer, test fixture, and 2 seed data entries",
+        "Proposes a fix for Finding 1 that validates at the API layer (route handler) while preserving create_project() for internal callers",
+        "Does NOT add validation directly in create_project() without accounting for callers that pass empty titles intentionally",
+        "Fixes Finding 2 (missing rate limiting) with a concrete implementation using the existing stack",
+        "Addresses both findings — does not skip Finding 2 because Finding 1 is harder"
+      ],
+      "assertions": [
+        "contains: import",
+        "contains: caller",
+        "contains: rate limit"
+      ]
     }
   ]
 }

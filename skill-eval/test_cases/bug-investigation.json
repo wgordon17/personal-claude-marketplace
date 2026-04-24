@@ -120,6 +120,24 @@
         "contains: deleted items",
         "contains: soft-delete"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Investigate this bug report. The error appears in the tasks module but the root cause may be elsewhere.\n\n{fixture:7-misdirected-symptom}",
+      "rubrics": ["root_cause_analysis", "finding_completeness"],
+      "expected_behaviors": [
+        "Traces the error from tasks/handlers.py (symptom) to auth/middleware.py (root cause) — middleware renamed g.current_user to g.auth_context in revision abc789",
+        "Does NOT conclude the bug is in tasks/handlers.py — the handler code is correct, the data it depends on was renamed upstream",
+        "Identifies ALL affected handlers, not just the reported one: tasks, projects, reports, and settings modules all read g.current_user",
+        "Notes that settings/handlers.py uses dict key access (g.current_user['id']) which raises KeyError, a different symptom from the same root cause",
+        "Proposes fix: update all handlers to use g.auth_context, OR revert the rename in middleware.py"
+      ],
+      "assertions": [
+        "contains: middleware",
+        "contains: auth_context",
+        "contains: rename",
+        "contains: projects"
+      ]
     }
   ]
 }

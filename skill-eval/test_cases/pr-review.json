@@ -216,6 +216,30 @@
         "contains: webhook",
         "not-contains: fabricated"
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add discount engine and order history pagination\n- Description: Implements tiered discount calculation for orders and adds pagination to order history endpoint. Comprehensive tests included.\n- Files changed: 3\n\n## Diff\n{fixture:13-subtle-logic-bugs}",
+      "rubrics": [
+        "finding_completeness",
+        "classification_precision",
+        "severity_accuracy",
+        "pr_depth"
+      ],
+      "expected_behaviors": [
+        "Identifies off-by-one in apply_discounts_to_batch: range(1, len(orders)) skips the first order — should be range(len(orders))",
+        "Identifies pagination offset bug in order_history: offset(page * per_page) is wrong when page=1 returns items starting at index 20 instead of 0 — should be offset((page - 1) * per_page)",
+        "Identifies that test_batch_applies_discounts asserts len(result)==2 which matches the buggy behavior (skipping first item) — the test encodes the bug",
+        "Classifies these as correctness bugs, not style or security issues",
+        "Assigns medium-high severity — off-by-one in billing affects revenue and pagination affects all users of order history"
+      ],
+      "assertions": [
+        "contains: range",
+        "contains: offset",
+        "contains: off-by-one",
+        "not-contains: style",
+        "not-contains: security"
+      ]
     }
   ]
 }

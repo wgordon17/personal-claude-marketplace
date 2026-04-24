@@ -297,6 +297,30 @@
         "not-contains: security audit passed",
         "not-contains: already reviewed"
       ]
+    },
+    {
+      "id": 15,
+      "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n{fixture:15-bug-free-incomplete-feature}\n\n## Project Context\nThis is a Flask REST API backend. The work is tracked against a plan file specifying full CRUD with paginated listing.",
+      "rubrics": [
+        "review_comprehensiveness",
+        "finding_completeness",
+        "phase_completion"
+      ],
+      "expected_behaviors": [
+        "Identifies that Update endpoint (PUT /projects/:id) is missing — specified in plan Task 4 but not implemented",
+        "Identifies that Delete endpoint (DELETE /projects/:id) is missing — specified in plan Task 5 but not implemented",
+        "Identifies that list_projects() returns all results without pagination despite the plan requiring page/per_page support",
+        "Identifies that tests only cover Create and Read — no tests for List, and no tests for the missing Update/Delete",
+        "Does NOT fabricate code quality issues — the implemented code is clean and correct",
+        "Flags the work as INCOMPLETE relative to the stated plan goal, not as PASS"
+      ],
+      "assertions": [
+        "contains: update",
+        "contains: delete",
+        "contains: pagination",
+        "contains: incomplete",
+        "not-contains: pass"
+      ]
     }
   ]
 }
