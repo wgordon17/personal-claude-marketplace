@@ -183,6 +183,27 @@
         "not-contains: unnecessary wrapper",
         "not-contains: ai slop"
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues, classify them by category, and prioritize by impact.\n\n{fixture:11-ambiguous-category-boundaries}",
+      "rubrics": ["classification_precision", "convention_adherence", "instruction_adherence", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Classifies format_response() and ResponseFormatter as dead code — no callers exist",
+        "Classifies validate_user_input() and sanitize_user_data() as duplicates — identical logic",
+        "Classifies buildQuery() as BOTH a security issue (SQL injection via string interpolation) AND a convention violation (camelCase)",
+        "Prioritizes buildQuery SQL injection above all other findings — security trumps style",
+        "Flags camelCase naming on buildQuery and formatTimestamp as convention violations against the dominant snake_case pattern",
+        "Flags bare except in DataProcessor.process() as a convention violation — other code uses specific exceptions",
+        "Does NOT flag retry_with_backoff() as dead code — it is a legitimate utility",
+        "Does NOT flag DataProcessor.transform() returning NotImplemented as dead code — it is an ABC pattern"
+      ],
+      "assertions": [
+        "contains: sql injection",
+        "contains: dead code",
+        "contains: duplicate",
+        "contains: camelCase"
+      ]
     }
   ]
 }

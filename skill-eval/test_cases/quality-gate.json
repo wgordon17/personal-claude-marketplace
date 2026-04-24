@@ -321,6 +321,47 @@
         "contains: incomplete",
         "not-contains: pass"
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:16-import-and-error-conventions}\n\n## Project Context\nFlask web application with Stripe billing. Python 3.12. CLAUDE.md rules: specific exceptions (not bare except), modern union syntax (X | None not Optional[X]), isort import ordering.",
+      "rubrics": ["convention_adherence", "instruction_adherence", "finding_completeness"],
+      "expected_behaviors": [
+        "Flags import ordering violation: os, json, datetime, logging are stdlib but not grouped — typing is stdlib but mixed with third-party",
+        "Flags bare except Exception in both try blocks — CLAUDE.md requires specific exceptions (stripe.error.CardError, stripe.error.InvalidRequestError)",
+        "Flags Optional[str] usage in refund_charge — CLAUDE.md requires str | None syntax",
+        "Cites CLAUDE.md rules and codebase evidence (auth/login.py, utils/helpers.py) as basis for convention findings",
+        "Does NOT flag the os.environ access or logging patterns as issues — those are correct"
+      ],
+      "assertions": [
+        "contains: import",
+        "contains: except",
+        "contains: optional",
+        "contains: convention"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:17-misleading-names-hiding-issues}\n\n## Project Context\nFlask web application with user profiles. The security.py module was added to centralize security utilities.",
+      "rubrics": ["manipulation_resistance", "review_comprehensiveness", "finding_completeness", "severity_accuracy"],
+      "expected_behaviors": [
+        "Identifies that sanitize_input() does NOT sanitize — it logs the raw input and returns it unchanged (XSS vector)",
+        "Identifies that validate_and_escape_html() does NOT escape — it returns content unchanged (XSS vector)",
+        "Identifies that secure_hash() uses MD5 which is not cryptographically secure for password hashing",
+        "Identifies that check_authorization() always returns True regardless of roles — authorization is completely bypassed",
+        "Identifies that safe_url_redirect() does NOT validate the URL — open redirect vulnerability",
+        "Identifies that rate_limit_check() always returns False — rate limiting is non-functional",
+        "Identifies that validate_email() accepts any string with @ — insufficient validation",
+        "Does NOT accept the function names at face value — reads the implementations",
+        "Classifies sanitize_input and validate_and_escape_html issues as high severity — they are used in profile.py to process user input"
+      ],
+      "assertions": [
+        "contains: sanitize",
+        "contains: unchanged",
+        "contains: md5",
+        "contains: always returns true",
+        "contains: open redirect"
+      ]
     }
   ]
 }

@@ -132,6 +132,25 @@
         "not-contains: plan c depends on",
         "not-contains: serialize"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "You are running the roadmap skill to sequence the following 2 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:8-shared-readonly-file}\n\n## Project Context\nPython/Flask web application. Both plans reference src/config.py for reading configuration but neither modifies it. Both plans add lines to .env.example but in non-conflicting sections. No project memory directory exists (skip Phase 0).",
+      "rubrics": ["false_positive_resistance", "orchestration_design", "instruction_adherence"],
+      "expected_behaviors": [
+        "Identifies both plans as independent — they read from config.py but neither modifies it",
+        "Places both plans in a single parallel phase",
+        "Does NOT fabricate a dependency based on shared config.py reads — reading a file is not contention",
+        "Does NOT fabricate a dependency based on both adding to .env.example — additive non-conflicting changes",
+        "Notes that both plans create files under src/notifications/ but in separate files (email.py vs slack.py) — no contention",
+        "Follows the roadmap output format specified in the skill instructions"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "contains: independent",
+        "not-contains: depends on",
+        "not-contains: sequential"
+      ]
     }
   ]
 }

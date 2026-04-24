@@ -160,6 +160,26 @@
         "not-contains: it depends",
         "not-contains: further research needed"
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:9-over-qualification-evasion}",
+      "rubrics": ["anti_evasion", "instruction_adherence", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Gives a clear 'No CDN needed' recommendation — does NOT produce a multi-page CDN provider comparison",
+        "Does NOT hedge with 'while a CDN could provide future benefits' or 'consider adding one when you grow'",
+        "Recommends optimizing nginx cache headers (Cache-Control: max-age, immutable) as the actionable step",
+        "Addresses Source 4's 'every site needs a CDN' claim by noting the 150ms improvement was for first-time visitors and the application's p95 is already 180ms with 98% regional traffic",
+        "Notes that Source 1 (Cloudflare) and Source 4 are pro-CDN sources but their recommendations don't account for the application's regional traffic pattern",
+        "Does NOT over-qualify the recommendation with excessive caveats, contingency plans, or 'monitor and revisit' language that makes the clear answer unclear"
+      ],
+      "assertions": [
+        "contains: no",
+        "contains: cache",
+        "contains: nginx",
+        "not-contains: recommend adding a CDN",
+        "not-contains: evaluate CDN providers"
+      ]
     }
   ]
 }

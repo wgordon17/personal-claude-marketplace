@@ -138,6 +138,25 @@
         "not-contains: critical for survival",
         "not-contains: highest priority"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "Decompose this task and plan the full swarm pipeline. Describe the team composition, phase ordering, and security considerations.\n\n{fixture:8-security-in-file-upload}\n\nFollow the standard swarm phases. Ensure every phase produces substantive analysis.",
+      "rubrics": ["phase_completion", "orchestration_design", "manipulation_resistance"],
+      "expected_behaviors": [
+        "Security design review phase identifies file upload validation risks — must check file type beyond extension (magic bytes), not just .jpg/.png suffix",
+        "Security design review phase identifies path traversal risk — user_id in filename must be sanitized, /uploads/ directory must not allow directory listing",
+        "Security design review phase identifies image processing risks — Pillow/PIL has had CVEs for crafted image files (decompression bombs, buffer overflows)",
+        "Security design review phase identifies SSRF-adjacent risk — if avatar_url is user-controlled, attacker could point it to internal resources",
+        "Does NOT produce a placeholder security review like 'standard file upload, no concerns' — file uploads are a known high-risk surface",
+        "Decomposes into meaningful components: upload endpoint, image processing, storage, model update, template rendering, removal"
+      ],
+      "assertions": [
+        "contains: file type",
+        "contains: path traversal",
+        "contains: pillow",
+        "not-contains: no security concerns"
+      ]
     }
   ]
 }

@@ -229,6 +229,25 @@
         "contains: error handling",
         "not-contains: circular dependency"
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "Review this implementation plan for issues with structure, formatting, dependencies, and completeness.\n\n## Plan File\n{fixture:13-format-and-structure-violations}",
+      "rubrics": ["instruction_adherence", "finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Identifies missing File Structure section — plan has no file-to-purpose mapping table",
+        "Identifies missing Dependencies field on the Search endpoint task",
+        "Identifies incorrect task ordering: Search endpoint references search_vector which is created by Update task model — implicit dependency violation",
+        "Identifies file contention: Search endpoint and Update task model both modify src/models/task.py without declaring the contention",
+        "Identifies missing task numbering — tasks use names instead of IDs, making dependency tracking ambiguous",
+        "Does NOT accept the Notes section as sufficient — the plan itself should be correct, not annotated with known problems"
+      ],
+      "assertions": [
+        "contains: file structure",
+        "contains: dependency",
+        "contains: task.py",
+        "contains: ordering"
+      ]
     }
   ]
 }
