@@ -387,7 +387,8 @@ Track A) because PR boundaries branch sequentially from main — each boundary c
 branch from main after the prior boundary's PR merges. Track B cannot start until Track A's
 PR merges. This is PR-level sequencing, not task-level — tasks WITHIN a
 single PR boundary may still be parallelizable if the swarm architect determines they are
-independent.
+independent. The `PR 1`, `PR 2` labels in the table are internal plumbing — each PR created
+from a boundary is standalone work described by what it accomplishes, never "Part X of Y".
 
 Completion tracking for intra-plan tracks uses the same branch merge detection as inter-plan
 tracks (primary: `gh pr list --state merged`, fallback: `git branch --merged main`).

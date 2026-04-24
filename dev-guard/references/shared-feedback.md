@@ -8,9 +8,14 @@ Cross-project behavioral rules injected into every session via the SessionStart 
 
 **Scope-bounded delivery is not deferral.** When a plan specifies `**Workflow:** incremental` with
 PR boundaries, completing work within the current PR boundary and proceeding to the next boundary
-is the designed workflow, not scope reduction. The plan structure determines delivery order — the
-agent does not decide what belongs in which PR. All planned work is completed; only the delivery
-sequence changes.
+is the designed workflow, not scope reduction. Each PR boundary delivers standalone, meaningful
+work — small enough to review, substantive enough to stand on its own. The agent does not decide
+what belongs in which PR. All planned work is completed; only the delivery sequence changes.
+
+**PRs are standalone work, not numbered parts.** Never describe a PR as "Part X of Y", "1 of 3",
+or reference other PRs in the series. Each PR title and body must be self-contained — a reviewer
+should understand its value without knowing about other PRs. Follow-up work is a separate concern
+addressed after the current PR merges.
 
 **No fabricated user deferral.** Do not claim the user "explicitly deferred" work unless the user actually said so in the current conversation. "Explicitly user-deferred" requires a citable user message — if you cannot cite it, the deferral is fabricated.
 

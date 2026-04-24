@@ -60,7 +60,7 @@ must appear as columns — do not add per-track metadata outside the table.
 | Track | Yes | Letter identifier (A, B, C...) |
 | Plan | Yes | Absolute path to the plan file |
 | Tasks | Yes | Task range from that plan (e.g., "Tasks 1-3", "Tasks 4-7", "All") |
-| PR | No | PR boundary number from the plan's `**PR:**` task field (e.g., "PR 1", "PR 2"). Use "—" when the plan has no `**Workflow:** incremental` header. For intra-plan PR boundary tracks, this identifies which PR boundary the track implements. |
+| PR | No | PR boundary number from the plan's `**PR:**` task field (e.g., "PR 1", "PR 2"). Use "—" when the plan has no `**Workflow:** incremental` header. For intra-plan PR boundary tracks, this identifies which PR boundary the track implements. This is internal plumbing — these labels must not appear in PR titles or bodies. |
 | Worktree Branch | Yes | Convention: `roadmap/phase-N/plan-name` (derived from plan filename) |
 | Depends On | Yes | Intra-phase track dependencies only — other tracks *within this phase* that must complete before this track starts. Inter-phase ordering is handled by the Prerequisites field. Use "None" when the track has no dependencies on other tracks in the same phase. |
 | Skill | Yes | Execution skill. Valid values: `/swarm` (full agent swarm — default for most implementation work), `/speculative` (competing implementations), or a custom skill path. The orchestrator invokes the specified skill in the track's worktree with the plan file and task range as arguments. |
