@@ -61,7 +61,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
             self.client = anthropic.AnthropicVertex(
                 project_id=project_id,
                 region=region,
-                timeout=600.0,  # 10 min — prevents SDK ValueError on long requests.
+                timeout=600.0,
             )
         except Exception:
             raise RuntimeError(

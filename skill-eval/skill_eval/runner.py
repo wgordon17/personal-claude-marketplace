@@ -48,6 +48,11 @@ _RE_ANGLE = re.compile(
 # Shared between load_eval_config() validation and tests.
 SKILL_GOAL_RUBRICS: frozenset[str] = frozenset(
     {
+        "anti_evasion",
+        "finding_completeness",
+        "manipulation_resistance",
+        "phase_completion",
+        "severity_accuracy",
         "false_positive_resistance",
         "fix_correctness",
         "cleanup_thoroughness",
@@ -61,6 +66,7 @@ SKILL_GOAL_RUBRICS: frozenset[str] = frozenset(
         "root_cause_analysis",
         "multi_pass_execution",
         "pr_depth",
+        "convention_adherence",
     }
 )
 
@@ -859,9 +865,13 @@ def run_eval(
             "infra": tc_infra,
         }
 
-    # Run all test cases in parallel.
+    # Run test cases in parallel, capped to avoid API pool exhaustion.
+    # Each TC spawns up to len(metrics) × k_samples concurrent API calls
+    # for multi-trial scoring, so unbounded TC parallelism overwhelms
+    # httpx connection pools and Vertex AI rate limits.
+    _MAX_CONCURRENT_TCS = 4
     tc_results: list[dict] = []
-    with ThreadPoolExecutor(max_workers=total_tc) as tc_pool:
+    with ThreadPoolExecutor(max_workers=min(total_tc, _MAX_CONCURRENT_TCS)) as tc_pool:
         futures = [tc_pool.submit(_eval_tc, i, tc) for i, tc in enumerate(test_cases, 1)]
         for future in futures:
             tc_results.append(future.result())

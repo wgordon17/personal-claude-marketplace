@@ -1,11 +1,11 @@
 [project]
 name = "skill-eval"
-version = "0.2.0"
+version = "0.2.1"
 requires-python = ">=3.13"
 dependencies = [
-    "deepeval>=2.9,<3.0",
+    "deepeval>=3.0",
     "instructor>=1.0,<2.0",
-    "anthropic[vertex]>=0.40.0",
+    "anthropic[vertex]>=0.80.0",
 ]
 
 [dependency-groups]
