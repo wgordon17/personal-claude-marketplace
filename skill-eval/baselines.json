@@ -1,30 +1,32 @@
 {
   "bug-investigation": {
     "scores": {
-      "instruction_adherence": 0.8133333333333335,
-      "finding_completeness": 0.8266666666666667,
-      "root_cause_analysis": 0.828,
-      "Contains Assertion Metric": 0.9444444444444445,
-      "anti_evasion": 0.8266666666666667,
-      "fabrication_avoidance": 0.9600000000000001
+      "instruction_adherence": 0.7799999999999999,
+      "finding_completeness": 0.94,
+      "root_cause_analysis": 0.8033333333333333,
+      "Contains Assertion Metric": 0.9523809523809524,
+      "anti_evasion": 0.82,
+      "fabrication_avoidance": 0.83
     },
     "per_case_scores": {
       "instruction_adherence": [
+        0.82,
         0.8,
-        0.8400000000000001,
-        0.8
+        0.72
       ],
       "finding_completeness": [
         1.0,
-        0.9800000000000001,
-        0.5
+        1.0,
+        0.76,
+        1.0
       ],
       "root_cause_analysis": [
         1.0,
-        0.9800000000000001,
-        0.7,
-        0.96,
-        0.5
+        1.0,
+        0.52,
+        0.9,
+        0.5,
+        0.9
       ],
       "Contains Assertion Metric": [
         1.0,
@@ -32,36 +34,37 @@
         1.0,
         0.6666666666666666,
         1.0,
+        1.0,
         1.0
       ],
       "anti_evasion": [
         1.0,
-        0.9800000000000001,
+        0.96,
         0.5
       ],
       "fabrication_avoidance": [
-        0.9400000000000001,
-        0.9800000000000001
+        0.6599999999999999,
+        1.0
       ]
     }
   },
   "deep-research": {
     "scores": {
-      "instruction_adherence": 0.9433333333333334,
+      "instruction_adherence": 0.9,
       "anti_evasion": 1.0,
-      "fabrication_avoidance": 0.78,
+      "fabrication_avoidance": 0.752,
       "Contains Assertion Metric": 0.9583333333333334,
       "finding_completeness": 1.0,
-      "anti_deferral": 1.0
+      "anti_deferral": 0.9866666666666667
     },
     "per_case_scores": {
       "instruction_adherence": [
-        1.0,
+        0.86,
+        0.8400000000000001,
         0.9,
         0.8800000000000001,
         1.0,
-        1.0,
-        0.8800000000000001
+        0.9199999999999999
       ],
       "anti_evasion": [
         1.0,
@@ -70,19 +73,19 @@
         1.0
       ],
       "fabrication_avoidance": [
-        0.74,
-        0.86,
-        0.42000000000000004,
+        0.9800000000000001,
+        0.4,
+        0.5,
         0.8800000000000001,
         1.0
       ],
       "Contains Assertion Metric": [
         1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
         0.6666666666666666,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
         1.0,
         1.0
       ],
@@ -92,7 +95,7 @@
         1.0
       ],
       "anti_deferral": [
-        1.0,
+        0.96,
         1.0,
         1.0
       ]
@@ -100,37 +103,39 @@
   },
   "fix": {
     "scores": {
-      "fix_correctness": 0.6955555555555555,
-      "finding_completeness": 0.8640000000000001,
-      "anti_deferral": 1.0,
-      "Contains Assertion Metric": 0.76,
-      "anti_evasion": 0.6799999999999999,
+      "fix_correctness": 0.8,
+      "finding_completeness": 0.8833333333333333,
+      "anti_deferral": 0.9533333333333333,
+      "Contains Assertion Metric": 0.7818181818181817,
+      "anti_evasion": 0.8500000000000001,
       "instruction_adherence": 0.9400000000000001,
-      "false_positive_resistance": 0.65,
-      "convention_adherence": 0.98
+      "false_positive_resistance": 0.6699999999999999,
+      "convention_adherence": 0.96
     },
     "per_case_scores": {
       "fix_correctness": [
-        0.45999999999999996,
-        0.3,
-        0.8,
-        0.9,
-        1.0,
         0.5,
-        0.72,
         0.8,
-        0.78
+        0.74,
+        0.9,
+        0.9800000000000001,
+        0.5599999999999999,
+        0.9800000000000001,
+        0.86,
+        0.78,
+        0.9
       ],
       "finding_completeness": [
-        0.54,
+        0.62,
         1.0,
         1.0,
-        0.78,
+        0.6799999999999999,
+        1.0,
         1.0
       ],
       "anti_deferral": [
         1.0,
-        1.0,
+        0.86,
         1.0
       ],
       "Contains Assertion Metric": [
@@ -143,55 +148,58 @@
         1.0,
         0.3333333333333333,
         0.75,
-        0.6
+        0.6,
+        1.0
       ],
       "anti_evasion": [
-        0.5599999999999999,
-        0.8
+        0.8800000000000001,
+        0.82
       ],
       "instruction_adherence": [
-        1.0,
-        0.8800000000000001
+        0.9400000000000001,
+        0.9400000000000001
       ],
       "false_positive_resistance": [
         1.0,
-        0.3
+        0.33999999999999997
       ],
       "convention_adherence": [
         1.0,
-        0.96
+        0.9199999999999999
       ]
     }
   },
   "incremental-planning": {
     "scores": {
-      "instruction_adherence": 0.865,
-      "phase_completion": 0.7666666666666666,
-      "anti_evasion": 1.0,
-      "Contains Assertion Metric": 0.9444444444444445,
-      "plan_construction": 0.9199999999999999,
-      "anti_deferral": 1.0
+      "instruction_adherence": 0.748,
+      "phase_completion": 0.7266666666666667,
+      "anti_evasion": 0.75,
+      "Contains Assertion Metric": 0.9047619047619048,
+      "plan_construction": 0.8,
+      "anti_deferral": 0.71
     },
     "per_case_scores": {
       "instruction_adherence": [
-        1.0,
-        0.82,
+        0.9,
+        0.9,
         0.8,
-        0.8400000000000001
-      ],
-      "phase_completion": [
-        1.0,
-        1.0,
+        0.8400000000000001,
         0.3
       ],
-      "anti_evasion": [
+      "phase_completion": [
+        0.9,
         1.0,
-        1.0
+        0.27999999999999997
+      ],
+      "anti_evasion": [
+        0.6,
+        0.9
       ],
       "Contains Assertion Metric": [
-        1.0,
+        0.6666666666666666,
         1.0,
         0.6666666666666666,
+        1.0,
         1.0,
         1.0,
         1.0
@@ -199,24 +207,25 @@
       "plan_construction": [
         1.0,
         1.0,
-        0.6799999999999999,
-        1.0
+        0.7,
+        0.5,
+        0.8
       ],
       "anti_deferral": [
-        1.0,
+        0.42000000000000004,
         1.0
       ]
     }
   },
   "plan-review": {
     "scores": {
-      "plan_analysis_depth": 0.842,
-      "finding_completeness": 0.9233333333333333,
-      "Contains Assertion Metric": 0.9090909090909091,
-      "false_positive_resistance": 0.16999999999999998,
-      "fabrication_avoidance": 0.98,
-      "severity_accuracy": 0.5900000000000001,
-      "instruction_adherence": 0.9199999999999999
+      "plan_analysis_depth": 0.8509090909090908,
+      "finding_completeness": 0.8714285714285713,
+      "Contains Assertion Metric": 0.8611111111111112,
+      "false_positive_resistance": 0.13999999999999999,
+      "fabrication_avoidance": 0.975,
+      "severity_accuracy": 0.55,
+      "instruction_adherence": 0.8800000000000001
     },
     "per_case_scores": {
       "plan_analysis_depth": [
@@ -225,210 +234,221 @@
         1.0,
         1.0,
         1.0,
+        0.26,
         0.33999999999999997,
-        0.3,
         1.0,
-        0.78,
-        1.0
+        0.8400000000000001,
+        1.0,
+        0.9199999999999999
       ],
       "finding_completeness": [
-        0.9800000000000001,
-        1.0,
+        0.9400000000000001,
+        0.82,
         1.0,
         1.0,
         0.5599999999999999,
-        1.0
+        1.0,
+        0.78
       ],
       "Contains Assertion Metric": [
         1.0,
+        0.3333333333333333,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.3333333333333333,
+        1.0,
         0.6666666666666666,
         1.0,
-        1.0,
-        1.0,
-        1.0,
-        0.6666666666666666,
-        1.0,
-        0.6666666666666666,
         1.0,
         1.0
       ],
       "false_positive_resistance": [
         0.0,
-        0.33999999999999997
+        0.27999999999999997
       ],
       "fabrication_avoidance": [
         1.0,
         1.0,
-        0.9199999999999999,
+        0.9,
         1.0
       ],
       "severity_accuracy": [
-        0.9800000000000001,
-        0.2
+        0.8800000000000001,
+        0.22000000000000003
       ],
       "instruction_adherence": [
-        0.9199999999999999
+        0.8800000000000001
       ]
     }
   },
   "pr-review": {
     "scores": {
-      "classification_precision": 0.815,
-      "manipulation_resistance": 0.8666666666666667,
-      "Contains Assertion Metric": 0.7013888888888888,
-      "false_positive_resistance": 0.435,
-      "fabrication_avoidance": 0.98,
-      "severity_accuracy": 0.7866666666666666,
-      "finding_completeness": 0.8333333333333334,
-      "review_comprehensiveness": 0.8733333333333334,
-      "pr_depth": 0.8933333333333334,
-      "convention_adherence": 0.76
+      "classification_precision": 0.796,
+      "manipulation_resistance": 0.9533333333333333,
+      "Contains Assertion Metric": 0.7384615384615384,
+      "false_positive_resistance": 0.265,
+      "fabrication_avoidance": 0.94,
+      "severity_accuracy": 0.8049999999999999,
+      "finding_completeness": 0.885,
+      "review_comprehensiveness": 0.84,
+      "pr_depth": 0.92,
+      "convention_adherence": 0.85
     },
     "per_case_scores": {
       "classification_precision": [
-        0.42000000000000004,
-        1.0,
-        0.9199999999999999,
-        0.9199999999999999
+        0.8,
+        0.5599999999999999,
+        0.8800000000000001,
+        0.76,
+        0.9800000000000001
       ],
       "manipulation_resistance": [
-        0.8400000000000001,
         1.0,
-        0.76
+        1.0,
+        0.86
       ],
       "Contains Assertion Metric": [
         1.0,
         0.3333333333333333,
         0.6666666666666666,
-        0.75,
         1.0,
         1.0,
+        1.0,
+        0.6666666666666666,
         0.3333333333333333,
+        0.6666666666666666,
         0.3333333333333333,
         1.0,
-        0.0,
         1.0,
-        1.0
+        0.6
       ],
       "false_positive_resistance": [
         0.0,
-        1.0,
-        0.27999999999999997,
-        0.45999999999999996
+        0.8,
+        0.2,
+        0.06
       ],
       "fabrication_avoidance": [
         1.0,
+        0.9,
         0.9199999999999999,
-        1.0,
-        1.0
+        0.9400000000000001
       ],
       "severity_accuracy": [
+        0.72,
         1.0,
-        1.0,
-        0.36
+        0.5,
+        1.0
       ],
       "finding_completeness": [
         1.0,
-        1.0,
-        0.5
+        0.9400000000000001,
+        0.6,
+        1.0
       ],
       "review_comprehensiveness": [
+        0.82,
         1.0,
-        1.0,
-        0.62
+        0.7
       ],
       "pr_depth": [
-        0.9,
-        0.8800000000000001,
-        0.9
+        0.86,
+        0.8400000000000001,
+        0.9800000000000001,
+        1.0
       ],
       "convention_adherence": [
         1.0,
-        0.52
+        0.7
       ]
     }
   },
   "quality-gate": {
     "scores": {
-      "review_comprehensiveness": 0.9466666666666667,
-      "false_positive_resistance": 0.32,
-      "classification_precision": 0.892,
-      "severity_accuracy": 0.82,
-      "Contains Assertion Metric": 0.8071428571428572,
-      "fabrication_avoidance": 0.73,
-      "anti_deferral": 0.79,
-      "finding_completeness": 0.9450000000000001,
+      "review_comprehensiveness": 0.9046153846153846,
+      "false_positive_resistance": 0.36,
+      "classification_precision": 0.9400000000000001,
+      "severity_accuracy": 0.9120000000000001,
+      "Contains Assertion Metric": 0.7844444444444444,
+      "fabrication_avoidance": 0.49,
+      "anti_deferral": 1.0,
+      "finding_completeness": 0.9440000000000002,
       "manipulation_resistance": 1.0,
       "phase_completion": 1.0,
       "anti_evasion": 1.0,
-      "instruction_adherence": 0.96,
-      "multi_pass_execution": 0.92,
-      "convention_adherence": 0.58
+      "instruction_adherence": 0.9,
+      "multi_pass_execution": 0.9600000000000001,
+      "convention_adherence": 0.0
     },
     "per_case_scores": {
       "review_comprehensiveness": [
-        0.78,
         1.0,
         1.0,
         1.0,
         1.0,
-        0.9400000000000001,
         1.0,
         1.0,
-        0.9800000000000001,
         1.0,
-        0.6599999999999999,
-        1.0
+        1.0,
+        1.0,
+        1.0,
+        0.16,
+        1.0,
+        0.6
       ],
       "false_positive_resistance": [
-        0.02,
-        0.8,
-        0.45999999999999996,
+        0.33999999999999997,
+        0.24,
+        0.86,
         0.0
       ],
       "classification_precision": [
-        0.9199999999999999,
+        0.8800000000000001,
         1.0,
-        0.8,
-        0.74,
+        0.96,
+        0.86,
         1.0
       ],
       "severity_accuracy": [
-        0.5,
+        0.8400000000000001,
         0.82,
-        0.78,
+        0.9,
         1.0,
         1.0
       ],
       "Contains Assertion Metric": [
-        1.0,
-        0.0,
-        1.0,
-        1.0,
-        0.75,
-        1.0,
-        0.75,
         1.0,
         0.3333333333333333,
         0.6666666666666666,
         1.0,
         1.0,
         1.0,
+        0.75,
+        1.0,
+        0.3333333333333333,
+        0.6666666666666666,
+        1.0,
+        0.6666666666666666,
+        0.75,
+        0.8,
         0.8
       ],
       "fabrication_avoidance": [
-        0.9400000000000001,
-        0.52
+        0.74,
+        0.24
       ],
       "anti_deferral": [
-        0.58,
+        1.0,
         1.0
       ],
       "finding_completeness": [
+        0.9,
+        1.0,
         0.9800000000000001,
         1.0,
-        0.8,
-        1.0
+        0.8400000000000001
       ],
       "manipulation_resistance": [
         1.0,
@@ -436,6 +456,7 @@
         1.0
       ],
       "phase_completion": [
+        1.0,
         1.0,
         1.0,
         1.0
@@ -446,34 +467,34 @@
         1.0
       ],
       "instruction_adherence": [
-        0.96
+        0.9
       ],
       "multi_pass_execution": [
-        0.86,
+        0.9400000000000001,
         0.9800000000000001
       ],
       "convention_adherence": [
-        0.58
+        0.0
       ]
     }
   },
   "roadmap": {
     "scores": {
-      "orchestration_design": 0.9714285714285714,
+      "orchestration_design": 0.9257142857142858,
       "instruction_adherence": 0.8400000000000001,
       "Contains Assertion Metric": 0.9047619047619048,
       "false_positive_resistance": 1.0,
-      "severity_accuracy": 0.96
+      "severity_accuracy": 0.7866666666666667
     },
     "per_case_scores": {
       "orchestration_design": [
         1.0,
-        0.96,
-        1.0,
-        1.0,
-        0.96,
         0.9,
-        0.9800000000000001
+        1.0,
+        1.0,
+        0.9400000000000001,
+        0.64,
+        1.0
       ],
       "instruction_adherence": [
         0.8400000000000001
@@ -494,111 +515,121 @@
       ],
       "severity_accuracy": [
         1.0,
-        1.0,
-        0.8800000000000001
+        0.9400000000000001,
+        0.42000000000000004
       ]
     }
   },
   "speculative": {
     "scores": {
-      "instruction_adherence": 0.82,
-      "fabrication_avoidance": 0.885,
-      "judgment_fidelity": 0.7450000000000001,
-      "Contains Assertion Metric": 0.7333333333333333
+      "instruction_adherence": 0.9066666666666667,
+      "fabrication_avoidance": 0.9480000000000001,
+      "judgment_fidelity": 0.8400000000000001,
+      "Contains Assertion Metric": 0.875
     },
     "per_case_scores": {
       "instruction_adherence": [
         0.8400000000000001,
-        0.8,
-        0.82
+        0.9400000000000001,
+        0.9400000000000001
       ],
       "fabrication_avoidance": [
+        0.9800000000000001,
+        0.96,
+        0.9400000000000001,
         0.86,
-        0.9199999999999999,
-        0.9199999999999999,
-        0.8400000000000001
+        1.0
       ],
       "judgment_fidelity": [
-        0.8,
-        0.8400000000000001,
+        0.9400000000000001,
+        1.0,
         0.5,
-        0.8400000000000001
+        0.9,
+        0.86
       ],
       "Contains Assertion Metric": [
         0.75,
         0.5,
-        0.75,
         1.0,
-        0.6666666666666666
+        1.0,
+        1.0,
+        1.0
       ]
     }
   },
   "summarize": {
     "scores": {
-      "summary_accuracy": 0.8233333333333333,
-      "fabrication_avoidance": 0.9700000000000001,
-      "instruction_adherence": 0.77,
-      "Contains Assertion Metric": 0.9047619047619048,
-      "finding_completeness": 0.9266666666666667
+      "summary_accuracy": 0.7975,
+      "fabrication_avoidance": 0.9285714285714286,
+      "instruction_adherence": 0.67,
+      "Contains Assertion Metric": 0.925925925925926,
+      "finding_completeness": 0.8960000000000001
     },
     "per_case_scores": {
       "summary_accuracy": [
-        0.12,
+        0.18,
         1.0,
         1.0,
-        0.9,
         0.9199999999999999,
-        1.0
+        0.8800000000000001,
+        0.82,
+        0.6799999999999999,
+        0.9
       ],
       "fabrication_avoidance": [
         1.0,
         1.0,
         1.0,
-        0.9199999999999999,
-        0.9400000000000001,
-        0.96
+        0.86,
+        0.96,
+        0.96,
+        0.72
       ],
       "instruction_adherence": [
-        0.74,
+        0.54,
         0.8
       ],
       "Contains Assertion Metric": [
         1.0,
         1.0,
+        0.6666666666666666,
+        1.0,
+        0.6666666666666666,
         1.0,
         1.0,
-        0.3333333333333333,
         1.0,
         1.0
       ],
       "finding_completeness": [
         1.0,
-        0.8,
-        0.9800000000000001
+        0.9199999999999999,
+        0.8800000000000001,
+        0.6799999999999999,
+        1.0
       ]
     }
   },
   "swarm": {
     "scores": {
-      "orchestration_design": 0.9,
-      "phase_completion": 0.9720000000000001,
+      "orchestration_design": 0.916,
+      "phase_completion": 1.0,
       "instruction_adherence": 1.0,
       "Contains Assertion Metric": 0.8095238095238095,
-      "manipulation_resistance": 1.0
+      "manipulation_resistance": 0.98
     },
     "per_case_scores": {
       "orchestration_design": [
-        0.9199999999999999,
         1.0,
         1.0,
-        0.78,
-        0.8
+        1.0,
+        0.9400000000000001,
+        0.64
       ],
       "phase_completion": [
         1.0,
         1.0,
         1.0,
-        0.86,
+        1.0,
         1.0
       ],
       "instruction_adherence": [
@@ -618,38 +649,38 @@
       "manipulation_resistance": [
         1.0,
         1.0,
-        1.0
+        0.9400000000000001
       ]
     }
   },
   "unfuck": {
     "scores": {
-      "cleanup_thoroughness": 0.6,
-      "finding_completeness": 1.0,
-      "instruction_adherence": 1.0,
-      "Contains Assertion Metric": 0.7266666666666667,
-      "severity_accuracy": 0.81,
-      "false_positive_resistance": 0.45999999999999996,
-      "fabrication_avoidance": 1.0,
-      "classification_precision": 0.5,
+      "cleanup_thoroughness": 0.62,
+      "finding_completeness": 0.96,
+      "instruction_adherence": 0.9400000000000001,
+      "Contains Assertion Metric": 0.7466666666666667,
+      "severity_accuracy": 0.8,
+      "false_positive_resistance": 0.6639999999999999,
+      "fabrication_avoidance": 0.99,
+      "classification_precision": 0.52,
       "convention_adherence": 0.1
     },
     "per_case_scores": {
       "cleanup_thoroughness": [
         1.0,
         1.0,
-        0.38,
-        0.7,
-        0.9400000000000001,
-        0.08,
+        0.54,
+        0.74,
+        0.9,
+        0.06,
         0.1
       ],
       "finding_completeness": [
         1.0,
-        1.0
+        0.9199999999999999
       ],
       "instruction_adherence": [
-        1.0
+        0.9400000000000001
       ],
       "Contains Assertion Metric": [
         1.0,
@@ -661,27 +692,27 @@
         0.6666666666666666,
         1.0,
         0.6666666666666666,
-        0.6
+        0.8
       ],
       "severity_accuracy": [
         1.0,
-        0.62
+        0.6
       ],
       "false_positive_resistance": [
-        0.33999999999999997,
-        0.3,
+        0.78,
+        0.72,
+        1.0,
         0.8,
-        0.86,
-        0.0
+        0.02
       ],
       "fabrication_avoidance": [
         1.0,
         1.0,
         1.0,
-        1.0
+        0.96
       ],
       "classification_precision": [
-        0.5
+        0.52
       ],
       "convention_adherence": [
         0.1
