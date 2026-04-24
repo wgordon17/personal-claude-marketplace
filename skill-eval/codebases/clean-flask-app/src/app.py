@@ -8,7 +8,7 @@ from src.api.tickets import tickets_bp
 from src.db import init_db
 
 
-def create_app(config_overrides=None):
+def create_app(config_overrides: dict | None = None) -> Flask:
     app = Flask(__name__)
 
     # Fail-fast on missing required env var — not a hardcoded value

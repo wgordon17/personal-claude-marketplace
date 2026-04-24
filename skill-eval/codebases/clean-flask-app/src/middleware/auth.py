@@ -1,11 +1,12 @@
 import ast
+from collections.abc import Callable
 from functools import wraps
 
 import jwt
 from flask import current_app, g, jsonify, request, session
 
 
-def require_session(f):
+def require_session(f: Callable) -> Callable:
     @wraps(f)
     def decorated(*args, **kwargs):
         user_id = session.get("user_id")
@@ -18,7 +19,7 @@ def require_session(f):
     return decorated
 
 
-def require_jwt(f):
+def require_jwt(f: Callable) -> Callable:
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")

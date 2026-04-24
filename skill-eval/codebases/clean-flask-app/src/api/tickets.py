@@ -1,7 +1,8 @@
 from flask import Blueprint, g, jsonify, request
+from sqlalchemy.orm import Session
 from src.db import get_db
 from src.middleware.auth import require_session
-from src.models.project import get_project_by_id
+from src.models.project import Project, get_project_by_id
 from src.models.ticket import (
     TicketPriority,
     TicketStatus,
@@ -15,7 +16,9 @@ from src.utils.validation import validate_description, validate_ticket_title
 tickets_bp = Blueprint("tickets", __name__)
 
 
-def _assert_project_membership(db, project_id: int, user_id: int):
+def _assert_project_membership(
+    db: Session, project_id: int, user_id: int
+) -> tuple[Project | None, tuple | None]:
     project = get_project_by_id(db, project_id)
     if project is None:
         return None, (jsonify({"error": "Project not found"}), 404)

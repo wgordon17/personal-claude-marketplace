@@ -24,7 +24,7 @@ def get_db() -> Session:
     try:
         yield session
         session.commit()
-    except Exception:
+    except Exception:  # Must catch all DB exceptions to ensure rollback
         session.rollback()
         raise
     finally:

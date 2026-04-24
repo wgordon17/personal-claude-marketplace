@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from sqlalchemy.orm import Session
 from src.db import execute_write, fetch_all, fetch_one
 
 
@@ -31,7 +32,7 @@ class Ticket:
     reporter_id: int
 
 
-def get_ticket_by_id(session, ticket_id: int) -> Ticket | None:
+def get_ticket_by_id(session: Session, ticket_id: int) -> Ticket | None:
     row = fetch_one(
         session,
         """
@@ -52,7 +53,7 @@ def get_ticket_by_id(session, ticket_id: int) -> Ticket | None:
 
 
 def list_tickets_for_project(
-    session, project_id: int, page: int = 1, per_page: int = 50
+    session: Session, project_id: int, page: int = 1, per_page: int = 50
 ) -> list[Ticket]:
     offset = (page - 1) * per_page
     rows = fetch_all(
@@ -73,7 +74,7 @@ def list_tickets_for_project(
 
 
 def create_ticket(
-    session,
+    session: Session,
     project_id: int,
     title: str,
     description: str,
@@ -117,7 +118,7 @@ def create_ticket(
     )
 
 
-def update_ticket_status(session, ticket_id: int, status: TicketStatus) -> bool:
+def update_ticket_status(session: Session, ticket_id: int, status: TicketStatus) -> bool:
     rows = execute_write(
         session,
         "UPDATE tickets SET status = :status WHERE id = :id",

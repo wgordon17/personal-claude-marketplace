@@ -1,6 +1,7 @@
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from functools import wraps
 
 from flask import jsonify, request
@@ -45,7 +46,7 @@ _auth_limiter = SlidingWindowRateLimiter(max_requests=5, window_seconds=60.0)
 
 
 def rate_limit(limiter: SlidingWindowRateLimiter = None):
-    def decorator(f):
+    def decorator(f: Callable) -> Callable:
         @wraps(f)
         def decorated(*args, **kwargs):
             lim = limiter or _default_limiter

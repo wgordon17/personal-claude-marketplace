@@ -2,6 +2,7 @@ from flask import Blueprint, g, jsonify, request
 from src.db import get_db
 from src.middleware.auth import require_session
 from src.models.project import (
+    Project,
     add_member,
     create_project,
     delete_project,
@@ -13,7 +14,9 @@ from src.utils.validation import validate_description, validate_project_name
 projects_bp = Blueprint("projects", __name__)
 
 
-def _assert_project_access(project, user_id: int, owner_only: bool = False):
+def _assert_project_access(
+    project: Project | None, user_id: int, owner_only: bool = False
+) -> tuple[Project | None, tuple | None]:
     if project is None:
         return None, (jsonify({"error": "Project not found"}), 404)
     if owner_only and project.owner_id != user_id:

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from sqlalchemy.orm import Session
 from src.db import execute_write, fetch_all, fetch_one
 
 
@@ -12,7 +13,7 @@ class Project:
     member_ids: list[int] = field(default_factory=list)
 
 
-def get_project_by_id(session, project_id: int) -> Project | None:
+def get_project_by_id(session: Session, project_id: int) -> Project | None:
     row = fetch_one(
         session,
         "SELECT id, name, description, owner_id FROM projects WHERE id = :id",
@@ -31,7 +32,7 @@ def get_project_by_id(session, project_id: int) -> Project | None:
 
 
 def list_projects_for_user(
-    session, user_id: int, page: int = 1, per_page: int = 20
+    session: Session, user_id: int, page: int = 1, per_page: int = 20
 ) -> list[Project]:
     offset = (page - 1) * per_page
     rows = fetch_all(
@@ -49,7 +50,7 @@ def list_projects_for_user(
     return [Project(**r, member_ids=[]) for r in rows]
 
 
-def create_project(session, name: str, description: str, owner_id: int) -> Project:
+def create_project(session: Session, name: str, description: str, owner_id: int) -> Project:
     execute_write(
         session,
         """
@@ -69,7 +70,7 @@ def create_project(session, name: str, description: str, owner_id: int) -> Proje
     return Project(**row, member_ids=[owner_id])
 
 
-def add_member(session, project_id: int, user_id: int) -> bool:
+def add_member(session: Session, project_id: int, user_id: int) -> bool:
     execute_write(
         session,
         """
@@ -81,7 +82,7 @@ def add_member(session, project_id: int, user_id: int) -> bool:
     return True
 
 
-def delete_project(session, project_id: int) -> bool:
+def delete_project(session: Session, project_id: int) -> bool:
     execute_write(
         session,
         "DELETE FROM project_members WHERE project_id = :project_id",

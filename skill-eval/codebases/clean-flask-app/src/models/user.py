@@ -2,6 +2,7 @@ import hmac
 from dataclasses import dataclass
 
 import bcrypt
+from sqlalchemy.orm import Session
 from src.db import execute_write, fetch_one
 
 
@@ -14,7 +15,7 @@ class User:
     is_active: bool
 
 
-def get_user_by_id(session, user_id: int) -> User | None:
+def get_user_by_id(session: Session, user_id: int) -> User | None:
     row = fetch_one(
         session,
         "SELECT id, username, email, password_hash, is_active FROM users WHERE id = :id",
@@ -25,7 +26,7 @@ def get_user_by_id(session, user_id: int) -> User | None:
     return User(**row)
 
 
-def get_user_by_email(session, email: str) -> User | None:
+def get_user_by_email(session: Session, email: str) -> User | None:
     row = fetch_one(
         session,
         "SELECT id, username, email, password_hash, is_active FROM users WHERE email = :email",
@@ -36,7 +37,7 @@ def get_user_by_email(session, email: str) -> User | None:
     return User(**row)
 
 
-def create_user(session, username: str, email: str, password: str) -> User:
+def create_user(session: Session, username: str, email: str, password: str) -> User:
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     execute_write(
         session,
@@ -55,7 +56,7 @@ def verify_password(user: User, candidate: str) -> bool:
     return hmac.compare_digest(expected, user.password_hash.encode())
 
 
-def deactivate_user(session, user_id: int) -> bool:
+def deactivate_user(session: Session, user_id: int) -> bool:
     rows = execute_write(
         session,
         "UPDATE users SET is_active = FALSE WHERE id = :id",
