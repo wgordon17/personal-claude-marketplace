@@ -171,6 +171,7 @@ SWARM_SKILL = REPO_ROOT / "code-quality" / "skills" / "swarm" / "SKILL.md"
 LABEL_DEFINITIONS = REPO_ROOT / "code-quality" / "references" / "github-label-definitions.md"
 TRACKER_FIELD_SPEC = REPO_ROOT / "code-quality" / "references" / "tracker-field-spec.md"
 PROJECT_MEMORY_REFERENCE = REPO_ROOT / "code-quality" / "references" / "project-memory-reference.md"
+SHARED_FEEDBACK = REPO_ROOT / "dev-guard" / "references" / "shared-feedback.md"
 
 
 class TestCodeQualityReferenceIntegrity:
@@ -305,6 +306,20 @@ class TestCodeQualityReferenceIntegrity:
         assert "**PRs:**" in content, (
             "swarm/SKILL.md does not contain '**PRs:**'. "
             "The PRs field extraction for incremental mode was deleted or altered."
+        )
+
+    def test_swarm_pr_template_no_serial_numbering(self):
+        content = SWARM_SKILL.read_text()
+        assert "Part {current_pr} of {total_prs}" not in content, (
+            "swarm/SKILL.md still contains 'Part {current_pr} of {total_prs}'. "
+            "PR body template must not use serial numbering — each PR is standalone work."
+        )
+
+    def test_shared_feedback_standalone_pr_rule(self):
+        content = SHARED_FEEDBACK.read_text()
+        assert "PRs are standalone work" in content, (
+            "shared-feedback.md does not contain 'PRs are standalone work'. "
+            "The standalone PR framing rule was deleted or altered."
         )
 
     def test_project_memory_reference_contains_checkpoint_schema(self):

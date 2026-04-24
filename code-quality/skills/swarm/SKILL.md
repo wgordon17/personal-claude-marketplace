@@ -433,7 +433,7 @@ After completing all tasks in the current PR boundary (all components for tasks 
 3. Spawn Verifier agent (tests + lint) — same agent as Phase 7 but invoked inline at
    boundary stop. Full test suite, not scoped. This is a Verifier agent invocation only,
    NOT the full Phase 7 pipeline (Phase 6 docs run only at final completion).
-   **Partial-feature test failures:** Compare test results against the Phase 0 baseline.
+   **Boundary-scoped test failures:** Compare test results against the Phase 0 baseline.
    Any test that was passing in baseline and now fails is a regression — blocking. Any NEW
    test (added by the current boundary's tasks) that fails is blocking. Tests that were
    already failing in baseline are pre-existing (handled by existing swarm convention).
