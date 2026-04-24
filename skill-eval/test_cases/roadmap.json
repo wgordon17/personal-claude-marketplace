@@ -114,6 +114,24 @@
         "contains: dependency",
         "contains: risk"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:7-phantom-resource-independence}\n\n## Project Context\nThis is a Python/Flask web application. Plans A (email notifications) and B (CSV export) and C (audit log) touch different directories. Plan C references a MessageBroker service that does not exist. No project memory directory exists (skip Phase 0).",
+      "rubrics": ["false_positive_resistance", "orchestration_design"],
+      "expected_behaviors": [
+        "Identifies all 3 plans as independent — zero file overlap between them",
+        "Places all 3 in a single parallel phase since they have no cross-plan dependencies",
+        "Does NOT fabricate a dependency between Plan C and Plans A/B based on the phantom MessageBroker reference",
+        "Flags Plan C's MessageBroker reference as a feasibility issue internal to Plan C — it is missing from the codebase",
+        "Does NOT serialize the plans 'to be safe' — independence is evidenced by zero file overlap"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "contains: messagebroker",
+        "not-contains: plan c depends on",
+        "not-contains: serialize"
+      ]
     }
   ]
 }

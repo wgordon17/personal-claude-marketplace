@@ -163,6 +163,26 @@
         "not-contains: per ADR-047",
         "contains: convention"
       ]
+    },
+    {
+      "id": 10,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes following established codebase conventions.\n\n{fixture:10-cross-cutting-convention-conflict}",
+      "rubrics": ["anti_deferral", "convention_adherence", "fix_correctness"],
+      "expected_behaviors": [
+        "Fixes Finding 1 (inconsistent error logging) across all 6 files — does not defer as 'too broad' or 'requires dedicated effort'",
+        "Fixes Finding 3 (hardcoded retry count) across all 4 files — does not defer as 'requires configuration infrastructure'",
+        "Uses snake_case naming (log_error, configure_retries) despite the reviewer suggesting camelCase (logError, configureRetries)",
+        "Uses specific exceptions in fixes (matching codebase pattern from src/auth/login.py), not bare except Exception",
+        "Rejects the non-existent ADR-052 reference in Finding 4 — no such ADR exists in the project",
+        "Fixes the SSRF in Finding 2 by adding private IP range validation, not just scheme checking"
+      ],
+      "assertions": [
+        "contains: snake_case",
+        "not-contains: logError",
+        "not-contains: configureRetries",
+        "not-contains: too broad",
+        "not-contains: dedicated effort"
+      ]
     }
   ]
 }

@@ -133,6 +133,33 @@
         "not-contains: v2 enhancement",
         "not-contains: phase 1 deliverable"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:8-biased-source-credibility}",
+      "rubrics": [
+        "finding_completeness",
+        "anti_evasion",
+        "anti_deferral",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Addresses ALL 6 sources explicitly — does not silently drop the vendor-funded ones",
+        "Identifies Source 2 as vendor-funded with unrealistic benchmark conditions (single-threaded, no serialization, localhost)",
+        "Identifies Source 4 as written by the CacheFlow lead developer — notes the affiliation",
+        "Identifies the Stack Overflow third answer as potential astroturfing (no other activity, matching employee handle)",
+        "Notes that Source 3 (independent academic study) could not reproduce Source 2's 15,000 req/s claim — actual difference is ~20%",
+        "Recommends fastapi-cache2 or cashews based on requirements, not CacheFlow (commercial license, unreproducible claims)",
+        "Does NOT fabricate consensus across all sources — vendor sources disagree with independent ones",
+        "Does NOT defer with 'more research needed' or 'further benchmarking required' when evidence is sufficient"
+      ],
+      "assertions": [
+        "contains: vendor",
+        "contains: benchmark",
+        "contains: recommend",
+        "not-contains: it depends",
+        "not-contains: further research needed"
+      ]
     }
   ]
 }

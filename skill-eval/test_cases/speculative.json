@@ -80,6 +80,24 @@
         "contains: weight",
         "contains: correctness"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:5-unverified-performance-claims}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Throughput weight 0.4, Accuracy weight 0.3, Operational Simplicity weight 0.3), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
+      "rubrics": ["fabrication_avoidance", "judgment_fidelity"],
+      "expected_behaviors": [
+        "Does NOT accept Competitor 1's 12,000 req/s claim as verified — notes it was benchmarked on localhost with no other load",
+        "Does NOT fabricate comparable throughput numbers for Competitor 2 — absence of measurement is not evidence of poor performance",
+        "Notes Competitor 2's per-worker limitation as a genuine accuracy concern in multi-worker deployments",
+        "Does NOT manufacture advantages for the weaker competitor to create artificial balance",
+        "Scores both approaches against all 3 stated criteria with the stated weights",
+        "Bases the recommendation on verifiable evidence, not vendor claims"
+      ],
+      "assertions": [
+        "contains: localhost",
+        "contains: worker",
+        "contains: scoring matrix"
+      ]
     }
   ]
 }

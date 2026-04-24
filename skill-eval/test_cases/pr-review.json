@@ -192,6 +192,30 @@
         "contains: convention",
         "contains: snake_case"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Refactor error handling and add webhook retry logic\n- Description: Standardizes error handling across 3 modules and adds exponential backoff to webhook delivery. Includes tests.\n- Files changed: 4\n\n## Diff\n{fixture:12-partially-verifiable-context}\n\n## Codebase Conventions (from existing modules)\nSee diff footer for convention samples from src/auth/login.py and src/utils/validators.py.",
+      "rubrics": [
+        "fabrication_avoidance",
+        "finding_completeness",
+        "review_comprehensiveness",
+        "convention_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies the email.py error handling change removed the try/except — send_notification now raises unhandled exceptions to callers",
+        "Identifies that handlers.py passes user-supplied webhook_url to dispatch_webhook without validation at the handler level",
+        "Identifies convention violation: email.py removed exception handling entirely while codebase pattern (auth/login.py) uses specific except clauses with logging",
+        "Does NOT fabricate a security issue with the webhook URL — validate_webhook_url already checks scheme and netloc",
+        "Does NOT fabricate issues in the test file — tests correctly mock requests.post and time.sleep",
+        "Traces cross-file data flow: user input in handlers.py flows to dispatch_webhook with validation, but email.py lost its error resilience"
+      ],
+      "assertions": [
+        "contains: email",
+        "contains: exception",
+        "contains: webhook",
+        "not-contains: fabricated"
+      ]
     }
   ]
 }

@@ -162,6 +162,27 @@
         "contains: snake_case",
         "contains: inconsisten"
       ]
+    },
+    {
+      "id": 10,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Report only genuine issues.\n\n{fixture:10-unfamiliar-legitimate-patterns}",
+      "rubrics": ["fabrication_avoidance", "false_positive_resistance", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Does NOT flag RegistryMeta metaclass as unnecessary abstraction — it is a standard Python auto-registration pattern",
+        "Does NOT flag FieldDescriptor as AI slop — it is a standard Python descriptor protocol implementation (PEP 487)",
+        "Does NOT flag __init_subclass__ as dead code — it is the registration hook called by the Python runtime",
+        "Does NOT flag __set_name__ as dead code — it is part of the descriptor protocol",
+        "Identifies the unused import: typing_extensions is imported but never used",
+        "Identifies the catch-rethrow pattern would be valid if it existed but this code does not have one — does not fabricate it",
+        "Does NOT flag the ABC/abstractmethod pattern as unnecessary complexity — it enforces interface contracts"
+      ],
+      "assertions": [
+        "contains: typing_extensions",
+        "contains: unused",
+        "not-contains: unnecessary abstraction",
+        "not-contains: unnecessary wrapper",
+        "not-contains: ai slop"
+      ]
     }
   ]
 }
