@@ -423,7 +423,7 @@ After completing all tasks in the current PR boundary (all components for tasks 
    same core review agents as full Phase 4 (Security, QA, Code-Reviewer, Performance, plus
    any auto-detected domain reviewers from Phase 1) with `pr_boundary_files` — NOT via
    /pr-review skill, which reviews existing PRs. Plan Adherence and Phase 4.5 structural
-   analysts also run at boundary stops (structural analysts receive partial-feature briefing
+   analysts also run at boundary stops (structural analysts receive scoped-review briefing
    per the Phase 4.5 incremental workflow section).
 2. Run Phase 5 Fixer scoped to the current boundary's files only — the Lead passes
    `pr_boundary_files` to the Fixer agent's prompt (same mechanism as Phase 4 reviewers).
@@ -919,7 +919,7 @@ Phase 4: Parallel Review
 Phase 4.5: Structural Design Review (always runs)
   +-- Analyst 1: Concurrency & State (opus) ---------+
   +-- Analyst 2: Integration & Contract (opus) -------+--> Lead merges STRUCT findings
-  [incremental non-final: analysts briefed on partial feature — don't flag future-boundary gaps]
+  [incremental non-final: analysts review as standalone work — don't flag future-boundary gaps]
      |
      v
 Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
