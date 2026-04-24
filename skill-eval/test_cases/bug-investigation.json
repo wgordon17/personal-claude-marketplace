@@ -104,6 +104,22 @@
         "contains: internal",
         "contains: security"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Investigate these reported bugs:\n\n{fixture:6-masked-symptoms}\n\n{codebase:dirty-flask-app/src/tasks/search.py}\n\nIdentify root causes and recommend fixes.",
+      "rubrics": ["finding_completeness", "root_cause_analysis"],
+      "expected_behaviors": [
+        "Investigates both Bug A (500 errors) and Bug B (deleted items in results) independently",
+        "Identifies that Bug A's 500 errors are caused by null fields on soft-deleted items",
+        "Identifies that Bug B's root cause is the soft-delete filter not excluding deleted items from queries",
+        "Recognizes that fixing Bug B (proper soft-delete filtering) also resolves Bug A (no more null field access)"
+      ],
+      "assertions": [
+        "contains: 500",
+        "contains: deleted items",
+        "contains: soft-delete"
+      ]
     }
   ]
 }

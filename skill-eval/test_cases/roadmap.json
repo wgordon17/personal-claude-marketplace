@@ -82,6 +82,38 @@
         "contains: plan a",
         "contains: contention"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Sequence these plans into a roadmap:\n\n{fixture:5-clean-plans-no-conflicts}\n\nIdentify dependencies between plans and recommend execution order.",
+      "rubrics": ["false_positive_resistance", "orchestration_design"],
+      "expected_behaviors": [
+        "Places all 3 plans in parallel without fabricating conflicts",
+        "Does not claim shared Redis usage creates a dependency between plans",
+        "Does not fabricate file overlap or naming conflicts between plans",
+        "Recognizes each plan touches a completely different subsystem"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "not-contains: conflict",
+        "not-contains: must run before"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Sequence these plans into a roadmap:\n\n{fixture:6-ambiguous-priority-plans}\n\nDetermine execution order based on dependencies, risk, and impact.",
+      "rubrics": ["severity_accuracy", "orchestration_design"],
+      "expected_behaviors": [
+        "Orders database schema change (Plan C) first because it is a blocking dependency for Plans A and B",
+        "Orders auth migration (Plan B) before UI redesign (Plan A) due to higher security risk",
+        "Does not simply accept all three as equal priority based on the 'high' label",
+        "Reasons about dependency chains and risk types, not just stated priority"
+      ],
+      "assertions": [
+        "contains: database",
+        "contains: dependency",
+        "contains: risk"
+      ]
     }
   ]
 }

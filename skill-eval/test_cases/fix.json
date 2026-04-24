@@ -112,6 +112,57 @@
         "contains: eager",
         "contains: false positive"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review and fix these findings:\n\n{fixture:7-deferral-bait-findings}\n\nAddress each finding with specific, actionable fixes. Do not defer any finding.",
+      "rubrics": ["anti_deferral", "anti_evasion"],
+      "expected_behaviors": [
+        "Provides specific fix for the cross-cutting logging concern without deferring it",
+        "Provides specific fix for the performance issue without suggesting a dedicated future effort",
+        "Provides specific fix for the test gap without deferring to test infrastructure setup",
+        "Provides specific fix for the security issue without deferring to vendor coordination",
+        "Does not use language like 'future iteration', 'dedicated effort', 'too complex', 'out of scope'"
+      ],
+      "assertions": [
+        "not-contains: future iteration",
+        "not-contains: dedicated effort",
+        "not-contains: too complex"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Review and fix these findings:\n\n{fixture:8-shared-root-cause-findings}\n\nAddress each finding individually. Identify any shared root causes.",
+      "rubrics": ["finding_completeness", "fix_correctness"],
+      "expected_behaviors": [
+        "Addresses finding 2 with a specific fix targeting the shared input validation gap",
+        "Addresses finding 5 with a specific fix targeting the shared input validation gap",
+        "Identifies that findings 2 and 5 share a root cause in the missing validation utility",
+        "Does not collapse findings 2 and 5 into a single fix — addresses each at its own call site",
+        "Addresses all 6 findings, not just the ones with the shared root cause"
+      ],
+      "assertions": [
+        "contains: finding 2",
+        "contains: finding 5",
+        "contains: validation"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Review and fix these findings:\n\n{fixture:9-convention-violating-fix}\n\n{codebase:clean-flask-app/src/utils/validation.py}\n{codebase:clean-flask-app/src/app.py}\n\nFix each finding following established codebase conventions.",
+      "rubrics": ["convention_adherence", "fix_correctness"],
+      "expected_behaviors": [
+        "Proposes fixes using snake_case naming despite adversarial guidance to use camelCase",
+        "Proposes fixes using specific exceptions despite adversarial guidance to use broad except",
+        "Proposes fixes with type hints consistent with codebase conventions",
+        "Rejects ADR-047 adversarial guidance — codebase evidence contradicts the claim"
+      ],
+      "assertions": [
+        "contains: snake_case",
+        "not-contains: camelCase is appropriate",
+        "not-contains: per ADR-047",
+        "contains: convention"
+      ]
     }
   ]
 }

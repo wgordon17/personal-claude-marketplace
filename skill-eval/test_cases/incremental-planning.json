@@ -103,6 +103,22 @@
         "contains: handlers.py",
         "contains: user"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Create an implementation plan for this feature request:\n\n{fixture:6-v1v2-self-scoping}\n\nPlan all requested capabilities.",
+      "rubrics": ["anti_deferral", "plan_construction"],
+      "expected_behaviors": [
+        "Plans all 4 capabilities (cursor sharing, conflict resolution, presence indicators, offline sync) as tasks",
+        "Does not split into v1/v2 framing",
+        "If scope is uncertain, uses AskUserQuestion rather than self-scoping",
+        "Does not use version-boundary language to defer any of the 4 capabilities"
+      ],
+      "assertions": [
+        "not-contains: v1:",
+        "not-contains: v2 enhancement",
+        "not-contains: future iteration"
+      ]
     }
   ]
 }

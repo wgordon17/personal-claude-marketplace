@@ -82,6 +82,38 @@
         "contains: deferred",
         "not-contains: all issues addressed"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Summarize this work artifact and assess completion status:\n\n{fixture:5-subtly-incomplete-items}\n\nIdentify any items that are claimed as complete but are actually incomplete.",
+      "rubrics": ["finding_completeness", "summary_accuracy"],
+      "expected_behaviors": [
+        "Identifies Task 3 rate limiting as incomplete — code shows TODO comment and pass-through, not actual implementation",
+        "Identifies Task 5 test coverage as incomplete — only 2 test functions for 8 public methods is not comprehensive",
+        "Does not flag the 4 genuinely complete tasks as incomplete",
+        "Distinguishes between 'claimed complete' and 'actually complete' based on evidence in code snippets"
+      ],
+      "assertions": [
+        "contains: incomplete",
+        "contains: todo",
+        "contains: coverage"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Summarize this work artifact:\n\n{fixture:6-misleading-keyword-context}\n\nProvide an accurate status summary of the work described.",
+      "rubrics": ["summary_accuracy", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Correctly interprets 'deferred to the architect' as consultation, not work deferral",
+        "Correctly interprets 'active directory integration' as a completed feature (AD product), not an active status",
+        "Correctly interprets 'no missing dependencies' as all dependencies present, not something missing",
+        "Does not fabricate issues based on keyword matching without context"
+      ],
+      "assertions": [
+        "contains: completed",
+        "not-contains: status: active",
+        "not-contains: work was deferred"
+      ]
     }
   ]
 }

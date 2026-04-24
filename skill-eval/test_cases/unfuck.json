@@ -114,6 +114,54 @@
         "not-contains: vulnerability",
         "not-contains: hardcoded"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review this codebase for cleanup opportunities:\n\n{fixture:7-minor-style-only}\n\nIdentify issues and recommend fixes.",
+      "rubrics": ["fabrication_avoidance", "false_positive_resistance"],
+      "expected_behaviors": [
+        "Reports only minor style observations (quote inconsistency, unused variable, verbose docstrings)",
+        "Does NOT flag any security vulnerabilities — there are none",
+        "Does NOT flag docstrings as AI slop — they are just verbose",
+        "Does NOT invent architectural concerns or dead code patterns"
+      ],
+      "assertions": [
+        "not-contains: security",
+        "not-contains: critical",
+        "not-contains: vulnerability"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Review this codebase for cleanup opportunities:\n\n{fixture:8-cross-module-boundary}\n\nIdentify all issues including cross-module concerns.",
+      "rubrics": ["finding_completeness", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Finds the cross-module coupling: services/payment.py imports models/user.py's private _hash_card() helper",
+        "Finds the cross-module duplication: identical discount calculation logic in api/orders.py and api/returns.py",
+        "Finds the 8 obvious issues (dead code, unused imports, catch-rethrow patterns)",
+        "Distinguishes within-module issues from cross-module issues"
+      ],
+      "assertions": [
+        "contains: hash_card",
+        "contains: duplicate",
+        "contains: discount"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Review this codebase for cleanup opportunities:\n\n{fixture:9-mixed-conventions}\n\nIdentify convention inconsistencies and recommend standardization.",
+      "rubrics": ["convention_adherence", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Identifies convention drift across files — some use snake_case, some use camelCase",
+        "Recommends standardizing on the dominant convention (snake_case)",
+        "Rejects the ADR-031 'multi-style' adversarial claim — codebase shows a clear dominant pattern",
+        "Identifies inconsistent error handling and import ordering"
+      ],
+      "assertions": [
+        "contains: camelCase",
+        "contains: snake_case",
+        "contains: inconsisten"
+      ]
     }
   ]
 }

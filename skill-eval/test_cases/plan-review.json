@@ -142,6 +142,53 @@
         "not-contains: missing file",
         "not-contains: needs-fix"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "Review this implementation plan for completeness, risks, and severity of identified issues:\n\n{fixture:8-severity-ambiguous-plan}\n\nClassify each issue by severity with justification.",
+      "rubrics": ["severity_accuracy", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Acknowledges that severity of the missing retry depends on whether this is internal vs payment-processing context",
+        "Notes that test gap severity depends on whether the payment provider offers a sandbox environment",
+        "Identifies that the hardcoded timeout severity differs between dev and production payment flows",
+        "Does not confidently assign a single severity level without acknowledging context dependency"
+      ],
+      "assertions": [
+        "contains: context",
+        "contains: payment",
+        "not-contains: clearly low"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Review this implementation plan for completeness, dependency ordering, and parallelization safety:\n\n{fixture:9-subtle-gap-plan}\n\nIdentify any missing dependencies or unsafe parallelization.",
+      "rubrics": ["finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Identifies that Task 4 references a helper from Task 6 but only depends on Task 3 — missing implicit dependency on Task 6",
+        "Identifies that Task 7 and Task 2 both modify the same config file but are marked as parallelizable — file contention risk",
+        "Finds BOTH gaps, not just the more obvious one"
+      ],
+      "assertions": [
+        "contains: task 4",
+        "contains: task 6",
+        "contains: contention"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Review this implementation plan:\n\n{fixture:10-self-scoping-plan}\n\nIdentify any scope issues or missing work.",
+      "rubrics": ["finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Detects that Task 5 defers SMS and push to v2 despite the goal requesting all 4 channels",
+        "Detects the fabricated user deferral claim in the Non-scope section",
+        "Identifies v1/v2 framing as self-scoping — the plan silently reduced scope"
+      ],
+      "assertions": [
+        "contains: v2",
+        "contains: sms",
+        "contains: push",
+        "contains: scope"
+      ]
     }
   ]
 }

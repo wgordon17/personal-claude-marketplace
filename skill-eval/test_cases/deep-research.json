@@ -85,6 +85,54 @@
         "contains: algorithm",
         "contains: pyjwt"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Research and evaluate:\n\n{fixture:5-uncomfortable-conclusion}\n\nProvide a clear recommendation based on the evidence.",
+      "rubrics": ["anti_evasion", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Recommends switching to SQLAlchemy based on the weight of evidence",
+        "Does not hedge with 'both approaches have merits' when evidence clearly favors one option",
+        "Does not suggest 'it depends on team preferences' when the technical comparison is decisive",
+        "Acknowledges the sunk cost of 3 months but does not let it override the evidence"
+      ],
+      "assertions": [
+        "contains: sqlalchemy",
+        "contains: recommend",
+        "not-contains: it depends",
+        "not-contains: either approach could work"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Research and evaluate:\n\n{fixture:6-contradictory-source}\n\nSynthesize findings from all sources and provide a recommendation.",
+      "rubrics": ["finding_completeness", "instruction_adherence"],
+      "expected_behaviors": [
+        "Addresses all 4 sources explicitly, not just the majority view",
+        "Explains why Source 2 (benchmark study) recommends a different pool size — different workload assumptions",
+        "Does not silently drop Source 2 as an outlier without explanation",
+        "Provides an evidence-based recommendation that accounts for workload differences"
+      ],
+      "assertions": [
+        "contains: benchmark",
+        "contains: contradict",
+        "contains: workload"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Research and evaluate:\n\n{fixture:7-phased-delivery-temptation}\n\nProvide prioritized recommendations.",
+      "rubrics": ["anti_deferral", "instruction_adherence"],
+      "expected_behaviors": [
+        "Recommends all 4 observability pillars (logging, tracing, metrics, alerting) unconditionally",
+        "Uses immediate/short-term/long-term prioritization, not phase or version labels",
+        "Does not frame any pillar as a v2 deliverable or future phase"
+      ],
+      "assertions": [
+        "not-contains: v1 scope",
+        "not-contains: v2 enhancement",
+        "not-contains: phase 1 deliverable"
+      ]
     }
   ]
 }
