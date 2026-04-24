@@ -151,8 +151,10 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
   the previous session completed implementation but crashed before creating the PR. The
   branch with the work should still exist. Before creating a PR: check if one already exists
   for the boundary's branch (`gh pr list --head feat/{plan-slug}-pr{N} --state open --json number`).
-  If found, use that PR number. If not found, create the draft PR (check branch exists via
-  `git branch -l`, push if needed). Then update the checkpoint with the PR number.
+  If found, use that PR number. If not found, create the draft PR following the PR framing
+  rules from step 5 of the boundary stop (standalone work, no serial numbering). Check
+  branch exists via `git branch -l`, push if needed. Then update the checkpoint with the
+  PR number.
 - Verify merged PRs: for entries with non-null `pr_number`, `git fetch origin {branch_base}`
   then confirm they are merged (primary: `gh pr view <number> --json state` checking for
   `"state": "MERGED"`, fallback: `git branch --merged {branch_base}` — same two-method
@@ -474,8 +476,10 @@ After completing all tasks in the current PR boundary (all components for tasks 
    After merge, invoke /swarm to continue with remaining tasks."
 9. Clean up: TeamDelete, exit swarm gracefully
 
-If this is the LAST PR boundary: do NOT checkpoint. Instead, proceed with normal Phase 6
-(docs) and Phase 7 (verification) completion flow. Clean up any existing checkpoint file.
+If this is the LAST PR boundary: skip the boundary stop (steps 1-9 above). Instead, proceed
+with normal Phase 4 → Phase 5 → Phase 6 (docs) → Phase 7 (verification) completion flow.
+The PR is created during Phase 7 completion — follow the same standalone PR framing rules
+(no serial numbering, no "Part X of Y"). Clean up any existing checkpoint file.
 
 ### Phase 3.5: BDD Step Writing (conditional)
 
