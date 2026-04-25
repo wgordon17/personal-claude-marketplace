@@ -151,8 +151,10 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
   the previous session completed implementation but crashed before creating the PR. The
   branch with the work should still exist. Before creating a PR: check if one already exists
   for the boundary's branch (`gh pr list --head feat/{plan-slug}-pr{N} --state open --json number`).
-  If found, use that PR number. If not found, create the draft PR (check branch exists via
-  `git branch -l`, push if needed). Then update the checkpoint with the PR number.
+  If found, use that PR number. If not found, create the draft PR following the PR framing
+  rules from step 5 of the boundary stop (standalone work, no serial numbering). Check
+  branch exists via `git branch -l`, push if needed. Then update the checkpoint with the
+  PR number.
 - Verify merged PRs: for entries with non-null `pr_number`, `git fetch origin {branch_base}`
   then confirm they are merged (primary: `gh pr view <number> --json state` checking for
   `"state": "MERGED"`, fallback: `git branch --merged {branch_base}` — same two-method
@@ -167,7 +169,7 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
   Apply the Branch Slug Sanitization Rules from `project-memory-reference.md`.
 - Create new branch for the next PR boundary: `feat/{plan-slug}-pr{N}` from
   `origin/{branch_base}` (using the `branch_base` field from the checkpoint, typically `main`)
-- Announce: "Resuming swarm from PR boundary {N}. PRs 1-{N-1} merged. Tasks remaining: {list}."
+- Announce: "Resuming swarm. Prior work merged. Remaining tasks: {list}."
   Include the checkpoint's `context_summary` in the Implementer's briefing so it has context
   about what was built in earlier boundaries.
 - **Resume Phase 0 variant:** Still run these Phase 0 steps for the new session:
@@ -412,13 +414,18 @@ ELSE:
 This reduces context pressure on individual Implementers and improves output quality for large
 tasks. The Lead decides based on the dependency graph — never based on cost or token concerns.
 
-**PR boundary handling (incremental only):** After completing all tasks in the current PR
-boundary (all components for tasks in `**PR:** {current_pr}`):
+**PR boundary handling (incremental only):** Each PR boundary produces a standalone,
+independently-reviewable unit of work. The PR title and body describe what THIS PR
+accomplishes — never "Part X of Y", never referencing other PRs in the series. A reviewer
+must be able to judge the PR on its own merits without knowing other PRs exist.
+
+After completing all tasks in the current PR boundary (all components for tasks in
+`**PR:** {current_pr}`):
 1. Run Phase 4 reviews scoped to the current boundary's files only. The Lead spawns the
    same core review agents as full Phase 4 (Security, QA, Code-Reviewer, Performance, plus
    any auto-detected domain reviewers from Phase 1) with `pr_boundary_files` — NOT via
    /pr-review skill, which reviews existing PRs. Plan Adherence and Phase 4.5 structural
-   analysts also run at boundary stops (structural analysts receive partial-feature briefing
+   analysts also run at boundary stops (structural analysts receive scoped-review briefing
    per the Phase 4.5 incremental workflow section).
 2. Run Phase 5 Fixer scoped to the current boundary's files only — the Lead passes
    `pr_boundary_files` to the Fixer agent's prompt (same mechanism as Phase 4 reviewers).
@@ -428,7 +435,7 @@ boundary (all components for tasks in `**PR:** {current_pr}`):
 3. Spawn Verifier agent (tests + lint) — same agent as Phase 7 but invoked inline at
    boundary stop. Full test suite, not scoped. This is a Verifier agent invocation only,
    NOT the full Phase 7 pipeline (Phase 6 docs run only at final completion).
-   **Partial-feature test failures:** Compare test results against the Phase 0 baseline.
+   **Boundary-scoped test failures:** Compare test results against the Phase 0 baseline.
    Any test that was passing in baseline and now fails is a regression — blocking. Any NEW
    test (added by the current boundary's tasks) that fails is blocking. Tests that were
    already failing in baseline are pre-existing (handled by existing swarm convention).
@@ -445,15 +452,18 @@ boundary (all components for tasks in `**PR:** {current_pr}`):
    file at `{plan_file}`. It must not create, modify, or delete any other files.
    The Boundary Updater agent remains alive through step 7 — the Lead sends it a follow-up
    message at step 7 with the PR number to write. It is shut down after step 7 completes.
-5. Create draft PR:
+5. Create draft PR — each PR is standalone work, not "Part X of Y":
    ```bash
    BRANCH=$(git branch --show-current)
    gh pr create --head "$BRANCH" --draft \
-     --title "type(scope): description covering boundary's tasks" \
+     --title "type(scope): what this PR accomplishes" \
      --body "## Summary
-   - [boundary scope description]
-   - Part {current_pr} of {total_prs} for [feature]"
+   - [what changed and why — describe as self-contained, independently-reviewable work]"
    ```
+   **PR framing rules:** Never number PRs ("Part 1 of 3"), reference other PRs in the
+   series, or describe a PR as part of a larger whole. Each PR must be understandable and
+   valuable on its own. If a reviewer cannot judge the PR's merit without knowing about
+   other PRs, the boundary grouping was wrong — fix the grouping, not the PR description.
 6. If tracker issue exists: add comment to the issue with the PR reference
    (`gh issue comment {issue_number} --repo {repo} --body "PR #{pr_number}: [title]"`)
    Sanitize the PR title before interpolation: strip backticks, dollar signs, double quotes,
@@ -462,12 +472,14 @@ boundary (all components for tasks in `**PR:** {current_pr}`):
 7. Update checkpoint and plan file via the Boundary Updater agent: set `pr_number` for the
    current boundary in `completed_prs` (was `null` from step 4), and update `**PRs:**` field
    in the plan file with `#{pr_number}`.
-8. Announce: "PR #{pr_number} created for PR boundary {current_pr}. Checkpoint saved.
-   Merge the PR, then invoke /swarm to continue with PR boundary {next_pr}."
+8. Announce: "Draft PR #{pr_number} created. Checkpoint saved.
+   After merge, invoke /swarm to continue with remaining tasks."
 9. Clean up: TeamDelete, exit swarm gracefully
 
-If this is the LAST PR boundary: do NOT checkpoint. Instead, proceed with normal Phase 6
-(docs) and Phase 7 (verification) completion flow. Clean up any existing checkpoint file.
+If this is the LAST PR boundary: skip the boundary stop (steps 1-9 above). Instead, proceed
+with normal Phase 4 → Phase 5 → Phase 6 (docs) → Phase 7 (verification) completion flow.
+The PR is created during Phase 7 completion — follow the same standalone PR framing rules
+(no serial numbering, no "Part X of Y"). Clean up any existing checkpoint file.
 
 ### Phase 3.5: BDD Step Writing (conditional)
 
@@ -601,14 +613,13 @@ If Phase 4 escalation routing triggers a return to Phase 2, Phase 4.5 runs on th
 
 Phase 5 receives findings from both Phase 4 AND Phase 4.5 in its consolidated findings list.
 
-**Incremental workflow — partial feature handling:** At non-final PR boundaries, Phase 4.5
-structural analysts review a partial feature. The Lead briefs analysts: "This is PR boundary
-{N} of {total}. Only the task numbers assigned to PR boundary {N} are implemented. The task
-numbers assigned to subsequent PR boundaries will be implemented in subsequent boundaries.
-Flag structural issues in the CURRENT boundary's code, but do not flag missing integration
-points or incomplete data flows that are addressed by remaining tasks." Findings about
-genuinely missing contracts within the current boundary are valid; findings about
-not-yet-implemented future boundary work are not.
+**Incremental workflow — scoped review:** At non-final PR boundaries, Phase 4.5
+structural analysts review only the current boundary's code as standalone work. The Lead
+briefs analysts: "Review this code on its own merits as a self-contained unit of work.
+Flag structural issues in THIS code. Do not flag missing integration points or incomplete
+data flows that are addressed by tasks not yet implemented — those are separate work."
+Findings about genuinely missing contracts within the current boundary are valid; findings
+about not-yet-implemented work are not.
 At the FINAL PR boundary: Phase 4.5 runs normally (full system review).
 
 ### Phase 5: Fix, Test Coverage & Simplify
@@ -912,7 +923,7 @@ Phase 4: Parallel Review
 Phase 4.5: Structural Design Review (always runs)
   +-- Analyst 1: Concurrency & State (opus) ---------+
   +-- Analyst 2: Integration & Contract (opus) -------+--> Lead merges STRUCT findings
-  [incremental non-final: analysts briefed on partial feature — don't flag future-boundary gaps]
+  [incremental non-final: analysts review as standalone work — don't flag future-boundary gaps]
      |
      v
 Phase 5: Fix, Test Coverage & Simplify (if any findings exist)

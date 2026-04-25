@@ -171,6 +171,9 @@ SWARM_SKILL = REPO_ROOT / "code-quality" / "skills" / "swarm" / "SKILL.md"
 LABEL_DEFINITIONS = REPO_ROOT / "code-quality" / "references" / "github-label-definitions.md"
 TRACKER_FIELD_SPEC = REPO_ROOT / "code-quality" / "references" / "tracker-field-spec.md"
 PROJECT_MEMORY_REFERENCE = REPO_ROOT / "code-quality" / "references" / "project-memory-reference.md"
+SHARED_FEEDBACK = REPO_ROOT / "dev-guard" / "references" / "shared-feedback.md"
+ROADMAP_SKILL = REPO_ROOT / "code-quality" / "skills" / "roadmap" / "SKILL.md"
+PHASE_SCHEMA = REPO_ROOT / "code-quality" / "skills" / "roadmap" / "references" / "phase-schema.md"
 
 
 class TestCodeQualityReferenceIntegrity:
@@ -307,6 +310,45 @@ class TestCodeQualityReferenceIntegrity:
             "The PRs field extraction for incremental mode was deleted or altered."
         )
 
+    def test_swarm_pr_template_no_serial_numbering(self):
+        content = SWARM_SKILL.read_text()
+        assert "Part {current_pr} of {total_prs}" not in content, (
+            "swarm/SKILL.md still contains 'Part {current_pr} of {total_prs}'. "
+            "PR body template must not use serial numbering — each PR is standalone work."
+        )
+        assert "PR framing rules" in content, (
+            "swarm/SKILL.md does not contain 'PR framing rules'. "
+            "The standalone PR framing rules section was deleted or altered."
+        )
+
+    def test_shared_feedback_standalone_pr_rule(self):
+        content = SHARED_FEEDBACK.read_text()
+        assert "PRs are standalone work" in content, (
+            "shared-feedback.md does not contain 'PRs are standalone work'. "
+            "The standalone PR framing rule was deleted or altered."
+        )
+
+    def test_roadmap_standalone_pr_framing(self):
+        content = ROADMAP_SKILL.read_text()
+        assert 'never "Part X of Y"' in content, (
+            "roadmap/SKILL.md does not contain the standalone PR framing rule. "
+            "The rule was deleted or altered."
+        )
+
+    def test_incremental_planning_standalone_pr_framing(self):
+        content = INCREMENTAL_PLANNING_SKILL.read_text()
+        assert "must NOT appear in PR titles, PR bodies, or user-facing messages" in content, (
+            "incremental-planning/SKILL.md does not contain the standalone PR framing rule. "
+            "The rule was deleted or altered."
+        )
+
+    def test_phase_schema_internal_plumbing_rule(self):
+        content = PHASE_SCHEMA.read_text()
+        assert "internal plumbing" in content, (
+            "phase-schema.md does not contain 'internal plumbing'. "
+            "The PR column internal plumbing caveat was deleted or altered."
+        )
+
     def test_project_memory_reference_contains_checkpoint_schema(self):
         content = PROJECT_MEMORY_REFERENCE.read_text()
         assert "checkpoint.json" in content, (
@@ -388,7 +430,6 @@ class TestPluginVersionParity:
 
 BUG_INVESTIGATION_SKILL = REPO_ROOT / "code-quality" / "skills" / "bug-investigation" / "SKILL.md"
 QUALITY_GATE_SKILL = REPO_ROOT / "code-quality" / "skills" / "quality-gate" / "SKILL.md"
-ROADMAP_SKILL = REPO_ROOT / "code-quality" / "skills" / "roadmap" / "SKILL.md"
 ARTIFACT_FORMATS = (
     REPO_ROOT / "code-quality" / "skills" / "summarize" / "references" / "artifact-formats.md"
 )

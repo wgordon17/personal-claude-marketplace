@@ -339,7 +339,10 @@ Write the plan file with a header containing:
   The grouping is determined during Phase 4 task writing based on logical cohesion, file
   overlap, and dependency structure — not mechanical line counting. Initially left blank in
   the header — populated after all tasks are written and PR assignments are finalized during
-  Phase 5 validation.
+  Phase 5 validation. These internal labels (`PR 1`, `PR 2`) are plan-file plumbing only —
+  they must NOT appear in PR titles, PR bodies, or user-facing messages. Each PR created
+  from a boundary is standalone work described by what it accomplishes, not by its position
+  in a sequence.
 - **PRs:** — (only when `**Workflow:** incremental`, populated during implementation)
   Tracks created PR numbers. Format: `PR 1: #42, PR 2: pending, PR 3: pending`. Updated
   by swarm as PRs are created. Initially all `pending`.
