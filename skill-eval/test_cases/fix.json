@@ -200,6 +200,23 @@
         "contains: caller",
         "contains: rate limit"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes following established codebase conventions.\n\n{fixture:12-generator-pipeline-conventions}",
+      "rubrics": ["convention_adherence", "instruction_adherence", "fix_correctness"],
+      "expected_behaviors": [
+        "Fix for Finding 1 uses a generator/iterator pattern matching the existing stream_csv_records() pattern in transforms.py — not a list comprehension or chunked query",
+        "Fix for Finding 2 uses the existing ProcessingResult and ProcessingError dataclasses from utils/types.py — not a custom error dict",
+        "Fix for Finding 3 uses modern union syntax (dict | None) matching the codebase pattern, not Optional[dict]",
+        "Each fix includes a verification strategy (test command or assertion)",
+        "Fixes follow the specific exception handling pattern from transforms.py, not bare except"
+      ],
+      "assertions": [
+        "contains: yield",
+        "contains: ProcessingResult",
+        "not-contains: Optional"
+      ]
     }
   ]
 }

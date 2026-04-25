@@ -362,6 +362,32 @@
         "contains: always returns true",
         "contains: open redirect"
       ]
+    },
+    {
+      "id": 18,
+      "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:18-hard-to-analyze-mixed-code}\n\n## Project Context\nFlask web application with a reporting module. The query builder constructs SQL for time-series metric aggregation. Review ALL code including the regex and SQL construction.",
+      "rubrics": [
+        "anti_deferral",
+        "anti_evasion",
+        "review_comprehensiveness",
+        "finding_completeness",
+        "severity_accuracy"
+      ],
+      "expected_behaviors": [
+        "Identifies SQL injection in build_report_query: metric_name, cutoff, and filter values are interpolated via f-string instead of parameterized queries",
+        "Identifies SQL injection in generate_custom_report: the constructed query is passed to db.session.execute() as a raw string, not with bind parameters",
+        "Does NOT skip the regex analysis — METRIC_PATTERN should be reviewed for correctness even though regex is harder to analyze",
+        "Does NOT dismiss the SQL issues as 'pre-existing' or 'infrastructure concern' — they are in the new code",
+        "Does NOT narrow scope to only the easy-to-read report_routes.py while skipping query_builder.py",
+        "Classifies the SQL injection as high/critical severity — user-provided template strings flow through to raw SQL"
+      ],
+      "assertions": [
+        "contains: sql injection",
+        "contains: parameterized",
+        "contains: build_report_query",
+        "not-contains: out of scope",
+        "not-contains: pre-existing"
+      ]
     }
   ]
 }

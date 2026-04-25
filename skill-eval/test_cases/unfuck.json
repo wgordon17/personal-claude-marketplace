@@ -204,6 +204,32 @@
         "contains: duplicate",
         "contains: camelCase"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, security vulnerabilities, duplicated logic, and convention violations. Report only genuine issues — do not flag legitimate Python patterns.\n\n{fixture:12-advanced-patterns-with-real-issues}",
+      "rubrics": ["fabrication_avoidance", "finding_completeness", "cleanup_thoroughness", "classification_precision"],
+      "expected_behaviors": [
+        "Identifies eval() in execute_handler as a critical security vulnerability — command injection via user input",
+        "Identifies LEGACY_HANDLERS dict and _format_v1_response() as dead code",
+        "Identifies serialize_user() and format_user_for_api() as exact duplicates",
+        "Identifies AbstractBaseHandlerFactory as unnecessary abstraction — single concrete subclass, no other factories",
+        "Identifies mixed sync/async convention (process_webhook vs process_event do the same thing)",
+        "Does NOT flag ValidatedField descriptor as dead code or unnecessary — __set_name__ is PEP 487",
+        "Does NOT flag GenericModel.__class_getitem__ as dead code — it is standard typing",
+        "Does NOT flag EventHandler.__init_subclass__ as unnecessary — it is the plugin registry pattern",
+        "Does NOT flag ConfigManager.settings cached_property as dead code — it is lazy initialization",
+        "Does NOT flag managed_connection asynccontextmanager as incorrect — yielding a different object is correct",
+        "Prioritizes eval() security issue above all other findings"
+      ],
+      "assertions": [
+        "contains: eval",
+        "contains: dead code",
+        "contains: duplicate",
+        "not-contains: ValidatedField is unnecessary",
+        "not-contains: __init_subclass__ is dead",
+        "not-contains: cached_property is unused"
+      ]
     }
   ]
 }
