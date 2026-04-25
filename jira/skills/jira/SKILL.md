@@ -127,7 +127,7 @@ discover the sprint ID with `jira sprint list --table --plain --state active`, t
 `jira sprint add SPRINT_ID ISSUE-KEY`. There is no `--sprint` flag on `jira issue create`.
 
 Before writing descriptions, read `jira/reference/osac-conventions.md` for the appropriate
-template (Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to write markdown correctly.
+template (Epic, Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to write markdown correctly.
 
 ```bash
 jira issue create -p MGMT -t Task -s "Summary" -b "Description" -l OSAC -C OSAC -a "$JIRA_LOGIN" --no-input --raw
@@ -136,6 +136,22 @@ jira issue create -p MGMT -t Task -s "Summary" -b "Description" -l OSAC -C OSAC 
 Note: `-b` takes precedence over `--template` — if both are provided, `-b` wins. Use `-b` for
 short inline text. Use `--template -` (without `-b`) for multi-line or LLM-generated content
 via stdin.
+
+**Creating Epics:** Epics use a different CLI command with distinct flags:
+
+```bash
+jira epic create -p MGMT -n "Epic Name" -s "Epic Summary" -l OSAC -C OSAC -a "$JIRA_LOGIN" -T "$TMPFILE" --no-input
+```
+
+- `-n` — Epic Name (appears in Epic Link dropdown for child issues)
+- `-s` — Summary (the issue title)
+- `-b "$BODY"` or `-T <tempfile>` — body content (multi-section descriptions should use `-T`)
+- `jira epic create` does NOT support `--raw` — parse the key from plain-text output using
+  regex `[A-Z]+-[0-9]+`
+- `jira epic create` does NOT support `--template -` (stdin pipe) — use `-T <filepath>` instead:
+  write the body to a temp file, then pass its path to `-T`
+- `--no-input` is required to prevent interactive prompts
+- Epic descriptions require the structured template from `jira/reference/osac-conventions.md`
 
 **Shell safety:** LLM-generated summaries and descriptions may contain quotes, backticks, or `$`.
 Never interpolate them directly into flags. Assign to a variable via heredoc, then pipe:
