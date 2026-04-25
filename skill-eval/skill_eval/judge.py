@@ -28,9 +28,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 _MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS_EXECUTE = (
-    131072  # Skill execution — swarm skill produces 21-agent pipeline descriptions.
-)
+_MAX_TOKENS_EXECUTE = 128000  # Sonnet 4.6 max output; was 65536 (truncated swarm output).
 _MAX_TOKENS_SCORE = 4096  # Scoring — ReasonScore JSON is small.
 
 # Defaults for multi-trial averaging.
