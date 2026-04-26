@@ -372,6 +372,7 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Authority bias**: Taking official docs at face value without community validation
 - **Shallow research**: Stopping at hop 1-2 when deeper exploration is needed
 - **Scope creep**: Researching tangential topics instead of the core question
+- **Anecdotal evidence bias**: Treating personal testimonials or forum anecdotes as reliable evidence, especially in health, legal, or safety-critical domains
 
 ## When to Stop
 
@@ -382,6 +383,7 @@ Research is complete when:
 - [ ] Risks are identified and documented
 - [ ] Actionable recommendations can be made
 - [ ] Source count target (40+) is met
+- [ ] Authoritative sources for the domain have been consulted and cross-referenced
 - [ ] *(Bridged mode)* Internal investigation has covered relevant source files (not just memory files)
 - [ ] *(Bridged mode)* Internal-external bridge table is populated with specific file references
 
