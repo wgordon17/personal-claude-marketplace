@@ -35,8 +35,8 @@ Before starting research:
 2. **Identify key criteria for evaluation**
    - Performance, cost, complexity, security, safety, effectiveness, durability?
    - What matters most to the user?
-   - **When domain is Science & Technology:** If the research involves comparing libraries,
-     frameworks, CLI tools, or dependencies, read
+   - **Dependency/tool comparison detected?** *(Science & Technology)* If the research involves
+     comparing libraries, frameworks, CLI tools, or dependencies, read
      [dependency-evaluation.md](../../references/dependency-evaluation.md) and incorporate its
      Must-Have / Should-Have / Red Flags / Supply Chain Assessment criteria into the evaluation
      framework. These criteria replace ad-hoc quality assessments with a structured checklist
@@ -59,12 +59,13 @@ After completing scope definition, identify the research domain cluster:
 - **Academic** — scholarly research, pedagogy, methodology
 - **Consumer** — product comparison, purchasing decisions, reviews
 - **General Knowledge** — history, culture, science, current events
+- When a topic spans multiple clusters, note all matching clusters and apply conditionals from each.
 
 Note the domain cluster name. Subsequent sections use "When domain is [cluster]" conditionals to indicate emphasis. Domain classification is advisory — it guides which sources and columns to emphasize but **never** gates or skips any research step.
 
 ### Phase 1.5: Research Mode Classification
 
-After completing Phase 1 scope definition, classify the research mode via `AskUserQuestion` before proceeding.
+After completing Phase 1.25 domain classification, classify the research mode via `AskUserQuestion` before proceeding.
 
 **Argument parsing:**
 - **Detection rule:** If the skill argument ends with `Mode: External` or `Mode: Bridged` (case-insensitive, after a period or newline), use that mode directly and skip the `AskUserQuestion` call below. Example suffix: `[research question]. Mode: Bridged`.
@@ -216,7 +217,7 @@ If a memory directory is found, write the research report to a file:
 1. Generate a run ID per the Run-ID Naming Convention in that reference.
 2. Create `{memory_dir}/research/` if it does not exist.
 3. Write the report to `{memory_dir}/research/{run-id}-<topic>.md`
-   (e.g. `hack/research/research-1711388400-sourdough-fermentation.md`).
+   (e.g. `hack/research/feat-research-1711388400-sourdough-fermentation.md`).
 4. After writing, tell the user the file path.
 
 If no memory directory exists, deliver the report in the conversation only.
@@ -401,7 +402,7 @@ Other skills should invoke `/deep-research` when they encounter any of these str
 ### Mode Guidance
 
 - Use **Bridged** mode when the research relates to the current codebase (e.g., evaluating how the project uses a library, researching migration paths for an existing dependency)
-- Use **External** mode when it's a pure technology question (e.g., comparing two libraries the project hasn't adopted yet, evaluating a new framework, researching best practices for a non-technical topic, comparing approaches or products)
+- Use **External** mode when it's a standalone question unrelated to this codebase (e.g., comparing two libraries the project hasn't adopted yet, evaluating a new framework, researching best practices for a non-technical topic, comparing approaches or products)
 
 ### Invocation Guidance
 
