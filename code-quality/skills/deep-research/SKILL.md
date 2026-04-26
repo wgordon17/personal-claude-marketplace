@@ -107,17 +107,17 @@ Store this summary as `{internal_findings}`. It becomes the feed-forward context
 
 Organize sources into categories:
 
-| Source Type | What to Look For | Priority | Non-Tech Examples |
-|-------------|------------------|----------|-------------------|
-| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest | — |
+| Source Type | What to Look For | Priority | Universal Equivalent |
+|-------------|------------------|----------|----------------------|
+| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest | Internal sources |
 | **Library documentation** | *(Science & Technology)* Current API docs via Context7 MCP (`resolve-library-id` → `query-docs`) | Highest | Authoritative/official sources (FDA, USDA, building codes, RFCs, specs) |
-| **Primary sources** | Official documentation, specifications, papers | Highest | — |
-| **Secondary sources** | Tutorials, blog posts, case studies | High | — |
-| **Community sources** | *(Science & Technology)* GitHub issues, Stack Overflow; forums | Medium | Practitioner communities, Reddit, domain-specific Q&A |
-| **Comparative sources** | Benchmarks, comparisons, reviews | High | Consumer reports, side-by-side reviews |
-| **Recent sources** | News, *(Science & Technology)* release notes, changelogs (2025-2026) | Critical | Regulatory updates, recall notices |
+| **Primary sources** | Official documentation, specifications, papers | Highest | Primary sources |
+| **Secondary sources** | Tutorials, blog posts, case studies | High | Secondary sources |
+| **Community sources** | *(Science & Technology)* GitHub issues, Stack Overflow; forums | Medium | Practitioner communities, forums, Reddit, domain-specific Q&A |
+| **Comparative sources** | Benchmarks, comparisons, reviews | High | Comparative/evaluative sources (consumer reports, side-by-side reviews) |
+| **Recent sources** | News, *(Science & Technology)* release notes, changelogs (2025-2026) | Critical | Current developments, regulatory updates, recall notices |
 | **Peer-reviewed/Expert** | Academic papers, RFCs, professional standards | High | Journal articles, professional standards, expert-reviewed content |
-| **Grey literature** | Whitepapers, preprints | Medium | Manufacturer specs, non-traditional publications |
+| **Grey literature** | Whitepapers, preprints | Medium | Manufacturer specs, internal reports, non-traditional publications |
 
 #### Library Documentation via Context7
 
@@ -161,7 +161,7 @@ Include viewpoints from:
 | **Enterprise users** | Scale, support, compliance | Institutional/Large-scale users (hospitals, school districts, chains) |
 | **Indie developers** | Simplicity, cost, *(Science & Technology)* DX | Individual practitioner (home cook, DIY homeowner, solo researcher) |
 | **Different tech stacks** | Integration, compatibility | Cross-discipline perspectives (adjacent fields, alternative methods) |
-| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost | — |
+| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost | Current maintainers |
 | **Security auditor, compliance team** | Safety, compliance, standards, regulations | Regulator/Guardian (FDA, building inspector, medical board) |
 
 ### Phase 5: Synthesis
@@ -390,11 +390,12 @@ Research is complete when:
 Other skills should invoke `/deep-research` when they encounter any of these structural triggers:
 
 - **Third-party technology decisions** — choosing between libraries, frameworks, or services
-- **Unfamiliar patterns or methods** — the skill's current knowledge is insufficient for the topic or domain
+- **Unfamiliar API patterns** — the skill's current knowledge is insufficient
 - **Deprecated API migration paths** — need to research replacement approaches
 - **Architecture pattern evaluation** — comparing design patterns with external evidence
 - **Unknown unknowns surfaced by review** — research gaps identified by `/plan-review` or `/pr-review`
 - **Market/industry analysis** — competitive positioning, pricing, adoption trends
+- **Domain-specific methodology questions** — the skill's current knowledge is insufficient for the research domain
 - **Regulatory or compliance questions** — research needed on standards, codes, or legal requirements
 - **Best-practice evaluation** — comparing approaches with external evidence across any domain
 
