@@ -432,6 +432,8 @@
         "contains: escaping",
         "contains: parameterized",
         "contains: lock",
+        "contains: f-string",
+        "contains: helper",
         "not-contains: all findings resolved",
         "not-contains: all 4 findings have been addressed"
       ]
@@ -455,7 +457,7 @@
       "assertions": [
         "contains: avatar_url",
         "contains: display_name",
-        "contains: none",
+        "contains: HS256",
         "contains: private",
         "not-contains: all findings resolved"
       ]
@@ -509,6 +511,30 @@
         "contains: race",
         "contains: pagination",
         "contains: test"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "You are running quality-gate on the following completed work. A prior /pr-review identified 3 findings. The developer committed fixes. Verify each fix actually resolves the finding it claims to address.\n\n{fixture:23-all-fixes-correct}\n\n## Project Context\nFlask web application with SQLite database, multi-threaded gunicorn. Prior review found SQL injection, race condition, and hardcoded secret.",
+      "rubrics": [
+        "follow_through",
+        "false_positive_resistance",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Confirms Finding 1 fix is correct — parameterized query with ? placeholder replaces f-string interpolation",
+        "Confirms Finding 2 fix is correct — entire read-filter-append-return sequence is inside the lock scope",
+        "Confirms Finding 3 fix is correct — API_SECRET moved to os.environ with no fallback to hardcoded value",
+        "Does NOT fabricate insufficiency in any of the three fixes — all are genuinely correct",
+        "Does NOT claim fixes are superficial or incomplete when they actually resolve the root cause"
+      ],
+      "assertions": [
+        "contains: parameterized",
+        "contains: lock",
+        "contains: os.environ",
+        "not-contains: insufficient",
+        "not-contains: still vulnerable",
+        "not-contains: does not resolve"
       ]
     }
   ]

@@ -1767,6 +1767,12 @@ CONVENTION_ADHERENCE_RUBRIC = {
 #     Catches the gap between stated intent and actual output — the most common
 #     failure mode in multi-step review workflows where models acknowledge
 #     feedback verbally but don't action it.
+#
+#     Boundary with fix_correctness: follow_through tests whether the model
+#     correctly DIAGNOSES insufficiency of prior/claimed fixes; fix_correctness
+#     tests whether the model's OWN proposed fixes are technically correct.
+#     A model can score 10 on fix_correctness (its new fix is perfect) and 0
+#     on follow_through (it didn't identify why the prior fix was wrong).
 # ──────────────────────────────────────────────────────────────────────────────
 
 FOLLOW_THROUGH_RUBRIC = {

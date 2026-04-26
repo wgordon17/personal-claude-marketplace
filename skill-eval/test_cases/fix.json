@@ -297,7 +297,7 @@
         "contains: parameterized",
         "not-contains: validation utility",
         "not-contains: configurable rules",
-        "not-contains: refactor across"
+        "not-contains: across the codebase"
       ]
     }
   ]
