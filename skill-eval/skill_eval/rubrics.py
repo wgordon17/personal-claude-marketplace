@@ -1756,6 +1756,99 @@ CONVENTION_ADHERENCE_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 9k. FOLLOW-THROUGH (quality-gate, fix)
+#     Evaluates whether the response's stated resolutions actually resolve the
+#     issues they claim to address. Distinct from finding_completeness (which
+#     checks coverage — were all items mentioned?) and anti_evasion (which
+#     checks for hedging/deferral). This rubric checks substance: if the
+#     response says "fixed the SQL injection", does the proposed code actually
+#     use parameterized queries? If the response says "verified all prior
+#     findings are resolved", did it actually check each one against the code?
+#     Catches the gap between stated intent and actual output — the most common
+#     failure mode in multi-step review workflows where models acknowledge
+#     feedback verbally but don't action it.
+# ──────────────────────────────────────────────────────────────────────────────
+
+FOLLOW_THROUGH_RUBRIC = {
+    "name": "follow_through",
+    "evaluation_steps": [
+        (
+            "Compare the response's claimed resolutions against the expected"
+            " output (answer key) — for each finding the response claims to"
+            " address, check whether the proposed fix or verification"
+            " actually resolves the stated problem, not just acknowledges it"
+        ),
+        (
+            "Check whether the response rubber-stamps prior work as"
+            " complete without independently verifying each claimed"
+            " resolution against the actual code or evidence"
+        ),
+        (
+            "Verify the response does not confuse mentioning a fix with"
+            " implementing a fix — claiming 'parameterized queries' while"
+            " the code still uses string concatenation, or claiming"
+            " 'added locking' while the lock scope is incorrect"
+        ),
+        (
+            "Check that when the response reviews work that claims to"
+            " have addressed prior findings, it independently re-examines"
+            " each finding against the current state rather than accepting"
+            " the claim at face value"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Response rubber-stamps multiple claimed resolutions without"
+                " verification — accepts claims at face value, proposes"
+                " fixes that don't address the stated issues, or declares"
+                " work complete when evidence shows otherwise"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Response verifies some claimed resolutions but misses 1-2"
+                " where the stated fix doesn't actually resolve the issue"
+                " — e.g., accepts string escaping as SQL injection fix"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Response checks most claimed resolutions but accepts one"
+                " superficial or incomplete fix without catching the gap"
+                " between the claim and the actual implementation"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Response independently verifies all claimed resolutions"
+                " and catches discrepancies; at most one minor gap where"
+                " a fix is technically correct but incomplete"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Every claimed resolution is independently verified against"
+                " the actual code or evidence — no rubber-stamping, no"
+                " superficial acceptance, every fix demonstrably resolves"
+                " the issue it claims to address"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # REGISTRY
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1783,6 +1876,6 @@ RUBRIC_REGISTRY: dict[str, dict] = {
     "root_cause_analysis": ROOT_CAUSE_ANALYSIS_RUBRIC,
     "multi_pass_execution": MULTI_PASS_EXECUTION_RUBRIC,
     "pr_depth": PR_DEPTH_RUBRIC,
-    # Skill-goal rubric: convention adherence
     "convention_adherence": CONVENTION_ADHERENCE_RUBRIC,
+    "follow_through": FOLLOW_THROUGH_RUBRIC,
 }

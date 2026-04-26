@@ -484,7 +484,7 @@ class TestNewCompetencyRubrics:
 
         for name in SKILL_GOAL_RUBRICS:
             assert name in RUBRIC_REGISTRY, f"Rubric {name!r} not in RUBRIC_REGISTRY"
-        assert len(RUBRIC_REGISTRY) == 22
+        assert len(RUBRIC_REGISTRY) == 23
 
     def test_new_rubrics_have_evaluation_steps(self):
         from skill_eval.rubrics import RUBRIC_REGISTRY

@@ -6,13 +6,18 @@
     "false_positive_resistance",
     "anti_deferral",
     "anti_evasion",
-    "instruction_adherence"
+    "instruction_adherence",
+    "follow_through"
   ],
   "test_cases": [
     {
       "id": 1,
       "prompt": "The following findings were identified by a pr-review of recent changes. Investigate each finding, determine if it is valid, and produce fixes for valid findings.\n\n{fixture:1-security-findings-with-code}",
-      "rubrics": ["fix_correctness", "finding_completeness", "anti_deferral"],
+      "rubrics": [
+        "fix_correctness",
+        "finding_completeness",
+        "anti_deferral"
+      ],
       "expected_behaviors": [
         "SQL injection fix uses parameterized queries, not string escaping",
         "Auth check fix adds middleware or decorator to the route, not an inline if-check in the function body",
@@ -29,7 +34,10 @@
     {
       "id": 2,
       "prompt": "The following findings were identified by a pr-review of recent changes. Both findings target the same function. Investigate each finding, determine if they are valid, detect any conflicts between fixes, and produce a unified resolution.\n\n{fixture:2-conflicting-fixes}",
-      "rubrics": ["fix_correctness", "anti_evasion"],
+      "rubrics": [
+        "fix_correctness",
+        "anti_evasion"
+      ],
       "expected_behaviors": [
         "Detects that both findings target the same function and overlapping line ranges",
         "Presents the conflict between adding validation and refactoring to early returns",
@@ -44,7 +52,10 @@
     {
       "id": 3,
       "prompt": "The following finding was identified by a pr-review of recent changes. It includes a research gap that has been investigated via /deep-research. Use the research output to produce the correct fix.\n\n{fixture:3-research-gap-finding}",
-      "rubrics": ["fix_correctness", "instruction_adherence"],
+      "rubrics": [
+        "fix_correctness",
+        "instruction_adherence"
+      ],
       "expected_behaviors": [
         "Recognizes this is a research gap finding based on the Recommended resolution: /deep-research marker",
         "Uses the simulated /deep-research output to determine the correct fix",
@@ -59,7 +70,11 @@
     {
       "id": 4,
       "prompt": "The following findings were identified by a pr-review of recent changes. Some findings may be false positives. Investigate each finding, determine if it is valid or invalid, fix valid findings, and classify invalid findings with evidence.\n\n{fixture:4-false-positive-findings}",
-      "rubrics": ["fix_correctness", "finding_completeness", "false_positive_resistance"],
+      "rubrics": [
+        "fix_correctness",
+        "finding_completeness",
+        "false_positive_resistance"
+      ],
       "expected_behaviors": [
         "Fixes the SQL injection in search endpoint using parameterized queries",
         "Classifies the null check finding as invalid because the ORM column is declared nullable=False with a default",
@@ -77,7 +92,11 @@
     {
       "id": 5,
       "prompt": "The following findings were identified by a pr-review of recent changes. The findings form a dependency chain where fixes must be applied in a specific order. Investigate each finding, identify the dependency chain, and apply fixes in the correct order.\n\n{fixture:5-multi-file-fix-chain}",
-      "rubrics": ["fix_correctness", "instruction_adherence", "finding_completeness"],
+      "rubrics": [
+        "fix_correctness",
+        "instruction_adherence",
+        "finding_completeness"
+      ],
       "expected_behaviors": [
         "Identifies that the validation helper must be created in utils.py before handlers.py can reference it",
         "Applies fixes in dependency order: utils.py first, then handlers.py, then test_utils.py",
@@ -116,7 +135,10 @@
     {
       "id": 7,
       "prompt": "Review and fix these findings:\n\n{fixture:7-deferral-bait-findings}\n\nAddress each finding with specific, actionable fixes. Do not defer any finding.",
-      "rubrics": ["anti_deferral", "anti_evasion"],
+      "rubrics": [
+        "anti_deferral",
+        "anti_evasion"
+      ],
       "expected_behaviors": [
         "Provides specific fix for the cross-cutting logging concern without deferring it",
         "Provides specific fix for the performance issue without suggesting a dedicated future effort",
@@ -133,7 +155,10 @@
     {
       "id": 8,
       "prompt": "Review and fix these findings:\n\n{fixture:8-shared-root-cause-findings}\n\nAddress each finding individually. Identify any shared root causes.",
-      "rubrics": ["finding_completeness", "fix_correctness"],
+      "rubrics": [
+        "finding_completeness",
+        "fix_correctness"
+      ],
       "expected_behaviors": [
         "Addresses finding 2 with a specific fix targeting the shared input validation gap",
         "Addresses finding 5 with a specific fix targeting the shared input validation gap",
@@ -150,7 +175,10 @@
     {
       "id": 9,
       "prompt": "Review and fix these findings:\n\n{fixture:9-convention-violating-fix}\n\n{codebase:clean-flask-app/src/utils/validation.py}\n{codebase:clean-flask-app/src/app.py}\n\nFix each finding following established codebase conventions.",
-      "rubrics": ["convention_adherence", "fix_correctness"],
+      "rubrics": [
+        "convention_adherence",
+        "fix_correctness"
+      ],
       "expected_behaviors": [
         "Proposes fixes using snake_case naming despite adversarial guidance to use camelCase",
         "Proposes fixes using specific exceptions despite adversarial guidance to use broad except",
@@ -167,7 +195,11 @@
     {
       "id": 10,
       "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes following established codebase conventions.\n\n{fixture:10-cross-cutting-convention-conflict}",
-      "rubrics": ["anti_deferral", "convention_adherence", "fix_correctness"],
+      "rubrics": [
+        "anti_deferral",
+        "convention_adherence",
+        "fix_correctness"
+      ],
       "expected_behaviors": [
         "Fixes Finding 1 (inconsistent error logging) across all 6 files — does not defer as 'too broad' or 'requires dedicated effort'",
         "Fixes Finding 3 (hardcoded retry count) across all 4 files — does not defer as 'requires configuration infrastructure'",
@@ -187,7 +219,10 @@
     {
       "id": 11,
       "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes. Pay attention to existing callers of modified functions.\n\n{fixture:11-fix-breaks-callers}",
-      "rubrics": ["fix_correctness", "finding_completeness"],
+      "rubrics": [
+        "fix_correctness",
+        "finding_completeness"
+      ],
       "expected_behaviors": [
         "Identifies that naively rejecting empty titles would break 4 existing callers: CSV importer, test fixture, and 2 seed data entries",
         "Proposes a fix for Finding 1 that validates at the API layer (route handler) while preserving create_project() for internal callers",
@@ -204,7 +239,11 @@
     {
       "id": 12,
       "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes following established codebase conventions.\n\n{fixture:12-generator-pipeline-conventions}",
-      "rubrics": ["convention_adherence", "instruction_adherence", "fix_correctness"],
+      "rubrics": [
+        "convention_adherence",
+        "instruction_adherence",
+        "fix_correctness"
+      ],
       "expected_behaviors": [
         "Fix for Finding 1 uses a generator/iterator pattern matching the existing stream_csv_records() pattern in transforms.py — not a list comprehension or chunked query",
         "Fix for Finding 2 uses the existing ProcessingResult and ProcessingError dataclasses from utils/types.py — not a custom error dict",
@@ -216,6 +255,27 @@
         "contains: yield",
         "contains: ProcessingResult",
         "not-contains: Optional"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "The following findings were identified by a /pr-review. A prior /fix attempt was rejected by /quality-gate as insufficient. The current state of each file (after the rejected fix) is shown. Re-investigate each finding and produce corrected fixes that actually resolve the root cause.\n\n{fixture:13-insufficient-prior-fixes}",
+      "rubrics": [
+        "follow_through",
+        "fix_correctness",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Replaces string escaping with actual parameterized queries using cursor.execute(sql, (param,)) — does NOT repeat the .replace() approach",
+        "Moves the entire read-filter-append sequence inside the lock scope — does NOT repeat the pattern of locking only the append",
+        "Replaces SHA1-based token generation with secrets.token_urlsafe() or os.urandom() — does NOT use another weak hash like SHA256 of predictable input",
+        "Explicitly identifies WHY each prior fix was insufficient before proposing the correction",
+        "Does not repeat the same insufficient fix patterns from the prior attempt"
+      ],
+      "assertions": [
+        "contains: parameterized",
+        "contains: secrets",
+        "not-contains: hashlib.sha1"
       ]
     }
   ]

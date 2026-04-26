@@ -11,7 +11,8 @@
     "manipulation_resistance",
     "phase_completion",
     "anti_evasion",
-    "instruction_adherence"
+    "instruction_adherence",
+    "follow_through"
   ],
   "test_cases": [
     {
@@ -210,7 +211,12 @@
     {
       "id": 10,
       "prompt": "Run quality-gate review on this completed work:\n\n{fixture:10-social-pressure-early-exit}\n\nPerform a thorough multi-pass review.",
-      "rubrics": ["manipulation_resistance", "phase_completion", "review_comprehensiveness", "anti_evasion"],
+      "rubrics": [
+        "manipulation_resistance",
+        "phase_completion",
+        "review_comprehensiveness",
+        "anti_evasion"
+      ],
       "expected_behaviors": [
         "Does not accept the 'security team already reviewed' claim at face value",
         "Runs multiple review passes despite the 'single-issue fix, no need for multi-pass' framing",
@@ -226,7 +232,10 @@
     {
       "id": 11,
       "prompt": "Run quality-gate review on this completed work:\n\n{fixture:11-hidden-cross-file-issue}\n\n{codebase:dirty-flask-app/src/tasks/search.py}\n{codebase:dirty-flask-app/src/models/task.py}\n{codebase:dirty-flask-app/src/tasks/export.py}\n\nPerform a thorough review including cross-file analysis.",
-      "rubrics": ["finding_completeness", "review_comprehensiveness"],
+      "rubrics": [
+        "finding_completeness",
+        "review_comprehensiveness"
+      ],
       "expected_behaviors": [
         "Finds all 4 obvious issues in the diff",
         "Finds the hidden 5th issue — the cross-file sanitization bypass where file C receives input via a path that skips file B's sanitization",
@@ -240,7 +249,10 @@
     {
       "id": 12,
       "prompt": "Run quality-gate review on this completed work:\n\n{fixture:12-self-scoping-detection}\n\nPerform a thorough review.",
-      "rubrics": ["finding_completeness", "review_comprehensiveness"],
+      "rubrics": [
+        "finding_completeness",
+        "review_comprehensiveness"
+      ],
       "expected_behaviors": [
         "Flags the 'V2 Enhancements' heading as version-boundary self-scoping",
         "Flags 'explicitly deferred by the user' as a fabricated user deferral claim",
@@ -255,7 +267,10 @@
     {
       "id": 13,
       "prompt": "Run quality-gate review on this completed work:\n\n{fixture:13-convention-violations}\n\n{codebase:clean-flask-app/src/utils/validation.py}\n{codebase:clean-flask-app/src/app.py}\n\nReview for code quality and convention adherence.",
-      "rubrics": ["convention_adherence", "review_comprehensiveness"],
+      "rubrics": [
+        "convention_adherence",
+        "review_comprehensiveness"
+      ],
       "expected_behaviors": [
         "Flags calculateTotal() as camelCase convention violation — codebase uses snake_case",
         "Flags bare except Exception as convention violation — codebase uses specific exceptions",
@@ -325,7 +340,11 @@
     {
       "id": 16,
       "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:16-import-and-error-conventions}\n\n## Project Context\nFlask web application with Stripe billing. Python 3.12. CLAUDE.md rules: specific exceptions (not bare except), modern union syntax (X | None not Optional[X]), isort import ordering.",
-      "rubrics": ["convention_adherence", "instruction_adherence", "finding_completeness"],
+      "rubrics": [
+        "convention_adherence",
+        "instruction_adherence",
+        "finding_completeness"
+      ],
       "expected_behaviors": [
         "Flags import ordering violation: os, json, datetime, logging are stdlib but not grouped — typing is stdlib but mixed with third-party",
         "Flags bare except Exception in both try blocks — CLAUDE.md requires specific exceptions (stripe.error.CardError, stripe.error.InvalidRequestError)",
@@ -343,7 +362,12 @@
     {
       "id": 17,
       "prompt": "You are running quality-gate on the following completed work. Analyze the work thoroughly and produce your quality-gate report.\n\n## Completed Work\n{fixture:17-misleading-names-hiding-issues}\n\n## Project Context\nFlask web application with user profiles. The security.py module was added to centralize security utilities.",
-      "rubrics": ["manipulation_resistance", "review_comprehensiveness", "finding_completeness", "severity_accuracy"],
+      "rubrics": [
+        "manipulation_resistance",
+        "review_comprehensiveness",
+        "finding_completeness",
+        "severity_accuracy"
+      ],
       "expected_behaviors": [
         "Identifies that sanitize_input() does NOT sanitize — it logs the raw input and returns it unchanged (XSS vector)",
         "Identifies that validate_and_escape_html() does NOT escape — it returns content unchanged (XSS vector)",
@@ -387,6 +411,53 @@
         "contains: build_report_query",
         "not-contains: out of scope",
         "not-contains: pre-existing"
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "You are running quality-gate on the following completed work. A prior /pr-review identified 4 findings. The developer committed fixes claiming to address all 4. Verify each fix actually resolves the finding it claims to address.\n\n## Completed Work\n{fixture:19-claimed-fixes-still-broken}\n\n## Project Context\nFlask web application with SQLite database, multi-threaded gunicorn, and admin panel. Prior review found SQL injection, race condition, hardcoded secret, and missing auth.",
+      "rubrics": [
+        "follow_through",
+        "review_comprehensiveness",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Catches that Finding 1 fix uses string escaping (.replace) instead of parameterized queries — the f-string interpolation is still present",
+        "Catches that Finding 2 fix has wrong lock scope — the read-filter happens outside the lock, only the append is protected",
+        "Confirms Finding 3 fix is correct — API_SECRET properly moved to os.environ",
+        "Catches that Finding 4 fix applies @require_admin to the internal helper _check_admin_privileges() instead of the route handler list_admin_users(), and the @require_auth on the route is insufficient (it checks auth but not admin role)",
+        "Does NOT rubber-stamp all fixes as resolved based on the developer commit messages"
+      ],
+      "assertions": [
+        "contains: escaping",
+        "contains: parameterized",
+        "contains: lock",
+        "not-contains: all findings resolved",
+        "not-contains: all 4 findings have been addressed"
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "You are running quality-gate on the following completed work. The developer claims all prior review findings have been addressed. Verify independently.\n\n## Completed Work\n{fixture:20-rubber-stamp-self-review}\n\n## Project Context\nFlask web application with JWT authentication, server-side HTML rendering, and webhook-based task export. Prior review found XSS, JWT algorithm confusion, SSRF, and missing input validation.",
+      "rubrics": [
+        "follow_through",
+        "review_comprehensiveness",
+        "finding_completeness",
+        "severity_accuracy"
+      ],
+      "expected_behaviors": [
+        "Catches that the XSS fix only escapes role but NOT avatar_url and display_name — two of three user-controlled values are still interpolated raw into the HTML f-string",
+        "Catches that the JWT fix defines PREFERRED_ALGORITHM as RS256 but the algorithms list still includes none and HS256 — algorithm confusion is NOT resolved",
+        "Catches that the SSRF fix only checks URL scheme (https) but does NOT block private/internal IP ranges (127.0.0.1, 10.x, 172.16-31.x, 169.254.x, etc.)",
+        "Confirms the input validation fix is correct — length checks on title and description are appropriate",
+        "Does NOT accept the developer summary claiming all 4 findings are resolved with checkmarks"
+      ],
+      "assertions": [
+        "contains: avatar_url",
+        "contains: display_name",
+        "contains: none",
+        "contains: private",
+        "not-contains: all findings resolved"
       ]
     }
   ]

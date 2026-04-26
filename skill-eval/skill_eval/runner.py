@@ -67,6 +67,7 @@ SKILL_GOAL_RUBRICS: frozenset[str] = frozenset(
         "multi_pass_execution",
         "pr_depth",
         "convention_adherence",
+        "follow_through",
     }
 )
 
