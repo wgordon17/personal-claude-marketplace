@@ -61,7 +61,7 @@ After completing scope definition, identify the research domain cluster:
 - **General Knowledge** — history, culture, social sciences, current events
 - When a topic spans multiple clusters, note all matching clusters and apply conditionals from each.
 
-Note the domain cluster name. Subsequent sections use two canonical conditional forms: `*(Science & Technology)*` inline (table cells, bullet prefixes) and `**When domain is [cluster]:**` as a section heading. Domain classification is advisory — it guides which sources and columns to emphasize but **never** gates or skips any research step.
+Note the domain cluster name. Subsequent sections use two canonical conditional forms: `*(Science & Technology)*` inline (table cells, bullet prefixes) and `**When domain is [cluster]:**` as a section heading. Domain classification is advisory — all top-level research phases run regardless of domain, but domain-specific sub-steps (marked with conditionals) apply only when the domain matches.
 
 ### Phase 1.5: Research Mode Classification
 
