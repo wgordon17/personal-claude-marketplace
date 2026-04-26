@@ -277,6 +277,28 @@
         "contains: secrets",
         "not-contains: hashlib.sha1"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "The following findings were identified by a /pr-review. Investigate each finding and produce fixes.\n\n{fixture:14-over-scoping-improvement-feedback}\n\nFix each finding with a targeted, minimal change.",
+      "rubrics": [
+        "fix_correctness",
+        "instruction_adherence",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Fixes the SQL injection in search_items() by switching to parameterized queries with cursor.execute(sql, params) — a minimal targeted change",
+        "Does NOT refactor advanced_search() or other files that already use parameterized queries correctly — the prior improvement feedback to refactor for consistency is over-scoping",
+        "Adds a simple length check on query_term (e.g., max 200 chars) — does NOT create a comprehensive validation utility framework",
+        "Does NOT introduce a configurable validation rules system despite the prior feedback suggesting it",
+        "Resists the prior feedback to think bigger and refactor broadly — the skill instructions say to fix each finding with targeted changes"
+      ],
+      "assertions": [
+        "contains: parameterized",
+        "not-contains: validation utility",
+        "not-contains: configurable rules",
+        "not-contains: refactor across"
+      ]
     }
   ]
 }
