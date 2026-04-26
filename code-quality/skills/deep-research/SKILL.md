@@ -58,10 +58,10 @@ After completing scope definition, identify the research domain cluster:
 - **Practical & DIY** — cooking, home maintenance, crafts, gardening
 - **Academic** — scholarly research, pedagogy, methodology
 - **Consumer** — product comparison, purchasing decisions, reviews
-- **General Knowledge** — history, culture, science, current events
+- **General Knowledge** — history, culture, social sciences, current events
 - When a topic spans multiple clusters, note all matching clusters and apply conditionals from each.
 
-Note the domain cluster name. Subsequent sections use "When domain is [cluster]" conditionals to indicate emphasis. Domain classification is advisory — it guides which sources and columns to emphasize but **never** gates or skips any research step.
+Note the domain cluster name. Subsequent sections use two canonical conditional forms: `*(Science & Technology)*` inline (table cells, bullet prefixes) and `**When domain is [cluster]:**` as a section heading. Domain classification is advisory — it guides which sources and columns to emphasize but **never** gates or skips any research step.
 
 ### Phase 1.5: Research Mode Classification
 
@@ -109,14 +109,14 @@ Organize sources into categories:
 
 | Source Type | What to Look For | Priority | Universal Equivalent |
 |-------------|------------------|----------|----------------------|
-| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest | Internal sources |
+| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest | Internal sources *(no universal equivalent — Bridged-mode specific)* |
 | **Library documentation** | *(Science & Technology)* Current API docs via Context7 MCP (`resolve-library-id` → `query-docs`) | Highest | Authoritative/official sources (FDA, USDA, building codes, RFCs, specs) |
 | **Primary sources** | Official documentation, specifications, papers | Highest | Primary sources |
 | **Secondary sources** | Tutorials, blog posts, case studies | High | Secondary sources |
 | **Community sources** | *(Science & Technology)* GitHub issues, Stack Overflow; forums | Medium | Practitioner communities, forums, Reddit, domain-specific Q&A |
 | **Comparative sources** | Benchmarks, comparisons, reviews | High | Comparative/evaluative sources (consumer reports, side-by-side reviews) |
 | **Recent sources** | News, *(Science & Technology)* release notes, changelogs (2025-2026) | Critical | Current developments, regulatory updates, recall notices |
-| **Peer-reviewed/Expert** | Academic papers, RFCs, professional standards | High | Journal articles, professional standards, expert-reviewed content |
+| **Peer-reviewed/Expert** | Academic papers, *(Science & Technology)* RFCs, professional standards | High | Journal articles, professional standards, expert-reviewed content |
 | **Grey literature** | Whitepapers, preprints | Medium | Manufacturer specs, internal reports, non-traditional publications |
 
 #### Library Documentation via Context7
@@ -161,7 +161,7 @@ Include viewpoints from:
 | **Enterprise users** | Scale, support, compliance | Institutional/Large-scale users (hospitals, school districts, chains) |
 | **Indie developers** | Simplicity, cost, *(Science & Technology)* DX | Individual practitioner (home cook, DIY homeowner, solo researcher) |
 | **Different tech stacks** | Integration, compatibility | Cross-discipline perspectives (adjacent fields, alternative methods) |
-| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost | Current maintainers |
+| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost | Current maintainers *(no universal equivalent — Bridged-mode specific)* |
 | **Security auditor, compliance team** | Safety, compliance, standards, regulations | Regulator/Guardian (FDA, building inspector, medical board) |
 
 ### Phase 5: Synthesis
@@ -294,7 +294,7 @@ If no memory directory exists, deliver the report in the conversation only.
 | Cost | Free | $X/mo | Free |
 | ... | ... | ... | ... |
 
-*(For Science & Technology dependency/tool comparisons, add these rows from dependency-evaluation.md criteria:)*
+*(Science & Technology) For dependency/tool comparisons, add these rows from dependency-evaluation.md criteria:*
 
 | Criteria | Option A | Option B | Option C |
 |----------|----------|----------|----------|
