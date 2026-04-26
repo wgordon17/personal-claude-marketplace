@@ -18,7 +18,7 @@ Comprehensive research methodology targeting 40+ sources with multi-hop explorat
 - User asks for "thorough research"
 - User wants "comprehensive comparison"
 - User needs "deep investigation"
-- Technology selection decisions
+- Selection decisions (technology, tools, methods, approaches)
 - Understanding complex topics with nuance
 - Evaluating multiple alternatives
 
@@ -46,6 +46,21 @@ Before starting research:
 3. **Define success metrics**
    - What does "good enough" research look like?
    - How will we know when to stop?
+
+### Phase 1.25: Domain Classification
+
+After completing scope definition, identify the research domain cluster:
+
+- **Science & Technology** — software, engineering, data science, hardware, tools
+- **Health & Medicine** — nutrition, clinical, fitness, pharmacology
+- **Law & Regulation** — legal, compliance, standards, codes
+- **Finance & Business** — markets, accounting, investing, operations
+- **Practical & DIY** — cooking, home maintenance, crafts, gardening
+- **Academic** — scholarly research, pedagogy, methodology
+- **Consumer** — product comparison, purchasing decisions, reviews
+- **General Knowledge** — history, culture, science, current events
+
+Note the domain cluster name. Subsequent sections use "When domain is [cluster]" conditionals to indicate emphasis. Domain classification is advisory — it guides which sources and columns to emphasize but **never** gates or skips any research step.
 
 ### Phase 1.5: Research Mode Classification
 
@@ -91,15 +106,17 @@ Store this summary as `{internal_findings}`. It becomes the feed-forward context
 
 Organize sources into categories:
 
-| Source Type | What to Look For | Priority |
-|-------------|------------------|----------|
-| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest |
-| **Library documentation** | Current API docs via Context7 MCP (`resolve-library-id` → `query-docs`) | Highest |
-| **Primary sources** | Official documentation, specifications, papers | Highest |
-| **Secondary sources** | Tutorials, blog posts, case studies | High |
-| **Community sources** | GitHub issues, Stack Overflow, forums | Medium |
-| **Comparative sources** | Benchmarks, comparisons, reviews | High |
-| **Recent sources** | News, release notes, changelogs (2025-2026) | Critical |
+| Source Type | What to Look For | Priority | Universal Equivalent |
+|-------------|------------------|----------|----------------------|
+| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest | Internal sources |
+| **Library documentation** | *(Science & Technology)* Current API docs via Context7 MCP (`resolve-library-id` → `query-docs`) | Highest | Authoritative/official sources (FDA, USDA, building codes, RFCs, specs) |
+| **Primary sources** | Official documentation, specifications, papers | Highest | Primary sources |
+| **Secondary sources** | Tutorials, blog posts, case studies | High | Secondary sources |
+| **Community sources** | *(Science & Technology)* GitHub issues, Stack Overflow; forums | Medium | Practitioner communities, forums, Reddit, domain-specific Q&A |
+| **Comparative sources** | Benchmarks, comparisons, reviews | High | Comparative/evaluative sources (consumer reports, side-by-side reviews) |
+| **Recent sources** | News, *(Science & Technology)* release notes, changelogs (2025-2026) | Critical | Current developments, regulatory updates, recall notices |
+| **Peer-reviewed/Expert** | Academic papers, RFCs, professional standards | High | Journal articles, professional standards, expert-reviewed content |
+| **Grey literature** | Whitepapers, preprints | Medium | Manufacturer specs, internal reports, non-traditional publications |
 
 #### Library Documentation via Context7
 
@@ -135,15 +152,16 @@ In **Bridged mode**, internal code patterns are treated as **hop 0**. External e
 
 Include viewpoints from:
 
-| Stakeholder | What They Care About |
-|-------------|---------------------|
-| **Maintainers/creators** | Design decisions, roadmap |
-| **Power users** | Advanced features, edge cases |
-| **Critics** | Limitations, alternatives |
-| **Enterprise users** | Scale, support, compliance |
-| **Indie developers** | Simplicity, cost, DX |
-| **Different tech stacks** | Integration, compatibility |
-| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost |
+| Stakeholder | What They Care About | Universal Equivalent |
+|-------------|---------------------|----------------------|
+| **Maintainers/creators** | Design decisions, roadmap | Creator/Producer (recipe developer, researcher, designer) |
+| **Power users** | Advanced features, edge cases | Expert/Specialist (food scientist, specialist physician, advanced practitioner) |
+| **Critics** | Limitations, alternatives | Evaluator/Critic (reviewer, auditor, inspector) |
+| **Enterprise users** | Scale, support, compliance | Institutional/Large-scale users (hospitals, school districts, chains) |
+| **Indie developers** | Simplicity, cost, *(Science & Technology)* DX | Individual practitioner (home cook, DIY homeowner, solo researcher) |
+| **Different tech stacks** | Integration, compatibility | Cross-discipline perspectives (adjacent fields, alternative methods) |
+| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost | Current maintainers |
+| **Security auditor, compliance team** | Safety, compliance, standards, regulations | Regulator/Guardian (FDA, building inspector, medical board) |
 
 ### Phase 5: Synthesis
 
