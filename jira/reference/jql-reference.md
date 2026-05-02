@@ -203,17 +203,16 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 
 ### Jira Service Management Functions
 
-Available on redhat.atlassian.net but not used in OSAC engineering work. Listed for
-cross-project awareness:
+Provided by the JSM app on redhat.atlassian.net. Available in any JQL query across the instance:
 
 - `approved()`, `approver("")` — Approval status/user
 - `breached()`, `everBreached()` — SLA breach status
 - `completed()`, `paused()`, `running()`, `elapsed("")`, `remaining("")` — SLA timer states
 - `pending()`, `pendingBy("")`, `myPending()` — Pending approval queries
 - `myApproval()`, `myPendingApproval()`, `pendingApprovalBy("")` — Personal approval queries
-- `customerDetail("", "")`, `organizationDetail("", "")`, `organizationMembers("")` — JSM customer/org queries
-- `entitlementDetail("", "")`, `entitlementProduct("")` — JSM entitlement queries
-- `requestTypesInGroup("", "")` — JSM request type filtering
+- `customerDetail("", "")`, `organizationDetail("", "")`, `organizationMembers("")` — Customer/org queries
+- `entitlementDetail("", "")`, `entitlementProduct("")` — Entitlement queries
+- `requestTypesInGroup("", "")` — Request type filtering
 
 ## Discovering JQL Functions
 
