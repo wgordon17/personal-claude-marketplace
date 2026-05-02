@@ -20,9 +20,7 @@ Epic
 - **Bug** — Defects; uses the Bugzilla-legacy workflow (see Status Workflows)
 - **Sub-task** — Rarely used; child of Story/Task
 
-**Epic Link:** Stories, Tasks, and Bugs are linked to their parent Epic via `--parent MGMT-12345`
-(automatically sets customfield_10014 from `epic.link` config for classic project non-subtask types).
-Do NOT use `--custom customfield_10014=...` as a workaround (would double-set the field).
+**Epic Link:** Stories, Tasks, and Bugs are linked to their parent Epic via `customfield_10014` (Epic Link) set to the parent epic key in the `createJiraIssue` fields payload.
 
 ## Status Workflows
 
@@ -61,8 +59,7 @@ statusCategory = "In Progress"
 statusCategory = Done
 ```
 
-Use `jira issue move KEY STATE` for transitions. If the state name is wrong, the CLI returns
-valid transitions in the error output. No separate discovery step needed.
+Use `getTransitionsForJiraIssue` to discover valid transitions before calling `transitionJiraIssue`.
 
 ## Description Templates
 
@@ -198,7 +195,7 @@ What should happen instead.
 - Component B: version
 ```
 
-The jira CLI accepts markdown natively for `-b` body text. No format parameter needed.
+Always pass `contentFormat: "markdown"` for description fields in MCP write operations.
 See `jira/reference/jira-formatting.md` for markdown guidance.
 
 ## Title Conventions
@@ -217,8 +214,7 @@ See `jira/reference/jira-formatting.md` for markdown guidance.
 - **Naming pattern:** `OSAC Sprint <N>` (sequential integers, e.g., `OSAC Sprint 42`)
 - **Board ID:** 4269
 - **Custom field:** `customfield_10020` (alias `sprint` may work in `fields` arrays; use the custom field ID in JQL for reliability)
-- **Assignment:** Sprint requires post-creation step: `jira sprint add SPRINT_ID ISSUE-KEY`
-  (no `--sprint` flag on `jira issue create`). Omit for backlog items.
+- **Assignment:** Set `customfield_10020` to the sprint name or ID in the `createJiraIssue` fields payload. Omit for backlog items.
 
 ### Labels
 
@@ -249,8 +245,8 @@ requested; exceptions noted in the table.
 
 ### Self-Assignment Rule
 
-Always assign newly created OSAC issues to the current user via `-a "$JIRA_LOGIN"` (login
-captured from `jira me` at session start). Never create unassigned cards.
+Always assign newly created OSAC issues to the current user via the `assignee` field
+(account ID captured from `atlassianUserInfo` at session start). Never create unassigned cards.
 
 | Scenario | Risk |
 |----------|------|
@@ -264,15 +260,13 @@ indicates who created the card, not who is working on it.
 
 ## Custom Field IDs
 
-These IDs are point-in-time snapshots (verified 2026-04-08). Use `--parent` for Epic Link on
-classic project non-subtask types (automatically sets customfield_10014 via epic.link config).
-Use `--custom` flag only for truly custom fields not covered by built-in flags (e.g.,
-`--custom customfield_10016=5` for Story Points). No runtime field discovery available via
-CLI — use the documented field IDs.
+These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTypeMetaWithFields`
+to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom
+fields server-side.
 
 | Field | Custom Field ID | Notes |
 |-------|-----------------|-------|
-| Epic Link | `customfield_10014` | Use `--parent` flag instead of `--custom` |
+| Epic Link | `customfield_10014` | Set in `createJiraIssue` fields payload |
 | Sprint | `customfield_10020` | Sprint assignment |
 | Story Points | `customfield_10016` | Present but unused in OSAC |
 
