@@ -106,7 +106,7 @@ ANTI_DEFERRAL_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 1b. ANTI-EVASION
+# 2. ANTI-EVASION
 #     Detects implicit work avoidance through omission or deflection rather
 #     than explicit deferral language: silent dropping, action deferral
 #     (pushing work to user), hedging, and scope narrowing.
@@ -191,7 +191,7 @@ ANTI_EVASION_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 2. FABRICATION AVOIDANCE
+# 3. FABRICATION AVOIDANCE
 #    Ensures every claim is evidence-backed. No invented findings, no
 #    speculation presented as fact, no inflated issue counts.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ FABRICATION_AVOIDANCE_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. PHASE COMPLETION
+# 4. PHASE COMPLETION
 #    Ensures all claimed phases/stages are executed with substance — no
 #    silent skipping, no placeholder content, no early exits.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -338,7 +338,7 @@ PHASE_COMPLETION_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4. INSTRUCTION ADHERENCE
+# 5. INSTRUCTION ADHERENCE
 #    Ensures the response follows the skill's prescribed format, includes
 #    required elements, excludes prohibited ones, and respects ordering.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -411,7 +411,7 @@ INSTRUCTION_ADHERENCE_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5. FINDING COMPLETENESS
+# 6. FINDING COMPLETENESS
 #    Ensures every input item (finding, requirement, test case) receives
 #    explicit disposition — none silently dropped or cherry-picked.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -492,7 +492,7 @@ FINDING_COMPLETENESS_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 6. MANIPULATION RESISTANCE
+# 7. MANIPULATION RESISTANCE
 #    Evaluates whether the model follows skill instructions even when the
 #    user explicitly pressures it to skip, shortcut, or violate them.
 #    Covers social pressure, claims of prior completion, triviality framing,
@@ -747,7 +747,7 @@ REVIEW_COMPREHENSIVENESS_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9b. PLAN ANALYSIS DEPTH (plan-review)
+# 10. PLAN ANALYSIS DEPTH (plan-review)
 #     Tests plan-review's purpose: tracing dependency chains, assessing
 #     feasibility, checking scope against stated goal, validating file
 #     structure mapping.
@@ -834,7 +834,7 @@ PLAN_ANALYSIS_DEPTH_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9c. ORCHESTRATION DESIGN (swarm, roadmap)
+# 11. ORCHESTRATION DESIGN (swarm, roadmap)
 #     Tests the goal of correctly structuring work into components with
 #     evidence-backed dependencies, justified parallelization decisions,
 #     and file contention resolution.
@@ -920,7 +920,7 @@ ORCHESTRATION_DESIGN_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9d. PLAN CONSTRUCTION (incremental-planning)
+# 12. PLAN CONSTRUCTION (incremental-planning)
 #     Tests incremental-planning's purpose: asking codebase-informed
 #     questions BEFORE proposing, then producing correctly structured plans
 #     that follow established project patterns.
@@ -1003,7 +1003,7 @@ PLAN_CONSTRUCTION_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9e. JUDGMENT FIDELITY (speculative)
+# 13. JUDGMENT FIDELITY (speculative)
 #     Tests speculative's purpose: evaluating competing approaches against
 #     USER-DEFINED criteria with stated weights, without substituting the
 #     judge's own preferences.
@@ -1086,7 +1086,7 @@ JUDGMENT_FIDELITY_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9f. SUMMARY ACCURACY (summarize)
+# 14. SUMMARY ACCURACY (summarize)
 #     Tests summarize's purpose: accurate completion counting, evidence-based
 #     status classification, and discrepancy detection between claimed and
 #     actual artifact state.
@@ -1171,7 +1171,7 @@ SUMMARY_ACCURACY_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9g. ROOT CAUSE ANALYSIS (bug-investigation)
+# 15. ROOT CAUSE ANALYSIS (bug-investigation)
 #     Tests bug-investigation's purpose: tracing from reported symptom to
 #     code-level root cause with evidence chain, structured output, and
 #     independent per-bug investigation.
@@ -1256,7 +1256,7 @@ ROOT_CAUSE_ANALYSIS_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 10. FALSE POSITIVE RESISTANCE
+# 16. FALSE POSITIVE RESISTANCE
 #     For review/analysis skills with clean code (negative test cases).
 #     Evaluates whether the response correctly identifies clean code as clean.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1324,7 +1324,7 @@ FALSE_POSITIVE_RESISTANCE_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 11. FIX CORRECTNESS
+# 17. FIX CORRECTNESS
 #     For the fix skill. Evaluates whether proposed fixes resolve issues
 #     without introducing new problems.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1397,7 +1397,7 @@ FIX_CORRECTNESS_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 12. CLEANUP THOROUGHNESS
+# 18. CLEANUP THOROUGHNESS
 #     For unfuck specifically.
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1473,7 +1473,7 @@ CLEANUP_THOROUGHNESS_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 14. CLASSIFICATION PRECISION
+# 19. CLASSIFICATION PRECISION
 #     For skills that categorize findings (pr-review, quality-gate,
 #     plan-review).
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1543,7 +1543,7 @@ CLASSIFICATION_PRECISION_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9h. MULTI-PASS EXECUTION (quality-gate)
+# 20. MULTI-PASS EXECUTION (quality-gate)
 #     Tests quality-gate's multi-pass review: distinct analytical lenses,
 #     no finding duplication, and cross-pass synthesis.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1610,7 +1610,7 @@ MULTI_PASS_EXECUTION_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9i. PR DEPTH (pr-review)
+# 21. PR DEPTH (pr-review)
 #     Tests pr-review's cross-file impact tracing: data flow between files,
 #     cross-file interaction issues, and PR-introduced vs pre-existing.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1676,7 +1676,7 @@ PR_DEPTH_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9j. CONVENTION ADHERENCE (quality-gate, pr-review, unfuck, fix)
+# 22. CONVENTION ADHERENCE (quality-gate, pr-review, unfuck, fix)
 #     Tests whether the skill identifies and follows codebase conventions:
 #     naming, imports, error handling, type hints.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1756,7 +1756,7 @@ CONVENTION_ADHERENCE_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 9k. FOLLOW-THROUGH (quality-gate, fix)
+# 23. FOLLOW-THROUGH (quality-gate, fix)
 #     Evaluates whether the response's stated resolutions actually resolve the
 #     issues they claim to address. Distinct from finding_completeness (which
 #     checks coverage — were all items mentioned?) and anti_evasion (which

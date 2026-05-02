@@ -54,9 +54,25 @@ def _write_baselines(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data))
 
 
-def _run_result(skill: str, scores: dict) -> dict:
-    """Minimal run_eval() result dict."""
-    return {"skill": skill, "scores": scores, "pass_rate": 1.0, "details": []}
+def _run_result(skill: str, scores: dict, *, n: int = 3) -> dict:
+    """Minimal run_eval() result dict with per_case_scores."""
+    per_case = {k: [v] * n for k, v in scores.items()}
+    return {
+        "skill": skill,
+        "scores": scores,
+        "per_case_scores": per_case,
+        "pass_rate": 1.0,
+        "details": [],
+    }
+
+
+def _make_fixture(tmp_path: Path, skill: str, key: str, content: str) -> Path:
+    """Create a fixture file at skill-eval/fixtures/{skill}/{key}.md. Returns repo root."""
+    fixture_dir = tmp_path / "skill-eval" / "fixtures" / skill
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    p = fixture_dir / f"{key}.md"
+    p.write_text(content)
+    return tmp_path
 
 
 def _tc(actual: str) -> LLMTestCase:
@@ -484,7 +500,6 @@ class TestNewCompetencyRubrics:
 
         for name in SKILL_GOAL_RUBRICS:
             assert name in RUBRIC_REGISTRY, f"Rubric {name!r} not in RUBRIC_REGISTRY"
-        assert len(RUBRIC_REGISTRY) == 23
 
     def test_new_rubrics_have_evaluation_steps(self):
         from skill_eval.rubrics import RUBRIC_REGISTRY
@@ -526,6 +541,18 @@ class TestNewCompetencyRubrics:
             rubric = RUBRIC_REGISTRY[name]
             assert rubric["evaluation_params"] == expected_params, (
                 f"Rubric {name!r} evaluation_params: {rubric['evaluation_params']}"
+            )
+
+    def test_behavioral_rubrics_lack_expected_output(self):
+        """Behavioral-only rubrics should NOT have EXPECTED_OUTPUT in params."""
+        from deepeval.test_case import LLMTestCaseParams
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        behavioral_only = set(RUBRIC_REGISTRY) - SKILL_GOAL_RUBRICS
+        for name in behavioral_only:
+            params = RUBRIC_REGISTRY[name]["evaluation_params"]
+            assert LLMTestCaseParams.EXPECTED_OUTPUT not in params, (
+                f"Behavioral rubric {name!r} has EXPECTED_OUTPUT in evaluation_params"
             )
 
 
@@ -616,7 +643,7 @@ class TestLoadContextLayers:
         assert "project" not in layers
 
 
-# ── Group 11: build_metrics ──────────────────────────────────────────────
+# ── Group 10: build_metrics ─────────────────────────────────────────────
 
 
 class TestBuildMetrics:
@@ -633,7 +660,7 @@ class TestBuildMetrics:
             build_metrics(["nonexistent_rubric"], judge=mock_judge)
 
 
-# ── Group 12: Nested baselines format ──────────────────────────────────────
+# ── Group 11: Nested baselines format ─────────────────────────────────────
 
 
 class TestNestedBaselinesFormat:
@@ -690,7 +717,7 @@ class TestNestedBaselinesFormat:
         assert result["quality-gate"]["anti_deferral"] == pytest.approx(0.85)
 
 
-# ── Group 10: Multi-trial averaging (VertexSonnetJudge) ────────────────────
+# ── Group 12: Multi-trial averaging (VertexSonnetJudge) ───────────────────
 
 
 class TestMultiTrialAveraging:
@@ -884,7 +911,7 @@ class TestMultiTrialAveraging:
             )
 
 
-# ── Group 10: Eval integrity guard (--locked) ─────────────────────────────
+# ── Group 13: Eval integrity guard (--locked) ─────────────────────────────
 
 
 class TestVerifyEvalIntegrity:
@@ -984,16 +1011,7 @@ class TestLockedMode:
         assert exc.value.code == 0
 
 
-# ── Group 13: load_fixture ─────────────────────────────────────────────────
-
-
-def _make_fixture(tmp_path: Path, skill: str, key: str, content: str) -> Path:
-    """Create a fixture file at skill-eval/fixtures/{skill}/{key}.md. Returns repo root."""
-    fixture_dir = tmp_path / "skill-eval" / "fixtures" / skill
-    fixture_dir.mkdir(parents=True, exist_ok=True)
-    p = fixture_dir / f"{key}.md"
-    p.write_text(content)
-    return tmp_path
+# ── Group 14: load_fixture ─────────────────────────────────────────────────
 
 
 class TestLoadFixture:
@@ -1068,7 +1086,7 @@ class TestLoadFixture:
         assert "Final content" in result
 
 
-# ── Group 14: build_fixture_prompt ──────────────────────────────────────────
+# ── Group 15: build_fixture_prompt ─────────────────────────────────────────
 
 
 class TestBuildFixturePrompt:
@@ -1093,85 +1111,196 @@ class TestBuildFixturePrompt:
         assert "{fixture:nonexistent}" in result
 
 
-# ── Group 15: Per-case rubric support ───────────────────────────────────────
+# ── Group 16: Per-case rubric support ──────────────────────────────────────
 
 
 class TestPerCaseRubrics:
-    """Per-case rubrics field overrides config-level rubrics.
+    """Per-case rubrics field overrides config-level rubrics via run_eval."""
 
-    Tests the selection logic used in _eval_tc: if tc.get("rubrics") is truthy,
-    use per-case rubrics; otherwise fall back to config-level rubric_names.
-    """
+    def test_per_case_rubrics_override(self, tmp_path):
+        """TC with rubrics field uses per-case rubrics, not config-level."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
 
-    def test_per_case_rubrics_override(self):
-        """Test case with rubrics field uses per-case rubrics."""
-        config_rubrics = ["anti_deferral", "phase_completion"]
-        tc = {"id": 1, "prompt": "test", "rubrics": ["anti_deferral"]}
+        captured_rubrics: list[list[str]] = []
 
-        # Mirror the selection logic from _eval_tc.
-        effective_rubrics = tc["rubrics"] if tc.get("rubrics") else config_rubrics
+        def capture_build(names, judge):
+            captured_rubrics.append(list(names))
+            return []
 
-        assert effective_rubrics == ["anti_deferral"]
-        assert "phase_completion" not in effective_rubrics
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {
+                        "id": 1,
+                        "prompt": "test",
+                        "rubrics": ["instruction_adherence"],
+                        "assertions": [],
+                    }
+                ],
+                rubric_names=["anti_deferral", "phase_completion"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
 
-    def test_per_case_rubrics_fallback(self):
-        """Test case without rubrics field uses config-level."""
-        config_rubrics = ["anti_deferral", "phase_completion"]
-        tc = {"id": 1, "prompt": "test"}
+        assert len(captured_rubrics) == 1
+        assert captured_rubrics[0] == ["instruction_adherence"]
 
-        # Mirror the selection logic from _eval_tc.
-        effective_rubrics = tc["rubrics"] if tc.get("rubrics") else config_rubrics
+    def test_per_case_rubrics_fallback(self, tmp_path):
+        """TC without rubrics field uses config-level rubrics."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
 
-        assert effective_rubrics == ["anti_deferral", "phase_completion"]
-        assert len(effective_rubrics) == 2
+        captured_rubrics: list[list[str]] = []
+
+        def capture_build(names, judge):
+            captured_rubrics.append(list(names))
+            return []
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[{"id": 1, "prompt": "test", "assertions": []}],
+                rubric_names=["anti_deferral", "phase_completion"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert len(captured_rubrics) == 1
+        assert captured_rubrics[0] == ["anti_deferral", "phase_completion"]
+
+    def test_per_case_empty_rubrics_fallback(self, tmp_path):
+        """TC with rubrics: [] falls through to config-level (empty list is falsy)."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        captured_rubrics: list[list[str]] = []
+
+        def capture_build(names, judge):
+            captured_rubrics.append(list(names))
+            return []
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[{"id": 1, "prompt": "test", "rubrics": [], "assertions": []}],
+                rubric_names=["anti_deferral", "phase_completion"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert len(captured_rubrics) == 1
+        assert captured_rubrics[0] == ["anti_deferral", "phase_completion"]
 
 
-# ── Group 16: expected_behaviors wiring ─────────────────────────────────────
+# ── Group 17: expected_behaviors wiring ────────────────────────────────────
 
 
 class TestExpectedBehaviorsWiring:
     """expected_behaviors list is joined and passed as LLMTestCase.expected_output."""
 
-    def test_expected_behaviors_wired_as_expected_output(self):
-        """When non-empty, LLMTestCase.expected_output equals joined string."""
-        from skill_eval.runner import _PROMPT_DELIMITERS
+    def test_expected_behaviors_wired_as_expected_output(self, tmp_path):
+        """run_eval passes expected_behaviors as expected_output to metrics."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
 
-        behaviors = ["Finds SQL injection", "Reports path traversal"]
-        sanitized = []
-        for e in behaviors:
-            for delim in _PROMPT_DELIMITERS:
-                e = e.replace(delim, "")
-            sanitized.append(e.strip())
-        sanitized = [e for e in sanitized if e]
+        captured_tcs: list[LLMTestCase] = []
 
-        llm_tc = LLMTestCase(
-            input="test",
-            actual_output="response",
-            expected_output="\n".join(sanitized) if sanitized else None,
+        class CapturingMetric:
+            name = "capture"
+            score = None
+
+            def measure(self, tc):
+                captured_tcs.append(tc)
+                self.score = 0.5
+
+            def is_successful(self):
+                return True
+
+        def capture_build(names, judge):
+            return [CapturingMetric()]
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {
+                        "id": 1,
+                        "prompt": "test",
+                        "expected_behaviors": ["Finds SQL injection", "Reports path traversal"],
+                        "assertions": [],
+                    }
+                ],
+                rubric_names=["instruction_adherence"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert any(
+            tc.expected_output == "Finds SQL injection\nReports path traversal"
+            for tc in captured_tcs
         )
-        assert llm_tc.expected_output == "Finds SQL injection\nReports path traversal"
 
-    def test_expected_output_none_when_empty(self):
-        """When absent/empty, expected_output is None."""
-        from skill_eval.runner import _PROMPT_DELIMITERS
+    def test_expected_output_none_when_empty(self, tmp_path):
+        """Without expected_behaviors, expected_output is None."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
 
-        behaviors: list[str] = []
-        sanitized = []
-        for e in behaviors:
-            for delim in _PROMPT_DELIMITERS:
-                e = e.replace(delim, "")
-            sanitized.append(e.strip())
-        sanitized = [e for e in sanitized if e]
+        captured_tcs: list[LLMTestCase] = []
 
-        llm_tc = LLMTestCase(
-            input="test",
-            actual_output="response",
-            expected_output="\n".join(sanitized) if sanitized else None,
-        )
-        assert llm_tc.expected_output is None
+        class CapturingMetric:
+            name = "capture"
+            score = None
+
+            def measure(self, tc):
+                captured_tcs.append(tc)
+                self.score = 0.5
+
+            def is_successful(self):
+                return True
+
+        def capture_build(names, judge):
+            return [CapturingMetric()]
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[{"id": 1, "prompt": "test", "assertions": []}],
+                rubric_names=["instruction_adherence"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert all(tc.expected_output is None for tc in captured_tcs)
 
 
-# ── Group 17: load_eval_config validation ───────────────────────────────────
+# ── Group 18: load_eval_config validation ──────────────────────────────────
 
 
 class TestLoadEvalConfigValidation:
@@ -1206,7 +1335,7 @@ class TestLoadEvalConfigValidation:
             load_eval_config("test-empty-rubrics", tc_dir=tmp_path)
 
 
-# ── Group 18: N-adjusted regression threshold ──────────────────────────────
+# ── Group 19: N-adjusted regression threshold ─────────────────────────────
 
 
 class TestNAdjustedThreshold:
@@ -1238,7 +1367,7 @@ class TestNAdjustedThreshold:
         assert passed_n3 is False, f"N=3 drop of 0.20 should fail: {report_n3}"
 
 
-# ── Group 19: load_codebase_file ─────────────────────────────────────────────
+# ── Group 20: load_codebase_file ───────────────────────────────────────────
 
 
 class TestLoadCodebaseFile:
@@ -1333,7 +1462,7 @@ class TestLoadCodebaseFile:
         assert "key: value" in result
 
 
-# ── Group 20: build_fixture_prompt codebase support ──────────────────────────
+# ── Group 21: build_fixture_prompt codebase support ───────────────────────
 
 
 class TestBuildFixturePromptCodebase:
@@ -1383,7 +1512,7 @@ class TestBuildFixturePromptCodebase:
         assert not has_missing
 
 
-# ── Group 21: Integration — codebase-only prompts through run_eval ────────────
+# ── Group 22: Integration — codebase-only prompts through run_eval ────────
 
 
 class TestCodebaseOnlyRunEval:
@@ -1429,7 +1558,7 @@ class TestCodebaseOnlyRunEval:
         assert "{codebase:" not in captured_prompts[0]
 
 
-# ── Group 22: Codebase Python syntax regression ───────────────────────────────
+# ── Group 23: Codebase Python syntax regression ──────────────────────────
 
 
 class TestCodebasePythonSyntax:
@@ -1439,13 +1568,150 @@ class TestCodebasePythonSyntax:
         import ast
 
         codebases_dir = Path(__file__).parent.parent / "codebases"
-        if not codebases_dir.exists():
-            pytest.skip("No codebases directory yet")
+        assert codebases_dir.exists(), (
+            "codebases/ directory missing — fixture apps may have been deleted"
+        )
         py_files = list(codebases_dir.rglob("*.py"))
-        if not py_files:
-            pytest.skip("No .py files found under skill-eval/codebases/")
+        assert py_files, "No .py files under skill-eval/codebases/ — fixture apps may be empty"
         for path in py_files:
             try:
                 ast.parse(path.read_text())
             except SyntaxError as e:
                 raise AssertionError(f"Syntax error in {path}: {e}") from e
+
+
+# ── Group 24: Multi-codebase placeholder ─────────────────────────────────
+
+
+class TestMultiCodebasePlaceholder:
+    """Multiple {codebase:} placeholders in one template resolve correctly."""
+
+    def test_two_codebase_placeholders(self, tmp_path):
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "a.py").write_text("FILE_A_CONTENT")
+        (codebases / "b.py").write_text("FILE_B_CONTENT")
+        template = "First: {codebase:repo/src/a.py}\nSecond: {codebase:repo/src/b.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "FILE_A_CONTENT" in result
+        assert "FILE_B_CONTENT" in result
+        assert "{codebase:" not in result
+        assert not has_missing
+
+
+# ── Group 25: Transitive codebase in fixture ─────────────────────────────
+
+
+class TestTransitiveCodebaseInFixture:
+    """Codebase placeholders inside fixture content are resolved (transitive)."""
+
+    def test_codebase_inside_fixture_resolved(self, tmp_path):
+        _make_fixture(
+            tmp_path,
+            "test-skill",
+            "1-ref",
+            "Review this file:\n{codebase:repo/src/app.py}\n",
+        )
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("TRANSITIVE_CONTENT")
+        template = "{fixture:1-ref}"
+        result, has_missing = build_fixture_prompt("test-skill", template, repo_root=tmp_path)
+        assert "TRANSITIVE_CONTENT" in result
+        assert "{codebase:" not in result
+        assert not has_missing
+
+
+# ── Group 26: Frontmatter-only fixture ───────────────────────────────────
+
+
+class TestFrontmatterOnlyFixture:
+    """Fixture with only frontmatter (no content after closing ---) returns ''."""
+
+    def test_frontmatter_only_returns_empty(self, tmp_path):
+        content = "---\nkey: val\n---"
+        repo = _make_fixture(tmp_path, "test-skill", "1-empty", content)
+        result = load_fixture("test-skill", "1-empty", repo_root=repo)
+        assert result is not None
+        assert result.strip() == ""
+
+
+# ── Group 27: run_eval infra-error threshold ─────────────────────────────
+
+
+class TestRunEvalInfraError:
+    """run_eval sets infra_error when >= 50% of TCs have infra failures."""
+
+    def test_all_tcs_fail_sets_infra_error(self, tmp_path):
+        """When all TCs raise, infra_error is True."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        def failing_execute(*args, **kwargs):
+            raise RuntimeError("API down")
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with patch.object(runner, "execute_skill", side_effect=failing_execute):
+            result = run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {"id": 1, "prompt": "test", "assertions": []},
+                    {"id": 2, "prompt": "test2", "assertions": []},
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert result["infra_error"] is True
+
+    def test_half_tcs_fail_sets_infra_error(self, tmp_path):
+        """When exactly 50% fail (>= threshold), infra_error is True."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        call_count = {"n": 0}
+
+        def half_failing(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RuntimeError("API down")
+            return "response"
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with patch.object(runner, "execute_skill", side_effect=half_failing):
+            result = run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {"id": 1, "prompt": "test", "assertions": []},
+                    {"id": 2, "prompt": "test2", "assertions": []},
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert result["infra_error"] is True
+
+    def test_no_failures_no_infra_error(self, tmp_path):
+        """When no TCs fail, infra_error is False."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with patch.object(runner, "execute_skill", return_value="response"):
+            result = run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {"id": 1, "prompt": "test", "assertions": []},
+                    {"id": 2, "prompt": "test2", "assertions": []},
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert result["infra_error"] is False

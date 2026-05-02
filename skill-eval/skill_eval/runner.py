@@ -13,6 +13,7 @@ Security constraints (enforced throughout):
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
@@ -72,6 +73,7 @@ SKILL_GOAL_RUBRICS: frozenset[str] = frozenset(
 )
 
 
+@functools.lru_cache(maxsize=1)
 def _get_repo_root() -> Path:
     """Return the git repository root as an absolute Path."""
     result = subprocess.run(
@@ -241,9 +243,8 @@ def load_eval_config(skill_name: str, tc_dir: Path | None = None) -> dict:
     Fields:
         skill_name: Must match the JSON filename (without .json extension).
         rubrics: List of rubric names from RUBRIC_REGISTRY to apply via GEval.
-            Registered rubrics: anti_deferral, anti_evasion,
-            fabrication_avoidance, phase_completion, instruction_adherence,
-            finding_completeness, manipulation_resistance, severity_accuracy.
+            See ``RUBRIC_REGISTRY`` in ``skill_eval/rubrics.py`` for all
+            registered names.
         test_cases: List of test case objects. Each test case:
             id: Integer identifier, unique within the file.
             prompt: The scenario context string. Passed as LLMTestCase.input;
@@ -253,8 +254,10 @@ def load_eval_config(skill_name: str, tc_dir: Path | None = None) -> dict:
                 when rubrics include any skill-goal rubric (e.g.,
                 review_comprehensiveness, fix_correctness, plan_analysis_depth,
                 orchestration_design, etc.).
-            rubrics: Optional per-case list of rubric names. When present,
-                overrides config-level rubrics for this test case only.
+            rubrics: Optional per-case list of rubric names. When present
+                and non-empty, overrides config-level rubrics for this test
+                case only. An empty list ``[]`` is treated as absent (falls
+                through to config-level rubrics).
             assertions: List of assertion strings. Each must start with
                 ``contains: `` or ``not-contains: `` followed by the substring
                 to check. Assertions are case-insensitive and checked against
@@ -407,6 +410,9 @@ def build_fixture_prompt(
     Two-pass resolution: first ``{fixture:KEY}`` placeholders are resolved
     via ``load_fixture``, then ``{codebase:REPO/PATH}`` placeholders are
     resolved via ``load_codebase_file`` in the post-substitution result.
+    This is intentionally transitive: ``{codebase:...}`` references inside
+    fixture content are resolved in pass 2, allowing fixtures to compose
+    with codebase files.
 
     Args:
         skill_name: The skill identifier for fixture directory lookup.
@@ -770,8 +776,10 @@ def run_eval(
         Dict with keys:
             skill: skill_name
             scores: {metric_name: average_float} across all test cases
+            per_case_scores: {metric_name: [per_tc_floats]} for N-adjusted thresholds
             pass_rate: fraction of test cases where ALL metrics passed
             details: list of per-test-case result dicts
+            infra_error: True if >= 50% of test cases had infrastructure failures
     """
     from deepeval.test_case import LLMTestCase
 
@@ -867,9 +875,9 @@ def run_eval(
         }
 
     # Run test cases in parallel, capped to avoid API pool exhaustion.
-    # Each TC spawns up to len(metrics) × k_samples concurrent API calls
-    # for multi-trial scoring, so unbounded TC parallelism overwhelms
-    # httpx connection pools and Vertex AI rate limits.
+    # Concurrency ceiling: _MAX_CONCURRENT_TCS × len(metrics) × k_samples
+    # (e.g. 4 × 7 × 5 = 140 concurrent API calls). httpx queues excess
+    # calls via its connection pool backpressure — no explicit semaphore.
     _MAX_CONCURRENT_TCS = 4
     tc_results: list[dict] = []
     with ThreadPoolExecutor(max_workers=min(total_tc, _MAX_CONCURRENT_TCS)) as tc_pool:
