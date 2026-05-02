@@ -1,18 +1,19 @@
 # Jira Formatting Reference
 
-Markdown style guide for writing Jira issue descriptions and comments via the jira CLI.
+Markdown style guide for writing Jira issue descriptions and comments via the MCP server.
 
 ## How Formatting Works
 
-The jira CLI accepts `-b` body text and `--template` input, handling conversion to the Jira
-API format internally. Write standard CommonMark markdown — the CLI handles the rest.
+The Atlassian Rovo MCP server converts between formats automatically:
 
-The CLI does not require format parameters. Use `--plain` for readable output and `--raw`
-for JSON.
+- **Write operations** (`createJiraIssue`, `editJiraIssue`, `addCommentToJiraIssue`): Pass `contentFormat: "markdown"` — the server converts markdown to Atlassian Document Format (ADF)
+- **Read operations** (`getJiraIssue`, `searchJiraIssuesUsingJql`): Pass `responseContentFormat: "markdown"` — the server converts ADF back to markdown
+
+Always use these parameters. Without `responseContentFormat: "markdown"`, read responses return verbose nested ADF JSON that wastes tokens.
 
 ## Write Standard Markdown
 
-Write standard CommonMark markdown. Do NOT write Jira wiki markup (`h1.`, `*bold*`, `{{monospace}}`, `{code}`). While the CLI may accept wiki markup, prefer CommonMark for consistency and portability.
+Write standard CommonMark markdown. Do NOT write Jira wiki markup (`h1.`, `*bold*`, `{{monospace}}`, `{code}`). Jira wiki markup is the wrong format — the MCP server expects standard CommonMark markdown, not Atlassian wiki syntax.
 
 **Wrong (wiki markup — do not use):**
 ```
@@ -38,7 +39,7 @@ oc delete route observatorium-api
 
 ## What Renders Correctly
 
-These standard markdown features convert cleanly:
+These standard markdown features convert cleanly to ADF:
 
 | Feature | Markdown Syntax |
 |---------|----------------|
@@ -51,7 +52,7 @@ These standard markdown features convert cleanly:
 | Ordered lists | `1. item` |
 | Tables | Standard GFM table syntax |
 | Links | `[text](url)` |
-| Checkboxes | `- [ ] item` (renders as task list) |
+| Checkboxes | `- [ ] item` (renders as task list in ADF) |
 | Blockquotes | `> text` |
 | Horizontal rules | `---` |
 
@@ -86,9 +87,25 @@ Avoid the old `{code}...{code}` wiki syntax — it is not valid markdown.
 - **Nested lists:** Deep nesting (3+ levels) may render inconsistently. Keep list nesting to 2 levels.
 - **Tables:** Simple GFM tables convert well. Complex tables with merged cells are not supported in markdown — use lists instead.
 - **Images:** Markdown image syntax (`![alt](url)`) may not render in all Jira contexts. Attach images via the Jira UI for reliability.
-- **HTML tags:** Raw HTML in markdown is stripped in conversion. Use only markdown syntax.
-- **Line breaks:** Use blank lines between paragraphs. Single newlines may be collapsed.
+- **HTML tags:** Raw HTML in markdown is stripped in ADF conversion. Use only markdown syntax.
+- **Line breaks:** Use blank lines between paragraphs. Single newlines may be collapsed in the ADF output.
 
 ## Description Templates
 
-Follow the templates in `jira/reference/osac-conventions.md` for OSAC issue types. Write them in standard markdown — the jira CLI handles the conversion.
+Follow the templates in `jira/reference/osac-conventions.md` for OSAC issue types. Write them in standard markdown — the MCP server handles the conversion.
+
+## Always Pass Content Format Parameters
+
+Both `contentFormat` and `responseContentFormat` are top-level parameters on MCP tool calls
+(not nested under `fields` or `body`). Pass them on every call that reads or writes content:
+
+| Tool | Write parameter | `contentFormat` | `responseContentFormat` |
+|------|----------------|-----------------|------------------------|
+| `createJiraIssue` | `description` (string) | `"markdown"` | `"markdown"` |
+| `editJiraIssue` | `fields` (object with Jira field names) | `"markdown"` | `"markdown"` |
+| `addCommentToJiraIssue` | `commentBody` (string) | `"markdown"` | `"markdown"` |
+| `addWorklogToJiraIssue` | `commentBody` (string, optional) | `"markdown"` | — |
+| `getJiraIssue` | — | — | `"markdown"` |
+| `searchJiraIssuesUsingJql` | — | — | `"markdown"` |
+
+Missing `responseContentFormat: "markdown"` returns ADF JSON — verbose, deeply nested, and token-expensive.

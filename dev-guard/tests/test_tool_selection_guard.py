@@ -5861,12 +5861,12 @@ class TestMCPKeyFunction:
             == "plugin_claude-mem_mcp-search__search"
         )
 
-    def test_jira_tool(self):
+    def test_jira_plugin_tool_key(self):
         from mcp_constants import mcp_key
 
         assert (
-            mcp_key("mcp__plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__getJiraIssue")
-            == "plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__getJiraIssue"
+            mcp_key("mcp__plugin_jira_mcp-atlassian-prod__getJiraIssue")
+            == "plugin_jira_mcp-atlassian-prod__getJiraIssue"
         )
 
     def test_short_name_returns_empty(self):
@@ -5893,25 +5893,10 @@ class TestMCPReadOnlyFrozenset:
 
         assert "plugin_github-mcp_github__actions_get" in MCP_READ_ONLY
 
-    def test_jira_read_tool_present(self):
-        from mcp_constants import MCP_READ_ONLY
-
-        assert (
-            "plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__getJiraIssue" in MCP_READ_ONLY
-        )
-
     def test_serena_write_tool_absent(self):
         from mcp_constants import MCP_READ_ONLY
 
         assert "serena__write_memory" not in MCP_READ_ONLY
-
-    def test_jira_write_tool_absent(self):
-        from mcp_constants import MCP_READ_ONLY
-
-        assert (
-            "plugin_hcm-jira-administrator-agent_mcp-atlassian-prod__createJiraIssue"
-            not in MCP_READ_ONLY
-        )
 
     def test_jira_plugin_read_tool_present(self):
         from mcp_constants import MCP_READ_ONLY
@@ -5922,6 +5907,11 @@ class TestMCPReadOnlyFrozenset:
         from mcp_constants import MCP_READ_ONLY
 
         assert "plugin_jira_mcp-atlassian-prod__createJiraIssue" not in MCP_READ_ONLY
+
+    def test_confluence_read_tool_present(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        assert "plugin_jira_mcp-atlassian-prod__getConfluencePage" in MCP_READ_ONLY
 
     def test_bare_name_not_present(self):
         """Bare function names should NOT match — must be server-qualified."""
@@ -5975,6 +5965,18 @@ class TestMCPGuardIntegration:
             env=env,
         )
         assert result.returncode == 0
+        assert '"allow"' in result.stdout
+
+    def test_jira_readonly_mcp_tool_approved(self, session_db):
+        """A known read-only Jira MCP tool should get permissionDecision: allow."""
+        env, _ = session_db
+        result = run_guard(
+            "mcp__plugin_jira_mcp-atlassian-prod__getJiraIssue",
+            {},
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "permissionDecision" in result.stdout
         assert '"allow"' in result.stdout
 
     def test_unknown_mcp_tool_passthrough(self, session_db):

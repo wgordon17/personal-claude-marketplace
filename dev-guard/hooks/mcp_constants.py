@@ -55,11 +55,11 @@ MCP_READ_ONLY: frozenset[str] = frozenset(
         ],
     )
     + _qualify(
-        "plugin_hcm-jira-administrator-agent_mcp-atlassian-prod",
+        "plugin_jira_mcp-atlassian-prod",
         [
             # Jira read
             "atlassianUserInfo",
-            "fetchAtlassian",
+            "fetch",
             "getAccessibleAtlassianResources",
             "getIssueLinkTypes",
             "getJiraIssue",
@@ -69,7 +69,7 @@ MCP_READ_ONLY: frozenset[str] = frozenset(
             "getTransitionsForJiraIssue",
             "getVisibleJiraProjects",
             "lookupJiraAccountId",
-            "searchAtlassian",
+            "search",
             "searchJiraIssuesUsingJql",
             # Confluence read
             "getConfluenceCommentChildren",
@@ -80,25 +80,6 @@ MCP_READ_ONLY: frozenset[str] = frozenset(
             "getConfluenceSpaces",
             "getPagesInConfluenceSpace",
             "searchConfluenceUsingCql",
-        ],
-    )
-    + _qualify(
-        "plugin_jira_mcp-atlassian-prod",
-        [
-            # Jira read
-            "atlassianUserInfo",
-            "fetchAtlassian",
-            "getAccessibleAtlassianResources",
-            "getIssueLinkTypes",
-            "getJiraIssue",
-            "getJiraIssueRemoteIssueLinks",
-            "getJiraIssueTypeMetaWithFields",
-            "getJiraProjectIssueTypesMetadata",
-            "getTransitionsForJiraIssue",
-            "getVisibleJiraProjects",
-            "lookupJiraAccountId",
-            "searchAtlassian",
-            "searchJiraIssuesUsingJql",
         ],
     )
     + _qualify(

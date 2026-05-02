@@ -8,8 +8,9 @@ Verifies that:
 5. Every marketplace.json entry has a corresponding plugin.json on disk.
 6. Shared reference files (github-label-definitions.md, tracker-field-spec.md) exist
    on disk and are referenced by their consumer SKILL.md files.
-7. Jira self-assignment rules: JIRA_LOGIN capture, -a flag, never-unassigned rule,
-   halt-on-empty guard, and post-create verification are present in both files.
+7. Jira self-assignment rules: account ID capture via atlassianUserInfo,
+   assignee_account_id param, never-unassigned rule, halt-on-empty guard,
+   and post-create verification are present in both files.
 
 These are grep-based and JSON-parse lint tests — no LLM calls, no subprocess execution.
 They guard against accidental deletion of rules and references, and against
@@ -83,20 +84,20 @@ class TestJiraPluginIntegrity:
             "The spawn-data anti-injection treatment was deleted or altered."
         )
 
-    def test_skill_contains_jira_login_capture(self):
-        """jira/skills/jira/SKILL.md must capture JIRA_LOGIN during bootstrap."""
+    def test_skill_contains_account_id_capture(self):
+        """jira/skills/jira/SKILL.md must capture account ID via atlassianUserInfo."""
         content = JIRA_SKILL.read_text()
-        assert "JIRA_LOGIN=$(jira me)" in content, (
-            f"{JIRA_SKILL} does not contain 'JIRA_LOGIN=$(jira me)'. "
+        assert "atlassianUserInfo" in content, (
+            f"{JIRA_SKILL} does not contain 'atlassianUserInfo'. "
             "The bootstrap self-assignment capture step was deleted or altered."
         )
 
-    def test_skill_contains_self_assignment_flag(self):
-        """jira/skills/jira/SKILL.md must use -a '$JIRA_LOGIN' in issue create commands."""
+    def test_skill_contains_self_assignment_param(self):
+        """jira/skills/jira/SKILL.md must use assignee_account_id in issue create."""
         content = JIRA_SKILL.read_text()
-        assert '-a "$JIRA_LOGIN"' in content, (
-            f"{JIRA_SKILL} does not contain '-a \"$JIRA_LOGIN\"'. "
-            "The self-assignment flag was removed from issue create commands."
+        assert "assignee_account_id" in content, (
+            f"{JIRA_SKILL} does not contain 'assignee_account_id'. "
+            "The self-assignment parameter was removed from issue create guidance."
         )
 
     def test_skill_contains_never_create_unassigned(self):
@@ -107,28 +108,28 @@ class TestJiraPluginIntegrity:
             "The unassigned-card prohibition was deleted or altered."
         )
 
-    def test_skill_contains_halt_on_empty_jira_login(self):
-        """jira/skills/jira/SKILL.md must contain the halt-on-empty JIRA_LOGIN instruction."""
+    def test_skill_contains_halt_on_empty_account_id(self):
+        """jira/skills/jira/SKILL.md must halt if account ID is empty."""
         content = JIRA_SKILL.read_text()
-        assert "JIRA_LOGIN` is empty after capture, halt and report the error" in content, (
-            f"{JIRA_SKILL} does not contain the halt-on-empty JIRA_LOGIN instruction. "
+        assert "account ID is empty after capture, halt and report the error" in content, (
+            f"{JIRA_SKILL} does not contain the halt-on-empty account ID instruction. "
             "The guard against missing assignee was deleted or altered."
         )
 
-    def test_agent_contains_jira_login_capture(self):
-        """jira/agents/jira-agent.md must capture JIRA_LOGIN during prerequisites."""
+    def test_agent_contains_account_id_capture(self):
+        """jira/agents/jira-agent.md must capture account ID via atlassianUserInfo."""
         content = JIRA_AGENT.read_text()
-        assert "JIRA_LOGIN=$(jira me)" in content, (
-            f"{JIRA_AGENT} does not contain 'JIRA_LOGIN=$(jira me)'. "
-            "The prerequisites self-assignment capture step was deleted or altered."
+        assert "atlassianUserInfo" in content, (
+            f"{JIRA_AGENT} does not contain 'atlassianUserInfo'. "
+            "The bootstrap self-assignment capture step was deleted or altered."
         )
 
-    def test_agent_contains_self_assignment_flag(self):
-        """jira/agents/jira-agent.md must use -a '$JIRA_LOGIN' in issue create commands."""
+    def test_agent_contains_self_assignment_param(self):
+        """jira/agents/jira-agent.md must use assignee_account_id in issue create."""
         content = JIRA_AGENT.read_text()
-        assert '-a "$JIRA_LOGIN"' in content, (
-            f"{JIRA_AGENT} does not contain '-a \"$JIRA_LOGIN\"'. "
-            "The self-assignment flag was removed from issue create commands."
+        assert "assignee_account_id" in content, (
+            f"{JIRA_AGENT} does not contain 'assignee_account_id'. "
+            "The self-assignment parameter was removed from issue create guidance."
         )
 
     def test_agent_contains_never_create_unassigned(self):
@@ -139,11 +140,11 @@ class TestJiraPluginIntegrity:
             "The unassigned-card prohibition was deleted or altered."
         )
 
-    def test_agent_contains_halt_on_empty_jira_login(self):
-        """jira/agents/jira-agent.md must contain the halt-on-empty JIRA_LOGIN instruction."""
+    def test_agent_contains_halt_on_empty_account_id(self):
+        """jira/agents/jira-agent.md must halt if account ID is empty."""
         content = JIRA_AGENT.read_text()
-        assert "JIRA_LOGIN` is empty after capture, halt and report the error" in content, (
-            f"{JIRA_AGENT} does not contain the halt-on-empty JIRA_LOGIN instruction. "
+        assert "account ID is empty after capture, halt and report the error" in content, (
+            f"{JIRA_AGENT} does not contain the halt-on-empty account ID instruction. "
             "The guard against missing assignee was deleted or altered."
         )
 

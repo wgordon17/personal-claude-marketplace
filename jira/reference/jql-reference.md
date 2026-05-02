@@ -129,15 +129,14 @@ Common orderings:
 
 ## MGMT Custom Fields
 
-These IDs are point-in-time snapshots (verified 2026-04-08). Use `--parent` for Epic Link on
-classic project non-subtask types (automatically sets customfield_10014 via epic.link config).
-Use `--custom` flag only for truly custom fields not covered by built-in flags.
+These IDs are point-in-time snapshots (verified 2026-05-02). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
 
 | Field | Custom Field ID | JQL Usage |
 |-------|-----------------|-----------|
 | Epic Link | `customfield_10014` | `"Epic Link" = MGMT-12345` |
+| Epic Name (Epic type only) | `customfield_10011` | `customfield_10011 = "My Epic Name"` |
 | Sprint | `customfield_10020` | `sprint in openSprints()` or `customfield_10020 = "OSAC Sprint 42"` |
-| Story Points | `customfield_10016` | `customfield_10016 IS EMPTY` (unused in OSAC) |
+| Story Points | `customfield_10028` | `customfield_10028 IS EMPTY` (unused in OSAC) |
 
 **Note:** The `sprint` alias may work in `fields` parameter arrays; use the custom field ID or the `sprint` function in JQL filters for reliability.
 
@@ -152,6 +151,9 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 - `membersOf("group-name")` — Members of a group
 - `currentLogin()` — Time the current user's session began
 - `lastLogin()` — Time of the user's previous login
+- `updatedBy("user")` — Issues updated by a specific user
+- `inactiveUsers()` — Inactive user accounts (useful for cleanup queries)
+- `componentsLeadByUser([user])` — Components led by a user (defaults to current user)
 
 ### Date Functions
 
@@ -172,6 +174,8 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 ### Issue Functions
 
 - `linkedIssues(issueKey[, linkType])` — Issues linked to a specific issue
+- `issuesWithRemoteLinksByGlobalId("globalId")` — Issues with cross-instance remote links
+- `portfolioChildIssuesOf("issueKey")` — Advanced Roadmaps child issues (Cloud replacement for server-only `portfolioChildrenOf`)
 - `watchedIssues()` — Issues watched by the current user
 - `votedIssues()` — Issues voted for by the current user
 - `issueHistory()` — Issues from the user's recent history
@@ -194,6 +198,35 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 ### Other Functions
 
 - `cascadeOption(parentValue[, childValue])` — Cascading select custom field matching
+- `choiceOption("value")` — Custom field choice matching
+- `withinCalendarHours()` — SLA calendar hours filter
+
+### Jira Service Management Functions
+
+Provided by the JSM app on redhat.atlassian.net. Available in any JQL query across the instance:
+
+- `approved()`, `approver("")` — Approval status/user
+- `breached()`, `everBreached()` — SLA breach status
+- `completed()`, `paused()`, `running()`, `elapsed("")`, `remaining("")` — SLA timer states
+- `pending()`, `pendingBy("")`, `myPending()` — Pending approval queries
+- `myApproval()`, `myPendingApproval()`, `pendingApprovalBy("")` — Personal approval queries
+- `customerDetail("", "")`, `organizationDetail("", "")`, `organizationMembers("")` — Customer/org queries
+- `entitlementDetail("", "")`, `entitlementProduct("")` — Entitlement queries
+- `requestTypesInGroup("", "")` — Request type filtering
+
+## Discovering JQL Functions
+
+The functions above are a point-in-time snapshot (verified 2026-05-02, 66 functions). Marketplace
+apps installed on redhat.atlassian.net may add or remove functions over time. To refresh:
+
+```bash
+curl -s -u "USER@redhat.com:$JIRA_API_TOKEN" \
+  "https://redhat.atlassian.net/rest/api/3/jql/autocompletedata" \
+  | jq '.visibleFunctionNames | sort_by(.displayName) | .[].displayName'
+```
+
+The MCP `fetch` tool cannot access this endpoint (ARI-based only). Use the REST API directly
+for periodic discovery.
 
 ## ScriptRunner Functions — NOT Available on Cloud
 
@@ -205,16 +238,13 @@ The following functions existed on Jira Server but are **absent on Atlassian Clo
 - `hasComments()` — comment presence
 - `dateCompare()` — date field comparison
 - `epicsOf()` / `issuesInEpics()` — epic hierarchy
-- `portfolioChildrenOf()` / `portfolioParentsOf()` — Advanced Roadmaps hierarchy
+- `portfolioChildrenOf()` / `portfolioParentsOf()` — Advanced Roadmaps hierarchy (Cloud has `portfolioChildIssuesOf()` instead — see Issue Functions above)
 
-For link traversal on Cloud, use `linkedIssues()` function in JQL. Remote issue links
-(cross-instance links) have no CLI equivalent. For link types, use known types (Blocks,
-Clones, Duplicate, Relates) or discover via `jira issue link` error output.
+For link traversal on Cloud, use `linkedIssues()` function in JQL, or `getJiraIssueRemoteIssueLinks` and `getIssueLinkTypes` MCP tools for programmatic access.
 
 ## OSAC Query Patterns
 
-Pre-built JQL scoped to the OSAC component in MGMT project. Use with
-`jira issue list -q "<JQL>" --plain --columns KEY,SUMMARY,STATUS,TYPE`:
+Pre-built JQL scoped to the OSAC component in MGMT project:
 
 ### My Open OSAC Work
 
@@ -267,7 +297,7 @@ project = MGMT AND component = OSAC AND labels = "gori-ga" AND statusCategory !=
 5. **Use parentheses for OR groups** — `(A OR B) AND C`
 6. **Use `statusCategory` for cross-project queries** — avoid workflow-specific status names
 7. **Test in Jira UI** — validate at https://redhat.atlassian.net/jira before coding into plans
-8. **Use `jira issue list -q`** for JQL queries via CLI
+8. **Prefer typed MCP tools** — use `searchJiraIssuesUsingJql` over `search` for Jira-only queries
 
 ## Troubleshooting
 
