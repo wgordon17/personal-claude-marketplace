@@ -1,6 +1,6 @@
 # OSAC Jira Conventions
 
-Point-in-time snapshot of OSAC/MGMT project conventions (verified 2026-04-24). These are
+Point-in-time snapshot of OSAC/MGMT project conventions (verified 2026-05-02). These are
 observed patterns from live cards, not enforced schema — Jira does not prevent deviation.
 
 ## Issue Type Hierarchy
@@ -20,7 +20,7 @@ Epic
 - **Bug** — Defects; uses the Bugzilla-legacy workflow (see Status Workflows)
 - **Sub-task** — Rarely used; child of Story/Task
 
-**Epic Link:** Stories, Tasks, and Bugs are linked to their parent Epic via `customfield_10014` (Epic Link) set to the parent epic key in the `createJiraIssue` fields payload.
+**Epic Link:** Stories, Tasks, and Bugs are linked to their parent Epic via `customfield_10014` (Epic Link) set to the parent epic key in `createJiraIssue` `additional_fields`.
 
 ## Status Workflows
 
@@ -269,7 +269,7 @@ requested; exceptions noted in the table.
 |-------|--------|
 | Priority | Not set — all issues show "Undefined" |
 | fixVersions | Not used |
-| Story Points | Not used (`customfield_10016` present but empty) |
+| Story Points | Not used (`customfield_10028` present but empty) |
 | Security Level | Not set |
 | Due Date | Sometimes set — lightweight, not enforced |
 
@@ -290,13 +290,14 @@ indicates who created the card, not who is working on it.
 
 ## Custom Field IDs
 
-These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTypeMetaWithFields`
+These IDs are point-in-time snapshots (verified 2026-05-02). Use `getJiraIssueTypeMetaWithFields`
 to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom
 fields server-side.
 
 | Field | Custom Field ID | Notes |
 |-------|-----------------|-------|
 | Epic Link | `customfield_10014` | Set in `createJiraIssue` `additional_fields` |
+| Epic Name (Epic type only) | `customfield_10011` | Set in `createJiraIssue` `additional_fields` |
 | Sprint | `customfield_10020` | Sprint assignment |
 | Story Points | `customfield_10028` | Present but unused in OSAC |
 

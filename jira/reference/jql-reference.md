@@ -129,11 +129,12 @@ Common orderings:
 
 ## MGMT Custom Fields
 
-These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
+These IDs are point-in-time snapshots (verified 2026-05-02). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
 
 | Field | Custom Field ID | JQL Usage |
 |-------|-----------------|-----------|
 | Epic Link | `customfield_10014` | `"Epic Link" = MGMT-12345` |
+| Epic Name (Epic type only) | `customfield_10011` | `customfield_10011 = "My Epic Name"` |
 | Sprint | `customfield_10020` | `sprint in openSprints()` or `customfield_10020 = "OSAC Sprint 42"` |
 | Story Points | `customfield_10028` | `customfield_10028 IS EMPTY` (unused in OSAC) |
 

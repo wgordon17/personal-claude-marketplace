@@ -13,7 +13,7 @@ Always use these parameters. Without `responseContentFormat: "markdown"`, read r
 
 ## Write Standard Markdown
 
-Write standard CommonMark markdown. Do NOT write Jira wiki markup (`h1.`, `*bold*`, `{{monospace}}`, `{code}`). The wiki markup syntax from the old `jira-cli`-based workflow is the wrong format for MCP-based writes.
+Write standard CommonMark markdown. Do NOT write Jira wiki markup (`h1.`, `*bold*`, `{{monospace}}`, `{code}`). Jira wiki markup is the wrong format — the MCP server expects standard CommonMark markdown, not Atlassian wiki syntax.
 
 **Wrong (wiki markup — do not use):**
 ```

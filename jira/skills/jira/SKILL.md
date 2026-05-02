@@ -73,9 +73,7 @@ in all `getJiraIssue`, `searchJiraIssuesUsingJql`, `createJiraIssue`, `editJiraI
 Jira MCP tool requires `cloudId` — missing it returns an error.
 
 **The account ID is required for self-assignment.** Store the account ID for use in the
-`assignee_account_id` parameter during issue creation. If the account ID is empty after
-capture, halt and report the error — do not proceed with issue creation without a valid
-assignee.
+`assignee_account_id` parameter during issue creation. If the account ID is empty after capture, halt and report the error — do not proceed with issue creation without a valid assignee.
 
 ## Default OSAC Scope
 

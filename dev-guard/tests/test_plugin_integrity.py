@@ -111,7 +111,7 @@ class TestJiraPluginIntegrity:
     def test_skill_contains_halt_on_empty_account_id(self):
         """jira/skills/jira/SKILL.md must halt if account ID is empty."""
         content = JIRA_SKILL.read_text()
-        assert "account ID is empty after" in content and "halt and report the error" in content, (
+        assert "account ID is empty after capture, halt and report the error" in content, (
             f"{JIRA_SKILL} does not contain the halt-on-empty account ID instruction. "
             "The guard against missing assignee was deleted or altered."
         )
