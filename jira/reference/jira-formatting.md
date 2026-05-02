@@ -96,26 +96,16 @@ Follow the templates in `jira/reference/osac-conventions.md` for OSAC issue type
 
 ## Always Pass Content Format Parameters
 
-In every MCP tool call that reads or writes content:
+Both `contentFormat` and `responseContentFormat` are top-level parameters on MCP tool calls
+(not nested under `fields` or `body`). Pass them on every call that reads or writes content:
 
-```
-createJiraIssue:
-  fields.description.contentFormat: "markdown"
-  responseContentFormat: "markdown"
-
-editJiraIssue:
-  fields.description.contentFormat: "markdown"
-  responseContentFormat: "markdown"
-
-addCommentToJiraIssue:
-  body.contentFormat: "markdown"
-  responseContentFormat: "markdown"
-
-getJiraIssue:
-  responseContentFormat: "markdown"
-
-searchJiraIssuesUsingJql:
-  responseContentFormat: "markdown"
-```
+| Tool | Write parameter | `contentFormat` | `responseContentFormat` |
+|------|----------------|-----------------|------------------------|
+| `createJiraIssue` | `description` (string) | `"markdown"` | `"markdown"` |
+| `editJiraIssue` | `fields` (object with Jira field names) | `"markdown"` | `"markdown"` |
+| `addCommentToJiraIssue` | `commentBody` (string) | `"markdown"` | `"markdown"` |
+| `addWorklogToJiraIssue` | `commentBody` (string, optional) | `"markdown"` | — |
+| `getJiraIssue` | — | — | `"markdown"` |
+| `searchJiraIssuesUsingJql` | — | — | `"markdown"` |
 
 Missing `responseContentFormat: "markdown"` returns ADF JSON — verbose, deeply nested, and token-expensive.

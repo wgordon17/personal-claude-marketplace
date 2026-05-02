@@ -245,7 +245,7 @@ requested; exceptions noted in the table.
 
 ### Self-Assignment Rule
 
-Always assign newly created OSAC issues to the current user via the `assignee` field
+Always assign newly created OSAC issues to the current user via `assignee_account_id`
 (account ID captured from `atlassianUserInfo` at session start). Never create unassigned cards.
 
 | Scenario | Risk |
@@ -266,7 +266,7 @@ fields server-side.
 
 | Field | Custom Field ID | Notes |
 |-------|-----------------|-------|
-| Epic Link | `customfield_10014` | Set in `createJiraIssue` fields payload |
+| Epic Link | `customfield_10014` | Set in `createJiraIssue` `additional_fields` |
 | Sprint | `customfield_10020` | Sprint assignment |
 | Story Points | `customfield_10016` | Present but unused in OSAC |
 

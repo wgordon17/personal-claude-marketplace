@@ -25,8 +25,8 @@ allowed-tools: [Read, Bash, Agent, AskUserQuestion,
   mcp__plugin_jira_mcp-atlassian-prod__addWorklogToJiraIssue,
   mcp__plugin_jira_mcp-atlassian-prod__getVisibleJiraProjects,
   mcp__plugin_jira_mcp-atlassian-prod__getJiraIssueRemoteIssueLinks,
-  mcp__plugin_jira_mcp-atlassian-prod__fetchAtlassian,
-  mcp__plugin_jira_mcp-atlassian-prod__searchAtlassian]
+  mcp__plugin_jira_mcp-atlassian-prod__fetch,
+  mcp__plugin_jira_mcp-atlassian-prod__search]
 ---
 
 # Jira Skill
@@ -73,8 +73,9 @@ in all `getJiraIssue`, `searchJiraIssuesUsingJql`, `createJiraIssue`, `editJiraI
 Jira MCP tool requires `cloudId` — missing it returns an error.
 
 **The account ID is required for self-assignment.** Store the account ID for use in the
-`assignee` field during issue creation. If the account ID is empty after capture, halt and
-report the error — do not proceed with issue creation without a valid assignee.
+`assignee_account_id` parameter during issue creation. If the account ID is empty after
+capture, halt and report the error — do not proceed with issue creation without a valid
+assignee.
 
 ## Default OSAC Scope
 
@@ -103,8 +104,9 @@ return verbose nested JSON structures that waste tokens.
 
 ### Pagination
 
-`searchJiraIssuesUsingJql` returns paginated results (default ~50 per page). For large
-result sets, use `startAt` and `maxResults` parameters to page through results.
+`searchJiraIssuesUsingJql` returns paginated results (default 10 per page, max 100 via
+`maxResults`). For large result sets, use `nextPageToken` from the response to fetch
+subsequent pages.
 
 **Pagination cap:** Limit to 5 pages / 250 results maximum. When more results exist,
 inform the user of the total count and offer to refine the query rather than auto-fetching
@@ -124,11 +126,10 @@ Offer these patterns based on user intent:
 
 For complex query construction, read `jira/reference/jql-reference.md`.
 
-**`searchAtlassian` note:** `searchAtlassian` returns results from both Jira AND Confluence.
-Prefer `searchJiraIssuesUsingJql` for Jira-only queries — it has structured return types and
-Jira-specific pagination. Use `searchAtlassian` only when the user explicitly requests a
-cross-product search across Jira and Confluence simultaneously. Filter or ignore Confluence
-results if they appear unexpectedly in `searchAtlassian` output.
+**`search` note:** The `search` tool (Rovo Search) returns results from both Jira AND
+Confluence. Prefer `searchJiraIssuesUsingJql` for Jira-only queries — it has structured
+return types and Jira-specific pagination. Use `search` only when the user explicitly
+requests a cross-product search across Jira and Confluence simultaneously.
 
 **Always present issue keys as fully-qualified URLs:**
 `https://redhat.atlassian.net/browse/<KEY>` — never bare keys. This applies to query results,
@@ -138,34 +139,32 @@ create/update confirmations, and any context where an issue is referenced. URLs 
 
 ### Creating Issues
 
-**Self-assignment is mandatory.** Always include the user's Atlassian account ID (captured
-during bootstrap) in the `assignee` field of every `createJiraIssue` call.
+**Self-assignment is mandatory.** Always pass the user's Atlassian account ID (captured
+during bootstrap) as `assignee_account_id` in every `createJiraIssue` call.
 
 **Never create unassigned cards.** An unassigned card on the team's sprint board or backlog
 is an open invitation for another developer to pick it up — even when the work is already
 in progress locally. This creates duplicate effort and conflicting implementations.
 
-When creating a MGMT/OSAC issue, always set:
-- `project`: `MGMT`
-- `components`: `[{"name": "OSAC"}]`
+When creating a MGMT/OSAC issue, always pass:
+- `projectKey`: `"MGMT"`
+- `issueTypeName`: `"Task"` / `"Story"` / `"Bug"` / `"Epic"` (from user input)
 - `summary`: from user input
-- `issuetype`: from user input (Task, Story, Bug, Epic)
-- `labels`: `["OSAC"]`
-- `assignee`: `{"accountId": "<account-id-from-bootstrap>"}` (self-assign)
+- `description`: from template
+- `contentFormat`: `"markdown"`
+- `responseContentFormat`: `"markdown"`
+- `assignee_account_id`: `"<account-id-from-bootstrap>"` (self-assign)
+- `additional_fields`: `{"labels": ["OSAC"], "components": [{"name": "OSAC"}]}`
 
-When creating Stories/Tasks/Bugs under an epic, set `customfield_10014` (Epic Link) to the parent epic key.
+When creating Stories/Tasks/Bugs under an epic, add `"customfield_10014": "MGMT-12345"` (Epic Link) to `additional_fields`.
 
-When creating an in-sprint issue, set the sprint field (`customfield_10020`) to the current `OSAC Sprint <N>`.
+When creating an in-sprint issue, add `"customfield_10020"` (Sprint) to `additional_fields`.
 
 Before writing descriptions, read `jira/reference/osac-conventions.md` for the appropriate template (Epic, Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to write markdown correctly.
 
-Always pass:
-- `contentFormat: "markdown"` for description fields
-- `responseContentFormat: "markdown"` to receive the created issue as markdown
-
-**Creating Epics:** Epics are created with `createJiraIssue` using `issuetype: {"name": "Epic"}`.
-Set `customfield_10011` for the Epic Name (typically the same as `summary`). Epic descriptions
-must follow the structured template from `jira/reference/osac-conventions.md` (Summary → Use Cases →
+**Creating Epics:** Epics use `issueTypeName: "Epic"`. Add `"customfield_10011": "Epic Name"`
+to `additional_fields` (typically the same as `summary`). Epic descriptions must follow the
+structured template from `jira/reference/osac-conventions.md` (Summary → Use Cases →
 Capabilities → Implementation Notes → optional Scope → optional Deliverables).
 
 **Post-create assignee verification:** After every issue creation, verify the assignee on
@@ -190,8 +189,8 @@ fields server-side. This prevents silently broken JQL queries from stale field I
 
 - **Field changes:** Use `editJiraIssue` for any field updates (summary, description, labels, components, assignee, etc.)
 - **Status changes:** Always call `getTransitionsForJiraIssue` first to discover available transitions, then call `transitionJiraIssue` with the correct transition ID
-- **Comments:** Use `addCommentToJiraIssue` with `contentFormat: "markdown"`
-- **Time logging:** Use `addWorklogToJiraIssue` with `timeSpentSeconds` (integer) or `timeSpent` (Jira duration format, e.g., `"2h"`, `"30m"`, `"1d"`), and optional `comment` with `contentFormat: "markdown"`. OSAC does not use time tracking but the tool is available for other projects.
+- **Comments:** Use `addCommentToJiraIssue` with `commentBody` (the comment text) and `contentFormat: "markdown"`
+- **Time logging:** Use `addWorklogToJiraIssue` with `timeSpent` (string, e.g., `"2h"`, `"30m"`, `"1d"`), and optional `commentBody` with `contentFormat: "markdown"`. OSAC does not use time tracking but the tool is available for other projects.
 
 ## Reference File Loading
 
@@ -219,13 +218,12 @@ When working outside MGMT/OSAC, drop the default project/component filter. Self-
 
 ### Generic Escape Hatches
 
-**`fetchAtlassian`** — ARI-based (Atlassian Resource Identifier) read-only content fetcher.
-Use only for ARI-based resource retrieval not covered by typed tools. Not a first-choice tool.
+**`fetch`** — ARI-based (Atlassian Resource Identifier) content fetcher. Use only for
+ARI-based resource retrieval not covered by typed tools. Not a first-choice tool.
 
-**`searchAtlassian`** — Use only when explicitly searching across Jira AND Confluence
-simultaneously. Prefer `searchJiraIssuesUsingJql` for Jira-only queries — it has structured
-return types, Jira-specific pagination, and clearer semantics. Filter or ignore Confluence
-results unless the user explicitly requests cross-product search.
+**`search`** — Rovo Search across Jira AND Confluence. Prefer `searchJiraIssuesUsingJql`
+for Jira-only queries — it has structured return types, Jira-specific pagination, and
+clearer semantics. Use `search` only when the user explicitly requests cross-product search.
 
 Always prefer typed tools (`searchJiraIssuesUsingJql`, `getJiraIssue`, `createJiraIssue`,
 etc.) over generic escape hatches — they have structured return types and clearer semantics.

@@ -197,10 +197,10 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 
 Marketplace apps installed on redhat.atlassian.net may provide additional JQL functions.
 To discover all available functions (built-in + app-provided), use the JQL autocomplete
-endpoint via `fetchAtlassian`:
+endpoint via the `fetch` tool:
 
 ```
-fetchAtlassian with ARI: ari:cloud:jira::site/<cloudId>
+fetch with ARI: ari:cloud:jira::site/<cloudId>
 GET /rest/api/3/jql/autocompletedata
 ```
 
@@ -276,7 +276,7 @@ project = MGMT AND component = OSAC AND labels = "gori-ga" AND statusCategory !=
 5. **Use parentheses for OR groups** — `(A OR B) AND C`
 6. **Use `statusCategory` for cross-project queries** — avoid workflow-specific status names
 7. **Test in Jira UI** — validate at https://redhat.atlassian.net/jira before coding into plans
-8. **Prefer typed MCP tools** — use `searchJiraIssuesUsingJql` over `searchAtlassian` for Jira-only queries
+8. **Prefer typed MCP tools** — use `searchJiraIssuesUsingJql` over `search` for Jira-only queries
 
 ## Troubleshooting
 
