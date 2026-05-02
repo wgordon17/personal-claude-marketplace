@@ -214,7 +214,7 @@ See `jira/reference/jira-formatting.md` for markdown guidance.
 - **Naming pattern:** `OSAC Sprint <N>` (sequential integers, e.g., `OSAC Sprint 42`)
 - **Board ID:** 4269
 - **Custom field:** `customfield_10020` (alias `sprint` may work in `fields` arrays; use the custom field ID in JQL for reliability)
-- **Assignment:** Set `customfield_10020` to the sprint name or ID in the `createJiraIssue` fields payload. Omit for backlog items.
+- **Assignment:** Sprint is not available as a create-time field. Assign via the board/backlog UI or post-creation API call. Omit for backlog items.
 
 ### Labels
 
@@ -268,7 +268,7 @@ fields server-side.
 |-------|-----------------|-------|
 | Epic Link | `customfield_10014` | Set in `createJiraIssue` `additional_fields` |
 | Sprint | `customfield_10020` | Sprint assignment |
-| Story Points | `customfield_10016` | Present but unused in OSAC |
+| Story Points | `customfield_10028` | Present but unused in OSAC |
 
 ## MGMT Project Coordinates
 

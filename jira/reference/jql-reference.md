@@ -135,7 +135,7 @@ These IDs are point-in-time snapshots (verified 2026-04-08). Use `getJiraIssueTy
 |-------|-----------------|-----------|
 | Epic Link | `customfield_10014` | `"Epic Link" = MGMT-12345` |
 | Sprint | `customfield_10020` | `sprint in openSprints()` or `customfield_10020 = "OSAC Sprint 42"` |
-| Story Points | `customfield_10016` | `customfield_10016 IS EMPTY` (unused in OSAC) |
+| Story Points | `customfield_10028` | `customfield_10028 IS EMPTY` (unused in OSAC) |
 
 **Note:** The `sprint` alias may work in `fields` parameter arrays; use the custom field ID or the `sprint` function in JQL filters for reliability.
 

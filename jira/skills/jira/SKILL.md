@@ -158,7 +158,8 @@ When creating a MGMT/OSAC issue, always pass:
 
 When creating Stories/Tasks/Bugs under an epic, add `"customfield_10014": "MGMT-12345"` (Epic Link) to `additional_fields`.
 
-When creating an in-sprint issue, add `"customfield_10020"` (Sprint) to `additional_fields`.
+Sprint is not available as a create-time field on MGMT issue types. Assign to a sprint
+post-creation via the board/backlog UI or subsequent API call.
 
 Before writing descriptions, read `jira/reference/osac-conventions.md` for the appropriate template (Epic, Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to write markdown correctly.
 
@@ -179,7 +180,8 @@ On the first CRUD operation each session, call `getJiraIssueTypeMetaWithFields` 
 target issue type in MGMT and verify that the custom field IDs from `jira/reference/jql-reference.md`
 still resolve:
 - Epic Link: `customfield_10014`
-- Sprint: `customfield_10020`
+- Epic Name (Epic type only): `customfield_10011`
+- Story Points: `customfield_10028`
 
 If a field ID returns no match, warn the user and use the ID discovered from the metadata
 response. Reference file IDs are point-in-time snapshots — Jira admins can remap custom

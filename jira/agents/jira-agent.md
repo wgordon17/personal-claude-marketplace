@@ -222,7 +222,8 @@ On the first CRUD operation each session, call `getJiraIssueTypeMetaWithFields` 
 target issue type in MGMT and verify that the custom field IDs from
 `jira/reference/jql-reference.md` still resolve:
 - Epic Link: `customfield_10014`
-- Sprint: `customfield_10020`
+- Epic Name (Epic type only): `customfield_10011`
+- Story Points: `customfield_10028`
 
 If a field ID returns no match, warn the spawner in the response and use the ID discovered
 from the metadata response. Reference file IDs are point-in-time snapshots — Jira admins
