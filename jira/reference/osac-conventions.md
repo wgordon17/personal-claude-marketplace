@@ -26,9 +26,27 @@ Epic
 
 Two distinct workflows are observed in MGMT/OSAC:
 
-### Standard Workflow (Epic, Story, Task, Sub-task)
+### Epic Workflow
 
-Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT Task:
+Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT-23842:
+
+```
+New → Planning → To Do → In Progress → Dev Complete → Release Pending → Closed
+```
+
+| Status | statusCategory |
+|--------|----------------|
+| New | To Do |
+| Planning | To Do |
+| To Do | To Do |
+| In Progress | In Progress |
+| Dev Complete | In Progress |
+| Release Pending | Done |
+| Closed | Done |
+
+### Task/Story Workflow
+
+Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT-24246 (Task):
 
 ```
 To Do → In Progress → Code Review → Review → Closed
