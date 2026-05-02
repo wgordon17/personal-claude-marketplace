@@ -1,7 +1,7 @@
 ---
 name: deep-research
 description: |
-  Use when user requests deep research, comprehensive analysis, or thorough investigation.
+  Use when user requests deep research, comprehensive analysis, or thorough investigation of any topic.
   Triggers on: "research X thoroughly", "deep dive into", "comprehensive analysis of",
   "investigate X exhaustively", "compare X options", "evaluate alternatives for".
   Supports two modes: External (web research, current behavior) and Bridged (internal
@@ -18,7 +18,7 @@ Comprehensive research methodology targeting 40+ sources with multi-hop explorat
 - User asks for "thorough research"
 - User wants "comprehensive comparison"
 - User needs "deep investigation"
-- Technology selection decisions
+- Selection decisions (technology, tools, methods, approaches)
 - Understanding complex topics with nuance
 - Evaluating multiple alternatives
 
@@ -33,10 +33,10 @@ Before starting research:
    - What decision will this inform?
 
 2. **Identify key criteria for evaluation**
-   - Performance, cost, complexity, security?
+   - Performance, cost, complexity, security, safety, effectiveness, durability?
    - What matters most to the user?
-   - **Dependency/tool comparison detected?** If the research involves comparing libraries,
-     frameworks, CLI tools, or dependencies, read
+   - **Dependency/tool comparison detected?** *(Science & Technology)* If the research involves
+     comparing libraries, frameworks, CLI tools, or dependencies, read
      [dependency-evaluation.md](../../references/dependency-evaluation.md) and incorporate its
      Must-Have / Should-Have / Red Flags / Supply Chain Assessment criteria into the evaluation
      framework. These criteria replace ad-hoc quality assessments with a structured checklist
@@ -47,9 +47,13 @@ Before starting research:
    - What does "good enough" research look like?
    - How will we know when to stop?
 
+### Phase 1.25: Domain Classification
+
+After completing scope definition, determine whether the research topic is **Science & Technology** (software, engineering, data science, hardware, tools). Subsequent sections use `*(Science & Technology)*` conditionals to gate sub-steps that only apply to S&T research (Context7 lookups, dependency-evaluation criteria, supply chain assessment). For all other topics, use the **Universal Equivalent** columns in the source and stakeholder tables for domain-appropriate guidance. All top-level research phases run regardless of domain.
+
 ### Phase 1.5: Research Mode Classification
 
-After completing Phase 1 scope definition, classify the research mode via `AskUserQuestion` before proceeding.
+After completing Phase 1.25 domain classification, classify the research mode via `AskUserQuestion` before proceeding.
 
 **Argument parsing:**
 - **Detection rule:** If the skill argument ends with `Mode: External` or `Mode: Bridged` (case-insensitive, after a period or newline), use that mode directly and skip the `AskUserQuestion` call below. Example suffix: `[research question]. Mode: Bridged`.
@@ -58,7 +62,7 @@ After completing Phase 1 scope definition, classify the research mode via `AskUs
 
 **Present two options to the user:**
 
-- **External** — Pure external research (web sources, documentation, community). Use when the question is about technologies, patterns, or decisions unrelated to this codebase.
+- **External** — Pure external research (web sources, documentation, community). Use when the question is about topics, patterns, or decisions unrelated to this codebase (technology comparisons, cooking techniques, home maintenance, legal questions, etc.).
 - **Bridged** — Internal investigation first, then external research informed by the internal findings. Use when the question references this project's code, patterns, or architecture.
 
 **Routing:**
@@ -91,19 +95,21 @@ Store this summary as `{internal_findings}`. It becomes the feed-forward context
 
 Organize sources into categories:
 
-| Source Type | What to Look For | Priority |
-|-------------|------------------|----------|
-| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest |
-| **Library documentation** | Current API docs via Context7 MCP (`resolve-library-id` → `query-docs`) | Highest |
-| **Primary sources** | Official documentation, specifications, papers | Highest |
-| **Secondary sources** | Tutorials, blog posts, case studies | High |
-| **Community sources** | GitHub issues, Stack Overflow, forums | Medium |
-| **Comparative sources** | Benchmarks, comparisons, reviews | High |
-| **Recent sources** | News, release notes, changelogs (2025-2026) | Critical |
+| Source Type | What to Look For | Priority | Universal Equivalent |
+|-------------|------------------|----------|----------------------|
+| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest | Internal sources *(no universal equivalent — Bridged-mode specific)* |
+| **Library documentation** | *(Science & Technology)* Current API docs via Context7 MCP (`resolve-library-id` → `query-docs`) | Highest | Authoritative/official sources (FDA, USDA, building codes, RFCs, specs) |
+| **Primary sources** | Official documentation, specifications, papers | Highest | Primary sources |
+| **Secondary sources** | Tutorials, blog posts, case studies | High | Secondary sources |
+| **Community sources** | *(Science & Technology)* GitHub issues, Stack Overflow; forums | Medium | Practitioner communities, forums, Reddit, domain-specific Q&A |
+| **Comparative sources** | Benchmarks, comparisons, reviews | High | Comparative/evaluative sources (consumer reports, side-by-side reviews) |
+| **Recent sources** | News, *(Science & Technology)* release notes, changelogs (2025-2026) | Critical | Current developments, regulatory updates, recall notices |
+| **Peer-reviewed/Expert** | Academic papers, *(Science & Technology)* RFCs, professional standards | High | Journal articles, professional standards, expert-reviewed content |
+| **Grey literature** | Whitepapers, preprints | Medium | Manufacturer specs, internal reports, non-traditional publications |
 
 #### Library Documentation via Context7
 
-Before proceeding to web-based source gathering, identify third-party libraries, frameworks, SDKs, or APIs relevant to the research question:
+**When domain is Science & Technology:** Before proceeding to web-based source gathering, identify third-party libraries, frameworks, SDKs, or APIs relevant to the research question:
 
 - If Context7 MCP is configured, for each library call `mcp__context7__resolve-library-id` to find the library, then call `mcp__context7__query-docs` with targeted queries to fetch current API docs, migration guides, or configuration references
 - If Context7 MCP is not configured, skip this step — web-based source gathering later in Phase 2 will cover documentation
@@ -135,22 +141,23 @@ In **Bridged mode**, internal code patterns are treated as **hop 0**. External e
 
 Include viewpoints from:
 
-| Stakeholder | What They Care About |
-|-------------|---------------------|
-| **Maintainers/creators** | Design decisions, roadmap |
-| **Power users** | Advanced features, edge cases |
-| **Critics** | Limitations, alternatives |
-| **Enterprise users** | Scale, support, compliance |
-| **Indie developers** | Simplicity, cost, DX |
-| **Different tech stacks** | Integration, compatibility |
-| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost |
+| Stakeholder | What They Care About | Universal Equivalent |
+|-------------|---------------------|----------------------|
+| **Maintainers/creators** | Design decisions, roadmap | Creator/Producer (recipe developer, researcher, designer) |
+| **Power users** | Advanced features, edge cases | Expert/Specialist (food scientist, specialist physician, advanced practitioner) |
+| **Critics** | Limitations, alternatives | Evaluator/Critic (reviewer, auditor, inspector) |
+| **Enterprise users** | Scale, support, compliance | Institutional/Large-scale users (hospitals, school districts, chains) |
+| **Indie developers** | Simplicity, cost, *(Science & Technology)* DX | Individual practitioner (home cook, DIY homeowner, solo researcher) |
+| **Different tech stacks** | Integration, compatibility | Cross-discipline perspectives (adjacent fields, alternative methods) |
+| **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost | Current maintainers *(no universal equivalent — Bridged-mode specific)* |
+| **Security auditor, compliance team** | Safety, compliance, standards, regulations | Regulator/Guardian (FDA, building inspector, medical board) |
 
 ### Phase 5: Synthesis
 
 1. **Create comparison tables**
    - Side-by-side feature comparison
    - Quantitative metrics where available
-   - **For dependency/tool comparisons:** include rows from
+   - **When domain is Science & Technology, for dependency/tool comparisons:** include rows from
      [dependency-evaluation.md](../../references/dependency-evaluation.md) Must-Have criteria —
      recent commits (6-month threshold from today), recent releases (12-month threshold),
      license, CVE status — plus bus factor and release integrity from Supply Chain Assessment.
@@ -198,7 +205,7 @@ If a memory directory is found, write the research report to a file:
 1. Generate a run ID per the Run-ID Naming Convention in that reference.
 2. Create `{memory_dir}/research/` if it does not exist.
 3. Write the report to `{memory_dir}/research/{run-id}-<topic>.md`
-   (e.g. `hack/research/feat-auth-1711388400-vertex-ai-pricing.md`).
+   (e.g. `hack/research/feat-research-1711388400-sourdough-fermentation.md`).
 4. After writing, tell the user the file path.
 
 If no memory directory exists, deliver the report in the conversation only.
@@ -252,17 +259,17 @@ If no memory directory exists, deliver the report in the conversation only.
 
 ## Detailed Findings
 
-### [Category 1: e.g., Performance]
+### [Category 1: e.g., Performance / Safety / Effectiveness]
 - **Finding 1**: [Description] (Source: [Link/Reference])
 - **Finding 2**: [Description] (Source: [Link/Reference])
 - **Consensus**: [What most sources agree on]
 - **Debate**: [Where sources disagree]
 
-### [Category 2: e.g., Developer Experience]
+### [Category 2: e.g., Usability / Practicality / Ease of Use]
 - **Finding 1**: [Description] (Source: [Link/Reference])
 - ...
 
-### [Category 3: e.g., Cost & Licensing]
+### [Category 3: e.g., Cost / Availability / Accessibility]
 - ...
 
 ## Comparison Table
@@ -275,7 +282,7 @@ If no memory directory exists, deliver the report in the conversation only.
 | Cost | Free | $X/mo | Free |
 | ... | ... | ... | ... |
 
-*(For dependency/tool comparisons, add these rows from dependency-evaluation.md criteria:)*
+*(Science & Technology) For dependency/tool comparisons, add these rows from dependency-evaluation.md criteria:*
 
 | Criteria | Option A | Option B | Option C |
 |----------|----------|----------|----------|
@@ -339,8 +346,9 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Flag areas of uncertainty** (don't pretend to know what you don't)
 - **Include recent (2025-2026) sources** where available
 - **Cross-reference claims** (verify important claims with multiple sources)
-- **Verify API claims against current docs** — use Context7 MCP to confirm API signatures, configuration options, and version-specific behavior rather than relying on training data
-- **For dependency/tool comparisons: apply [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria** — every candidate must be evaluated against Must-Have thresholds (recent commits, recent releases, license, CVEs). Use the Date Verification Protocol: calculate the actual gap in months from today's date. Never say "recently updated" without stating the date and gap. For CLI tools or code-executing dependencies, include the Supply Chain Assessment (maintainer provenance, bus factor, release integrity, code execution model)
+- *(Science & Technology)* **Verify API claims against current docs** — use Context7 MCP to confirm API signatures, configuration options, and version-specific behavior rather than relying on training data
+- *(Science & Technology)* **For dependency/tool comparisons: apply [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria** — every candidate must be evaluated against Must-Have thresholds (recent commits, recent releases, license, CVEs). Use the Date Verification Protocol: calculate the actual gap in months from today's date. Never say "recently updated" without stating the date and gap. For CLI tools or code-executing dependencies, include the Supply Chain Assessment (maintainer provenance, bus factor, release integrity, code execution model)
+- **Verify authoritative source claims** — cross-reference with the governing body or official source for the domain (e.g., FDA for food safety, manufacturer specs for products, building codes for construction)
 - *(Bridged mode)* **Internal investigation must cover relevant source files** — not just PROJECT.md and LESSONS.md; read actual code files
 - *(Bridged mode)* **Internal-external bridge must be specific** — cite actual file paths, function names, and patterns, not vague descriptions
 - *(Bridged mode)* **Recommendations must be project-aware** — verify that recommendations do not contradict documented project decisions before including them
@@ -352,6 +360,7 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Authority bias**: Taking official docs at face value without community validation
 - **Shallow research**: Stopping at hop 1-2 when deeper exploration is needed
 - **Scope creep**: Researching tangential topics instead of the core question
+- **Anecdotal evidence bias**: Treating personal testimonials or forum anecdotes as reliable evidence, especially in health, legal, or safety-critical domains
 
 ## When to Stop
 
@@ -362,6 +371,7 @@ Research is complete when:
 - [ ] Risks are identified and documented
 - [ ] Actionable recommendations can be made
 - [ ] Source count target (40+) is met
+- [ ] Authoritative sources for the domain have been consulted and cross-referenced
 - [ ] *(Bridged mode)* Internal investigation has covered relevant source files (not just memory files)
 - [ ] *(Bridged mode)* Internal-external bridge table is populated with specific file references
 
@@ -375,11 +385,14 @@ Other skills should invoke `/deep-research` when they encounter any of these str
 - **Architecture pattern evaluation** — comparing design patterns with external evidence
 - **Unknown unknowns surfaced by review** — research gaps identified by `/plan-review` or `/pr-review`
 - **Market/industry analysis** — competitive positioning, pricing, adoption trends
+- **Domain-specific methodology questions** — the skill's current knowledge is insufficient for the research domain
+- **Regulatory or compliance questions** — research needed on standards, codes, or legal requirements
+- **Best-practice evaluation** — comparing approaches with external evidence across any domain
 
 ### Mode Guidance
 
 - Use **Bridged** mode when the research relates to the current codebase (e.g., evaluating how the project uses a library, researching migration paths for an existing dependency)
-- Use **External** mode when it's a pure technology question (e.g., comparing two libraries the project hasn't adopted yet, evaluating a new framework)
+- Use **External** mode when it's a standalone question unrelated to this codebase (e.g., comparing two libraries the project hasn't adopted yet, evaluating a new framework, researching best practices for a non-technical topic, comparing approaches or products)
 
 ### Invocation Guidance
 
