@@ -151,6 +151,9 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 - `membersOf("group-name")` — Members of a group
 - `currentLogin()` — Time the current user's session began
 - `lastLogin()` — Time of the user's previous login
+- `updatedBy("user")` — Issues updated by a specific user
+- `inactiveUsers()` — Inactive user accounts (useful for cleanup queries)
+- `componentsLeadByUser([user])` — Components led by a user (defaults to current user)
 
 ### Date Functions
 
@@ -171,6 +174,8 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 ### Issue Functions
 
 - `linkedIssues(issueKey[, linkType])` — Issues linked to a specific issue
+- `issuesWithRemoteLinksByGlobalId("globalId")` — Issues with cross-instance remote links
+- `portfolioChildIssuesOf("issueKey")` — Advanced Roadmaps child issues (Cloud replacement for server-only `portfolioChildrenOf`)
 - `watchedIssues()` — Issues watched by the current user
 - `votedIssues()` — Issues voted for by the current user
 - `issueHistory()` — Issues from the user's recent history
@@ -193,6 +198,36 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 ### Other Functions
 
 - `cascadeOption(parentValue[, childValue])` — Cascading select custom field matching
+- `choiceOption("value")` — Custom field choice matching
+- `withinCalendarHours()` — SLA calendar hours filter
+
+### Jira Service Management Functions
+
+Available on redhat.atlassian.net but not used in OSAC engineering work. Listed for
+cross-project awareness:
+
+- `approved()`, `approver("")` — Approval status/user
+- `breached()`, `everBreached()` — SLA breach status
+- `completed()`, `paused()`, `running()`, `elapsed("")`, `remaining("")` — SLA timer states
+- `pending()`, `pendingBy("")`, `myPending()` — Pending approval queries
+- `myApproval()`, `myPendingApproval()`, `pendingApprovalBy("")` — Personal approval queries
+- `customerDetail("", "")`, `organizationDetail("", "")`, `organizationMembers("")` — JSM customer/org queries
+- `entitlementDetail("", "")`, `entitlementProduct("")` — JSM entitlement queries
+- `requestTypesInGroup("", "")` — JSM request type filtering
+
+## Discovering JQL Functions
+
+The functions above are a point-in-time snapshot (verified 2026-05-02, 66 functions). Marketplace
+apps installed on redhat.atlassian.net may add or remove functions over time. To refresh:
+
+```bash
+curl -s -u "USER@redhat.com:$JIRA_API_TOKEN" \
+  "https://redhat.atlassian.net/rest/api/3/jql/autocompletedata" \
+  | jq '.visibleFunctionNames | sort_by(.displayName) | .[].displayName'
+```
+
+The MCP `fetch` tool cannot access this endpoint (ARI-based only). Use the REST API directly
+for periodic discovery.
 
 ## ScriptRunner Functions — NOT Available on Cloud
 
@@ -204,7 +239,7 @@ The following functions existed on Jira Server but are **absent on Atlassian Clo
 - `hasComments()` — comment presence
 - `dateCompare()` — date field comparison
 - `epicsOf()` / `issuesInEpics()` — epic hierarchy
-- `portfolioChildrenOf()` / `portfolioParentsOf()` — Advanced Roadmaps hierarchy
+- `portfolioChildrenOf()` / `portfolioParentsOf()` — Advanced Roadmaps hierarchy (Cloud has `portfolioChildIssuesOf()` instead — see Issue Functions above)
 
 For link traversal on Cloud, use `linkedIssues()` function in JQL, or `getJiraIssueRemoteIssueLinks` and `getIssueLinkTypes` MCP tools for programmatic access.
 
