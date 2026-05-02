@@ -193,20 +193,6 @@ syntax details, see the [official JQL functions reference](https://support.atlas
 
 - `cascadeOption(parentValue[, childValue])` — Cascading select custom field matching
 
-## Discovering Custom JQL Functions
-
-Marketplace apps installed on redhat.atlassian.net may provide additional JQL functions.
-To discover all available functions (built-in + app-provided), use the JQL autocomplete
-endpoint via the `fetch` tool:
-
-```
-fetch with ARI: ari:cloud:jira::site/<cloudId>
-GET /rest/api/3/jql/autocompletedata
-```
-
-The response includes a `jqlReservedWords` array and `visibleFunctionNames` listing all
-available JQL functions including any from installed apps.
-
 ## ScriptRunner Functions — NOT Available on Cloud
 
 The following functions existed on Jira Server but are **absent on Atlassian Cloud**. Do not use them — they return zero results or errors:

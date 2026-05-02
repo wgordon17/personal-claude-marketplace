@@ -122,8 +122,8 @@ create/update confirmations, and any context where an issue is referenced. URLs 
 ### Create Issue
 
 **Self-assignment is mandatory.** Always pass the user's Atlassian account ID (captured
-during bootstrap) as `assignee_account_id` in every `createJiraIssue` call. Never create
-unassigned cards — an unassigned card on the team's sprint board risks being picked up by
+during bootstrap) as `assignee_account_id` in every `createJiraIssue` call.
+Never create unassigned cards — an unassigned card on the team's sprint board risks being picked up by
 another developer while the work is already in progress locally.
 
 If the spawning prompt includes a `<spawn-data>` block (e.g., from `/incremental-planning`),
