@@ -103,7 +103,10 @@ When the spawning task involves OSAC/MGMT work, apply these defaults:
 - **Project:** `MGMT`
 - **Component:** `OSAC`
 - **Label:** `OSAC` (always add to newly created issues)
-- **Sprint:** current `OSAC Sprint <N>` (sequential numbering) when instructed
+- **Sprint:** current `OSAC Sprint <N>` (sequential numbering) when instructed — sprint
+  assignment is a post-creation step via `editJiraIssue` with
+  `fields: {"customfield_10020": <sprint-id>}` (raw integer). Discover sprint IDs by
+  querying `sprint in openSprints()` and reading `customfield_10020` from results.
 - **Board:** 4269
 
 Use `contentFormat: "markdown"` for all write operations (descriptions, comments).

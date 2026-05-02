@@ -28,28 +28,37 @@ Two distinct workflows are observed in MGMT/OSAC:
 
 ### Standard Workflow (Epic, Story, Task, Sub-task)
 
+Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT Task:
+
 ```
-New → Planning → To Do → In Progress → Closed
+To Do → In Progress → Code Review → Review → Closed
+```
+
+| Status | statusCategory |
+|--------|----------------|
+| To Do | To Do |
+| In Progress | In Progress |
+| Code Review | In Progress |
+| Review | In Progress |
+| Closed | Done |
+
+### Bug Workflow (Bugzilla-legacy)
+
+Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT Bug:
+
+```
+New → ASSIGNED → POST → MODIFIED → ON_QA → Verified → Release Pending → Closed
 ```
 
 | Status | statusCategory |
 |--------|----------------|
 | New | To Do |
-| Planning | To Do |
-| To Do | To Do |
-| In Progress | In Progress |
-| Closed | Done |
-
-### Bug Workflow (Bugzilla-legacy)
-
-```
-ASSIGNED → MODIFIED → Closed
-```
-
-| Status | statusCategory |
-|--------|----------------|
 | ASSIGNED | In Progress |
+| POST | In Progress |
 | MODIFIED | In Progress |
+| ON_QA | In Progress |
+| Verified | Done |
+| Release Pending | Done |
 | Closed | Done |
 
 **Cross-project tip:** Use `statusCategory` in JQL for cross-project queries to avoid workflow-specific status names:
@@ -214,7 +223,10 @@ See `jira/reference/jira-formatting.md` for markdown guidance.
 - **Naming pattern:** `OSAC Sprint <N>` (sequential integers, e.g., `OSAC Sprint 42`)
 - **Board ID:** 4269
 - **Custom field:** `customfield_10020` (alias `sprint` may work in `fields` arrays; use the custom field ID in JQL for reliability)
-- **Assignment:** Sprint is not available as a create-time field. Assign via the board/backlog UI or post-creation API call. Omit for backlog items.
+- **Assignment:** Sprint is not available at create time. Assign post-creation via
+  `editJiraIssue` with `fields: {"customfield_10020": <sprint-id>}` (raw integer).
+  Discover sprint IDs by querying `sprint in openSprints()` and reading `customfield_10020`
+  from the results. Omit for backlog items.
 
 ### Labels
 
