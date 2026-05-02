@@ -49,19 +49,7 @@ Before starting research:
 
 ### Phase 1.25: Domain Classification
 
-After completing scope definition, identify the research domain cluster:
-
-- **Science & Technology** — software, engineering, data science, hardware, tools
-- **Health & Medicine** — nutrition, clinical, fitness, pharmacology
-- **Law & Regulation** — legal, compliance, standards, codes
-- **Finance & Business** — markets, accounting, investing, operations
-- **Practical & DIY** — cooking, home maintenance, crafts, gardening
-- **Academic** — scholarly research, pedagogy, methodology
-- **Consumer** — product comparison, purchasing decisions, reviews
-- **General Knowledge** — history, culture, social sciences, current events
-- When a topic spans multiple clusters, note all matching clusters and apply conditionals from each.
-
-Note the domain cluster name. Subsequent sections use two canonical conditional forms: `*(Science & Technology)*` inline (table cells, bullet prefixes) and `**When domain is [cluster]:**` as a section heading. Domain classification is advisory — all top-level research phases run regardless of domain, but domain-specific sub-steps (marked with conditionals) apply only when the domain matches.
+After completing scope definition, determine whether the research topic is **Science & Technology** (software, engineering, data science, hardware, tools). Subsequent sections use `*(Science & Technology)*` conditionals to gate sub-steps that only apply to S&T research (Context7 lookups, dependency-evaluation criteria, supply chain assessment). For all other topics, use the **Universal Equivalent** columns in the source and stakeholder tables for domain-appropriate guidance. All top-level research phases run regardless of domain.
 
 ### Phase 1.5: Research Mode Classification
 
