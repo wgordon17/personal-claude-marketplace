@@ -339,7 +339,7 @@
         "Does not repeat the same insufficient fix patterns from the prior attempt"
       ],
       "assertions": [
-        "contains: origin",
+        "contains: fetch",
         "contains: 127.0.0.1",
         "contains: magic"
       ]

@@ -176,17 +176,13 @@ index 0000000..3c4d5e6
 +
 +    Returns the number of jobs processed.
 +    """
-+    batch: list[Job] = []
-+
-+    # Phase 1: Collect batch from shared queue
-+    with _queue_lock:
-+        while _job_queue and len(batch) < BATCH_SIZE:
-+            batch.append(_job_queue.popleft())
++    # Phase 1: Snapshot queued items (reads without removing)
++    batch = [j for j in _job_queue if j.status == "queued"][:BATCH_SIZE]
 +
 +    if not batch:
 +        return 0
 +
-+    # Phase 2: Process each job (outside the lock for concurrency)
++    # Phase 2: Process each job
 +    processed = 0
 +    for job in batch:
 +        try:
@@ -195,6 +191,13 @@ index 0000000..3c4d5e6
 +            job.result = result
 +            job.status = "completed"
 +            processed += 1
++
++            # Phase 3: Remove from queue after processing
++            with _queue_lock:
++                try:
++                    _job_queue.remove(job)
++                except ValueError:
++                    pass  # Already removed by another worker
 +
 +            from src.pipeline.delivery import notify_completion
 +            notify_completion(job.job_id, result)

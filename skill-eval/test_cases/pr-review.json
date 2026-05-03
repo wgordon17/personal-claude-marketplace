@@ -255,8 +255,8 @@
       ],
       "assertions": [
         "contains: ssrf",
-        "not-contains: pre-existing",
         "not-contains: not introduced by this",
+        "not-contains: outside the scope",
         "contains: redirect"
       ]
     },
@@ -270,7 +270,7 @@
         "Identifies the missing file size check in upload_data() — file.read() loads entire file into memory with no limit enforcement before reading",
         "Identifies the missing timeout on requests.post() in delivery.py notify_completion() — will hang indefinitely on unresponsive webhook endpoints",
         "Identifies the ReDoS vulnerability in the DELIVERY_URL_PATTERN regex — the nested quantifiers with overlapping character classes cause catastrophic backtracking on malformed input",
-        "Identifies the race condition in process_batch() — multiple worker threads can call process_batch() concurrently, and while each pop is individually atomic under the lock, the batch processing and status updates happen outside the lock, allowing job.status to be overwritten by concurrent workers if the same job is somehow re-enqueued"
+        "Identifies the race condition in process_batch() — Phase 1 snapshots queued items without removing them from the queue, so two concurrent workers can both snapshot the same jobs, both process them (duplicate processing), and both attempt to remove them in Phase 3"
       ],
       "assertions": [
         "contains: api key",
