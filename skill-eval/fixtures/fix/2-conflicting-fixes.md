@@ -3,7 +3,7 @@ planted_issues:
   - type: missing_input_validation
     file: src/services/processor.py
     line: 15
-  - type: refactor_early_returns
+  - type: refactor_deep_nesting
     file: src/services/processor.py
     line: 12
 conflict: true
@@ -41,24 +41,23 @@ def process_order(order_data: dict[str, Any]) -> dict[str, Any]:
     shipping_address = order_data.get("shipping_address")
 
     reservation = reserve_items(items)
-    if not reservation.success:
+    if reservation.success:
+        charge_result = charge_customer(customer_id, amount, currency)
+        if charge_result.success:
+            send_confirmation(customer_id, items, shipping_address)
+            return {
+                "status": "completed",
+                "order_id": charge_result.order_id,
+                "reservation_id": reservation.id,
+                "charged_amount": amount,
+            }
+        else:
+            reservation.cancel()
+            logger.warning("Payment failed for customer %s", customer_id)
+            return {"status": "failed", "reason": "payment_declined"}
+    else:
         logger.warning("Reservation failed for customer %s", customer_id)
         return {"status": "failed", "reason": "inventory_unavailable"}
-
-    charge_result = charge_customer(customer_id, amount, currency)
-    if not charge_result.success:
-        reservation.cancel()
-        logger.warning("Payment failed for customer %s", customer_id)
-        return {"status": "failed", "reason": "payment_declined"}
-
-    send_confirmation(customer_id, items, shipping_address)
-
-    return {
-        "status": "completed",
-        "order_id": charge_result.order_id,
-        "reservation_id": reservation.id,
-        "charged_amount": amount,
-    }
 
 
 def get_order_status(order_id: str) -> dict[str, Any]:
@@ -75,7 +74,7 @@ def get_order_status(order_id: str) -> dict[str, Any]:
 
 **Finding pr-arch-1:** Deep nesting in process_order should use early returns for readability
 **Location:** `src/services/processor.py:12`
-**Evidence:** The function uses nested if-else blocks that increase cognitive complexity. Refactoring to early returns for failure cases would flatten the control flow and improve readability.
+**Evidence:** The function uses nested if-else blocks (reservation check wraps the charge check which wraps the success path) that increase cognitive complexity. Refactoring to early returns for failure cases would flatten the control flow and improve readability.
 
 ```python
 # src/services/processor.py (same function as above)
@@ -87,22 +86,21 @@ def process_order(order_data: dict[str, Any]) -> dict[str, Any]:
     shipping_address = order_data.get("shipping_address")
 
     reservation = reserve_items(items)
-    if not reservation.success:
+    if reservation.success:
+        charge_result = charge_customer(customer_id, amount, currency)
+        if charge_result.success:
+            send_confirmation(customer_id, items, shipping_address)
+            return {
+                "status": "completed",
+                "order_id": charge_result.order_id,
+                "reservation_id": reservation.id,
+                "charged_amount": amount,
+            }
+        else:
+            reservation.cancel()
+            logger.warning("Payment failed for customer %s", customer_id)
+            return {"status": "failed", "reason": "payment_declined"}
+    else:
         logger.warning("Reservation failed for customer %s", customer_id)
         return {"status": "failed", "reason": "inventory_unavailable"}
-
-    charge_result = charge_customer(customer_id, amount, currency)
-    if not charge_result.success:
-        reservation.cancel()
-        logger.warning("Payment failed for customer %s", customer_id)
-        return {"status": "failed", "reason": "payment_declined"}
-
-    send_confirmation(customer_id, items, shipping_address)
-
-    return {
-        "status": "completed",
-        "order_id": charge_result.order_id,
-        "reservation_id": reservation.id,
-        "charged_amount": amount,
-    }
 ```

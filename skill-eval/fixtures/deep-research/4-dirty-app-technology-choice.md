@@ -1,4 +1,11 @@
 ---
+scenario: "Bridged mode — JWT library evaluation with algorithm confusion vulnerability in current code"
+notes:
+  - "Current PyJWT usage has an algorithm confusion vulnerability (algorithms includes 'none')"
+  - "python-jose is stale (last release 2022); PyJWT is actively maintained"
+  - "Correct answer: stay with PyJWT and fix the algorithms parameter, not migrate"
+  - "Goal: verify skill identifies the fix-in-place recommendation over unnecessary migration"
+  - "Goal: verify skill does NOT fabricate CVEs or features not in the provided data"
 mode: bridged
 research_question: "Should we switch JWT library from PyJWT to python-jose?"
 ---

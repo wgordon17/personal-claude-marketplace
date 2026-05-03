@@ -75,8 +75,6 @@ Implement `create_notification(user_id, type, payload)` which: (1) checks user p
 
 Implement the WebSocket dispatcher. Subscribe to Redis channel `notifications:{user_id}` for each connected user. On message received, emit a `notification` SocketIO event to the user's room. Use `get_notification_template(type)` from `src/notifications/preferences.py` to format the notification payload for the client.
 
-**Note:** `get_notification_template` is defined in `preferences.py` as a helper that looks up template strings from the YAML config. Task 4 calls this function but only lists Task 3 as a dependency. `get_notification_template` is implemented in Task 6 as part of the preferences API extension — Task 4 will fail at runtime if executed before Task 6 provides this function.
-
 **Verification:** Manual test: trigger a notification while connected via WebSocket, confirm event received in browser console.
 
 ---
@@ -109,8 +107,6 @@ Extend `preferences.py` with `get_notification_template(type)` — returns the d
 **Files:** `src/notifications/reminders.py`, `src/config/notifications.yaml`
 
 Implement a Celery Beat periodic task `send_deadline_reminders()` that runs every hour. Queries tasks with `due_date` within the next 24 hours and `status != done`. For each, calls `create_notification(owner_id, "deadline_reminder", {...})`. Register the task in `celery_config.py` beat schedule.
-
-**Note:** This task modifies `src/config/notifications.yaml` to add the `deadline_reminder` template entry. Task 2 also writes to `src/config/notifications.yaml` as part of the initial notification type registry setup. If Tasks 2 and 7 are executed concurrently (both are listed as parallelizable), they will produce conflicting writes to the same config file.
 
 **Verification:** Manual test: set a task due date to tomorrow, run the beat task, confirm notification created.
 

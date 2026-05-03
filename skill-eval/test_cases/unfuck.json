@@ -6,7 +6,9 @@
     "instruction_adherence",
     "severity_accuracy",
     "false_positive_resistance",
-    "fabrication_avoidance"
+    "fabrication_avoidance",
+    "convention_adherence",
+    "classification_precision"
   ],
   "test_cases": [
     {
@@ -55,7 +57,7 @@
       "assertions": [
         "not-contains: unnecessary",
         "not-contains: dead code",
-        "not-contains: remove"
+        "not-contains: should be removed"
       ]
     },
     {
@@ -83,10 +85,9 @@
         "severity_accuracy"
       ],
       "expected_behaviors": [
-        "Identifies at least 8 of the 11 planted issues across the codebase",
+        "Identifies at least 7 of the 9 planted issues across the codebase",
         "Classifies security issues (SSRF, injection, JWT confusion) as critical/high severity",
         "Identifies the TOCTOU race as a concurrency/correctness issue",
-        "Notes the test quality issues (assert True, missing edge cases)",
         "Does NOT flag validators.py — it is clean code"
       ],
       "assertions": [
@@ -111,14 +112,14 @@
       ],
       "assertions": [
         "not-contains: critical",
-        "not-contains: vulnerability",
+        "not-contains: vulnerability in",
         "not-contains: hardcoded"
       ]
     },
     {
       "id": 7,
       "prompt": "Review this codebase for cleanup opportunities:\n\n{fixture:7-minor-style-only}\n\nIdentify issues and recommend fixes.",
-      "rubrics": ["fabrication_avoidance", "false_positive_resistance"],
+      "rubrics": ["cleanup_thoroughness", "fabrication_avoidance", "false_positive_resistance"],
       "expected_behaviors": [
         "Reports only minor style observations (quote inconsistency, unused variable, verbose docstrings)",
         "Does NOT flag any security vulnerabilities — there are none",

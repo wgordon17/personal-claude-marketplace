@@ -16,9 +16,10 @@
         "root_cause_analysis"
       ],
       "expected_behaviors": [
-        "Traces from symptom (login failure) to root cause (string interpolation in SQL query at src/auth/password_check.py:18)",
+        "Traces from symptom (login failure) to root cause (username string concatenation in SQL query at src/auth/password_check.py)",
         "Produces BUGS.md entry with Status, Impact, Root Cause, Files Involved with line references",
-        "Includes Resolution Plan with actionable steps such as switching to parameterized query"
+        "Includes Resolution Plan with actionable steps such as switching to parameterized query",
+        "Does NOT blame bcrypt.checkpw or the password field — password goes to bcrypt, not into SQL"
       ],
       "assertions": [
         "contains: root cause",
@@ -91,13 +92,15 @@
       "prompt": "Investigate this bug report and identify the root cause.\n\n{fixture:5-dirty-app-subtle-ssrf}",
       "rubrics": [
         "root_cause_analysis",
-        "fabrication_avoidance"
+        "fabrication_avoidance",
+        "anti_evasion"
       ],
       "expected_behaviors": [
         "Identifies SSRF as the root cause: URL validation only checks startswith('https://') without blocking internal IP ranges",
         "Explains the security implication: internal network access through webhook URLs, not just a functional bug",
         "Notes that the 'failing URLs' are all internal/private IP addresses (10.x, 172.16.x, 192.168.x)",
-        "Does NOT just explain the functional failure — identifies the security surface"
+        "Does NOT just explain the functional failure — identifies the security surface",
+        "Does NOT conclude the bug is in permissions.py — the permission check is not responsible for the webhook URL validation failure"
       ],
       "assertions": [
         "contains: ssrf",
@@ -111,20 +114,22 @@
       "rubrics": ["finding_completeness", "root_cause_analysis"],
       "expected_behaviors": [
         "Investigates both Bug A (500 errors) and Bug B (deleted items in results) independently",
-        "Identifies that Bug A's 500 errors are caused by null fields on soft-deleted items",
-        "Identifies that Bug B's root cause is the soft-delete filter not excluding deleted items from queries",
-        "Recognizes that fixing Bug B (proper soft-delete filtering) also resolves Bug A (no more null field access)"
+        "Identifies that Bug A's 500 errors stem from the missing deleted_at IS NULL filter in search_tasks — soft-deleted tasks are returned by the ORM query and their to_dict() raises AttributeError when associated data is absent",
+        "Identifies that Bug B's root cause is the same missing soft-delete filter: search_tasks does not exclude rows where deleted_at IS NOT NULL",
+        "Recognizes that fixing the soft-delete filter (adding Task.deleted_at == None to the ORM query) resolves both Bug A and Bug B",
+        "Identifies the SQL injection in search_tasks_by_saved_term (line 41): f-string interpolates user_id and the search term directly into a raw SQL query with no parameterization"
       ],
       "assertions": [
         "contains: 500",
-        "contains: deleted items",
-        "contains: soft-delete"
+        "contains: deleted_at",
+        "contains: soft-delete",
+        "contains: injection"
       ]
     },
     {
       "id": 7,
       "prompt": "Investigate this bug report. The error appears in the tasks module but the root cause may be elsewhere.\n\n{fixture:7-misdirected-symptom}",
-      "rubrics": ["root_cause_analysis", "finding_completeness"],
+      "rubrics": ["root_cause_analysis", "finding_completeness", "anti_evasion"],
       "expected_behaviors": [
         "Traces the error from tasks/handlers.py (symptom) to auth/middleware.py (root cause) — middleware renamed g.current_user to g.auth_context in revision abc789",
         "Does NOT conclude the bug is in tasks/handlers.py — the handler code is correct, the data it depends on was renamed upstream",

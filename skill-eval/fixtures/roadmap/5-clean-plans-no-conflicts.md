@@ -125,14 +125,3 @@ cli/
 
 **Cross-plan dependencies:** None. The CLI is a separate package in `cli/` that makes HTTP calls to the existing API. It does not share source files with Plans A or B.
 
----
-
-## Summary of False-Conflict Signals (All Are Non-Issues)
-
-| Signal | Plan A | Plan B | Actual relationship |
-|--------|--------|--------|---------------------|
-| Redis usage | email queue (list) | time-series (sorted set) | Different keyspaces, different data structures, different purposes — no contention |
-| Similar naming | `notifications.py` | `metrics.py` | Different directories: `src/api/notifications.py` vs `src/api/metrics.py` — no overlap |
-| Both use Jinja2 | `templates.py` | — | Only Plan A uses Jinja2; Plan C uses Click |
-| "client.py" appears twice | `email/client.py` | — | `cli/taskcli/client.py` — different packages, different directories |
-| All use pytest | All | All | Test frameworks don't create dependencies |

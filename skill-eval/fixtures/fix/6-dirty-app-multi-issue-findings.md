@@ -1,6 +1,6 @@
 ---
 planted_issues:
-  - toctou: "Finding 1: TOCTOU race in permissions.py"
+  - toctou: "Finding 1: TOCTOU race in perform_privileged_action() — separate check and act queries"
   - n_plus_1: "Finding 2: N+1 query in handlers.py"
   - pii_in_logs: "Finding 3: PII in logs in logging.py"
   - meaningless_test: "Finding 4: assert True in test_handlers.py"
@@ -12,8 +12,8 @@ false_positive:
 ## Review Findings
 
 ### Finding 1: Race condition in permission check (Critical)
-**File:** src/auth/permissions.py, lines 22-35
-**Issue:** check_permission() and perform_privileged_action() use separate database queries. A user's role can be revoked between the check and the action.
+**File:** src/auth/permissions.py, lines 38-46
+**Issue:** perform_privileged_action() calls check_permission() (one DB query) and then issues a second DB query to load the acting user. A user's role can be revoked between these two queries, allowing a privilege-escalation window.
 
 ### Finding 2: N+1 query in task listing (High)
 **File:** src/tasks/handlers.py, lines 26-30
@@ -42,6 +42,15 @@ false_positive:
 
 #### src/tasks/handlers.py
 {codebase:dirty-flask-app/src/tasks/handlers.py}
+
+#### src/middleware/logging.py
+{codebase:dirty-flask-app/src/middleware/logging.py}
+
+#### tests/test_handlers.py
+{codebase:dirty-flask-app/tests/test_handlers.py}
+
+#### src/utils/cache.py
+{codebase:dirty-flask-app/src/utils/cache.py}
 
 #### src/utils/validators.py
 {codebase:dirty-flask-app/src/utils/validators.py}

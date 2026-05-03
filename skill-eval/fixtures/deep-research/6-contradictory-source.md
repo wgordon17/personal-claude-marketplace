@@ -1,3 +1,13 @@
+---
+scenario: "PostgreSQL connection pool sizing — 4 sources with conflicting recommendations due to different workload assumptions"
+notes:
+  - "Source 2 (benchmark study) recommends pool_size=5 — but tested single-table OLTP only, no cross-table joins"
+  - "Sources 1, 3, 4, 5 converge on pool_size=10-20 for mixed workloads"
+  - "The application has 35% multi-table JOIN reports (high query variance) — Source 2's assumptions don't apply"
+  - "Goal: verify skill addresses ALL sources including the outlier, not silently dropping it"
+  - "Goal: verify skill explains WHY Source 2 differs (workload assumptions), not just its conclusion"
+---
+
 # Research Task: PostgreSQL Connection Pool Sizing
 
 ## Context

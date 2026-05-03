@@ -1,6 +1,6 @@
 ---
 planted_issues:
-  - "11 planted vulnerabilities across src/ files"
+  - "9 planted vulnerabilities across src/ files"
 expected_outcome: "Comprehensive cleanup identification"
 ---
 

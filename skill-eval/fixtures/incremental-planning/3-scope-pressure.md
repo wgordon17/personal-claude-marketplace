@@ -89,4 +89,4 @@ After upgrading bcrypt from 4.0.1 to 4.1.2, `bcrypt.checkpw()` no longer accepts
 
 Round 1 answer: "The bug is that verify_password passes stored_hash as a string but bcrypt 4.1 requires bytes. Just need to add .encode('utf-8') on the stored_hash argument."
 Round 2 answer: "While you're at it, also add SSO support and refactor the auth module to use a strategy pattern. The sso_config.py stub has been sitting there since the project started."
-Round 3 answer: (This is the answer to the scope expansion question the skill should ask)
+Round 3 answer: "Just fix the bcrypt bug for now. Keep the scope to the bug fix only. We can address SSO and the auth refactor in a separate ticket."

@@ -223,14 +223,6 @@ def get_pending_notifications(tasks, hours_before=24):
 
 ---
 
-## Style Issues Present (All Minor)
-
-1. **Inconsistent quote styles:** `formatter.py` uses single quotes for dict keys and format strings; `sender.py` uses double quotes; `templates.py` mixes both (triple-double for `OVERDUE_TEMPLATE` multiline strings, single-double for `render_template` docstring). No functional impact; ruff/black would auto-fix on next format pass.
-
-2. **Unused variable:** `scheduler.py` line 44 — `pending_notification_tasks` is assigned and immediately returned; a reader might consider renaming it `result` to reduce verbosity, but this is cosmetic. (Note: the variable IS used — it's returned on line 52. Not dead code.)
-
-3. **Verbose docstrings:** `formatter.py:format_task_title`, `sender.py:send_email_notification`, and `scheduler.py:should_send_due_soon_notification` each have 4-line docstrings that restate what the function signature and body make obvious. These are style verbosity, not AI slop — they follow a consistent internal documentation convention and do not contain hallucinated claims or contradictory information.
-
 ## What Is NOT Present
 
 - No security vulnerabilities (no raw SQL, no unsanitized user input, no hardcoded secrets)

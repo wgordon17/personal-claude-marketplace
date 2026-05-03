@@ -32,7 +32,8 @@
       "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:2-one-clearly-better}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Correctness weight 0.5, Performance weight 0.3, Readability weight 0.2), a winner, rationale, and hybrid_recommended flag. One approach may clearly dominate — do not manufacture advantages for the weaker approach to appear balanced.",
       "rubrics": [
         "fabrication_avoidance",
-        "instruction_adherence"
+        "instruction_adherence",
+        "judgment_fidelity"
       ],
       "expected_behaviors": [
         "Clearly identifies competitor-1 (joinedload) as winner across all criteria",
@@ -40,7 +41,7 @@
         "Does NOT recommend hybrid when one approach dominates across all criteria"
       ],
       "assertions": [
-        "not-contains: hybrid",
+        "not-contains: recommend hybrid",
         "contains: winner"
       ]
     },
@@ -65,7 +66,7 @@
     },
     {
       "id": 4,
-      "prompt": "Evaluate these competing approaches using the user-defined criteria and weights.\n\n{fixture:4-dirty-app-fix-approaches}",
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:4-dirty-app-fix-approaches}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 user-defined criteria (Correctness weight 0.5, Performance impact weight 0.3, Code complexity weight 0.2), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
       "rubrics": [
         "judgment_fidelity",
         "fabrication_avoidance"

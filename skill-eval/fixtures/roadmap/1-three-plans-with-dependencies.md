@@ -48,7 +48,7 @@ Test model creation, unique constraint validation, role enum values, and timesta
 
 **Goal:** Implement JWT authentication middleware that validates tokens and loads the current user.
 **Cynefin Domain:** Complicated
-**Architecture Summary:** Middleware layer that imports the User model from Plan A to look up authenticated users by ID from the JWT payload.
+**Architecture Summary:** Middleware layer that validates JWT tokens and loads the current user from the database by ID extracted from the JWT payload.
 
 ## File Structure
 
@@ -86,7 +86,7 @@ Test valid token flow, expired token rejection, missing token handling, and role
 
 **Goal:** Build an admin dashboard that uses auth middleware to enforce admin-only access.
 **Cynefin Domain:** Complicated
-**Architecture Summary:** Admin routes protected by the auth middleware from Plan B. Reads `g.current_user.role` set by the middleware to enforce admin-only access. Queries the User model from Plan A to list and manage users.
+**Architecture Summary:** Admin routes that enforce role-based access control via request context. Reads `g.current_user.role` from the request context and queries the User model to list and manage users.
 
 ## File Structure
 

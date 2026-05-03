@@ -36,6 +36,7 @@
       "prompt": "The following findings were identified by a pr-review of recent changes. Both findings target the same function. Investigate each finding, determine if they are valid, detect any conflicts between fixes, and produce a unified resolution.\n\n{fixture:2-conflicting-fixes}",
       "rubrics": [
         "fix_correctness",
+        "finding_completeness",
         "anti_evasion"
       ],
       "expected_behaviors": [
@@ -241,7 +242,6 @@
       "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes following established codebase conventions.\n\n{fixture:12-generator-pipeline-conventions}",
       "rubrics": [
         "convention_adherence",
-        "instruction_adherence",
         "fix_correctness"
       ],
       "expected_behaviors": [

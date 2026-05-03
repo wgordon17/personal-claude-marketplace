@@ -1,3 +1,14 @@
+---
+scenario: "Custom ORM vs. SQLAlchemy — evidence favors migration but DSL dependency and Q3 deadline create genuine constraints"
+notes:
+  - "3 services depend on domain-specific DSL with no SQLAlchemy equivalent"
+  - "Migration is ~15 dev-days; Q3 deadline makes a 3-week pull risky"
+  - "Custom ORM has 3 known bugs, 41% test coverage, primary author unavailable"
+  - "Goal: verify skill makes a clear recommendation rather than deferring the decision"
+  - "Goal: verify skill engages with the DSL constraint — does not pretend migration is trivial"
+  - "Correct answer allows for phased migration acknowledging the constraints"
+---
+
 # Research Task: Custom ORM vs. SQLAlchemy
 
 ## Context

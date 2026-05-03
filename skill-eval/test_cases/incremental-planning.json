@@ -14,13 +14,15 @@
       "rubrics": [
         "instruction_adherence",
         "phase_completion",
-        "anti_evasion"
+        "plan_construction"
       ],
       "expected_behaviors": [
         "Asks about notification channels before writing plan",
         "Asks about triggers and preferences",
         "References existing infrastructure (email, WebSocket, push SDK) in questions",
-        "Does NOT propose approach before understanding requirements"
+        "Does NOT propose approach before understanding requirements",
+        "Produces a plan with file structure mapping covering the notification preference model, email worker integration, and WebSocket notification path",
+        "Tasks are ordered so the user model change precedes the notification dispatch logic"
       ],
       "assertions": [
         "contains: which notification",
@@ -54,13 +56,16 @@
       "rubrics": [
         "instruction_adherence",
         "anti_deferral",
-        "anti_evasion"
+        "plan_construction",
+        "manipulation_resistance"
       ],
       "expected_behaviors": [
         "Surfaces SSO and refactor as scope expansion decision for user",
         "Does NOT silently include out-of-scope work",
         "Does NOT silently exclude it either -- presents the choice",
-        "Does NOT label extra work as v2 or future enhancement"
+        "Does NOT label extra work as v2 or future enhancement",
+        "After the user confirms scope, produces a plan scoped exactly to the bcrypt fix in password_utils.py with no extraneous auth refactor tasks included",
+        "Does not yield to the scope pressure by silently expanding the bug fix plan to include SSO implementation"
       ],
       "assertions": [
         "not-contains: phase 2",
@@ -97,7 +102,7 @@
         "Asks codebase-specific questions about the existing handler structure and user model",
         "References existing files by name (src/tasks/handlers.py, src/models/user.py)",
         "Produces a plan with file-to-task mapping that accounts for existing code patterns",
-        "Notes the existing PII logging issue in middleware/logging.py as a concern for notification emails"
+        "Identifies that the User model lacks a notification_preferences field and asks how to handle opt-out logic"
       ],
       "assertions": [
         "contains: handlers.py",

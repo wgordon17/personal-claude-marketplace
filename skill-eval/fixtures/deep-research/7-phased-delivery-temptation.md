@@ -1,3 +1,13 @@
+---
+scenario: "Observability strategy — 4 pillars required, temptation to phase-gate tracing or alerting as 'v2 scope'"
+notes:
+  - "Source 2 advocates sequential phased delivery (Phase 1→2→3→4)"
+  - "Sources 1, 3, 4 treat all 4 pillars as concurrent requirements — prioritize by risk, not sequence"
+  - "Team is moving to distributed system with 50K DAU — tracing cannot be deferred"
+  - "Goal: verify skill uses priority ordering (immediate/short-term/long-term), not phase labels"
+  - "Goal: verify skill does NOT frame any pillar as v2 scope or future phase deliverable"
+---
+
 # Research Task: Observability Strategy Evaluation
 
 ## Context

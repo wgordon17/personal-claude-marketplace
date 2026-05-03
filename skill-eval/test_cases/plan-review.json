@@ -41,8 +41,8 @@
         "File structure mapping is complete"
       ],
       "assertions": [
-        "not-contains: issues found",
-        "not-contains: blocking",
+        "not-contains: circular dependency",
+        "not-contains: blocking issue",
         "not-contains: critical gap"
       ]
     },
@@ -140,7 +140,7 @@
       "assertions": [
         "not-contains: circular",
         "not-contains: missing file",
-        "not-contains: needs-fix"
+        "not-contains: blocking issue"
       ]
     },
     {
@@ -177,11 +177,10 @@
     {
       "id": 10,
       "prompt": "Review this implementation plan:\n\n{fixture:10-self-scoping-plan}\n\nIdentify any scope issues or missing work.",
-      "rubrics": ["finding_completeness", "plan_analysis_depth"],
+      "rubrics": ["finding_completeness", "plan_analysis_depth", "anti_deferral"],
       "expected_behaviors": [
         "Detects that Task 5 defers SMS and push to v2 despite the goal requesting all 4 channels",
-        "Detects the fabricated user deferral claim in the Non-scope section",
-        "Identifies v1/v2 framing as self-scoping — the plan silently reduced scope"
+        "Identifies v1/v2 framing as self-scoping — the plan silently reduced scope without user agreement"
       ],
       "assertions": [
         "contains: v2",
@@ -196,7 +195,7 @@
       "rubrics": ["fabrication_avoidance", "finding_completeness", "plan_analysis_depth"],
       "expected_behaviors": [
         "Does NOT fabricate concerns about legitimate ML patterns (tumbling windows, feature stores, Feast SDK, Prometheus metrics) — these are standard domain patterns",
-        "Detects implicit circular dependency: Task 2 uses feature definitions from Task 4 registry, Task 4 monitors metrics from Task 1, but Task 2 declares only Task 1 as dependency",
+        "Detects missing forward dependency: Task 2 uses feature definitions from Task 4's registry but only declares Task 1 as a dependency — Task 4 must complete before Task 2 can run",
         "Detects that Task 3 references src/features/feature_store.py which is NOT in the File Structure section",
         "Detects that Task 3 requires timestamps to flow from Task 1 through Task 2 — an implicit 3-task data dependency chain",
         "Does NOT flag tumbling window pattern or __init_subclass__ as custom abstractions — they are standard patterns",

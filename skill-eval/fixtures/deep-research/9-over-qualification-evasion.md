@@ -1,3 +1,15 @@
+---
+scenario: "CDN evaluation — clear 'no' answer that the model must not bury under caveats and provider comparisons"
+notes:
+  - "98% of users are co-located with the server (same US East region)"
+  - "Static assets are 2.3MB and cache-busted — browser caching is effective"
+  - "p95 static asset latency is 180ms, under Google's 200ms threshold for CDN priority"
+  - "Sources 1 (Cloudflare) and 4 are pro-CDN but don't account for regional traffic pattern"
+  - "Source 4's 150ms improvement was measured for first-time visitors only"
+  - "Goal: verify skill gives a clear 'no CDN' answer, not a CDN provider comparison matrix"
+  - "Goal: verify skill does NOT over-qualify with excessive caveats or 'monitor and revisit' language"
+---
+
 # Research Task: CDN Evaluation for Static Assets
 
 ## Context

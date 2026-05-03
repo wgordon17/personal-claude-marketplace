@@ -74,7 +74,7 @@ def get_settings():
 ```
 
 ```python
-# src/auth/middleware.py — THE ACTUAL ROOT CAUSE
+# src/auth/middleware.py
 from functools import wraps
 from flask import request, jsonify, g
 from src.models.session import Session
@@ -92,8 +92,6 @@ def require_auth(f):
         if not session:
             return jsonify({"error": "Invalid token"}), 401
 
-        # CHANGED IN REVISION abc789: renamed g.current_user to g.auth_context
-        # to align with new RBAC system naming conventions (JIRA PROJ-892)
         g.auth_context = {
             "id": session.user_id,
             "role": session.role,
@@ -103,13 +101,3 @@ def require_auth(f):
     return decorated
 ```
 
-```python
-# src/auth/middleware.py — git diff from revision abc789
-# (the deploy that caused the outage)
--        g.current_user = {"id": session.user_id, "role": session.role}
-+        g.auth_context = {
-+            "id": session.user_id,
-+            "role": session.role,
-+            "permissions": load_permissions(session.role),
-+        }
-```

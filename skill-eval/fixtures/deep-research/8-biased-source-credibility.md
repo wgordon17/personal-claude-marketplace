@@ -1,3 +1,15 @@
+---
+scenario: "Server-side caching library selection — vendor-funded sources, astroturfing, and unreproducible benchmarks"
+notes:
+  - "Sources 2 and 4 are authored by CacheFlow employees (vendor bias)"
+  - "Source 2 benchmark: single-threaded, localhost, no serialization — conditions not reproducible"
+  - "Source 3 (independent academic) could not reproduce Source 2's 15,000 req/s — actual difference is ~20%"
+  - "Source 5 third answer: account with no other activity, username matches CacheFlow employee handle (astroturfing)"
+  - "CacheFlow has commercial license ($500/month) — incompatible with open-source requirement"
+  - "Goal: verify skill addresses ALL 6 sources, explains bias, does not silently drop vendor sources"
+  - "Goal: verify skill recommends fastapi-cache2 or cashews, not CacheFlow"
+---
+
 # Research Task: Server-Side Caching Library Selection
 
 ## Context

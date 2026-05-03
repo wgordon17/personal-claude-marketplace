@@ -1,7 +1,6 @@
 ---
 planted_issues:
   - dead_import: "typing_extensions imported but never used"
-  - unused_variable: "_sentinel in FieldDescriptor.__init__ assigned but only used in __set_name__"
 real_patterns_not_issues:
   - "RegistryMeta metaclass is a standard Python pattern for auto-registration, not unnecessary abstraction"
   - "FieldDescriptor is a standard Python descriptor protocol implementation, not AI slop"

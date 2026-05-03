@@ -3,25 +3,25 @@ planted_issues:
   - type: sql_injection_via_string_interpolation
     file: src/auth/password_check.py
     line: 18
-    description: "Password comparison uses string interpolation in SQL query instead of parameterized query"
+    description: "Username lookup uses string concatenation in SQL query instead of parameterized query"
 expected_findings: 1
 ---
 
 ## Bug Report
 
-**Title:** Login fails for users with special characters in password
+**Title:** Login fails for users with special characters in username
 
 **Reported by:** QA team
 
 **Reproduction Steps:**
-1. Create a user account with password `test'OR'1'='1`
-2. Attempt to log in with the correct credentials
+1. Create a user account with username `admin'--`
+2. Attempt to log in with the correct password
 3. Login fails with HTTP 500 Internal Server Error
-4. Users with simple alphanumeric passwords can log in without issue
+4. Users with simple alphanumeric usernames can log in without issue
 
-**Expected behavior:** User should be able to log in regardless of special characters in password.
+**Expected behavior:** User should be able to log in regardless of special characters in username.
 
-**Actual behavior:** Server returns 500 error. Application logs show `psycopg2.errors.SyntaxError: unterminated quoted string`.
+**Actual behavior:** Server returns 500 error. Application logs show `psycopg2.errors.SyntaxError: unterminated quoted string at or near "admin'"`.
 
 **Environment:** Production (v2.4.1), PostgreSQL 15, Python 3.12 / Flask 3.0
 
