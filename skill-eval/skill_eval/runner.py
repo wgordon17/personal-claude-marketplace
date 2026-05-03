@@ -1140,11 +1140,10 @@ def execute_chain(
     repo_root: Path,
     context_preamble: str | None,
     initial_captures: dict[str, str] | None = None,
-    timeout_seconds: int = 120,
 ) -> list[ChainStepResult]:
     """Execute a chain of skill steps sequentially, threading outputs between steps.
 
-    Each step invokes ``claude`` CLI with the skill bundle as system prompt.
+    Each step invokes ``claude`` CLI with the skill bundle as --append-system-prompt.
     Step prompts may reference outputs of prior steps via ``{capture_name}``
     and can reference initial captures via their key names.
 
@@ -1152,22 +1151,22 @@ def execute_chain(
     ``<prior-step-output skill="name">...</prior-step-output>``.
 
     Args:
-        steps: List of step dicts. Each dict must have "skill" (skill name relative
-            to a plugin dir) and "prompt" (template string). Optional: "capture_as"
-            (name to store output under), "skill_dir" (override for skill resolution),
-            "rubrics" (list of rubric names for this step's output).
+        steps: List of step dicts. Each dict must have "skill" (skill name under
+            code-quality/skills/), "prompt_template" (template string), and
+            "timeout_seconds" (int, required). Optional: "capture_as" (name to
+            store output under), "bare" (bool, passes --bare to claude CLI).
         repo_root: Repository root for skill bundle resolution.
-        context_preamble: CLAUDE.md content to prepend to each step's prompt.
+        context_preamble: CLAUDE.md content to prepend to each step's task prompt.
         initial_captures: Pre-populated captures (e.g. fixture content). NOT
             XML-wrapped — trusted input from the eval harness.
-        timeout_seconds: Per-step subprocess timeout in seconds.
 
     Returns:
         List of ChainStepResult, one per step.
 
     Raises:
         RuntimeError: If a step's skill bundle cannot be resolved.
-        subprocess.TimeoutExpired: If a step exceeds timeout_seconds.
+        KeyError: If a step is missing required "timeout_seconds" key.
+        subprocess.TimeoutExpired: If a step exceeds its timeout_seconds.
     """
     captures: dict[str, str] = dict(initial_captures or {})
     results: list[ChainStepResult] = []
@@ -1177,61 +1176,53 @@ def execute_chain(
         if not _SKILL_NAME_RE.match(skill_name):
             raise ValueError(f"Invalid skill name in chain step: {skill_name!r}")
 
-        prompt_template: str = step["prompt"]
+        prompt_template: str = step["prompt_template"]
         capture_as: str | None = step.get("capture_as")
+        timeout_seconds: int = step["timeout_seconds"]
 
-        # Resolve {variable} references using regex — NOT str.format_map to
-        # avoid KeyError on unrelated braces in the template.
-        def _replace(m: re.Match) -> str:  # noqa: ANN001
-            key = m.group(1)
-            return captures.get(key, m.group(0))
+        # Resolve {variable} references using known capture keys only.
+        if captures:
+            capture_keys = "|".join(re.escape(k) for k in captures)
+            resolved_prompt = re.sub(
+                r"\{(" + capture_keys + r")\}",
+                lambda m: captures[m.group(1)],
+                prompt_template,
+            )
+        else:
+            resolved_prompt = prompt_template
 
-        resolved_prompt = re.sub(r"\{([^}]+)\}", _replace, prompt_template)
-
-        # Resolve skill bundle from the repo.
-        # Skills live under {plugin}/skills/{skill_name}/ — search all plugins.
-        skill_dir: Path | None = None
+        # Resolve skill bundle from code-quality/skills/.
         if "skill_dir" in step:
             skill_dir = Path(step["skill_dir"])
         else:
-            for plugin_dir in repo_root.iterdir():
-                candidate = plugin_dir / "skills" / skill_name
-                if (candidate / "SKILL.md").is_file():
-                    skill_dir = candidate
-                    break
-
-        if skill_dir is None:
+            skill_dir = repo_root / "code-quality" / "skills" / skill_name
+        if not (skill_dir / "SKILL.md").is_file():
             raise RuntimeError(f"Could not find skill directory for {skill_name!r}")
 
         bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
         if bundle is None:
             raise RuntimeError(f"Could not resolve skill bundle for {skill_name!r}")
 
-        # Build the full prompt (context + skill instructions + task).
-        parts = ["You are an AI assistant following the instructions below.\n"]
+        # Build the task prompt, prepending context preamble if present.
         if context_preamble:
-            parts.append(
+            task_input = (
                 "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===\n"
                 f"{context_preamble}\n"
                 "=== END BEHAVIORAL CONTEXT ===\n\n"
+                f"{resolved_prompt}"
             )
-        parts.append(
-            "Follow the skill instructions exactly as written.\n\n"
-            "=== SKILL INSTRUCTIONS ===\n"
-            f"{bundle}\n"
-            "=== END SKILL INSTRUCTIONS ===\n\n"
-            f"Task:\n{resolved_prompt}"
-        )
-        full_prompt = "".join(parts)
+        else:
+            task_input = resolved_prompt
 
-        # Invoke claude CLI.
+        # Invoke claude CLI. Bundle goes via --append-system-prompt; task via stdin.
         cmd = [
             "claude",
             "--print",
             "--output-format",
             "text",
+            *(["--bare"] if step.get("bare", False) else []),
             "--append-system-prompt",
-            "",
+            bundle,
             "--permission-mode",
             "bypassPermissions",
         ]
@@ -1240,7 +1231,7 @@ def execute_chain(
         try:
             proc = subprocess.run(
                 cmd,
-                input=full_prompt,
+                input=task_input,
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
@@ -1283,65 +1274,31 @@ def execute_chain(
     return results
 
 
-def run_composition_eval(
-    composition: dict,
+def _run_single_config(
+    composition_name: str,
+    config: dict,
+    fixture_content: str,
+    scaffold_spec: dict,
+    rubric_names: list[str],
+    expected_behaviors: list[str],
+    assertions: list[str],
     repo_root: Path,
     judge: DeepEvalBaseLLM,
-    n_trials: int = 1,
+    n_trials: int,
 ) -> CompositionResult:
-    """Run one composition: execute the step chain and score the final output.
-
-    For each trial:
-    1. Create an isolated git worktree with scaffold files.
-    2. Execute the step chain.
-    3. Score the final step output with rubric metrics.
-
-    Args:
-        composition: A composition dict from the config's "compositions" list.
-            Required keys: "name", "fixture_key", "steps", "rubrics".
-            Optional: "expected_behaviors" (list[str]).
-        repo_root: Repository root.
-        judge: DeepEvalBaseLLM for scoring.
-        n_trials: Number of trial runs (scores are averaged).
-
-    Returns:
-        CompositionResult with averaged scores and step results from the last trial.
-    """
+    """Run one config's chain for all trials and return averaged CompositionResult."""
     from deepeval.test_case import LLMTestCase
 
-    name: str = composition["name"]
-    fixture_key: str = composition["fixture_key"]
-    rubric_names: list[str] = composition["rubrics"]
-    steps: list[dict] = composition["steps"]
-    expected_behaviors: list[str] = composition.get("expected_behaviors", [])
-
-    fixture_content = load_composition_fixture(fixture_key, repo_root)
-
-    # Parse YAML frontmatter for scaffold spec.
-    scaffold_spec: dict = {}
-    lines = fixture_content.split("\n")
-    if lines and _FRONTMATTER_RE.match(lines[0]):
-        for i in range(1, len(lines)):
-            if _FRONTMATTER_RE.match(lines[i]):
-                frontmatter_text = "\n".join(lines[1:i])
-                scaffold_spec = yaml.safe_load(frontmatter_text) or {}
-                scaffold_spec = scaffold_spec.get("scaffold", {})
-                break
-
+    config_name: str = config["name"]
+    steps: list[dict] = config["steps"]
     context_preamble = _build_context_preamble(repo_root)
-
-    # Prune stale worktrees before creating new ones.
-    subprocess.run(
-        ["git", "worktree", "prune"],
-        cwd=repo_root,
-        capture_output=True,
-    )
 
     trial_scores: list[dict[str, float]] = []
     last_step_results: list[ChainStepResult] = []
 
     for trial_idx in range(n_trials):
-        trial_root = repo_root / ".skill-eval-worktrees" / f"{name}-trial-{trial_idx}"
+        worktree_name = f"{composition_name}-{config_name}-trial-{trial_idx}"
+        trial_root = repo_root / ".skill-eval-worktrees" / worktree_name
         trial_root.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -1358,15 +1315,21 @@ def run_composition_eval(
             try:
                 step_results = execute_chain(
                     steps,
-                    repo_root,
+                    trial_root,
                     context_preamble,
                     initial_captures={"fixture": fixture_content},
                 )
                 last_step_results = step_results
             except Exception as exc:
-                logger.warning("Chain execution failed for %r trial %d: %s", name, trial_idx, exc)
+                logger.warning(
+                    "Chain execution failed for %r config %r trial %d: %s",
+                    composition_name,
+                    config_name,
+                    trial_idx,
+                    exc,
+                )
                 return CompositionResult(
-                    config_name=name,
+                    config_name=config_name,
                     step_results=[],
                     final_scores={},
                     trial_scores=None,
@@ -1374,7 +1337,7 @@ def run_composition_eval(
                 )
 
             final_output = step_results[-1].skill_output if step_results else ""
-            final_prompt = steps[-1].get("prompt", "") if steps else ""
+            final_prompt = steps[-1].get("prompt_template", "") if steps else ""
 
             sanitized_expected = []
             for e in expected_behaviors:
@@ -1391,6 +1354,9 @@ def run_composition_eval(
             )
 
             metrics = build_metrics(rubric_names, judge) if rubric_names else []
+            if assertions:
+                metrics.append(build_assertion_metrics(assertions))
+
             tc_scores: dict[str, float] = {}
             for metric in metrics:
                 try:
@@ -1408,7 +1374,6 @@ def run_composition_eval(
                 capture_output=True,
             )
 
-    # Average scores across trials.
     all_metric_names: set[str] = set()
     for ts in trial_scores:
         all_metric_names.update(ts.keys())
@@ -1419,77 +1384,171 @@ def run_composition_eval(
         final_scores[metric_name] = sum(vals) / len(vals) if vals else 0.0
 
     return CompositionResult(
-        config_name=name,
+        config_name=config_name,
         step_results=last_step_results,
         final_scores=final_scores,
         trial_scores=trial_scores,
     )
 
 
-def compare_composition_results(
-    current: CompositionResult,
-    baseline: CompositionResult,
-    tolerance: float = 0.15,
-) -> tuple[bool, str]:
-    """Compare a composition result against a baseline.
+def run_composition_eval(
+    composition: dict,
+    repo_root: Path,
+    judge: DeepEvalBaseLLM,
+    n_trials: int = 1,
+) -> dict[str, CompositionResult]:
+    """Run all configs of a composition and return results keyed by config name.
+
+    For each config in composition["configs"]:
+      For each trial 0..n_trials:
+        1. Create an isolated git worktree with scaffold files.
+        2. Execute the config's step chain in the worktree.
+        3. Score the final step output with rubric metrics.
+      Average scores across trials, build CompositionResult.
 
     Args:
-        current: The current eval's CompositionResult.
-        baseline: The baseline CompositionResult to compare against.
+        composition: A composition dict from the config's "compositions" list.
+            Required keys: "name", "fixture", "rubrics", "configs".
+            Optional: "expected_behaviors" (list[str]), "assertions" (list[str]).
+        repo_root: Repository root.
+        judge: DeepEvalBaseLLM for scoring.
+        n_trials: Number of trial runs per config (scores are averaged).
+
+    Returns:
+        dict mapping config name -> CompositionResult.
+    """
+    name: str = composition["name"]
+    fixture_key: str = composition["fixture"]
+    rubric_names: list[str] = composition["rubrics"]
+    configs: list[dict] = composition["configs"]
+    expected_behaviors: list[str] = composition.get("expected_behaviors", [])
+    assertions: list[str] = composition.get("assertions", [])
+
+    fixture_content = load_composition_fixture(fixture_key, repo_root)
+
+    # Parse YAML frontmatter for scaffold spec.
+    scaffold_spec: dict = {}
+    lines = fixture_content.split("\n")
+    if lines and _FRONTMATTER_RE.match(lines[0]):
+        for i in range(1, len(lines)):
+            if _FRONTMATTER_RE.match(lines[i]):
+                frontmatter_text = "\n".join(lines[1:i])
+                scaffold_spec = yaml.safe_load(frontmatter_text) or {}
+                scaffold_spec = scaffold_spec.get("scaffold", {})
+                break
+
+    # Prune stale worktrees before creating new ones.
+    subprocess.run(
+        ["git", "worktree", "prune"],
+        cwd=repo_root,
+        capture_output=True,
+    )
+
+    results: dict[str, CompositionResult] = {}
+    for config in configs:
+        config_name = config["name"]
+        results[config_name] = _run_single_config(
+            composition_name=name,
+            config=config,
+            fixture_content=fixture_content,
+            scaffold_spec=scaffold_spec,
+            rubric_names=rubric_names,
+            expected_behaviors=expected_behaviors,
+            assertions=assertions,
+            repo_root=repo_root,
+            judge=judge,
+            n_trials=n_trials,
+        )
+
+    return results
+
+
+def compare_composition_results(
+    results: dict[str, CompositionResult],
+    baseline_config: str,
+    tolerance: float = 0.15,
+) -> dict:
+    """Compare each non-baseline config against the baseline config.
+
+    Args:
+        results: Dict mapping config name -> CompositionResult (from run_composition_eval).
+        baseline_config: Config name to use as the comparison baseline.
         tolerance: Maximum allowed score drop before flagging degradation.
 
     Returns:
-        Tuple of (degradation_detected: bool, report: str).
-        degradation_detected is True when any metric drops more than tolerance.
+        Dict with keys:
+          "degradation_detected" (bool): True if any config shows degradation.
+          "reports" (dict[str, str]): Per-config comparison report strings.
     """
-    name = current.config_name
+    baseline = results.get(baseline_config)
+    if baseline is None:
+        return {
+            "degradation_detected": True,
+            "reports": {
+                baseline_config: f"Baseline config {baseline_config!r} not found in results"
+            },
+        }
 
-    if current.infra_error:
-        return True, f"{name}: INFRA ERROR — chain execution failed"
+    reports: dict[str, str] = {}
+    any_degradation = False
 
-    if baseline.infra_error:
-        return False, f"{name}: baseline had infra error — treating as pass"
-
-    current_scores = current.final_scores
-    baseline_scores = baseline.final_scores
-
-    if not baseline_scores:
-        return False, f"{name}: no baseline scores — treating as pass"
-
-    regressions: list[str] = []
-    deltas: dict[str, float] = {}
-
-    for metric, base_val in baseline_scores.items():
-        curr_val = current_scores.get(metric)
-        if curr_val is None:
-            regressions.append(f"  {metric}: missing from current (baseline={base_val:.3f})")
+    for config_name, result in results.items():
+        if config_name == baseline_config:
             continue
-        delta = curr_val - base_val
-        deltas[metric] = delta
-        drop = base_val - curr_val
-        if drop > tolerance:
-            regressions.append(
-                f"  {metric}: {curr_val:.3f} vs baseline {base_val:.3f}"
-                f" (drop={drop:.3f} > tolerance={tolerance:.3f})"
+
+        name = config_name
+
+        if result.infra_error:
+            reports[name] = f"{name}: INFRA ERROR — chain execution failed"
+            any_degradation = True
+            continue
+
+        if baseline.infra_error:
+            reports[name] = f"{name}: baseline had infra error — treating as pass"
+            continue
+
+        current_scores = result.final_scores
+        baseline_scores = baseline.final_scores
+
+        if not baseline_scores:
+            reports[name] = f"{name}: no baseline scores — treating as pass"
+            continue
+
+        regressions: list[str] = []
+
+        for metric, base_val in baseline_scores.items():
+            curr_val = current_scores.get(metric)
+            if curr_val is None:
+                regressions.append(f"  {metric}: missing from current (baseline={base_val:.3f})")
+                continue
+            drop = base_val - curr_val
+            if drop > tolerance:
+                regressions.append(
+                    f"  {metric}: {curr_val:.3f} vs baseline {base_val:.3f}"
+                    f" (drop={drop:.3f} > tolerance={tolerance:.3f})"
+                )
+
+        degradation_detected = len(regressions) > 0
+        if degradation_detected:
+            any_degradation = True
+
+        all_metrics = sorted(set(list(current_scores.keys()) + list(baseline_scores.keys())))
+        header = f"{'Metric':<30} {'Current':>8} {'Baseline':>8} {'Delta':>8}"
+        separator = "-" * len(header)
+        table_lines = [f"\n{name} (vs {baseline_config})", header, separator]
+        for metric in all_metrics:
+            curr_val = current_scores.get(metric, 0.0)
+            base_val = baseline_scores.get(metric, 0.0)
+            delta = curr_val - base_val
+            flag = " !" if delta < -tolerance else ""
+            table_lines.append(
+                f"  {metric:<28} {curr_val:>8.3f} {base_val:>8.3f} {delta:>+8.3f}{flag}"
             )
 
-    degradation_detected = len(regressions) > 0
+        status_line = f"\nStatus: {'DEGRADATION DETECTED' if degradation_detected else 'PASS'}"
+        if regressions:
+            status_line += "\n" + "\n".join(regressions)
 
-    # Build ASCII table.
-    all_metrics = sorted(set(list(current_scores.keys()) + list(baseline_scores.keys())))
-    header = f"{'Metric':<30} {'Current':>8} {'Baseline':>8} {'Delta':>8}"
-    separator = "-" * len(header)
-    table_lines = [f"\n{name}", header, separator]
-    for metric in all_metrics:
-        curr_val = current_scores.get(metric, 0.0)
-        base_val = baseline_scores.get(metric, 0.0)
-        delta = curr_val - base_val
-        flag = " !" if delta < -tolerance else ""
-        table_lines.append(f"  {metric:<28} {curr_val:>8.3f} {base_val:>8.3f} {delta:>+8.3f}{flag}")
+        reports[name] = "\n".join(table_lines) + status_line
 
-    status_line = f"\nStatus: {'DEGRADATION DETECTED' if degradation_detected else 'PASS'}"
-    if regressions:
-        status_line += "\n" + "\n".join(regressions)
-
-    report = "\n".join(table_lines) + status_line
-    return degradation_detected, report
+    return {"degradation_detected": any_degradation, "reports": reports}

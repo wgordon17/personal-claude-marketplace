@@ -344,26 +344,42 @@ def _mode_composition(config_path: Path, repo_root: Path) -> bool:
 
     for composition in compositions:
         name = composition.get("name", "?")
-        print(f"  [composition] {name}...")
+        configs = composition.get("configs", [])
+        print(f"  [composition] {name} ({len(configs)} config(s))...")
+
         try:
-            result = run_composition_eval(composition, repo_root, judge)
+            results = run_composition_eval(composition, repo_root, judge)
         except Exception as exc:
             print(f"  [error] {name}: {exc}", file=sys.stderr)
             all_passed = False
             continue
 
-        if result.infra_error:
-            print(f"  [error] {name}: infra error during chain execution", file=sys.stderr)
-            all_passed = False
-            continue
+        for config_name, result in results.items():
+            if result.infra_error:
+                print(
+                    f"  [error] {name}/{config_name}: infra error during chain execution",
+                    file=sys.stderr,
+                )
+                all_passed = False
+                continue
 
-        print(f"\n{'Metric':<30} {'Score':>8}  Status")
-        print("-" * 50)
-        for metric, score in result.final_scores.items():
-            print(f"  {metric:<28} {score:>8.3f}")
+            print(f"\n  [{name}/{config_name}]")
+            print(f"  {'Metric':<30} {'Score':>8}")
+            print("  " + "-" * 40)
+            for metric, score in result.final_scores.items():
+                print(f"    {metric:<28} {score:>8.3f}")
 
-        if not result.final_scores:
-            print(f"  {name}: no rubrics configured — chain executed successfully")
+            if not result.final_scores:
+                print("    no rubrics configured — chain executed successfully")
+
+        # Compare all non-baseline configs against the first config as baseline.
+        if len(results) > 1 and configs:
+            baseline_config = configs[0]["name"]
+            comparison = compare_composition_results(results, baseline_config)
+            if comparison["degradation_detected"]:
+                all_passed = False
+            for report in comparison["reports"].values():
+                print(report)
 
     return all_passed
 

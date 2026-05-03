@@ -1,86 +1,263 @@
 {
   "compositions": [
     {
-      "name": "terse-auth-plan-judgment",
-      "fixture_key": "composition/terse-auth-plan",
-      "rubrics": ["implementer_judgment"],
+      "name": "plan-review-swarm-degradation",
+      "description": "Tests whether repeated plan-review before swarm degrades implementer judgment",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/terse-auth-plan",
       "expected_behaviors": [
         "Chooses a JWT library (e.g. PyJWT) rather than manual token parsing",
         "Uses secrets.token_urlsafe() or equivalent secure random generation",
         "Applies decorator pattern or equivalent abstraction for role checking",
         "Does not mechanically follow a step-by-step checklist"
       ],
-      "steps": [
+      "assertions": ["not-contains: hashlib.sha256"],
+      "configs": [
         {
-          "skill": "incremental-planning",
-          "prompt": "{fixture}",
-          "capture_as": "plan_output"
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
         },
         {
-          "skill": "fix",
-          "prompt": "Implement the following plan:\n\n{plan_output}",
-          "capture_as": "implementation"
-        }
-      ]
-    },
-    {
-      "name": "overspecified-auth-plan-judgment",
-      "fixture_key": "composition/overspecified-auth-plan",
-      "rubrics": ["implementer_judgment"],
-      "expected_behaviors": [
-        "Does not use hashlib.sha256 for token generation — uses secrets or PyJWT",
-        "Does not create separate middleware files per role (avoids over-engineering)",
-        "Does not assert exact token hash strings in tests (avoids brittle assertions)",
-        "Shows independent judgment despite over-specified plan steps"
-      ],
-      "steps": [
-        {
-          "skill": "fix",
-          "prompt": "Implement the following plan:\n\n{fixture}",
-          "capture_as": "implementation"
-        }
-      ]
-    },
-    {
-      "name": "terse-crud-plan-judgment",
-      "fixture_key": "composition/terse-crud-plan",
-      "rubrics": ["implementer_judgment"],
-      "expected_behaviors": [
-        "Uses SQLAlchemy ORM queries, not raw SQL",
-        "Uses cursor-based or keyset pagination rather than OFFSET for scalability",
-        "Uses a schema validation library or structured approach instead of if/elif chains",
-        "Makes purposeful implementation decisions not dictated by the plan"
-      ],
-      "steps": [
-        {
-          "skill": "incremental-planning",
-          "prompt": "{fixture}",
-          "capture_as": "plan_output"
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
         },
         {
-          "skill": "fix",
-          "prompt": "Implement the following plan:\n\n{plan_output}",
-          "capture_as": "implementation"
+          "name": "3-review-cycles",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan (updated after prior feedback):\n{fixture}\n\nPrior review:\n{review_1}",
+              "capture_as": "review_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan (updated after two rounds of feedback):\n{fixture}\n\nPrior reviews:\n{review_1}\n{review_2}",
+              "capture_as": "review_3",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating all review feedback):\n{fixture}\n\nReview feedback:\n{review_3}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
         }
       ]
     },
     {
-      "name": "planted-issues-detection",
-      "fixture_key": "composition/planted-issues-diff",
-      "rubrics": ["finding_completeness", "severity_accuracy"],
-      "expected_behaviors": [
-        "Identifies SQL injection vulnerability (string interpolation in query)",
-        "Identifies missing authorization check on delete endpoint",
-        "Identifies brittle test assertion (exact error message string comparison)",
-        "Rates SQL injection as high severity",
-        "Rates missing auth check as high severity",
-        "Rates brittle assertion as low/medium severity"
-      ],
-      "steps": [
+      "name": "pr-review-fix-gate-degradation",
+      "description": "Tests whether repeated pr-review/fix cycles before gate reduces finding completeness",
+      "rubrics": ["phase_completion"],
+      "fixture": "composition/planted-issues-diff",
+      "configs": [
         {
-          "skill": "quality-gate",
-          "prompt": "Review this implementation diff for issues:\n\n{fixture}",
-          "capture_as": "review_output"
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff for issues:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "2-review-cycles",
+          "steps": [
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff for issues:\n{fixture}",
+              "capture_as": "review_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff again (prior review attached):\n{fixture}\n\nPrior review:\n{review_1}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "3-review-cycles",
+          "steps": [
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff for issues:\n{fixture}",
+              "capture_as": "review_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff again (prior review attached):\n{fixture}\n\nPrior review:\n{review_1}",
+              "capture_as": "review_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff a third time (prior reviews attached):\n{fixture}\n\nPrior reviews:\n{review_1}\n{review_2}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deep-research-planning-degradation",
+      "description": "Tests whether deep-research before incremental-planning degrades plan quality",
+      "rubrics": ["phase_completion"],
+      "fixture": "composition/terse-auth-plan",
+      "configs": [
+        {
+          "name": "baseline-no-research",
+          "steps": [
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "1-research-cycle",
+          "steps": [
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research best practices for:\n{fixture}",
+              "capture_as": "research_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}\n\nResearch findings:\n{research_output}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "3-research-cycles",
+          "steps": [
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research best practices for:\n{fixture}",
+              "capture_as": "research_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research implementation patterns for:\n{fixture}\n\nPrior research:\n{research_1}",
+              "capture_as": "research_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research security considerations for:\n{fixture}\n\nPrior research:\n{research_1}\n{research_2}",
+              "capture_as": "research_3",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}\n\nResearch findings:\n{research_3}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "planning-swarm-comparison",
+      "description": "Compares swarm with vs without incremental-planning upfront",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/terse-auth-plan",
+      "expected_behaviors": [
+        "Chooses a JWT library (e.g. PyJWT) rather than manual token parsing",
+        "Uses secrets.token_urlsafe() or equivalent secure random generation",
+        "Applies decorator pattern or equivalent abstraction for role checking",
+        "Does not mechanically follow a step-by-step checklist"
+      ],
+      "configs": [
+        {
+          "name": "baseline-swarm-only",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "planning-then-swarm",
+          "steps": [
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{plan_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "research-planning-swarm",
+          "steps": [
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research best practices for:\n{fixture}",
+              "capture_as": "research_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}\n\nResearch findings:\n{research_output}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{plan_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
         }
       ]
     }
