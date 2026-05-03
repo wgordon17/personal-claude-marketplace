@@ -28,7 +28,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 _MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS_EXECUTE = 24576  # Skill execution — must be large enough for full output.
+_MAX_TOKENS_EXECUTE = 128000  # Set high to avoid truncation; API caps at model's actual limit.
 _MAX_TOKENS_SCORE = 4096  # Scoring — ReasonScore JSON is small.
 
 # Defaults for multi-trial averaging.
@@ -61,7 +61,7 @@ class VertexSonnetJudge(DeepEvalBaseLLM):
             self.client = anthropic.AnthropicVertex(
                 project_id=project_id,
                 region=region,
-                timeout=600.0,  # 10 min — prevents SDK ValueError on long requests.
+                timeout=600.0,
             )
         except Exception:
             raise RuntimeError(

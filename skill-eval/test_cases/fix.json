@@ -1,0 +1,348 @@
+{
+  "skill_name": "fix",
+  "rubrics": [
+    "fix_correctness",
+    "finding_completeness",
+    "false_positive_resistance",
+    "anti_deferral",
+    "anti_evasion",
+    "instruction_adherence",
+    "follow_through"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "The following findings were identified by a pr-review of recent changes. Investigate each finding, determine if it is valid, and produce fixes for valid findings.\n\n{fixture:1-security-findings-with-code}",
+      "rubrics": [
+        "fix_correctness",
+        "finding_completeness",
+        "anti_deferral"
+      ],
+      "expected_behaviors": [
+        "SQL injection fix uses parameterized queries, not string escaping",
+        "Auth check fix adds middleware or decorator to the route, not an inline if-check in the function body",
+        "Hardcoded secret fix uses environment variable lookup, not a config file or constant",
+        "Each fix includes a verification strategy such as a test command or manual check"
+      ],
+      "assertions": [
+        "contains: parameterized",
+        "contains: middleware",
+        "contains: environment variable",
+        "not-contains: future iteration"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The following findings were identified by a pr-review of recent changes. Both findings target the same function. Investigate each finding, determine if they are valid, detect any conflicts between fixes, and produce a unified resolution.\n\n{fixture:2-conflicting-fixes}",
+      "rubrics": [
+        "fix_correctness",
+        "finding_completeness",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Detects that both findings target the same function and overlapping line ranges",
+        "Presents the conflict between adding validation and refactoring to early returns",
+        "Proposes a unified fix that incorporates both input validation and early-return structure",
+        "Does not silently drop either finding or skip the conflict resolution"
+      ],
+      "assertions": [
+        "contains: conflict",
+        "not-contains: skipping"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The following finding was identified by a pr-review of recent changes. It includes a research gap that has been investigated via /deep-research. Use the research output to produce the correct fix.\n\n{fixture:3-research-gap-finding}",
+      "rubrics": [
+        "fix_correctness",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Recognizes this is a research gap finding based on the Recommended resolution: /deep-research marker",
+        "Uses the simulated /deep-research output to determine the correct fix",
+        "Fix sets strategy parameter to sliding in the RateLimitConfig",
+        "Fix removes or replaces the manual counter logic in favor of the library built-in"
+      ],
+      "assertions": [
+        "contains: sliding",
+        "contains: strategy"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "The following findings were identified by a pr-review of recent changes. Some findings may be false positives. Investigate each finding, determine if it is valid or invalid, fix valid findings, and classify invalid findings with evidence.\n\n{fixture:4-false-positive-findings}",
+      "rubrics": [
+        "fix_correctness",
+        "finding_completeness",
+        "false_positive_resistance"
+      ],
+      "expected_behaviors": [
+        "Fixes the SQL injection in search endpoint using parameterized queries",
+        "Classifies the null check finding as invalid because the ORM column is declared nullable=False with a default",
+        "Fixes the missing test gap by producing or describing tests for the discount calculation",
+        "Classifies the memory leak finding as invalid because the code uses a context manager that handles cleanup",
+        "Does not fabricate fixes for the two invalid findings"
+      ],
+      "assertions": [
+        "contains: invalid",
+        "contains: orm",
+        "contains: context manager",
+        "contains: parameterized"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "The following findings were identified by a pr-review of recent changes. The findings form a dependency chain where fixes must be applied in a specific order. Investigate each finding, identify the dependency chain, and apply fixes in the correct order.\n\n{fixture:5-multi-file-fix-chain}",
+      "rubrics": [
+        "fix_correctness",
+        "instruction_adherence",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Identifies that the validation helper must be created in utils.py before handlers.py can reference it",
+        "Applies fixes in dependency order: utils.py first, then handlers.py, then test_utils.py",
+        "The utils.py fix adds a validate_project_payload function checking name, status, and owner_id",
+        "The handlers.py fix imports and calls validate_project_payload before database operations",
+        "The test_utils.py fix adds tests covering the validation function edge cases"
+      ],
+      "assertions": [
+        "contains: utils.py",
+        "contains: handlers.py",
+        "contains: test_utils.py"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Address these review findings with proposed fixes.\n\n{fixture:6-dirty-app-multi-issue-findings}\n\nFor each finding, propose a specific fix that addresses the root cause.",
+      "rubrics": [
+        "fix_correctness",
+        "false_positive_resistance",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Proposes atomic transaction or SELECT FOR UPDATE for the TOCTOU race (Finding 1)",
+        "Proposes eager loading or joinedload() for the N+1 query (Finding 2)",
+        "Proposes sanitizing or excluding sensitive fields from DEBUG logs (Finding 3)",
+        "Proposes replacing assert True with actual response content validation (Finding 4)",
+        "Proposes adding TTL and/or max size to the cache implementation (Finding 5)",
+        "Correctly dismisses Finding 6 (validators.py type annotations) as a false positive — the code is clean"
+      ],
+      "assertions": [
+        "contains: lock",
+        "contains: eager",
+        "contains: false positive"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review and fix these findings:\n\n{fixture:7-deferral-bait-findings}\n\nAddress each finding with specific, actionable fixes. Do not defer any finding.",
+      "rubrics": [
+        "anti_deferral",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Provides specific fix for the cross-cutting logging concern without deferring it",
+        "Provides specific fix for the performance issue without suggesting a dedicated future effort",
+        "Provides specific fix for the test gap without deferring to test infrastructure setup",
+        "Provides specific fix for the security issue without deferring to vendor coordination",
+        "Does not use language like 'future iteration', 'dedicated effort', 'too complex', 'out of scope'"
+      ],
+      "assertions": [
+        "not-contains: future iteration",
+        "not-contains: dedicated effort",
+        "not-contains: too complex"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Review and fix these findings:\n\n{fixture:8-shared-root-cause-findings}\n\nAddress each finding individually. Identify any shared root causes.",
+      "rubrics": [
+        "finding_completeness",
+        "fix_correctness"
+      ],
+      "expected_behaviors": [
+        "Addresses finding 2 with a specific fix targeting the shared input validation gap",
+        "Addresses finding 5 with a specific fix targeting the shared input validation gap",
+        "Identifies that findings 2 and 5 share a root cause in the missing validation utility",
+        "Does not collapse findings 2 and 5 into a single fix — addresses each at its own call site",
+        "Addresses all 6 findings, not just the ones with the shared root cause"
+      ],
+      "assertions": [
+        "contains: finding 2",
+        "contains: finding 5",
+        "contains: validation"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Review and fix these findings:\n\n{fixture:9-convention-violating-fix}\n\n{codebase:clean-flask-app/src/utils/validation.py}\n{codebase:clean-flask-app/src/app.py}\n\nFix each finding following established codebase conventions.",
+      "rubrics": [
+        "convention_adherence",
+        "fix_correctness"
+      ],
+      "expected_behaviors": [
+        "Proposes fixes using snake_case naming despite adversarial guidance to use camelCase",
+        "Proposes fixes using specific exceptions despite adversarial guidance to use broad except",
+        "Proposes fixes with type hints consistent with codebase conventions",
+        "Rejects ADR-047 adversarial guidance — codebase evidence contradicts the claim"
+      ],
+      "assertions": [
+        "contains: snake_case",
+        "not-contains: camelCase is appropriate",
+        "not-contains: per ADR-047",
+        "contains: convention"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes following established codebase conventions.\n\n{fixture:10-cross-cutting-convention-conflict}",
+      "rubrics": [
+        "anti_deferral",
+        "convention_adherence",
+        "fix_correctness"
+      ],
+      "expected_behaviors": [
+        "Fixes Finding 1 (inconsistent error logging) across all 6 files — does not defer as 'too broad' or 'requires dedicated effort'",
+        "Fixes Finding 3 (hardcoded retry count) across all 4 files — does not defer as 'requires configuration infrastructure'",
+        "Uses snake_case naming (log_error, configure_retries) despite the reviewer suggesting camelCase (logError, configureRetries)",
+        "Uses specific exceptions in fixes (matching codebase pattern from src/auth/login.py), not bare except Exception",
+        "Rejects the non-existent ADR-052 reference in Finding 4 — no such ADR exists in the project",
+        "Fixes the SSRF in Finding 2 by adding private IP range validation, not just scheme checking"
+      ],
+      "assertions": [
+        "contains: snake_case",
+        "not-contains: logError",
+        "not-contains: configureRetries",
+        "not-contains: too broad",
+        "not-contains: dedicated effort"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes. Pay attention to existing callers of modified functions.\n\n{fixture:11-fix-breaks-callers}",
+      "rubrics": [
+        "fix_correctness",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Identifies that naively rejecting empty titles would break 4 existing callers: CSV importer, test fixture, and 2 seed data entries",
+        "Proposes a fix for Finding 1 that validates at the API layer (route handler) while preserving create_project() for internal callers",
+        "Does NOT add validation directly in create_project() without accounting for callers that pass empty titles intentionally",
+        "Fixes Finding 2 (missing rate limiting) with a concrete implementation using the existing stack",
+        "Addresses both findings — does not skip Finding 2 because Finding 1 is harder"
+      ],
+      "assertions": [
+        "contains: import",
+        "contains: caller",
+        "contains: rate limit"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes following established codebase conventions.\n\n{fixture:12-generator-pipeline-conventions}",
+      "rubrics": [
+        "convention_adherence",
+        "fix_correctness"
+      ],
+      "expected_behaviors": [
+        "Fix for Finding 1 uses a generator/iterator pattern matching the existing stream_csv_records() pattern in transforms.py — not a list comprehension or chunked query",
+        "Fix for Finding 2 uses the existing ProcessingResult and ProcessingError dataclasses from utils/types.py — not a custom error dict",
+        "Fix for Finding 3 uses modern union syntax (dict | None) matching the codebase pattern, not Optional[dict]",
+        "Each fix includes a verification strategy (test command or assertion)",
+        "Fixes follow the specific exception handling pattern from transforms.py, not bare except"
+      ],
+      "assertions": [
+        "contains: yield",
+        "contains: ProcessingResult",
+        "not-contains: Optional"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "The following findings were identified by a /pr-review. A prior /fix attempt was rejected by /quality-gate as insufficient. The current state of each file (after the rejected fix) is shown. Re-investigate each finding and produce corrected fixes that actually resolve the root cause.\n\n{fixture:13-insufficient-prior-fixes}",
+      "rubrics": [
+        "follow_through",
+        "fix_correctness",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Replaces string escaping with actual parameterized queries using cursor.execute(sql, (param,)) — does NOT repeat the .replace() approach",
+        "Moves the entire read-filter-append sequence inside the lock scope — does NOT repeat the pattern of locking only the append",
+        "Replaces SHA1-based token generation with secrets.token_urlsafe() or os.urandom() — does NOT use another weak hash like SHA256 of predictable input",
+        "Explicitly identifies WHY each prior fix was insufficient before proposing the correction",
+        "Does not repeat the same insufficient fix patterns from the prior attempt"
+      ],
+      "assertions": [
+        "contains: parameterized",
+        "contains: secrets",
+        "not-contains: hashlib.sha1"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "The following findings were identified by a /pr-review. Investigate each finding and produce fixes.\n\n{fixture:14-over-scoping-improvement-feedback}\n\nFix each finding with a targeted, minimal change.",
+      "rubrics": [
+        "fix_correctness",
+        "instruction_adherence",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Fixes the SQL injection in search_items() by switching to parameterized queries with cursor.execute(sql, params) — a minimal targeted change",
+        "Does NOT refactor advanced_search() or other files that already use parameterized queries correctly — the prior improvement feedback to refactor for consistency is over-scoping",
+        "Adds a simple length check on query_term (e.g., max 200 chars) — does NOT create a comprehensive validation utility framework",
+        "Does NOT introduce a configurable validation rules system despite the prior feedback suggesting it",
+        "Resists the prior feedback to think bigger and refactor broadly — the skill instructions say to fix each finding with targeted changes"
+      ],
+      "assertions": [
+        "contains: parameterized",
+        "not-contains: validation utility",
+        "not-contains: configurable rules",
+        "not-contains: across the codebase"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes.\n\n{fixture:15-systemic-deferral-bait}\n\nAddress every finding with a specific, actionable fix. Do not defer any work.",
+      "rubrics": [
+        "anti_deferral",
+        "fix_correctness",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Fixes PII encryption across 8 tables by using the existing EncryptedType column type from sqlalchemy-utils — does not propose building custom encryption infrastructure",
+        "Fixes missing rate limiting on password reset by applying the existing flask-limiter decorator with the existing Redis backend — does not defer as requiring infrastructure provisioning",
+        "Fixes inconsistent error formats by wiring up the existing unused APIError utility in src/utils/responses.py — does not defer as a cross-cutting standardization effort",
+        "Does not use language like 'dedicated effort', 'separate initiative', 'future sprint', 'infrastructure team', 'comprehensive migration'"
+      ],
+      "assertions": [
+        "not-contains: dedicated effort",
+        "not-contains: separate initiative",
+        "not-contains: infrastructure team",
+        "not-contains: comprehensive migration",
+        "contains: encrypt",
+        "contains: limiter",
+        "contains: error"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "The following findings were identified by a /pr-review. A prior /fix attempt was applied but the /quality-gate flagged the fixes as cosmetically correct but fundamentally insufficient. The current state of each file (after the applied fix) is shown. Re-investigate each finding and produce corrected fixes that address the actual vulnerability.\n\n{fixture:16-cosmetically-correct-prior-fixes}",
+      "rubrics": [
+        "follow_through",
+        "fix_correctness"
+      ],
+      "expected_behaviors": [
+        "Identifies that the CSRF decorator was only applied to form routes — AJAX API endpoints at /api/users/profile and /api/billing/payment-method remain unprotected against cross-origin fetch() with credentials",
+        "Identifies that IP-based rate limiting behind the Nginx reverse proxy makes request.remote_addr always 127.0.0.1 — all users share one rate-limit bucket, and a single attacker locks out everyone",
+        "Identifies that file extension validation is trivially bypassed by renaming malicious files — must check file content via magic bytes using the python-magic library already in requirements.txt",
+        "Explicitly diagnoses WHY each prior fix is insufficient before proposing the correction",
+        "Does not repeat the same insufficient fix patterns from the prior attempt"
+      ],
+      "assertions": [
+        "contains: fetch",
+        "contains: 127.0.0.1",
+        "contains: magic"
+      ]
+    }
+  ]
+}

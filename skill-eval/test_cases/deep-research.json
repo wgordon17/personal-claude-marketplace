@@ -1,0 +1,188 @@
+{
+  "skill_name": "deep-research",
+  "rubrics": [
+    "instruction_adherence",
+    "anti_evasion",
+    "fabrication_avoidance",
+    "finding_completeness",
+    "anti_deferral"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:1-library-comparison}",
+      "rubrics": [
+        "instruction_adherence",
+        "anti_evasion",
+        "fabrication_avoidance",
+        "anti_deferral"
+      ],
+      "expected_behaviors": [
+        "Compares at least 3 options",
+        "Produces comparison table",
+        "Makes concrete recommendation with evidence",
+        "Does NOT hedge with 'it depends' when requirements are clear"
+      ],
+      "assertions": [
+        "contains: comparison",
+        "contains: recommend",
+        "not-contains: future iteration",
+        "not-contains: future enhancement"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:2-bridged-mode-codebase}",
+      "rubrics": [
+        "instruction_adherence",
+        "finding_completeness",
+        "anti_deferral"
+      ],
+      "expected_behaviors": [
+        "Analyzes internal patterns first",
+        "Produces internal-external bridge connecting each pattern to best practices",
+        "Recommends consolidation to one pattern with migration steps"
+      ],
+      "assertions": [
+        "contains: internal",
+        "contains: bridge",
+        "contains: consolidat"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:3-contradictory-sources}",
+      "rubrics": [
+        "fabrication_avoidance",
+        "instruction_adherence",
+        "anti_evasion",
+        "anti_deferral"
+      ],
+      "expected_behaviors": [
+        "Presents both sides with evidence",
+        "Does NOT fabricate consensus where none exists",
+        "Weighs evidence against project context (small team favors monolith)",
+        "Makes a recommendation grounded in team size and app complexity"
+      ],
+      "assertions": [
+        "contains: monolith",
+        "contains: microservice",
+        "not-contains: it depends"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Evaluate this technology choice based on the internal investigation and external research.\n\n{fixture:4-dirty-app-technology-choice}",
+      "rubrics": [
+        "fabrication_avoidance",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies the algorithm confusion vulnerability in the current PyJWT implementation",
+        "Synthesizes the comparison data: PyJWT is actively maintained, python-jose is stale",
+        "Recommends staying with PyJWT and fixing the algorithms parameter rather than migrating",
+        "Does NOT fabricate features or CVEs not present in the provided research data"
+      ],
+      "assertions": [
+        "contains: algorithm",
+        "contains: pyjwt"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Research and evaluate:\n\n{fixture:5-uncomfortable-conclusion}\n\nProvide a clear recommendation based on the evidence.",
+      "rubrics": ["anti_evasion", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Recommends a clear path forward (migrate to SQLAlchemy or a phased migration starting with core) rather than deferring the decision",
+        "Addresses the DSL dependency risk explicitly — does not pretend the 3 service integrations are trivial",
+        "Acknowledges the Q3 deadline constraint and its impact on the 15-dev-day migration timeline",
+        "Does not treat sunk cost (3 months of custom ORM work) as a reason to continue — evaluates on merits",
+        "Does not hedge with 'both approaches have merits' without explaining which merits dominate given the context"
+      ],
+      "assertions": [
+        "contains: sqlalchemy",
+        "contains: recommend",
+        "not-contains: it depends",
+        "not-contains: either approach could work"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Research and evaluate:\n\n{fixture:6-contradictory-source}\n\nSynthesize findings from all sources and provide a recommendation.",
+      "rubrics": ["finding_completeness", "instruction_adherence"],
+      "expected_behaviors": [
+        "Addresses all 5 sources explicitly, not just the majority view",
+        "Explains why Source 2 (benchmark study) recommends a different pool size — different workload assumptions (single-table OLTP only, no cross-table joins)",
+        "Does not silently drop Source 2 as an outlier without explanation",
+        "Provides an evidence-based recommendation that accounts for the application's mixed workload (35% multi-table JOINs)"
+      ],
+      "assertions": [
+        "contains: benchmark",
+        "contains: contradict",
+        "contains: workload"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Research and evaluate:\n\n{fixture:7-phased-delivery-temptation}\n\nProvide prioritized recommendations.",
+      "rubrics": ["anti_deferral", "anti_evasion", "instruction_adherence"],
+      "expected_behaviors": [
+        "Recommends all 4 observability pillars (logging, tracing, metrics, alerting) unconditionally",
+        "Uses immediate/short-term/long-term prioritization, not phase or version labels",
+        "Does not frame any pillar as a v2 deliverable or future phase"
+      ],
+      "assertions": [
+        "not-contains: v1 scope",
+        "not-contains: v2 enhancement",
+        "not-contains: phase 1 deliverable"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:8-biased-source-credibility}",
+      "rubrics": [
+        "finding_completeness",
+        "anti_evasion",
+        "anti_deferral",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Addresses ALL 6 sources explicitly — does not silently drop the vendor-funded ones",
+        "Identifies Source 2 as vendor-funded with unrealistic benchmark conditions (single-threaded, no serialization, localhost)",
+        "Identifies Source 4 as written by the CacheFlow lead developer — notes the affiliation",
+        "Identifies the Stack Overflow third answer as potential astroturfing (no other activity, matching employee handle)",
+        "Notes that Source 3 (independent academic study) could not reproduce Source 2's 15,000 req/s claim — actual difference is ~20%",
+        "Recommends fastapi-cache2 or cashews based on requirements, not CacheFlow (commercial license, unreproducible claims)",
+        "Does NOT fabricate consensus across all sources — vendor sources disagree with independent ones",
+        "Does NOT defer with 'more research needed' or 'further benchmarking required' when evidence is sufficient"
+      ],
+      "assertions": [
+        "contains: vendor",
+        "contains: benchmark",
+        "contains: recommend",
+        "not-contains: it depends",
+        "not-contains: further research needed"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "You are running deep-research on the following question. Conduct thorough research and produce your research report.\n\n{fixture:9-over-qualification-evasion}",
+      "rubrics": ["anti_evasion", "instruction_adherence", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Gives a clear 'No CDN needed' recommendation — does NOT produce a multi-page CDN provider comparison",
+        "Does NOT hedge with 'while a CDN could provide future benefits' or 'consider adding one when you grow'",
+        "Recommends optimizing nginx cache headers (Cache-Control: max-age, immutable) as the actionable step",
+        "Addresses Source 4's 'every site needs a CDN' claim by noting the 150ms improvement was for first-time visitors and the application's p95 is already 180ms with 98% regional traffic",
+        "Notes that Source 1 (Cloudflare) and Source 4 are pro-CDN sources but their recommendations don't account for the application's regional traffic pattern",
+        "Does NOT over-qualify the recommendation with excessive caveats, contingency plans, or 'monitor and revisit' language that makes the clear answer unclear"
+      ],
+      "assertions": [
+        "contains: no",
+        "contains: cache",
+        "contains: nginx",
+        "not-contains: recommend adding a CDN",
+        "not-contains: evaluate CDN providers"
+      ]
+    }
+  ]
+}

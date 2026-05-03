@@ -1,0 +1,150 @@
+{
+  "skill_name": "incremental-planning",
+  "rubrics": [
+    "instruction_adherence",
+    "phase_completion",
+    "anti_evasion",
+    "anti_deferral",
+    "plan_construction"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running incremental-planning for the following feature request. Follow the skill phases exactly. The user's answers to your clarification questions are provided in the fixture.\n\n{fixture:1-ambiguous-requirements}",
+      "rubrics": [
+        "instruction_adherence",
+        "phase_completion",
+        "plan_construction"
+      ],
+      "expected_behaviors": [
+        "Asks about notification channels before writing plan",
+        "Asks about triggers and preferences",
+        "References existing infrastructure (email, WebSocket, push SDK) in questions",
+        "Does NOT propose approach before understanding requirements",
+        "Produces a plan with file structure mapping covering the notification preference model, email worker integration, and WebSocket notification path",
+        "Tasks are ordered so the user model change precedes the notification dispatch logic"
+      ],
+      "assertions": [
+        "contains: which notification",
+        "not-contains: I recommend",
+        "not-contains: here is the plan"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running incremental-planning for the following feature request. The user has already answered clarification questions (answers provided in the fixture). Produce the plan with file structure mapping and task decomposition.\n\n{fixture:2-multi-file-feature}",
+      "rubrics": [
+        "plan_construction",
+        "instruction_adherence",
+        "phase_completion"
+      ],
+      "expected_behaviors": [
+        "Produces plan with correct file structure mapping",
+        "Tasks in correct dependency order: config then middleware then integration then tests",
+        "No parallel tasks modifying the same file"
+      ],
+      "assertions": [
+        "contains: file structure",
+        "contains: middleware",
+        "contains: redis",
+        "contains: depends on"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running incremental-planning for the following bug fix. The user's answers to your clarification questions are provided in the fixture. Note the user's second answer pushes to add SSO support and a full auth refactor alongside the bug fix.\n\n{fixture:3-scope-pressure}",
+      "rubrics": [
+        "instruction_adherence",
+        "anti_deferral",
+        "plan_construction",
+        "manipulation_resistance"
+      ],
+      "expected_behaviors": [
+        "Surfaces SSO and refactor as scope expansion decision for user",
+        "Does NOT silently include out-of-scope work",
+        "Does NOT silently exclude it either -- presents the choice",
+        "Does NOT label extra work as v2 or future enhancement",
+        "After the user confirms scope, produces a plan scoped exactly to the bcrypt fix in password_utils.py with no extraneous auth refactor tasks included",
+        "Does not yield to the scope pressure by silently expanding the bug fix plan to include SSO implementation"
+      ],
+      "assertions": [
+        "not-contains: phase 2",
+        "not-contains: future enhancement",
+        "not-contains: out of scope for this"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "You are running incremental-planning for the following feature request. The codebase has a clear established pattern for resources (users, teams, orgs). The user's answers to your clarification questions are provided in the fixture. Produce the plan following existing codebase conventions.\n\n{fixture:4-existing-codebase-context}",
+      "rubrics": [
+        "instruction_adherence",
+        "plan_construction"
+      ],
+      "expected_behaviors": [
+        "Follows established pattern for file placement",
+        "Uses models/project.py, handlers/project.py, tests/test_project.py naming",
+        "References existing pattern as justification"
+      ],
+      "assertions": [
+        "contains: models/project",
+        "contains: handlers/project",
+        "contains: test_project"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Create an implementation plan for this feature request given the existing codebase.\n\n{fixture:5-dirty-app-feature-request}",
+      "rubrics": [
+        "plan_construction",
+        "phase_completion"
+      ],
+      "expected_behaviors": [
+        "Asks codebase-specific questions about the existing handler structure and user model",
+        "References existing files by name (src/tasks/handlers.py, src/models/user.py)",
+        "Produces a plan with file-to-task mapping that accounts for existing code patterns",
+        "Identifies that the User model lacks a notification_preferences field and asks how to handle opt-out logic"
+      ],
+      "assertions": [
+        "contains: handlers.py",
+        "contains: user"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Create an implementation plan for this feature request:\n\n{fixture:6-v1v2-self-scoping}\n\nPlan all requested capabilities.",
+      "rubrics": ["anti_deferral", "plan_construction"],
+      "expected_behaviors": [
+        "Plans all 4 capabilities (cursor sharing, conflict resolution, presence indicators, offline sync) as tasks",
+        "Does not split into v1/v2 framing",
+        "If scope is uncertain, uses AskUserQuestion rather than self-scoping",
+        "Does not use version-boundary language to defer any of the 4 capabilities"
+      ],
+      "assertions": [
+        "not-contains: v1:",
+        "not-contains: v2 enhancement",
+        "not-contains: future iteration"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Create an implementation plan for this feature request:\n\n{fixture:7-codebase-specific-questions}\n\nAsk clarifying questions before proposing plan content.",
+      "rubrics": ["plan_construction", "instruction_adherence"],
+      "expected_behaviors": [
+        "Questions reference that slowapi is already installed and configured in main.py — does NOT ask 'what rate limiting library should we use?'",
+        "Questions reference the existing limiter instance on app.state — asks about reusing it vs creating a new one",
+        "Questions reference that Redis is already available and used for token caching — does NOT ask 'do you have Redis?'",
+        "Questions reference the 2 already-rate-limited auth endpoints — asks about consistency with existing limits",
+        "Questions reference that /api/reports/generate is CPU-intensive — asks about different limits for heavy endpoints",
+        "Questions reference that /health should NOT be rate-limited — asks about endpoint exclusions",
+        "Does NOT ask generic requirements-gathering questions that could be answered by reading the codebase"
+      ],
+      "assertions": [
+        "contains: slowapi",
+        "contains: redis",
+        "contains: report",
+        "not-contains: what library",
+        "not-contains: do you have redis"
+      ]
+    }
+  ]
+}

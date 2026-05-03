@@ -1,0 +1,270 @@
+{
+  "skill_name": "plan-review",
+  "rubrics": [
+    "plan_analysis_depth",
+    "false_positive_resistance",
+    "finding_completeness",
+    "severity_accuracy",
+    "fabrication_avoidance",
+    "instruction_adherence"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:1-circular-dependency-plan}",
+      "rubrics": [
+        "plan_analysis_depth",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Detects circular dependency between Task 3 and Task 5",
+        "Traces the specific chain: Task 3 needs Task 5 output (config validation rules), Task 5 needs Task 3 output (migration schema field names)",
+        "Suggests resolution by extracting shared resource into a separate task"
+      ],
+      "assertions": [
+        "contains: circular",
+        "contains: dependency",
+        "contains: task 3",
+        "contains: task 5"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:2-well-structured-plan}",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "No significant issues exist in the plan",
+        "Dependencies are correctly specified",
+        "File structure mapping is complete"
+      ],
+      "assertions": [
+        "not-contains: circular dependency",
+        "not-contains: blocking issue",
+        "not-contains: critical gap"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review this plan file for issues with task dependencies, feasibility, scope, and security considerations.\n\n## Plan File\n{fixture:3-missing-security-considerations}",
+      "rubrics": [
+        "plan_analysis_depth",
+        "severity_accuracy",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Identifies missing CSRF/state parameter validation in the OAuth callback handler",
+        "Identifies missing token expiry and refresh token handling",
+        "Flags that the plan header claims no security concerns despite implementing OAuth2 authentication",
+        "Notes absence of a dedicated security review or threat modeling task"
+      ],
+      "assertions": [
+        "contains: csrf",
+        "contains: token",
+        "contains: security"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this plan file for issues with scope alignment, task dependencies, and goal adherence.\n\n## Plan File\n{fixture:4-scope-creep-plan}",
+      "rubrics": [
+        "plan_analysis_depth",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies that the plan goal is CSV export but Tasks 2-4 expand far beyond that scope",
+        "Flags Task 2 (PDF export) as scope creep beyond the stated CSV export goal",
+        "Flags Task 3 (email delivery) as unrelated to the CSV export goal",
+        "Flags Task 4 (scheduling system) as a major scope expansion",
+        "Notes that Key Decisions rationalize scope creep with phrases like 'while we are building export infrastructure'"
+      ],
+      "assertions": [
+        "contains: scope",
+        "contains: goal",
+        "not-contains: reasonable addition"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Review this plan file for issues with task ordering, parallelism, and file contention.\n\n## Plan File\n{fixture:5-infeasible-task-ordering}",
+      "rubrics": [
+        "plan_analysis_depth"
+      ],
+      "expected_behaviors": [
+        "Identifies that Tasks 2 and 3 are marked as parallel but both modify src/config.py",
+        "Explains the file contention risk: concurrent modifications to the same file will cause merge conflicts or data loss",
+        "Notes that Task 3 adds config keys (FLAG_ROLLOUT_SALT, FLAG_CACHE_TTL) that Task 2 may need to be aware of, creating an implicit dependency"
+      ],
+      "assertions": [
+        "contains: config.py",
+        "contains: parallel",
+        "contains: contention"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Review this implementation plan for structural issues, dependency problems, and completeness.\n\n{fixture:6-dirty-app-implementation-plan}",
+      "rubrics": [
+        "plan_analysis_depth",
+        "finding_completeness",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Identifies phantom file reference: Task 3 references src/notifications/email.py not in File Structure",
+        "Identifies circular dependency: Task 4 depends on Task 5 and Task 5 depends on Task 4",
+        "Flags the unresolved [ASSUMPTION: scope] about SMS notifications",
+        "Does NOT fabricate issues with the correctly structured Tasks 1 and 2"
+      ],
+      "assertions": [
+        "contains: circular",
+        "contains: email.py",
+        "contains: assumption"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review this implementation plan for structural issues, dependency problems, and completeness.\n\n{fixture:7-clean-app-well-structured-plan}",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance",
+        "plan_analysis_depth"
+      ],
+      "expected_behaviors": [
+        "Recognizes the plan has correct dependency ordering (1 -> 2 -> 3)",
+        "Does NOT fabricate circular dependencies where none exist",
+        "Does NOT flag file references that correctly match the File Structure",
+        "May suggest minor improvements but marks them as non-blocking"
+      ],
+      "assertions": [
+        "not-contains: circular",
+        "not-contains: missing file",
+        "not-contains: blocking issue"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Review this implementation plan for completeness, risks, and severity of identified issues:\n\n{fixture:8-severity-ambiguous-plan}\n\nClassify each issue by severity with justification.",
+      "rubrics": ["severity_accuracy", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Acknowledges that severity of the missing retry depends on whether this is internal vs payment-processing context",
+        "Notes that test gap severity depends on whether the payment provider offers a sandbox environment",
+        "Identifies that the hardcoded timeout severity differs between dev and production payment flows",
+        "Does not confidently assign a single severity level without acknowledging context dependency"
+      ],
+      "assertions": [
+        "contains: context",
+        "contains: payment",
+        "not-contains: clearly low"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Review this implementation plan for completeness, dependency ordering, and parallelization safety:\n\n{fixture:9-subtle-gap-plan}\n\nIdentify any missing dependencies or unsafe parallelization.",
+      "rubrics": ["finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Identifies that Task 4 references a helper from Task 6 but only depends on Task 3 — missing implicit dependency on Task 6",
+        "Identifies that Task 7 and Task 2 both modify the same config file but are marked as parallelizable — file contention risk",
+        "Finds BOTH gaps, not just the more obvious one"
+      ],
+      "assertions": [
+        "contains: task 4",
+        "contains: task 6",
+        "contains: contention"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Review this implementation plan:\n\n{fixture:10-self-scoping-plan}\n\nIdentify any scope issues or missing work.",
+      "rubrics": ["finding_completeness", "plan_analysis_depth", "anti_deferral"],
+      "expected_behaviors": [
+        "Detects that Task 5 defers SMS and push to v2 despite the goal requesting all 4 channels",
+        "Identifies v1/v2 framing as self-scoping — the plan silently reduced scope without user agreement"
+      ],
+      "assertions": [
+        "contains: v2",
+        "contains: sms",
+        "contains: push",
+        "contains: scope"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Review this implementation plan for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:11-unfamiliar-domain-implicit-deps}",
+      "rubrics": ["fabrication_avoidance", "finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Does NOT fabricate concerns about legitimate ML patterns (tumbling windows, feature stores, Feast SDK, Prometheus metrics) — these are standard domain patterns",
+        "Detects missing forward dependency: Task 2 uses feature definitions from Task 4's registry but only declares Task 1 as a dependency — Task 4 must complete before Task 2 can run",
+        "Detects that Task 3 references src/features/feature_store.py which is NOT in the File Structure section",
+        "Detects that Task 3 requires timestamps to flow from Task 1 through Task 2 — an implicit 3-task data dependency chain",
+        "Does NOT flag tumbling window pattern or __init_subclass__ as custom abstractions — they are standard patterns",
+        "Notes that the Non-scope items are legitimate exclusions (model training, dashboards, A/B testing)"
+      ],
+      "assertions": [
+        "contains: feature_store",
+        "contains: file structure",
+        "contains: dependency",
+        "not-contains: unnecessary abstraction",
+        "not-contains: custom pattern"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Review this implementation plan for issues with task dependencies, feasibility, scope, and completeness.\n\n## Plan File\n{fixture:12-missing-operational-concerns}",
+      "rubrics": ["finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Identifies that the dispatcher (Task 4) has no error handling — what happens when the webhook URL is unreachable or returns 500?",
+        "Identifies missing retry/backoff logic — a single failed POST silently loses the notification",
+        "Identifies missing timeout on requests.post() — the synchronous call in a signal handler blocks the HTTP response indefinitely",
+        "Identifies that synchronous signal handlers (Task 5) block the user's HTTP request until all webhooks are delivered — needs async dispatch",
+        "Identifies missing URL validation — no SSRF protection on user-configured webhook URLs",
+        "Identifies no rate limiting — a user could configure many webhooks causing outbound request storms",
+        "Does NOT fabricate structural issues — dependencies are correct, file mapping is complete, no circular deps"
+      ],
+      "assertions": [
+        "contains: timeout",
+        "contains: retry",
+        "contains: error handling",
+        "not-contains: circular dependency"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Review this implementation plan for issues with structure, formatting, dependencies, and completeness.\n\n## Plan File\n{fixture:13-format-and-structure-violations}",
+      "rubrics": ["instruction_adherence", "finding_completeness", "plan_analysis_depth"],
+      "expected_behaviors": [
+        "Identifies missing File Structure section — plan has no file-to-purpose mapping table",
+        "Identifies missing Dependencies field on the Search endpoint task",
+        "Identifies incorrect task ordering: Search endpoint references search_vector which is created by Update task model — implicit dependency violation",
+        "Identifies file contention: Search endpoint and Update task model both modify src/models/task.py without declaring the contention",
+        "Identifies missing task numbering — tasks use names instead of IDs, making dependency tracking ambiguous",
+        "Does NOT accept the Notes section as sufficient — the plan itself should be correct, not annotated with known problems"
+      ],
+      "assertions": [
+        "contains: file structure",
+        "contains: dependency",
+        "contains: task.py",
+        "contains: ordering"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Review this implementation plan for issues with scope alignment, completeness, and goal adherence.\n\n## Plan File\n{fixture:14-reasonable-scope-reduction}\n\nIdentify any gaps between the stated goal and what the plan actually delivers.",
+      "rubrics": ["finding_completeness", "plan_analysis_depth", "anti_deferral"],
+      "expected_behaviors": [
+        "Identifies that the goal says 'rollback capability' but Task 6 substitutes a manual runbook and defers automated rollback — a runbook is documentation, not capability",
+        "Identifies that the goal says 'security scanning' but Task 7 only implements dependency scanning (Dependabot) and defers SAST/DAST — dependency scanning catches known CVEs in libraries but not custom code vulnerabilities like SQL injection or XSS",
+        "Identifies that 'better addressed as a parallel initiative by the security team' is deferral language — the plan's own goal includes security scanning, so it cannot be delegated out of scope",
+        "Does NOT accept the phasing as 'reasonable for an initial release' — the goal makes no mention of phased delivery or initial release"
+      ],
+      "assertions": [
+        "contains: rollback",
+        "contains: runbook",
+        "contains: sast",
+        "not-contains: reasonable phasing",
+        "not-contains: acceptable for"
+      ]
+    }
+  ]
+}

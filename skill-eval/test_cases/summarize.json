@@ -1,0 +1,174 @@
+{
+  "skill_name": "summarize",
+  "rubrics": [
+    "summary_accuracy",
+    "fabrication_avoidance",
+    "instruction_adherence",
+    "finding_completeness"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running /summarize on the following swarm report artifact. Read the report and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:1-completed-swarm-report}",
+      "rubrics": [
+        "summary_accuracy",
+        "fabrication_avoidance",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies 3 deferred findings as incomplete work",
+        "Classifies status as Active, not Completed",
+        "Does NOT accept report's self-assessment of complete at face value"
+      ],
+      "assertions": [
+        "contains: deferred",
+        "contains: active",
+        "not-contains: status: completed"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running /summarize on the following plan artifact. Read the plan and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:2-active-plan-file}",
+      "rubrics": [
+        "summary_accuracy",
+        "fabrication_avoidance",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Accurately counts 3/6 tasks complete",
+        "Classifies as Active",
+        "References review cycle count",
+        "Does NOT round up completion percentage"
+      ],
+      "assertions": [
+        "contains: 3",
+        "contains: 6",
+        "contains: active"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running /summarize on the following pull request. The PR data and associated plan have been provided inline. Produce a summarize output with plan-adherence audit following the skill instructions.\n\n## PR Metadata and Diff\n{fixture:3-pr-with-plan-adherence}",
+      "rubrics": [
+        "summary_accuracy",
+        "finding_completeness",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Identifies missing Task 3 in plan-adherence audit",
+        "Does NOT claim full plan adherence",
+        "Lists the specific missing task with its description"
+      ],
+      "assertions": [
+        "contains: task 3",
+        "contains: missing",
+        "contains: validation"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Summarize the status and outcomes of this implementation plan.\n\n{fixture:4-dirty-app-plan-summary}",
+      "rubrics": [
+        "summary_accuracy",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Identifies that only 4 of 6 tasks are completed (not all as claimed)",
+        "Flags the discrepancy: team lead claims 'all critical security issues addressed' but SSRF fix was deferred",
+        "Notes that PII scrubbing was deferred with weak justification",
+        "Does NOT accept the claimed outcome at face value"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "contains: deferred",
+        "not-contains: all issues addressed"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Summarize this work artifact and assess completion status:\n\n{fixture:5-subtly-incomplete-items}\n\nIdentify any items that are claimed as complete but are actually incomplete.",
+      "rubrics": ["finding_completeness", "summary_accuracy"],
+      "expected_behaviors": [
+        "Identifies Task 3 rate limiting as incomplete — _apply_rate_limit is a stub that always returns None, so no actual rate limiting is implemented despite the claim of completion",
+        "Identifies Task 5 test coverage as incomplete — all 4 test functions assert result is None, validating the stub's return value rather than testing any real rate-limiting behavior",
+        "Does not flag Tasks 1, 2, 4, or 6 as incomplete — those tasks contain actual implementation code and passing tests that verify real behavior",
+        "Distinguishes between 'claimed complete' and 'actually complete' based on code snippets: Tasks 3 and 5 form a pair where a stub is implemented and tested as if it were real"
+      ],
+      "assertions": [
+        "contains: incomplete",
+        "contains: stub",
+        "contains: coverage"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Summarize this work artifact:\n\n{fixture:6-misleading-keyword-context}\n\nProvide an accurate status summary of the work described.",
+      "rubrics": ["summary_accuracy", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Correctly interprets 'deferred to the architect' as consultation, not work deferral",
+        "Correctly interprets 'active directory integration' as a completed feature (AD product), not an active status",
+        "Correctly interprets 'no missing dependencies' as all dependencies present, not something missing",
+        "Does not fabricate issues based on keyword matching without context"
+      ],
+      "assertions": [
+        "contains: completed",
+        "not-contains: status: active",
+        "not-contains: work was deferred"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "You are running /summarize on the following swarm report artifact. Read the report and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:7-unverified-external-claims}",
+      "rubrics": ["finding_completeness", "summary_accuracy", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Identifies the TODO comment in Task 2 cache.py code — cache invalidation on write operations is not implemented",
+        "Identifies Task 5 test coverage gap — only 3 of 7 public methods tested in test_cache.py",
+        "Notes that Task 2 claims '50,000 cached reads per second' from Redis documentation — this is a vendor claim, not measured in this application",
+        "Notes that Task 4 cites Cloudflare blog's '95% of production APIs' statistic without verification — it is marketing content, not evidence",
+        "Flags the 'Deferred Findings: None' claim as contradicted by the TODO in Task 2 and sparse test coverage in Task 5",
+        "Classifies status as Active, not Complete — there is unfinished work (cache invalidation TODO, incomplete test coverage)"
+      ],
+      "assertions": [
+        "contains: todo",
+        "contains: cache invalidation",
+        "contains: incomplete",
+        "not-contains: status: complete"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "You are running /summarize on the following deep-research report artifact. Read the report and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:8-research-report-artifact}",
+      "rubrics": ["summary_accuracy", "finding_completeness", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Accurately captures the primary recommendation: consolidate to single shared engine with pool_size=10, max_overflow=20",
+        "Identifies all 3 internal findings and their 1:1 mapping to recommendations 1-3",
+        "Notes that Source 2 (PgBouncer blog) is authored by the PgBouncer maintainer — potential bias in recommendation 4",
+        "Notes that Source 3 (PostgreSQL Wiki) predates PostgreSQL 16 — the 10MB-per-connection estimate may be outdated",
+        "Classifies status as Research Complete, not Implemented — no code changes were made, only recommendations documented",
+        "Does NOT fabricate additional findings or recommendations beyond what the report contains"
+      ],
+      "assertions": [
+        "contains: single",
+        "contains: engine",
+        "contains: pool",
+        "contains: research complete"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "You are running /summarize on the following speculative execution report. Read the report and produce a summarize output following the skill instructions.\n\n## Artifact Content\n{fixture:9-speculative-report-artifact}",
+      "rubrics": ["summary_accuracy", "finding_completeness", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Catches the scoring matrix contradiction: Approach B scores 7.5 weighted total, Approach A scores 7.1, but the report declares Approach A the winner",
+        "Flags that the winner selection contradicts the quantitative scoring — the rationale discusses qualitative merits that were not captured in the criteria weights",
+        "Notes the deferred item: correlation ID logging from Approach B was not backported",
+        "Classifies status as Winner Selected with a caveat about the scoring inconsistency"
+      ],
+      "assertions": [
+        "contains: 7.5",
+        "contains: 7.1",
+        "contains: contradict"
+      ]
+    }
+  ]
+}

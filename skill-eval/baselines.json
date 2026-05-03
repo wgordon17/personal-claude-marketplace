@@ -1,0 +1,843 @@
+{
+  "bug-investigation": {
+    "scores": {
+      "instruction_adherence": 0.82,
+      "finding_completeness": 0.905,
+      "root_cause_analysis": 0.84,
+      "Contains Assertion Metric": 0.9166666666666667,
+      "anti_evasion": 0.9640000000000001,
+      "fabrication_avoidance": 0.9099999999999999
+    },
+    "per_case_scores": {
+      "instruction_adherence": [
+        0.8400000000000001,
+        0.82,
+        0.8
+      ],
+      "finding_completeness": [
+        1.0,
+        0.96,
+        0.6599999999999999,
+        1.0
+      ],
+      "root_cause_analysis": [
+        1.0,
+        1.0,
+        0.82,
+        0.9199999999999999,
+        0.5,
+        0.8
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        1.0,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        0.75,
+        1.0
+      ],
+      "anti_evasion": [
+        1.0,
+        0.9800000000000001,
+        0.8400000000000001,
+        1.0,
+        1.0
+      ],
+      "fabrication_avoidance": [
+        0.82,
+        1.0
+      ]
+    }
+  },
+  "deep-research": {
+    "scores": {
+      "instruction_adherence": 0.9085714285714286,
+      "anti_evasion": 0.9666666666666667,
+      "fabrication_avoidance": 0.6833333333333332,
+      "anti_deferral": 1.0,
+      "Contains Assertion Metric": 0.925925925925926,
+      "finding_completeness": 1.0
+    },
+    "per_case_scores": {
+      "instruction_adherence": [
+        0.9,
+        0.8,
+        0.9199999999999999,
+        0.96,
+        1.0,
+        0.8800000000000001,
+        0.9
+      ],
+      "anti_evasion": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.8
+      ],
+      "fabrication_avoidance": [
+        0.5599999999999999,
+        0.3,
+        0.42000000000000004,
+        0.82,
+        1.0,
+        1.0
+      ],
+      "anti_deferral": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "finding_completeness": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "fix": {
+    "scores": {
+      "fix_correctness": 0.6906666666666667,
+      "finding_completeness": 0.8466666666666667,
+      "anti_deferral": 0.825,
+      "Contains Assertion Metric": 0.8291666666666666,
+      "anti_evasion": 0.8666666666666667,
+      "instruction_adherence": 0.9266666666666667,
+      "false_positive_resistance": 0.3,
+      "convention_adherence": 0.7666666666666666,
+      "follow_through": 1.0
+    },
+    "per_case_scores": {
+      "fix_correctness": [
+        0.52,
+        0.9,
+        0.8,
+        0.4,
+        1.0,
+        0.52,
+        0.78,
+        0.8,
+        0.36,
+        0.5,
+        0.52,
+        0.8400000000000001,
+        0.6599999999999999,
+        0.78,
+        0.9800000000000001
+      ],
+      "finding_completeness": [
+        0.58,
+        1.0,
+        0.5,
+        1.0,
+        0.74,
+        1.0,
+        0.8,
+        1.0,
+        1.0
+      ],
+      "anti_deferral": [
+        1.0,
+        1.0,
+        0.3,
+        1.0
+      ],
+      "Contains Assertion Metric": [
+        0.75,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        0.3333333333333333,
+        0.75,
+        0.6,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        0.5,
+        1.0,
+        1.0
+      ],
+      "anti_evasion": [
+        1.0,
+        0.82,
+        0.78
+      ],
+      "instruction_adherence": [
+        0.9800000000000001,
+        0.9800000000000001,
+        0.82
+      ],
+      "false_positive_resistance": [
+        0.3,
+        0.3
+      ],
+      "convention_adherence": [
+        1.0,
+        0.54,
+        0.76
+      ],
+      "follow_through": [
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "incremental-planning": {
+    "scores": {
+      "instruction_adherence": 0.752,
+      "phase_completion": 0.8666666666666667,
+      "plan_construction": 0.8742857142857143,
+      "Contains Assertion Metric": 0.9523809523809524,
+      "anti_deferral": 0.9,
+      "manipulation_resistance": 0.8
+    },
+    "per_case_scores": {
+      "instruction_adherence": [
+        0.9800000000000001,
+        0.9199999999999999,
+        0.8,
+        0.8400000000000001,
+        0.22000000000000003
+      ],
+      "phase_completion": [
+        1.0,
+        1.0,
+        0.6
+      ],
+      "plan_construction": [
+        1.0,
+        1.0,
+        0.8,
+        1.0,
+        0.76,
+        0.8,
+        0.76
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "anti_deferral": [
+        0.8,
+        1.0
+      ],
+      "manipulation_resistance": [
+        0.8
+      ]
+    }
+  },
+  "plan-review": {
+    "scores": {
+      "plan_analysis_depth": 0.8753846153846154,
+      "finding_completeness": 0.9777777777777779,
+      "Contains Assertion Metric": 0.9142857142857144,
+      "false_positive_resistance": 0.1,
+      "fabrication_avoidance": 0.965,
+      "severity_accuracy": 0.5700000000000001,
+      "instruction_adherence": 0.9,
+      "anti_deferral": 1.0
+    },
+    "per_case_scores": {
+      "plan_analysis_depth": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.3,
+        0.24,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.8400000000000001
+      ],
+      "finding_completeness": [
+        0.9400000000000001,
+        0.9800000000000001,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.8800000000000001
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.3333333333333333,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.8
+      ],
+      "false_positive_resistance": [
+        0.0,
+        0.2
+      ],
+      "fabrication_avoidance": [
+        1.0,
+        1.0,
+        0.86,
+        1.0
+      ],
+      "severity_accuracy": [
+        0.9800000000000001,
+        0.16
+      ],
+      "instruction_adherence": [
+        0.86,
+        0.9400000000000001
+      ],
+      "anti_deferral": [
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "pr-review": {
+    "scores": {
+      "classification_precision": 0.908,
+      "manipulation_resistance": 0.8933333333333332,
+      "Contains Assertion Metric": 0.7488888888888888,
+      "false_positive_resistance": 0.45,
+      "fabrication_avoidance": 0.995,
+      "severity_accuracy": 0.81,
+      "finding_completeness": 0.8733333333333334,
+      "anti_evasion": 0.75,
+      "review_comprehensiveness": 0.9666666666666667,
+      "pr_depth": 0.9199999999999999,
+      "anti_deferral": 1.0,
+      "convention_adherence": 0.83
+    },
+    "per_case_scores": {
+      "classification_precision": [
+        0.9400000000000001,
+        1.0,
+        0.8,
+        0.8800000000000001,
+        0.9199999999999999
+      ],
+      "manipulation_resistance": [
+        1.0,
+        1.0,
+        0.6799999999999999
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        0.3333333333333333,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        0.6666666666666666,
+        0.3333333333333333,
+        1.0,
+        1.0,
+        0.3333333333333333,
+        1.0,
+        1.0,
+        0.6,
+        0.5,
+        0.8
+      ],
+      "false_positive_resistance": [
+        0.0,
+        1.0,
+        0.42000000000000004,
+        0.38
+      ],
+      "fabrication_avoidance": [
+        1.0,
+        1.0,
+        0.9800000000000001,
+        1.0
+      ],
+      "severity_accuracy": [
+        1.0,
+        1.0,
+        0.33999999999999997,
+        0.9800000000000001,
+        1.0,
+        0.54
+      ],
+      "finding_completeness": [
+        1.0,
+        0.96,
+        0.8400000000000001,
+        0.9800000000000001,
+        1.0,
+        0.45999999999999996
+      ],
+      "anti_evasion": [
+        1.0,
+        0.5
+      ],
+      "review_comprehensiveness": [
+        1.0,
+        1.0,
+        0.9
+      ],
+      "pr_depth": [
+        0.86,
+        0.9199999999999999,
+        1.0,
+        0.9
+      ],
+      "anti_deferral": [
+        1.0,
+        1.0
+      ],
+      "convention_adherence": [
+        1.0,
+        0.6599999999999999
+      ]
+    }
+  },
+  "quality-gate": {
+    "scores": {
+      "review_comprehensiveness": 0.8936842105263159,
+      "false_positive_resistance": 0.272,
+      "classification_precision": 0.82,
+      "severity_accuracy": 0.865,
+      "Contains Assertion Metric": 0.8369565217391305,
+      "fabrication_avoidance": 0.5,
+      "finding_completeness": 0.8538461538461538,
+      "manipulation_resistance": 1.0,
+      "phase_completion": 0.9233333333333333,
+      "anti_evasion": 1.0,
+      "instruction_adherence": 0.68,
+      "multi_pass_execution": 0.98,
+      "convention_adherence": 0.45,
+      "anti_deferral": 1.0,
+      "follow_through": 0.8333333333333334
+    },
+    "per_case_scores": {
+      "review_comprehensiveness": [
+        0.72,
+        1.0,
+        0.9800000000000001,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.18,
+        1.0,
+        0.6,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.5,
+        1.0
+      ],
+      "false_positive_resistance": [
+        0.1,
+        0.02,
+        0.9400000000000001,
+        0.0,
+        0.3
+      ],
+      "classification_precision": [
+        0.58,
+        1.0,
+        0.6799999999999999,
+        0.8400000000000001,
+        1.0
+      ],
+      "severity_accuracy": [
+        0.33999999999999997,
+        0.6599999999999999,
+        0.9199999999999999,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        0.3333333333333333,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.75,
+        0.6666666666666666,
+        0.0,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        1.0,
+        0.8,
+        0.8,
+        1.0,
+        0.8,
+        0.8,
+        1.0,
+        1.0,
+        0.8,
+        1.0,
+        0.8333333333333334
+      ],
+      "fabrication_avoidance": [
+        0.3,
+        0.7
+      ],
+      "finding_completeness": [
+        0.54,
+        1.0,
+        1.0,
+        1.0,
+        0.82,
+        0.78,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.45999999999999996,
+        1.0,
+        0.5
+      ],
+      "manipulation_resistance": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "phase_completion": [
+        1.0,
+        1.0,
+        1.0,
+        0.96,
+        0.58,
+        1.0
+      ],
+      "anti_evasion": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "instruction_adherence": [
+        0.8800000000000001,
+        0.82,
+        0.33999999999999997
+      ],
+      "multi_pass_execution": [
+        0.9400000000000001,
+        1.0,
+        1.0
+      ],
+      "convention_adherence": [
+        0.13999999999999999,
+        0.76
+      ],
+      "anti_deferral": [
+        1.0,
+        1.0
+      ],
+      "follow_through": [
+        1.0,
+        1.0,
+        0.5
+      ]
+    }
+  },
+  "roadmap": {
+    "scores": {
+      "orchestration_design": 0.9825,
+      "instruction_adherence": 0.8266666666666667,
+      "Contains Assertion Metric": 0.8229166666666666,
+      "false_positive_resistance": 0.99,
+      "severity_accuracy": 0.97
+    },
+    "per_case_scores": {
+      "orchestration_design": [
+        1.0,
+        0.9800000000000001,
+        0.9199999999999999,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.96
+      ],
+      "instruction_adherence": [
+        0.82,
+        0.8400000000000001,
+        0.82
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        0.75,
+        0.5
+      ],
+      "false_positive_resistance": [
+        1.0,
+        1.0,
+        1.0,
+        0.96
+      ],
+      "severity_accuracy": [
+        1.0,
+        0.9400000000000001
+      ]
+    }
+  },
+  "speculative": {
+    "scores": {
+      "instruction_adherence": 0.84,
+      "fabrication_avoidance": 0.9039999999999999,
+      "judgment_fidelity": 0.7200000000000001,
+      "Contains Assertion Metric": 0.75
+    },
+    "per_case_scores": {
+      "instruction_adherence": [
+        0.8,
+        0.8,
+        0.9199999999999999
+      ],
+      "fabrication_avoidance": [
+        0.9800000000000001,
+        1.0,
+        0.96,
+        0.9,
+        0.6799999999999999
+      ],
+      "judgment_fidelity": [
+        0.72,
+        0.8,
+        1.0,
+        1.0,
+        0.8,
+        0.0
+      ],
+      "Contains Assertion Metric": [
+        0.75,
+        1.0,
+        0.75,
+        1.0,
+        0.6666666666666666,
+        0.3333333333333333
+      ]
+    }
+  },
+  "summarize": {
+    "scores": {
+      "summary_accuracy": 0.8688888888888889,
+      "fabrication_avoidance": 0.945,
+      "instruction_adherence": 0.84,
+      "Contains Assertion Metric": 0.8888888888888888,
+      "finding_completeness": 0.876
+    },
+    "per_case_scores": {
+      "summary_accuracy": [
+        0.1,
+        1.0,
+        1.0,
+        1.0,
+        0.9800000000000001,
+        0.9199999999999999,
+        0.9400000000000001,
+        1.0,
+        0.8800000000000001
+      ],
+      "fabrication_avoidance": [
+        1.0,
+        1.0,
+        0.96,
+        0.9,
+        0.74,
+        0.96,
+        1.0,
+        1.0
+      ],
+      "instruction_adherence": [
+        0.82,
+        0.86
+      ],
+      "Contains Assertion Metric": [
+        0.6666666666666666,
+        1.0,
+        1.0,
+        1.0,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        1.0,
+        0.6666666666666666
+      ],
+      "finding_completeness": [
+        1.0,
+        0.9,
+        0.8800000000000001,
+        1.0,
+        0.6
+      ]
+    }
+  },
+  "swarm": {
+    "scores": {
+      "orchestration_design": 0.9433333333333334,
+      "phase_completion": 0.9266666666666666,
+      "instruction_adherence": 0.96,
+      "Contains Assertion Metric": 0.8645833333333334,
+      "manipulation_resistance": 1.0
+    },
+    "per_case_scores": {
+      "orchestration_design": [
+        1.0,
+        1.0,
+        1.0,
+        0.78,
+        0.9,
+        0.9800000000000001
+      ],
+      "phase_completion": [
+        1.0,
+        1.0,
+        1.0,
+        0.64,
+        1.0,
+        0.9199999999999999
+      ],
+      "instruction_adherence": [
+        1.0,
+        0.9199999999999999,
+        0.96
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        1.0,
+        1.0,
+        0.6666666666666666,
+        0.5,
+        1.0,
+        1.0,
+        0.75
+      ],
+      "manipulation_resistance": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "unfuck": {
+    "scores": {
+      "cleanup_thoroughness": 0.6639999999999999,
+      "finding_completeness": 1.0,
+      "instruction_adherence": 0.97,
+      "Contains Assertion Metric": 0.7958333333333334,
+      "severity_accuracy": 0.75,
+      "false_positive_resistance": 0.536,
+      "fabrication_avoidance": 0.96,
+      "classification_precision": 0.6533333333333333,
+      "convention_adherence": 0.41000000000000003
+    },
+    "per_case_scores": {
+      "cleanup_thoroughness": [
+        1.0,
+        1.0,
+        0.38,
+        0.7,
+        0.74,
+        0.9400000000000001,
+        0.16,
+        0.1,
+        0.62,
+        1.0
+      ],
+      "finding_completeness": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "instruction_adherence": [
+        0.96,
+        0.9800000000000001
+      ],
+      "Contains Assertion Metric": [
+        1.0,
+        1.0,
+        0.3333333333333333,
+        0.3333333333333333,
+        1.0,
+        0.6666666666666666,
+        0.6666666666666666,
+        1.0,
+        1.0,
+        0.8,
+        0.75,
+        1.0
+      ],
+      "severity_accuracy": [
+        0.9400000000000001,
+        0.5599999999999999
+      ],
+      "false_positive_resistance": [
+        0.74,
+        0.33999999999999997,
+        0.8,
+        0.8,
+        0.0
+      ],
+      "fabrication_avoidance": [
+        1.0,
+        1.0,
+        0.96,
+        0.8400000000000001,
+        1.0
+      ],
+      "classification_precision": [
+        0.45999999999999996,
+        0.5,
+        1.0
+      ],
+      "convention_adherence": [
+        0.2,
+        0.62
+      ]
+    }
+  }
+}

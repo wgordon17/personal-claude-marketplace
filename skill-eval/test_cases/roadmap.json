@@ -1,0 +1,156 @@
+{
+  "skill_name": "roadmap",
+  "rubrics": [
+    "orchestration_design",
+    "false_positive_resistance",
+    "severity_accuracy",
+    "instruction_adherence"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:1-three-plans-with-dependencies}\n\n## Project Context\nThis is a Python/Flask web application. The three plans form a chain: the user model must exist before auth middleware can reference it, and auth middleware must exist before the admin panel can enforce permissions. No project memory directory exists (skip Phase 0).",
+      "rubrics": [
+        "orchestration_design",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies A->B->C dependency chain inferred from file overlap and data flow",
+        "Does NOT parallelize B and C",
+        "Places A in Phase 1, B in Phase 2, C in Phase 3",
+        "Cites file-level evidence for dependencies (e.g. src/models/user.py, src/middleware/auth.py)"
+      ],
+      "assertions": [
+        "contains: phase 1",
+        "contains: phase 2",
+        "contains: phase 3",
+        "contains: depends"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:2-independent-plans}\n\n## Project Context\nThis is a Python/Flask web application. The three plans touch completely different directories with zero file overlap. No project memory directory exists (skip Phase 0).",
+      "rubrics": [
+        "orchestration_design",
+        "false_positive_resistance"
+      ],
+      "expected_behaviors": [
+        "Identifies all 3 plans as independent with no shared files",
+        "Places all 3 in a single parallel phase",
+        "Does NOT create artificial dependencies between the plans",
+        "Does NOT serialize plans to be safe when no dependency evidence exists"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "not-contains: must run before",
+        "not-contains: serialize"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running the roadmap skill to sequence the following 2 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:3-conflicting-plans}\n\n## Project Context\nThis is a Python/Flask web application. Both plans modify src/config.py. Plan A restructures the config loader internals (renames keys, changes parsing logic). Plan B adds new configuration keys that are read by the loader. If B merges before A, the new keys would reference the old internal structure that A is about to remove. No project memory directory exists (skip Phase 0).",
+      "rubrics": [
+        "orchestration_design",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Detects file conflict on src/config.py shared between both plans",
+        "Recommends Plan A before Plan B (structure changes must precede content additions)",
+        "Does NOT allow parallel execution due to the write conflict on config.py",
+        "Explains why the ordering matters: B's new keys reference internal structure that A is removing"
+      ],
+      "assertions": [
+        "contains: config.py",
+        "contains: conflict",
+        "not-contains: parallel"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Sequence these implementation plans into a roadmap. Identify dependencies, file contention, and optimal execution order.\n\n{fixture:4-dirty-app-multi-plan-sequence}",
+      "rubrics": [
+        "orchestration_design",
+        "severity_accuracy"
+      ],
+      "expected_behaviors": [
+        "Identifies that Plan A must complete before Plan B (shared auth files, A fixes what B builds on)",
+        "Identifies file contention between Plan B and Plan C (shared logging.py)",
+        "Proposes sequence: A first, then B, then C (or B and C partially parallel if contention is managed)",
+        "Recognizes Plan A as highest priority — it blocks the other plans and must not be delayed"
+      ],
+      "assertions": [
+        "contains: plan a",
+        "contains: contention"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Sequence these plans into a roadmap:\n\n{fixture:5-clean-plans-no-conflicts}\n\nIdentify dependencies between plans and recommend execution order.",
+      "rubrics": ["false_positive_resistance", "orchestration_design"],
+      "expected_behaviors": [
+        "Places all 3 plans in a single parallel phase — no dependencies exist between them",
+        "Does not claim shared Redis usage creates a dependency (different keyspaces, different data structures)",
+        "Does not fabricate conflicts from similarly named files in different directories (client.py, notifications.py vs metrics.py)",
+        "Recognizes each plan targets a completely separate subsystem: email, metrics, CLI"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "not-contains: conflict",
+        "not-contains: must run before"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Sequence these plans into a roadmap:\n\n{fixture:6-ambiguous-priority-plans}\n\nDetermine execution order based on dependencies, risk, and impact.",
+      "rubrics": ["severity_accuracy", "orchestration_design"],
+      "expected_behaviors": [
+        "Orders database schema change (Plan C) first because it is a blocking dependency for Plans A and B",
+        "Orders auth migration (Plan B) before UI redesign (Plan A) due to higher security risk",
+        "Does not treat all three plans as equal priority simply because they share a 'high' priority label",
+        "Reasons about dependency chains and risk type distinctions, not just stated priority metadata"
+      ],
+      "assertions": [
+        "contains: database",
+        "contains: dependency",
+        "contains: risk"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "You are running the roadmap skill to sequence the following 3 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:7-phantom-resource-independence}\n\n## Project Context\nThis is a Python/Flask web application. Plans A (email notifications) and B (CSV export) and C (audit log) touch different directories. Plan C references a MessageBroker service that does not exist. No project memory directory exists (skip Phase 0).",
+      "rubrics": ["false_positive_resistance", "orchestration_design"],
+      "expected_behaviors": [
+        "Identifies all 3 plans as independent — zero file overlap between them",
+        "Places all 3 in a single parallel phase since they have no cross-plan dependencies",
+        "Does NOT fabricate a dependency between Plan C and Plans A/B based on the missing MessageBroker",
+        "Flags Plan C's MessageBroker reference as a feasibility risk internal to Plan C — the service is absent from the codebase",
+        "Does NOT serialize plans as a precaution — independence is evidenced by zero file overlap"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "contains: messagebroker",
+        "not-contains: plan c depends on",
+        "not-contains: serialize"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "You are running the roadmap skill to sequence the following 2 plan files into a phased roadmap. Analyze dependencies, determine execution order, and produce the roadmap output.\n\n## Plan Files\n\n{fixture:8-shared-readonly-file}\n\n## Project Context\nPython/Flask web application. Both plans reference src/config.py for reading configuration but neither modifies it. Both plans add lines to .env.example but in non-conflicting sections. No project memory directory exists (skip Phase 0).",
+      "rubrics": ["false_positive_resistance", "orchestration_design", "instruction_adherence"],
+      "expected_behaviors": [
+        "Identifies both plans as independent — reading config.py is not contention; neither plan writes to it",
+        "Places both plans in a single parallel phase",
+        "Does NOT fabricate a dependency from shared config.py reads",
+        "Does NOT fabricate a dependency from both plans appending to .env.example (additive, non-conflicting sections)",
+        "Recognizes that src/notifications/email.py and src/notifications/slack.py are separate files — no contention even in the same directory",
+        "Follows the roadmap output format specified in the skill instructions"
+      ],
+      "assertions": [
+        "contains: parallel",
+        "contains: independent",
+        "not-contains: depends on",
+        "not-contains: sequential"
+      ]
+    }
+  ]
+}

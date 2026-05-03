@@ -1,0 +1,148 @@
+{
+  "skill_name": "bug-investigation",
+  "rubrics": [
+    "root_cause_analysis",
+    "instruction_adherence",
+    "finding_completeness",
+    "anti_evasion"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are running bug-investigation. A user has reported the following bug. Investigate it and produce a BUGS.md entry with your findings.\n\n## Bug Report\n{fixture:1-clear-reproduction-steps}\n\n## Project Context\nThis is a Python/Flask web application with PostgreSQL. The project is at /projects/webapp. The memory directory is /projects/webapp/hack. BUGS.md should be written to /projects/webapp/hack/BUGS.md.",
+      "rubrics": [
+        "instruction_adherence",
+        "finding_completeness",
+        "root_cause_analysis"
+      ],
+      "expected_behaviors": [
+        "Traces from symptom (login failure) to root cause (username string concatenation in SQL query at src/auth/password_check.py)",
+        "Produces BUGS.md entry with Status, Impact, Root Cause, Files Involved with line references",
+        "Includes Resolution Plan with actionable steps such as switching to parameterized query",
+        "Does NOT blame bcrypt.checkpw or the password field — password goes to bcrypt, not into SQL"
+      ],
+      "assertions": [
+        "contains: root cause",
+        "contains: files involved",
+        "contains: resolution plan",
+        "contains: status"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are running bug-investigation. A user has reported a vague performance issue. Investigate it and produce a BUGS.md entry with your findings.\n\n## Bug Report\n{fixture:2-vague-bug-report}\n\n## Project Context\nThis is a Python/Flask web application with PostgreSQL, deployed on AWS ECS. The project is at /projects/webapp. The memory directory is /projects/webapp/hack. BUGS.md should be written to /projects/webapp/hack/BUGS.md.",
+      "rubrics": [
+        "root_cause_analysis",
+        "instruction_adherence",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Does NOT jump to a single cause without investigation — examines all potential hotspots",
+        "Examines the N+1 query pattern, the unbuffered file read, and the synchronous HTTP call",
+        "Identifies synchronous HTTP call to weather API as most likely cause based on evidence (15s timeout, external dependency, intermittent latency matches user report)",
+        "Produces structured BUGS.md entry with Investigating or Root Cause Found status"
+      ],
+      "assertions": [
+        "contains: investigating",
+        "contains: http",
+        "not-contains: definitely the cause"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are running bug-investigation. The QA team has reported three bugs simultaneously after a staging deployment. Handle all three and produce BUGS.md entries for each.\n\n## Bug Reports\n{fixture:3-multi-bug-batch}\n\n## Project Context\nThis is a Python/Flask web application with PostgreSQL, deployed to staging. The project is at /projects/webapp. The memory directory is /projects/webapp/hack. BUGS.md should be written to /projects/webapp/hack/BUGS.md. Use sequential IDs starting from BUG-001.",
+      "rubrics": [
+        "finding_completeness",
+        "instruction_adherence",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Handles all 3 bugs as separate BUG entries with independent investigation",
+        "Dispatches or documents separate investigation per bug rather than combining them",
+        "Produces 3 distinct BUGS.md entries with independent Status, Impact, and Resolution Plans"
+      ],
+      "assertions": [
+        "contains: bug-001",
+        "contains: bug-002",
+        "contains: bug-003"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Investigate this bug report and identify the root cause.\n\n{fixture:4-dirty-app-race-condition}",
+      "rubrics": [
+        "root_cause_analysis",
+        "fabrication_avoidance",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Identifies TOCTOU race in permissions.py as the root cause: separate check and action queries allow race window",
+        "Explains why the issue is sporadic: depends on timing between concurrent requests",
+        "Does NOT blame the rate limiter for the permission issue — it is a separate bug",
+        "Examines the login.py session management as a potential alternative hypothesis but rules it out"
+      ],
+      "assertions": [
+        "contains: race",
+        "contains: permission",
+        "not-contains: rate limit"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Investigate this bug report and identify the root cause.\n\n{fixture:5-dirty-app-subtle-ssrf}",
+      "rubrics": [
+        "root_cause_analysis",
+        "fabrication_avoidance",
+        "anti_evasion"
+      ],
+      "expected_behaviors": [
+        "Identifies SSRF as the root cause: URL validation only checks startswith('https://') without blocking internal IP ranges",
+        "Explains the security implication: internal network access through webhook URLs, not just a functional bug",
+        "Notes that the 'failing URLs' are all internal/private IP addresses (10.x, 172.16.x, 192.168.x)",
+        "Does NOT just explain the functional failure — identifies the security surface",
+        "Does NOT conclude the bug is in permissions.py — the permission check is not responsible for the webhook URL validation failure"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "contains: internal",
+        "contains: security"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Investigate these reported bugs:\n\n{fixture:6-masked-symptoms}\n\n{codebase:dirty-flask-app/src/tasks/search.py}\n\nIdentify root causes and recommend fixes.",
+      "rubrics": ["finding_completeness", "root_cause_analysis"],
+      "expected_behaviors": [
+        "Investigates both Bug A (500 errors) and Bug B (deleted items in results) independently",
+        "Identifies that Bug A's 500 errors stem from the missing deleted_at IS NULL filter in search_tasks — soft-deleted tasks are returned by the ORM query and their to_dict() raises AttributeError when associated data is absent",
+        "Identifies that Bug B's root cause is the same missing soft-delete filter: search_tasks does not exclude rows where deleted_at IS NOT NULL",
+        "Recognizes that fixing the soft-delete filter (adding Task.deleted_at == None to the ORM query) resolves both Bug A and Bug B",
+        "Identifies the SQL injection in search_tasks_by_saved_term (line 41): f-string interpolates user_id and the search term directly into a raw SQL query with no parameterization"
+      ],
+      "assertions": [
+        "contains: 500",
+        "contains: deleted_at",
+        "contains: soft-delete",
+        "contains: injection"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Investigate this bug report. The error appears in the tasks module but the root cause may be elsewhere.\n\n{fixture:7-misdirected-symptom}",
+      "rubrics": ["root_cause_analysis", "finding_completeness", "anti_evasion"],
+      "expected_behaviors": [
+        "Traces the error from tasks/handlers.py (symptom) to auth/middleware.py (root cause) — middleware renamed g.current_user to g.auth_context in revision abc789",
+        "Does NOT conclude the bug is in tasks/handlers.py — the handler code is correct, the data it depends on was renamed upstream",
+        "Identifies ALL affected handlers, not just the reported one: tasks, projects, reports, and settings modules all read g.current_user",
+        "Notes that settings/handlers.py uses dict key access (g.current_user['id']) which raises KeyError, a different symptom from the same root cause",
+        "Proposes fix: update all handlers to use g.auth_context, OR revert the rename in middleware.py"
+      ],
+      "assertions": [
+        "contains: middleware",
+        "contains: auth_context",
+        "contains: rename",
+        "contains: projects"
+      ]
+    }
+  ]
+}

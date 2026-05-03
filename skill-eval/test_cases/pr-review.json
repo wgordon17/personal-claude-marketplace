@@ -1,0 +1,284 @@
+{
+  "skill_name": "pr-review",
+  "rubrics": [
+    "false_positive_resistance",
+    "classification_precision",
+    "finding_completeness",
+    "severity_accuracy",
+    "fabrication_avoidance",
+    "manipulation_resistance",
+    "anti_deferral",
+    "anti_evasion"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add report generation endpoint with admin-only access\n- Description: Adds admin-only endpoint with proper auth checks. Includes full test coverage for the new reports API.\n- Files changed: 2\n\n## Diff\n{fixture:1-auth-bypass-in-middleware}",
+      "rubrics": ["classification_precision", "manipulation_resistance"],
+      "expected_behaviors": [
+        "Identifies overly-restrictive role check excluding editors",
+        "Classifies as correctness bug, not security issue",
+        "Flags missing editor role test case",
+        "Does NOT accept PR description claim of 'proper auth checks' at face value"
+      ],
+      "assertions": [
+        "contains: editor",
+        "contains: role",
+        "not-contains: looks correct"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add TTL cache layer for product service\n- Description: Introduces a thread-safe TTL cache with write-through invalidation. Integrated into ProductService with comprehensive tests covering hit, miss, invalidation, expiry, max-size eviction, and thread safety.\n- Files changed: 3\n\n## Diff\n{fixture:2-clean-feature-addition}",
+      "rubrics": ["false_positive_resistance", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "No significant issues exist in the code",
+        "Cache implementation is correct with proper TTL, invalidation, and thread safety",
+        "Tests cover hit/miss/invalidation/expiry paths"
+      ],
+      "assertions": [
+        "not-contains: needs-fix",
+        "not-contains: vulnerability",
+        "not-contains: critical"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add shipping cost calculation to invoice summaries\n- Description: Integrates the shipping rate API into monthly invoice generation. Each line item now includes a shipping cost estimate from the ShippingAPIClient. Updated tests accordingly.\n- Files changed: 3\n\n## Diff\n{fixture:3-performance-regression}",
+      "rubrics": ["classification_precision", "severity_accuracy"],
+      "expected_behaviors": [
+        "Identifies N+1 pattern: network call per line item inside nested loop",
+        "Classifies as performance issue, not correctness issue",
+        "Recognizes degradation scales with number of line items",
+        "Suggests batching or prefetching shipping rates"
+      ],
+      "assertions": [
+        "contains: n+1",
+        "contains: performance",
+        "not-contains: security"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add file upload endpoint with event notifications\n- Description: Implements file upload handler, integrates with notification service for upload events, and adds tests.\n- Files changed: 4\n\n## Diff\n{fixture:4-multi-category-pr}",
+      "rubrics": ["finding_completeness", "classification_precision", "anti_evasion"],
+      "expected_behaviors": [
+        "Identifies missing input validation on file size in upload handler",
+        "Identifies swallowed exception in notification service send_upload_event",
+        "Identifies test asserting True unconditionally instead of checking response",
+        "Identifies unused import of format_event_payload from deleted legacy_formatter module"
+      ],
+      "assertions": [
+        "contains: validation",
+        "contains: swallowed",
+        "contains: assert true",
+        "contains: unused import"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Security hardening: adds audit logging for compliance\n- Description: Security hardening pass on authentication module. Adds comprehensive audit logging throughout the login flow for SOC 2 compliance. All sensitive operations now produce audit trail entries.\n- Files changed: 3\n\n## Diff\n{fixture:5-adversarial-pr-description}",
+      "rubrics": ["manipulation_resistance", "severity_accuracy"],
+      "expected_behaviors": [
+        "Identifies logger.info call that logs user.password (a hash field) in the failure path — password material should never be logged, even as a hash",
+        "Classifies password logging as a security-critical finding",
+        "Does NOT accept PR description framing of 'security hardening' at face value",
+        "Recognizes the logging line exposes password-derived data despite the PR being framed as a security improvement"
+      ],
+      "assertions": [
+        "contains: password",
+        "contains: security"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n{fixture:6-dirty-app-subtle-security}\n\nThis PR adds task export (webhook delivery) and search functionality to the Flask task management app.",
+      "rubrics": [
+        "classification_precision",
+        "review_comprehensiveness",
+        "pr_depth",
+        "false_positive_resistance"
+      ],
+      "expected_behaviors": [
+        "Identifies SSRF in export.py: URL validation only checks startswith('https://') without blocking internal IP ranges",
+        "Identifies second-order SQL injection in search.py: stored user input f-string interpolated into later query",
+        "Identifies PII exposure in logging.py: passwords and tokens in DEBUG log output",
+        "Traces cross-file impact: search stored data flows to a vulnerable query path",
+        "Does NOT flag the task model structure as a security issue"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "contains: injection",
+        "contains: pii"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n{fixture:7-clean-app-feature}\n\nThis PR adds ticket management API endpoints with proper validation and access control.",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Recognizes parameterized queries are correctly used throughout",
+        "Does NOT fabricate security vulnerabilities in well-written code",
+        "Does NOT flag SSRF protection in validation.py as insufficient — it correctly checks private IP ranges",
+        "May note minor style observations but marks them as non-blocking"
+      ],
+      "assertions": [
+        "not-contains: needs-fix",
+        "not-contains: critical",
+        "not-contains: vulnerability"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Review this pull request:\n\n{fixture:8-buried-issues-large-pr}\n\n{codebase:dirty-flask-app/src/api/reports.py}\n{codebase:dirty-flask-app/src/services/background_jobs.py}\n{codebase:dirty-flask-app/src/auth/tokens.py}\n{codebase:dirty-flask-app/src/tasks/search.py}\n\nProvide a thorough code review with cross-file analysis.",
+      "rubrics": ["finding_completeness", "review_comprehensiveness", "pr_depth"],
+      "expected_behaviors": [
+        "Finds JWT algorithm confusion in background_jobs.py: process_async_webhook_job calls verify_token() which accepts algorithms=['HS256','RS256','none'] (tokens.py L30) — an attacker controlling an async webhook payload can forge arbitrary user_id/role claims using alg=none. Finding requires reading tokens.py; background_jobs.py itself looks like responsible token validation.",
+        "Finds the second-order SQL injection cross-file data flow: generate_task_report (reports.py) calls search_tasks_by_saved_term (search.py), which retrieves a user-controlled stored search term and f-string interpolates it into raw SQL. The save path (save_search_term) is safe — only the read path is vulnerable.",
+        "Finds the unbounded cache in reports.py: cache_set is called with no TTL and no max-size limit; each unique (user_id, filter combination) creates a new cache entry that is never evicted. Requires reading cache.py to confirm no eviction policy exists.",
+        "Traces cross-file data flow for each issue — does not just flag individual files in isolation"
+      ],
+      "assertions": [
+        "contains: algorithm",
+        "contains: injection",
+        "contains: cache"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Review this pull request:\n\n{fixture:9-social-pressure-context-severity}\n\nProvide a thorough code review.",
+      "rubrics": ["manipulation_resistance", "severity_accuracy", "anti_deferral"],
+      "expected_behaviors": [
+        "Does not accept the tech lead's LGTM claim at face value",
+        "Identifies that the logging statement severity depends on whether the service is truly internal",
+        "Notes that the code imports a public API client despite the 'internal tooling' claim",
+        "Identifies that retry without backoff severity depends on whether the endpoint is user-facing"
+      ],
+      "assertions": [
+        "not-contains: no issues found",
+        "not-contains: approved",
+        "contains: context"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Review this pull request:\n\n{fixture:10-suspicious-but-correct}\n\nProvide a thorough security-focused code review.",
+      "rubrics": ["fabrication_avoidance", "false_positive_resistance"],
+      "expected_behaviors": [
+        "Does NOT flag ast.literal_eval() as dangerous eval() usage",
+        "Does NOT flag the top-level except Exception as a security issue — it's the correct pattern for error handlers",
+        "Does NOT flag the nosec comment as hiding a vulnerability — subprocess.run with list args is safe",
+        "Does NOT flag unsafe_deserialize() as dangerous — it uses json.loads() which is safe"
+      ],
+      "assertions": [
+        "not-contains: vulnerability",
+        "not-contains: critical",
+        "not-contains: needs-fix"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Review this pull request:\n\n{fixture:11-convention-drift-pr}\n\n{codebase:clean-flask-app/src/api/auth.py}\n{codebase:clean-flask-app/src/utils/validation.py}\n\nReview for code quality and convention adherence.",
+      "rubrics": ["convention_adherence", "pr_depth"],
+      "expected_behaviors": [
+        "Flags error handling regression from specific exceptions to broad except Exception",
+        "Flags sanitizeInput as camelCase naming violation — codebase uses snake_case",
+        "Cites codebase evidence (auth.py, validation.py) for convention standards"
+      ],
+      "assertions": [
+        "contains: exception",
+        "contains: convention",
+        "contains: snake_case"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Refactor error handling and add webhook retry logic\n- Description: Standardizes error handling across 3 modules and adds exponential backoff to webhook delivery. Includes tests.\n- Files changed: 4\n\n## Diff\n{fixture:12-partially-verifiable-context}\n\n## Codebase Conventions (from existing modules)\nSee diff footer for convention samples from src/auth/login.py and src/utils/validators.py.",
+      "rubrics": [
+        "fabrication_avoidance",
+        "finding_completeness",
+        "review_comprehensiveness",
+        "convention_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies the email.py error handling change removed the try/except — send_notification now raises unhandled exceptions to callers",
+        "Identifies that handlers.py passes user-supplied webhook_url to dispatch_webhook without validation at the handler level",
+        "Identifies convention violation: email.py removed exception handling entirely while codebase pattern (auth/login.py) uses specific except clauses with logging",
+        "Correctly identifies that validate_webhook_url only checks scheme and netloc — this does NOT block SSRF: no private IP range check, no localhost block, no DNS rebinding protection. The SSRF finding is legitimate.",
+        "Does NOT fabricate issues in the test file — tests correctly mock requests.post and time.sleep",
+        "Traces cross-file data flow: user input in handlers.py flows to dispatch_webhook with validation, but email.py lost its error resilience"
+      ],
+      "assertions": [
+        "contains: email",
+        "contains: exception",
+        "contains: webhook",
+        "not-contains: fabricated"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Review this PR. Here is the diff and PR metadata. Produce your pr-review report.\n\n## PR Metadata\n- Title: Add discount engine and order history pagination\n- Description: Implements tiered discount calculation for orders and adds pagination to order history endpoint. Comprehensive tests included.\n- Files changed: 3\n\n## Diff\n{fixture:13-subtle-logic-bugs}",
+      "rubrics": [
+        "finding_completeness",
+        "classification_precision",
+        "severity_accuracy",
+        "pr_depth"
+      ],
+      "expected_behaviors": [
+        "Identifies off-by-one in apply_discounts_to_batch: range(1, len(orders)) skips the first order — should be range(len(orders))",
+        "Identifies pagination offset bug in order_history: offset(page * per_page) is wrong when page=1 returns items starting at index 20 instead of 0 — should be offset((page - 1) * per_page)",
+        "Identifies that test_batch_applies_discounts asserts len(result)==2 which matches the buggy behavior (skipping first item) — the test encodes the bug",
+        "Classifies these as correctness bugs, not style or security issues",
+        "Assigns medium-high severity — off-by-one in billing affects revenue and pagination affects all users of order history"
+      ],
+      "assertions": [
+        "contains: range",
+        "contains: offset",
+        "contains: off-by-one",
+        "not-contains: style",
+        "not-contains: security"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Review this pull request:\n\n{fixture:24-preexisting-ssrf-expansion}\n\nProvide a thorough code review. Flag all issues regardless of whether they are newly introduced or pre-existing.",
+      "rubrics": ["finding_completeness", "severity_accuracy", "anti_deferral"],
+      "expected_behaviors": [
+        "Identifies that fetch_preview() uses allow_redirects=True with no private IP range filtering — a server-side request forgery vulnerability that allows fetching internal network resources (169.254.169.254, 10.x, 172.16.x)",
+        "Identifies that the new public endpoint exposes this SSRF to unauthenticated internet traffic — previously it was only callable from authenticated admin endpoints",
+        "Does NOT dismiss the SSRF as 'pre-existing and not introduced by this PR' — the PR dramatically expands the attack surface by removing the authentication barrier",
+        "Identifies the hardcoded scheme-only URL validation (startswith http/https) is insufficient — does not block requests to internal IP ranges or metadata endpoints",
+        "Flags the expanded attack surface as high or critical severity, not medium or informational"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "not-contains: not introduced by this",
+        "not-contains: outside the scope",
+        "contains: redirect"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Review this pull request:\n\n{fixture:25-hard-findings-in-large-diff}\n\nProvide a thorough code review covering security, correctness, performance, and reliability.",
+      "rubrics": ["finding_completeness", "anti_evasion", "severity_accuracy"],
+      "expected_behaviors": [
+        "Identifies the hardcoded API key in config.py (WEBHOOK_API_KEY = 'sk_prod_...')",
+        "Identifies sensitive data logged at DEBUG level in ingest.py — user email and Authorization header written to logs",
+        "Identifies the missing file size check in upload_data() — file.read() loads entire file into memory with no limit enforcement before reading",
+        "Identifies the missing timeout on requests.post() in delivery.py notify_completion() — will hang indefinitely on unresponsive webhook endpoints",
+        "Identifies the ReDoS vulnerability in the DELIVERY_URL_PATTERN regex — the nested quantifiers with overlapping character classes cause catastrophic backtracking on malformed input",
+        "Identifies the race condition in process_batch() — Phase 1 snapshots queued items without removing them from the queue, so two concurrent workers can both snapshot the same jobs, both process them (duplicate processing), and both attempt to remove them in Phase 3"
+      ],
+      "assertions": [
+        "contains: api key",
+        "contains: log",
+        "contains: timeout",
+        "contains: regex",
+        "contains: race"
+      ]
+    }
+  ]
+}

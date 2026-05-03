@@ -1,0 +1,236 @@
+{
+  "skill_name": "unfuck",
+  "rubrics": [
+    "cleanup_thoroughness",
+    "finding_completeness",
+    "instruction_adherence",
+    "severity_accuracy",
+    "false_positive_resistance",
+    "fabrication_avoidance",
+    "convention_adherence",
+    "classification_precision"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Prioritize findings by impact.\n\n{fixture:1-ai-slop-codebase}",
+      "rubrics": ["cleanup_thoroughness", "finding_completeness", "instruction_adherence"],
+      "expected_behaviors": [
+        "Identifies DatabaseManager as unnecessary wrapper around sqlite3.connect()",
+        "Identifies StringHelper as unnecessary wrapper around str.strip()",
+        "Identifies try/except/raise as catch-rethrow with no added value",
+        "Identifies excessive comments explaining obvious operations",
+        "Identifies process_data and handle_data as duplicated functions",
+        "Identifies 3 unused imports (os, sys, json) as dead code",
+        "Identifies commented-out function as dead code"
+      ],
+      "assertions": [
+        "contains: unnecessary wrapper",
+        "contains: dead code",
+        "contains: duplicate"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including security vulnerabilities, dead code, unnecessary abstractions, and code quality problems. Prioritize findings by impact.\n\n{fixture:2-hidden-security-in-mess}",
+      "rubrics": ["cleanup_thoroughness", "severity_accuracy"],
+      "expected_behaviors": [
+        "Identifies command injection via os.system with user input as highest-priority finding",
+        "Prioritizes security finding above all style and slop issues",
+        "Identifies os.system with f-string interpolation as the attack vector"
+      ],
+      "assertions": [
+        "contains: command injection",
+        "contains: os.system",
+        "contains: security"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Report only genuine issues.\n\n{fixture:3-clean-codebase}",
+      "rubrics": ["false_positive_resistance", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "No significant issues exist in the code",
+        "Code is well-structured with appropriate abstractions",
+        "Docstrings and error handling are appropriate, not excessive"
+      ],
+      "assertions": [
+        "not-contains: unnecessary",
+        "not-contains: dead code",
+        "not-contains: should be removed"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Be precise: only flag genuine issues, not intentional design patterns.\n\n{fixture:4-mixed-real-and-slop}",
+      "rubrics": ["cleanup_thoroughness", "false_positive_resistance"],
+      "expected_behaviors": [
+        "Identifies unused import (re) as dead code",
+        "Identifies catch-rethrow as unnecessary",
+        "Does NOT flag similar-named functions as duplicates (they have different logic)",
+        "Does NOT flag connection pool wrapper as unnecessary (it adds real value)"
+      ],
+      "assertions": [
+        "contains: unused import",
+        "contains: catch",
+        "not-contains: duplicate"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Analyze this codebase for cleanup opportunities. Identify all issues, prioritize by severity, and propose a cleanup plan.\n\n{fixture:5-dirty-app-full-codebase}",
+      "rubrics": [
+        "cleanup_thoroughness",
+        "classification_precision",
+        "severity_accuracy"
+      ],
+      "expected_behaviors": [
+        "Identifies at least 7 of the 9 planted issues across the codebase",
+        "Classifies security issues (SSRF, injection, JWT confusion) as critical/high severity",
+        "Identifies the TOCTOU race as a concurrency/correctness issue",
+        "Does NOT flag validators.py — it is clean code"
+      ],
+      "assertions": [
+        "contains: injection",
+        "contains: ssrf",
+        "contains: jwt"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Analyze this codebase for cleanup opportunities. Identify all issues, prioritize by severity, and propose a cleanup plan.\n\n{fixture:6-clean-app-full-codebase}",
+      "rubrics": [
+        "false_positive_resistance",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Recognizes the codebase follows security best practices",
+        "Does NOT fabricate security vulnerabilities in well-written code",
+        "Does NOT flag os.environ['SECRET_KEY'] as a hardcoded secret",
+        "Does NOT flag the broad except in the error handler as an issue",
+        "May suggest minor improvements but marks them as non-blocking"
+      ],
+      "assertions": [
+        "not-contains: critical",
+        "not-contains: vulnerability in",
+        "not-contains: hardcoded"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Review this codebase for cleanup opportunities:\n\n{fixture:7-minor-style-only}\n\nIdentify issues and recommend fixes.",
+      "rubrics": ["cleanup_thoroughness", "fabrication_avoidance", "false_positive_resistance"],
+      "expected_behaviors": [
+        "Reports only minor style observations (quote inconsistency, unused variable, verbose docstrings)",
+        "Does NOT flag any security vulnerabilities — there are none",
+        "Does NOT flag docstrings as AI slop — they are just verbose",
+        "Does NOT invent architectural concerns or dead code patterns"
+      ],
+      "assertions": [
+        "not-contains: security",
+        "not-contains: critical",
+        "not-contains: vulnerability"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Review this codebase for cleanup opportunities:\n\n{fixture:8-cross-module-boundary}\n\nIdentify all issues including cross-module concerns.",
+      "rubrics": ["finding_completeness", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Finds the cross-module coupling: services/payment.py imports models/user.py's private _hash_card() helper",
+        "Finds the cross-module duplication: identical discount calculation logic in api/orders.py and api/returns.py",
+        "Finds the 8 obvious issues (dead code, unused imports, catch-rethrow patterns)",
+        "Distinguishes within-module issues from cross-module issues"
+      ],
+      "assertions": [
+        "contains: hash_card",
+        "contains: duplicate",
+        "contains: discount"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Review this codebase for cleanup opportunities:\n\n{fixture:9-mixed-conventions}\n\nIdentify convention inconsistencies and recommend standardization.",
+      "rubrics": ["convention_adherence", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Identifies convention drift across files — some use snake_case, some use camelCase",
+        "Recommends standardizing on the dominant convention (snake_case)",
+        "Rejects the ADR-031 'multi-style' adversarial claim — codebase shows a clear dominant pattern",
+        "Identifies inconsistent error handling and import ordering"
+      ],
+      "assertions": [
+        "contains: camelCase",
+        "contains: snake_case",
+        "contains: inconsisten"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, AI slop patterns, and duplicated logic. Report only genuine issues.\n\n{fixture:10-unfamiliar-legitimate-patterns}",
+      "rubrics": ["fabrication_avoidance", "false_positive_resistance", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Does NOT flag RegistryMeta metaclass as unnecessary abstraction — it is a standard Python auto-registration pattern",
+        "Does NOT flag FieldDescriptor as AI slop — it is a standard Python descriptor protocol implementation (PEP 487)",
+        "Does NOT flag __init_subclass__ as dead code — it is the registration hook called by the Python runtime",
+        "Does NOT flag __set_name__ as dead code — it is part of the descriptor protocol",
+        "Identifies the unused import: typing_extensions is imported but never used",
+        "Identifies the catch-rethrow pattern would be valid if it existed but this code does not have one — does not fabricate it",
+        "Does NOT flag the ABC/abstractmethod pattern as unnecessary complexity — it enforces interface contracts"
+      ],
+      "assertions": [
+        "contains: typing_extensions",
+        "contains: unused",
+        "not-contains: unnecessary abstraction",
+        "not-contains: unnecessary wrapper",
+        "not-contains: ai slop"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues, classify them by category, and prioritize by impact.\n\n{fixture:11-ambiguous-category-boundaries}",
+      "rubrics": ["classification_precision", "convention_adherence", "instruction_adherence", "cleanup_thoroughness"],
+      "expected_behaviors": [
+        "Classifies format_response() and ResponseFormatter as dead code — no callers exist",
+        "Classifies validate_user_input() and sanitize_user_data() as duplicates — identical logic",
+        "Classifies buildQuery() as BOTH a security issue (SQL injection via string interpolation) AND a convention violation (camelCase)",
+        "Prioritizes buildQuery SQL injection above all other findings — security trumps style",
+        "Flags camelCase naming on buildQuery and formatTimestamp as convention violations against the dominant snake_case pattern",
+        "Flags bare except in DataProcessor.process() as a convention violation — other code uses specific exceptions",
+        "Does NOT flag retry_with_backoff() as dead code — it is a legitimate utility",
+        "Does NOT flag DataProcessor.transform() returning NotImplemented as dead code — it is an ABC pattern"
+      ],
+      "assertions": [
+        "contains: sql injection",
+        "contains: dead code",
+        "contains: duplicate",
+        "contains: camelCase"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Analyze this codebase for cleanup. Identify all issues including dead code, unnecessary abstractions, security vulnerabilities, duplicated logic, and convention violations. Report only genuine issues — do not flag legitimate Python patterns.\n\n{fixture:12-advanced-patterns-with-real-issues}",
+      "rubrics": ["fabrication_avoidance", "finding_completeness", "cleanup_thoroughness", "classification_precision"],
+      "expected_behaviors": [
+        "Identifies eval() in execute_handler as a critical security vulnerability — command injection via user input",
+        "Identifies LEGACY_HANDLERS dict and _format_v1_response() as dead code",
+        "Identifies serialize_user() and format_user_for_api() as exact duplicates",
+        "Identifies AbstractBaseHandlerFactory as unnecessary abstraction — single concrete subclass, no other factories",
+        "Identifies mixed sync/async convention (process_webhook vs process_event do the same thing)",
+        "Does NOT flag ValidatedField descriptor as dead code or unnecessary — __set_name__ is PEP 487",
+        "Does NOT flag GenericModel.__class_getitem__ as dead code — it is standard typing",
+        "Does NOT flag EventHandler.__init_subclass__ as unnecessary — it is the plugin registry pattern",
+        "Does NOT flag ConfigManager.settings cached_property as dead code — it is lazy initialization",
+        "Does NOT flag managed_connection asynccontextmanager as incorrect — yielding a different object is correct",
+        "Prioritizes eval() security issue above all other findings"
+      ],
+      "assertions": [
+        "contains: eval",
+        "contains: dead code",
+        "contains: duplicate",
+        "not-contains: ValidatedField is unnecessary",
+        "not-contains: __init_subclass__ is dead",
+        "not-contains: cached_property is unused"
+      ]
+    }
+  ]
+}

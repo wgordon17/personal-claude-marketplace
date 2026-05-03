@@ -19,10 +19,14 @@ import pytest
 from deepeval.test_case import LLMTestCase
 from skill_eval.contains_metric import ContainsMetric
 from skill_eval.runner import (
+    SKILL_GOAL_RUBRICS,
     build_assertion_metrics,
+    build_fixture_prompt,
     compare_baselines,
     load_baselines,
+    load_codebase_file,
     load_eval_config,
+    load_fixture,
     resolve_skill_bundle,
 )
 
@@ -50,9 +54,25 @@ def _write_baselines(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data))
 
 
-def _run_result(skill: str, scores: dict) -> dict:
-    """Minimal run_eval() result dict."""
-    return {"skill": skill, "scores": scores, "pass_rate": 1.0, "details": []}
+def _run_result(skill: str, scores: dict, *, n: int = 3) -> dict:
+    """Minimal run_eval() result dict with per_case_scores."""
+    per_case = {k: [v] * n for k, v in scores.items()}
+    return {
+        "skill": skill,
+        "scores": scores,
+        "per_case_scores": per_case,
+        "pass_rate": 1.0,
+        "details": [],
+    }
+
+
+def _make_fixture(tmp_path: Path, skill: str, key: str, content: str) -> Path:
+    """Create a fixture file at skill-eval/fixtures/{skill}/{key}.md. Returns repo root."""
+    fixture_dir = tmp_path / "skill-eval" / "fixtures" / skill
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    p = fixture_dir / f"{key}.md"
+    p.write_text(content)
+    return tmp_path
 
 
 def _tc(actual: str) -> LLMTestCase:
@@ -472,6 +492,70 @@ class TestBuildAssertionMetrics:
 # ── Group 8: Score anchoring in rubrics ─────────────────────────────────────
 
 
+class TestNewCompetencyRubrics:
+    """Verify skill-goal rubrics exist with the right structure."""
+
+    def test_new_rubrics_registered(self):
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name in SKILL_GOAL_RUBRICS:
+            assert name in RUBRIC_REGISTRY, f"Rubric {name!r} not in RUBRIC_REGISTRY"
+
+    def test_new_rubrics_have_evaluation_steps(self):
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name in SKILL_GOAL_RUBRICS:
+            rubric = RUBRIC_REGISTRY[name]
+            assert "evaluation_steps" in rubric, f"Rubric {name!r} missing evaluation_steps"
+            assert len(rubric["evaluation_steps"]) >= 3, (
+                f"Rubric {name!r} has {len(rubric['evaluation_steps'])} steps, expected >= 3"
+            )
+
+    def test_new_rubrics_have_score_anchors(self):
+        from deepeval.metrics.g_eval import Rubric
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        for name in SKILL_GOAL_RUBRICS:
+            rubric = RUBRIC_REGISTRY[name]
+            anchoring = rubric["rubric"]
+            assert len(anchoring) == 5, f"Rubric {name!r} has {len(anchoring)} anchors, expected 5"
+            for entry in anchoring:
+                assert isinstance(entry, Rubric), (
+                    f"Rubric {name!r} anchor is {type(entry)}, expected Rubric"
+                )
+            ranges = [r.score_range for r in anchoring]
+            assert ranges == [(0, 0), (3, 3), (5, 5), (8, 8), (10, 10)], (
+                f"Rubric {name!r} score ranges: {ranges}"
+            )
+
+    def test_new_rubrics_evaluation_params(self):
+        from deepeval.test_case import LLMTestCaseParams
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        expected_params = [
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.EXPECTED_OUTPUT,
+        ]
+        for name in SKILL_GOAL_RUBRICS:
+            rubric = RUBRIC_REGISTRY[name]
+            assert rubric["evaluation_params"] == expected_params, (
+                f"Rubric {name!r} evaluation_params: {rubric['evaluation_params']}"
+            )
+
+    def test_behavioral_rubrics_lack_expected_output(self):
+        """Behavioral-only rubrics should NOT have EXPECTED_OUTPUT in params."""
+        from deepeval.test_case import LLMTestCaseParams
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        behavioral_only = set(RUBRIC_REGISTRY) - SKILL_GOAL_RUBRICS
+        for name in behavioral_only:
+            params = RUBRIC_REGISTRY[name]["evaluation_params"]
+            assert LLMTestCaseParams.EXPECTED_OUTPUT not in params, (
+                f"Behavioral rubric {name!r} has EXPECTED_OUTPUT in evaluation_params"
+            )
+
+
 class TestScoreAnchoring:
     """Every rubric includes per-rubric Rubric objects for score-range guidance."""
 
@@ -559,7 +643,7 @@ class TestLoadContextLayers:
         assert "project" not in layers
 
 
-# ── Group 11: build_metrics ──────────────────────────────────────────────
+# ── Group 10: build_metrics ─────────────────────────────────────────────
 
 
 class TestBuildMetrics:
@@ -576,7 +660,7 @@ class TestBuildMetrics:
             build_metrics(["nonexistent_rubric"], judge=mock_judge)
 
 
-# ── Group 12: Nested baselines format ──────────────────────────────────────
+# ── Group 11: Nested baselines format ─────────────────────────────────────
 
 
 class TestNestedBaselinesFormat:
@@ -633,7 +717,7 @@ class TestNestedBaselinesFormat:
         assert result["quality-gate"]["anti_deferral"] == pytest.approx(0.85)
 
 
-# ── Group 10: Multi-trial averaging (VertexSonnetJudge) ────────────────────
+# ── Group 12: Multi-trial averaging (VertexSonnetJudge) ───────────────────
 
 
 class TestMultiTrialAveraging:
@@ -827,7 +911,7 @@ class TestMultiTrialAveraging:
             )
 
 
-# ── Group 10: Eval integrity guard (--locked) ─────────────────────────────
+# ── Group 13: Eval integrity guard (--locked) ─────────────────────────────
 
 
 class TestVerifyEvalIntegrity:
@@ -925,3 +1009,709 @@ class TestLockedMode:
 
         mock_all.assert_called_once_with(tmp_path)
         assert exc.value.code == 0
+
+
+# ── Group 14: load_fixture ─────────────────────────────────────────────────
+
+
+class TestLoadFixture:
+    """load_fixture(skill_name, fixture_key, repo_root) — fixture loading."""
+
+    def test_load_fixture_returns_none_for_missing(self, tmp_path):
+        """Missing fixture returns None."""
+        result = load_fixture("nonexistent", "missing-fixture", repo_root=tmp_path)
+        assert result is None
+
+    def test_load_fixture_reads_existing(self, tmp_path):
+        """Create tmp fixture, verify content loaded."""
+        repo = _make_fixture(tmp_path, "quality-gate", "1-test", "Hello fixture\n")
+        result = load_fixture("quality-gate", "1-test", repo_root=repo)
+        assert result is not None
+        assert "Hello fixture" in result
+
+    def test_load_fixture_strips_frontmatter(self, tmp_path):
+        """Fixture with YAML frontmatter returns only content after closing ---."""
+        content = "---\nplanted: true\nseverity: high\n---\n# Real content\nBody here\n"
+        repo = _make_fixture(tmp_path, "fix", "1-sec", content)
+        result = load_fixture("fix", "1-sec", repo_root=repo)
+        assert result is not None
+        assert "planted" not in result
+        assert "severity" not in result
+        assert "Real content" in result
+        assert "Body here" in result
+
+    def test_load_fixture_path_boundary(self, tmp_path):
+        """Symlink escaping repo_root returns None."""
+        # Create a fixture outside repo_root via symlink.
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret.md").write_text("SECRET DATA")
+
+        repo = tmp_path / "repo"
+        fixture_dir = repo / "skill-eval" / "fixtures" / "evil"
+        fixture_dir.mkdir(parents=True)
+        (fixture_dir / "1-escape.md").symlink_to(outside / "secret.md")
+
+        result = load_fixture("evil", "1-escape", repo_root=repo)
+        # The symlink resolves outside repo_root — should be blocked.
+        assert result is None or "SECRET DATA" not in (result or "")
+
+    def test_load_fixture_invalid_chars(self, tmp_path):
+        """skill_name or fixture_key with / or .. returns None."""
+        assert load_fixture("../evil", "test", repo_root=tmp_path) is None
+        assert load_fixture("fix", "../../etc/passwd", repo_root=tmp_path) is None
+        assert load_fixture("skill/name", "key", repo_root=tmp_path) is None
+        assert load_fixture("skill", "key/evil", repo_root=tmp_path) is None
+
+    def test_load_fixture_strips_delimiters(self, tmp_path):
+        """Fixture content containing execute_skill delimiters has those lines removed."""
+        content = (
+            "Some content\n"
+            "=== SKILL INSTRUCTIONS ===\n"
+            "More content\n"
+            "=== END SKILL INSTRUCTIONS ===\n"
+            "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===\n"
+            "=== END BEHAVIORAL CONTEXT ===\n"
+            "Final content\n"
+        )
+        repo = _make_fixture(tmp_path, "test-skill", "1-delim", content)
+        result = load_fixture("test-skill", "1-delim", repo_root=repo)
+        assert result is not None
+        assert "=== SKILL INSTRUCTIONS ===" not in result
+        assert "=== END SKILL INSTRUCTIONS ===" not in result
+        assert "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===" not in result
+        assert "=== END BEHAVIORAL CONTEXT ===" not in result
+        assert "Some content" in result
+        assert "More content" in result
+        assert "Final content" in result
+
+
+# ── Group 15: build_fixture_prompt ─────────────────────────────────────────
+
+
+class TestBuildFixturePrompt:
+    """build_fixture_prompt(skill, template, repo_root) — template substitution."""
+
+    def test_build_fixture_prompt_substitutes(self, tmp_path):
+        """{fixture:key} replaced; returns (str, False)."""
+        _make_fixture(tmp_path, "fix", "1-sec", "Fixture body A")
+        _make_fixture(tmp_path, "fix", "2-perf", "Fixture body B")
+        template = "Review:\n{fixture:1-sec}\n---\n{fixture:2-perf}\n"
+        result, has_missing = build_fixture_prompt("fix", template, repo_root=tmp_path)
+        assert has_missing is False
+        assert "Fixture body A" in result
+        assert "Fixture body B" in result
+        assert "{fixture:" not in result
+
+    def test_build_fixture_prompt_missing_fixture(self, tmp_path):
+        """Missing placeholder left as-is; returns (str, True)."""
+        template = "Review:\n{fixture:nonexistent}\n"
+        result, has_missing = build_fixture_prompt("fix", template, repo_root=tmp_path)
+        assert has_missing is True
+        assert "{fixture:nonexistent}" in result
+
+
+# ── Group 16: Per-case rubric support ──────────────────────────────────────
+
+
+class TestPerCaseRubrics:
+    """Per-case rubrics field overrides config-level rubrics via run_eval."""
+
+    def test_per_case_rubrics_override(self, tmp_path):
+        """TC with rubrics field uses per-case rubrics, not config-level."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        captured_rubrics: list[list[str]] = []
+
+        def capture_build(names, judge):
+            captured_rubrics.append(list(names))
+            return []
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {
+                        "id": 1,
+                        "prompt": "test",
+                        "rubrics": ["instruction_adherence"],
+                        "assertions": [],
+                    }
+                ],
+                rubric_names=["anti_deferral", "phase_completion"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert len(captured_rubrics) == 1
+        assert captured_rubrics[0] == ["instruction_adherence"]
+
+    def test_per_case_rubrics_fallback(self, tmp_path):
+        """TC without rubrics field uses config-level rubrics."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        captured_rubrics: list[list[str]] = []
+
+        def capture_build(names, judge):
+            captured_rubrics.append(list(names))
+            return []
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[{"id": 1, "prompt": "test", "assertions": []}],
+                rubric_names=["anti_deferral", "phase_completion"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert len(captured_rubrics) == 1
+        assert captured_rubrics[0] == ["anti_deferral", "phase_completion"]
+
+    def test_per_case_empty_rubrics_fallback(self, tmp_path):
+        """TC with rubrics: [] falls through to config-level (empty list is falsy)."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        captured_rubrics: list[list[str]] = []
+
+        def capture_build(names, judge):
+            captured_rubrics.append(list(names))
+            return []
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[{"id": 1, "prompt": "test", "rubrics": [], "assertions": []}],
+                rubric_names=["anti_deferral", "phase_completion"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert len(captured_rubrics) == 1
+        assert captured_rubrics[0] == ["anti_deferral", "phase_completion"]
+
+
+# ── Group 17: expected_behaviors wiring ────────────────────────────────────
+
+
+class TestExpectedBehaviorsWiring:
+    """expected_behaviors list is joined and passed as LLMTestCase.expected_output."""
+
+    def test_expected_behaviors_wired_as_expected_output(self, tmp_path):
+        """run_eval passes expected_behaviors as expected_output to metrics."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        captured_tcs: list[LLMTestCase] = []
+
+        class CapturingMetric:
+            name = "capture"
+            score = None
+
+            def measure(self, tc):
+                captured_tcs.append(tc)
+                self.score = 0.5
+
+            def is_successful(self):
+                return True
+
+        def capture_build(names, judge):
+            return [CapturingMetric()]
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {
+                        "id": 1,
+                        "prompt": "test",
+                        "expected_behaviors": ["Finds SQL injection", "Reports path traversal"],
+                        "assertions": [],
+                    }
+                ],
+                rubric_names=["instruction_adherence"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert any(
+            tc.expected_output == "Finds SQL injection\nReports path traversal"
+            for tc in captured_tcs
+        )
+
+    def test_expected_output_none_when_empty(self, tmp_path):
+        """Without expected_behaviors, expected_output is None."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        captured_tcs: list[LLMTestCase] = []
+
+        class CapturingMetric:
+            name = "capture"
+            score = None
+
+            def measure(self, tc):
+                captured_tcs.append(tc)
+                self.score = 0.5
+
+            def is_successful(self):
+                return True
+
+        def capture_build(names, judge):
+            return [CapturingMetric()]
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with (
+            patch.object(runner, "execute_skill", return_value="response"),
+            patch.object(runner, "build_metrics", side_effect=capture_build),
+        ):
+            run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[{"id": 1, "prompt": "test", "assertions": []}],
+                rubric_names=["instruction_adherence"],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert all(tc.expected_output is None for tc in captured_tcs)
+
+
+# ── Group 18: load_eval_config validation ──────────────────────────────────
+
+
+class TestLoadEvalConfigValidation:
+    """Validation rules for load_eval_config."""
+
+    def test_load_eval_config_raises_for_competency_rubric_without_expected_behaviors(
+        self, tmp_path
+    ):
+        """ValueError raised when competency rubric used without expected_behaviors."""
+        config = {
+            "skill_name": "test-skill",
+            "rubrics": ["review_comprehensiveness"],
+            "test_cases": [
+                {"id": 1, "prompt": "test", "assertions": []},
+            ],
+        }
+        tc_file = tmp_path / "test-competency-validation.json"
+        tc_file.write_text(json.dumps(config))
+        with pytest.raises(ValueError, match="competency rubric"):
+            load_eval_config("test-competency-validation", tc_dir=tmp_path)
+
+    def test_load_eval_config_raises_for_empty_rubrics(self, tmp_path):
+        """ValueError when rubrics is []."""
+        config = {
+            "skill_name": "test-empty-rubrics",
+            "rubrics": [],
+            "test_cases": [],
+        }
+        tc_file = tmp_path / "test-empty-rubrics.json"
+        tc_file.write_text(json.dumps(config))
+        with pytest.raises(ValueError, match="empty rubrics"):
+            load_eval_config("test-empty-rubrics", tc_dir=tmp_path)
+
+
+# ── Group 19: N-adjusted regression threshold ─────────────────────────────
+
+
+class TestNAdjustedThreshold:
+    """compare_baselines uses widened threshold for low N."""
+
+    def test_compare_baselines_widened_threshold_for_low_n(self):
+        """N=1 metric uses 1.5x threshold (0.225 instead of 0.15)."""
+        # A drop of 0.20 should PASS with N=1 (threshold widened to 0.225)
+        # but would FAIL with N>=3 (threshold stays 0.15).
+        results = {
+            "skill": "test-skill",
+            "scores": {"anti_deferral": 0.70},
+            "per_case_scores": {"anti_deferral": [0.70]},  # N=1
+        }
+        baselines = {"test-skill": {"anti_deferral": 0.90}}
+
+        # Drop = 0.20, base threshold = 0.15, N=1 effective = 0.225
+        # 0.20 < 0.225 -> pass
+        passed, report = compare_baselines(results, baselines)
+        assert passed is True, f"N=1 drop of 0.20 should pass with widened threshold: {report}"
+
+        # Same drop with N=3 should fail (threshold stays at 0.15).
+        results_n3 = {
+            "skill": "test-skill",
+            "scores": {"anti_deferral": 0.70},
+            "per_case_scores": {"anti_deferral": [0.60, 0.70, 0.80]},  # N=3
+        }
+        passed_n3, report_n3 = compare_baselines(results_n3, baselines)
+        assert passed_n3 is False, f"N=3 drop of 0.20 should fail: {report_n3}"
+
+
+# ── Group 20: load_codebase_file ───────────────────────────────────────────
+
+
+class TestLoadCodebaseFile:
+    """Tests for load_codebase_file()."""
+
+    def test_valid_codebase_ref(self, tmp_path):
+        """Valid ref resolves correctly."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("print('hello')")
+        result = load_codebase_file("test-repo/src/app.py", repo_root=tmp_path)
+        assert result == "print('hello')"
+
+    def test_path_traversal_rejected(self, tmp_path):
+        """.. in path is rejected."""
+        result = load_codebase_file("../evil/file.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_dotdot_in_path_rejected(self, tmp_path):
+        """.. in nested path is rejected."""
+        result = load_codebase_file("repo/../evil.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_absolute_path_rejected(self, tmp_path):
+        """Leading / is rejected."""
+        result = load_codebase_file("repo//etc/passwd", repo_root=tmp_path)
+        assert result is None
+
+    def test_double_slash_rejected(self, tmp_path):
+        """Empty path segment is rejected."""
+        result = load_codebase_file("repo//file.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_dot_segment_rejected(self, tmp_path):
+        """Single . in path is rejected."""
+        result = load_codebase_file("repo/./file.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_missing_file_returns_none(self, tmp_path):
+        """Non-existent file returns None."""
+        result = load_codebase_file("repo/nonexistent.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_no_slash_rejected(self, tmp_path):
+        """Ref without slash is rejected (must be REPO/PATH)."""
+        result = load_codebase_file("justfile.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_symlink_escape_blocked(self, tmp_path):
+        """Symlink pointing outside repo_root is blocked."""
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as f:
+            f.write(b"evil content")
+            evil_path = f.name
+        try:
+            codebases = tmp_path / "skill-eval" / "codebases" / "evil-repo"
+            codebases.mkdir(parents=True)
+            link = codebases / "escape.py"
+            link.symlink_to(evil_path)
+            result = load_codebase_file("evil-repo/escape.py", repo_root=tmp_path)
+            assert result is None
+        finally:
+            Path(evil_path).unlink(missing_ok=True)
+
+    def test_size_limit_enforced(self, tmp_path):
+        """Files exceeding MAX size return None."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "big-repo"
+        codebases.mkdir(parents=True)
+        big_file = codebases / "huge.py"
+        big_file.write_text("x" * 70000)  # > 65536
+        result = load_codebase_file("big-repo/huge.py", repo_root=tmp_path)
+        assert result is None
+
+    def test_delimiter_stripping(self, tmp_path):
+        """Prompt delimiter lines are stripped from codebase content."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo"
+        codebases.mkdir(parents=True)
+        content = "line1\n=== SKILL INSTRUCTIONS ===\nline3"
+        (codebases / "file.py").write_text(content)
+        result = load_codebase_file("test-repo/file.py", repo_root=tmp_path)
+        assert result == "line1\nline3"
+
+    def test_frontmatter_not_stripped(self, tmp_path):
+        """YAML frontmatter is preserved (not stripped like fixtures)."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo"
+        codebases.mkdir(parents=True)
+        content = "---\nkey: value\n---\ncode here"
+        (codebases / "file.py").write_text(content)
+        result = load_codebase_file("test-repo/file.py", repo_root=tmp_path)
+        assert "---" in result
+        assert "key: value" in result
+
+
+# ── Group 21: build_fixture_prompt codebase support ───────────────────────
+
+
+class TestBuildFixturePromptCodebase:
+    """Tests for {codebase:} placeholder resolution in build_fixture_prompt."""
+
+    def test_codebase_placeholder_substituted(self, tmp_path):
+        """Codebase placeholder is resolved."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("from flask import Flask")
+        template = "Review this: {codebase:test-repo/src/app.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "from flask import Flask" in result
+        assert not has_missing
+
+    def test_missing_codebase_leaves_placeholder(self, tmp_path):
+        """Missing codebase file leaves placeholder and sets has_missing."""
+        template = "Review: {codebase:nonexistent/file.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "{codebase:nonexistent/file.py}" in result
+        assert has_missing
+
+    def test_mixed_fixture_and_codebase(self, tmp_path):
+        """Both fixture and codebase placeholders resolve."""
+        # Create fixture
+        fixtures = tmp_path / "skill-eval" / "fixtures" / "test-skill"
+        fixtures.mkdir(parents=True)
+        (fixtures / "1-test.md").write_text("fixture content here")
+        # Create codebase file
+        codebases = tmp_path / "skill-eval" / "codebases" / "test-repo"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("codebase content here")
+        template = "{fixture:1-test} and {codebase:test-repo/app.py}"
+        result, has_missing = build_fixture_prompt("test-skill", template, repo_root=tmp_path)
+        assert "fixture content here" in result
+        assert "codebase content here" in result
+        assert not has_missing
+
+    def test_codebase_only_prompt_resolved(self, tmp_path):
+        """Prompt with only codebase placeholders (no fixtures) is resolved."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "main.py").write_text("def main(): pass")
+        template = "Analyze: {codebase:repo/src/main.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "def main(): pass" in result
+        assert not has_missing
+
+
+# ── Group 22: Integration — codebase-only prompts through run_eval ────────
+
+
+class TestCodebaseOnlyRunEval:
+    """Verifies _eval_tc guard triggers build_fixture_prompt for codebase-only prompts."""
+
+    def test_codebase_placeholder_resolved_through_eval_tc(self, tmp_path):
+        """Codebase-only prompt is resolved when run_eval calls _eval_tc."""
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("print('resolved')")
+
+        captured_prompts = []
+
+        def fake_execute(bundle, prompt, judge, context_preamble=None):
+            captured_prompts.append(prompt)
+            return "Looks good, no issues found."
+
+        from skill_eval import runner
+
+        mock_judge = type("MockJudge", (), {"get_model_name": lambda self: "mock"})()
+
+        with patch.object(runner, "execute_skill", side_effect=fake_execute):
+            from skill_eval.runner import run_eval
+
+            run_eval(
+                skill_name="test-skill",
+                skill_prompt_bundle="# test bundle",
+                test_cases=[
+                    {
+                        "id": 1,
+                        "prompt": "Review: {codebase:repo/src/app.py}",
+                        "rubrics": [],
+                        "assertions": [],
+                    }
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert len(captured_prompts) == 1
+        assert "print('resolved')" in captured_prompts[0]
+        assert "{codebase:" not in captured_prompts[0]
+
+
+# ── Group 23: Codebase Python syntax regression ──────────────────────────
+
+
+class TestCodebasePythonSyntax:
+    """Regression test: all .py files under skill-eval/codebases/ must parse."""
+
+    def test_codebase_python_syntax(self):
+        import ast
+
+        codebases_dir = Path(__file__).parent.parent / "codebases"
+        assert codebases_dir.exists(), (
+            "codebases/ directory missing — fixture apps may have been deleted"
+        )
+        py_files = list(codebases_dir.rglob("*.py"))
+        assert py_files, "No .py files under skill-eval/codebases/ — fixture apps may be empty"
+        for path in py_files:
+            try:
+                ast.parse(path.read_text())
+            except SyntaxError as e:
+                raise AssertionError(f"Syntax error in {path}: {e}") from e
+
+
+# ── Group 24: Multi-codebase placeholder ─────────────────────────────────
+
+
+class TestMultiCodebasePlaceholder:
+    """Multiple {codebase:} placeholders in one template resolve correctly."""
+
+    def test_two_codebase_placeholders(self, tmp_path):
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "a.py").write_text("FILE_A_CONTENT")
+        (codebases / "b.py").write_text("FILE_B_CONTENT")
+        template = "First: {codebase:repo/src/a.py}\nSecond: {codebase:repo/src/b.py}"
+        result, has_missing = build_fixture_prompt("any-skill", template, repo_root=tmp_path)
+        assert "FILE_A_CONTENT" in result
+        assert "FILE_B_CONTENT" in result
+        assert "{codebase:" not in result
+        assert not has_missing
+
+
+# ── Group 25: Transitive codebase in fixture ─────────────────────────────
+
+
+class TestTransitiveCodebaseInFixture:
+    """Codebase placeholders inside fixture content are resolved (transitive)."""
+
+    def test_codebase_inside_fixture_resolved(self, tmp_path):
+        _make_fixture(
+            tmp_path,
+            "test-skill",
+            "1-ref",
+            "Review this file:\n{codebase:repo/src/app.py}\n",
+        )
+        codebases = tmp_path / "skill-eval" / "codebases" / "repo" / "src"
+        codebases.mkdir(parents=True)
+        (codebases / "app.py").write_text("TRANSITIVE_CONTENT")
+        template = "{fixture:1-ref}"
+        result, has_missing = build_fixture_prompt("test-skill", template, repo_root=tmp_path)
+        assert "TRANSITIVE_CONTENT" in result
+        assert "{codebase:" not in result
+        assert not has_missing
+
+
+# ── Group 26: Frontmatter-only fixture ───────────────────────────────────
+
+
+class TestFrontmatterOnlyFixture:
+    """Fixture with only frontmatter (no content after closing ---) returns ''."""
+
+    def test_frontmatter_only_returns_empty(self, tmp_path):
+        content = "---\nkey: val\n---"
+        repo = _make_fixture(tmp_path, "test-skill", "1-empty", content)
+        result = load_fixture("test-skill", "1-empty", repo_root=repo)
+        assert result is not None
+        assert result.strip() == ""
+
+
+# ── Group 27: run_eval infra-error threshold ─────────────────────────────
+
+
+class TestRunEvalInfraError:
+    """run_eval sets infra_error when >= 50% of TCs have infra failures."""
+
+    def test_all_tcs_fail_sets_infra_error(self, tmp_path):
+        """When all TCs raise, infra_error is True."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        def failing_execute(*args, **kwargs):
+            raise RuntimeError("API down")
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with patch.object(runner, "execute_skill", side_effect=failing_execute):
+            result = run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {"id": 1, "prompt": "test", "assertions": []},
+                    {"id": 2, "prompt": "test2", "assertions": []},
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert result["infra_error"] is True
+
+    def test_half_tcs_fail_sets_infra_error(self, tmp_path):
+        """When exactly 50% fail (>= threshold), infra_error is True."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        call_count = {"n": 0}
+
+        def half_failing(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RuntimeError("API down")
+            return "response"
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with patch.object(runner, "execute_skill", side_effect=half_failing):
+            result = run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {"id": 1, "prompt": "test", "assertions": []},
+                    {"id": 2, "prompt": "test2", "assertions": []},
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert result["infra_error"] is True
+
+    def test_no_failures_no_infra_error(self, tmp_path):
+        """When no TCs fail, infra_error is False."""
+        from skill_eval import runner
+        from skill_eval.runner import run_eval
+
+        mock_judge = type("J", (), {"get_model_name": lambda self: "mock"})()
+        with patch.object(runner, "execute_skill", return_value="response"):
+            result = run_eval(
+                skill_name="test",
+                skill_prompt_bundle="# bundle",
+                test_cases=[
+                    {"id": 1, "prompt": "test", "assertions": []},
+                    {"id": 2, "prompt": "test2", "assertions": []},
+                ],
+                rubric_names=[],
+                judge=mock_judge,
+                repo_root=tmp_path,
+            )
+
+        assert result["infra_error"] is False

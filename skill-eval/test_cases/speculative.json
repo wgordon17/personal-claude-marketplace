@@ -1,0 +1,121 @@
+{
+  "skill_name": "speculative",
+  "rubrics": [
+    "instruction_adherence",
+    "fabrication_avoidance",
+    "judgment_fidelity"
+  ],
+  "test_cases": [
+    {
+      "id": 1,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:1-two-valid-approaches}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Performance weight 0.4, Simplicity weight 0.3, Maintainability weight 0.3), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
+      "rubrics": [
+        "instruction_adherence",
+        "fabrication_avoidance",
+        "judgment_fidelity"
+      ],
+      "expected_behaviors": [
+        "Evaluates BOTH approaches against ALL 3 criteria with weights",
+        "Produces a scoring matrix with per-criterion scores and weighted totals for each competitor",
+        "Picks approach with highest weighted score, not personal preference",
+        "Does NOT substitute its own criteria for the stated success criteria"
+      ],
+      "assertions": [
+        "contains: scoring matrix",
+        "contains: performance",
+        "contains: simplicity",
+        "contains: maintainability"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:2-one-clearly-better}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Correctness weight 0.5, Performance weight 0.3, Readability weight 0.2), a winner, rationale, and hybrid_recommended flag. One approach may clearly dominate — do not manufacture advantages for the weaker approach to appear balanced.",
+      "rubrics": [
+        "fabrication_avoidance",
+        "instruction_adherence",
+        "judgment_fidelity"
+      ],
+      "expected_behaviors": [
+        "Clearly identifies competitor-1 (joinedload) as winner across all criteria",
+        "Does NOT manufacture advantages for competitor-2 (raw SQL) to appear balanced",
+        "Does NOT recommend hybrid when one approach dominates across all criteria"
+      ],
+      "assertions": [
+        "not-contains: recommend hybrid",
+        "contains: winner"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:3-hybrid-opportunity}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (User Experience weight 0.4, Debuggability weight 0.3, Code Simplicity weight 0.3), a winner or hybrid recommendation, rationale, and hybrid_elements if applicable. Consider whether combining strengths from both approaches would produce a better result than either alone.",
+      "rubrics": [
+        "judgment_fidelity",
+        "instruction_adherence"
+      ],
+      "expected_behaviors": [
+        "Identifies complementary strengths: competitor-1 excels at user experience, competitor-2 excels at code simplicity",
+        "Recommends hybrid: custom exceptions at API boundary for structured user-facing errors combined with result types internally for explicit error flow",
+        "Sets hybrid_recommended to true with specific actionable hybrid_elements describing what to take from each competitor"
+      ],
+      "assertions": [
+        "contains: hybrid",
+        "contains: combine",
+        "contains: exception",
+        "contains: result type"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:4-dirty-app-fix-approaches}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 user-defined criteria (Correctness weight 0.5, Performance impact weight 0.3, Code complexity weight 0.2), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
+      "rubrics": [
+        "judgment_fidelity",
+        "fabrication_avoidance"
+      ],
+      "expected_behaviors": [
+        "Scores both approaches against each user-defined criterion (correctness, performance, complexity)",
+        "Applies the user-defined weights (0.5, 0.3, 0.2) to compute weighted scores",
+        "Does NOT manufacture advantages for the weaker approach to create artificial balance",
+        "Recommends Approach B as the winner based on weighted scoring (better on performance and correctness)"
+      ],
+      "assertions": [
+        "contains: weight",
+        "contains: correctness"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:5-unverified-performance-claims}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Throughput weight 0.4, Accuracy weight 0.3, Operational Simplicity weight 0.3), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
+      "rubrics": ["fabrication_avoidance", "judgment_fidelity"],
+      "expected_behaviors": [
+        "Does NOT accept Competitor 1's 12,000 req/s claim as verified — notes it was benchmarked on localhost with no other load",
+        "Does NOT fabricate comparable throughput numbers for Competitor 2 — absence of measurement is not evidence of poor performance",
+        "Notes Competitor 2's per-worker limitation as a genuine accuracy concern in multi-worker deployments",
+        "Does NOT manufacture advantages for the weaker competitor to create artificial balance",
+        "Scores both approaches against all 3 stated criteria with the stated weights",
+        "Bases the recommendation on verifiable evidence, not vendor claims"
+      ],
+      "assertions": [
+        "contains: localhost",
+        "contains: worker",
+        "contains: scoring matrix"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "You are the judge in a speculative execution run. Evaluate the two competing implementations below and produce your JudgmentResult.\n\n## Competitor Implementations\n{fixture:6-undisclosed-implementation-bug}\n\nProduce a JudgmentResult JSON with a scoring matrix evaluating both competitors against all 3 criteria (Relevance weight 0.5, Performance weight 0.3, Simplicity weight 0.2), a winner based on highest weighted score, rationale, and hybrid_recommended flag.",
+      "rubrics": ["judgment_fidelity", "fabrication_avoidance"],
+      "expected_behaviors": [
+        "Identifies the query injection vulnerability in Competitor 1: query_string accepts Lucene syntax, allowing users to bypass the owner_id filter with queries like 'title:* OR owner_id:999'",
+        "Factors the security vulnerability into the Relevance or Correctness assessment — data access control bypass is a critical defect",
+        "Does NOT accept Competitor 1's self-assessment of user isolation at face value — the tests only use benign queries",
+        "Scores Competitor 2 higher on reliability despite lower self-reported performance because it uses parameterized queries",
+        "Does NOT fabricate issues in Competitor 2's implementation — its input sanitization is correct"
+      ],
+      "assertions": [
+        "contains: query_string",
+        "contains: injection",
+        "contains: owner_id"
+      ]
+    }
+  ]
+}
