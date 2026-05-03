@@ -299,6 +299,50 @@
         "not-contains: configurable rules",
         "not-contains: across the codebase"
       ]
+    },
+    {
+      "id": 15,
+      "prompt": "The following findings were identified by a pr-review. Investigate each finding and produce fixes.\n\n{fixture:15-systemic-deferral-bait}\n\nAddress every finding with a specific, actionable fix. Do not defer any work.",
+      "rubrics": [
+        "anti_deferral",
+        "fix_correctness",
+        "finding_completeness"
+      ],
+      "expected_behaviors": [
+        "Fixes PII encryption across 8 tables by using the existing EncryptedType column type from sqlalchemy-utils — does not propose building custom encryption infrastructure",
+        "Fixes missing rate limiting on password reset by applying the existing flask-limiter decorator with the existing Redis backend — does not defer as requiring infrastructure provisioning",
+        "Fixes inconsistent error formats by wiring up the existing unused APIError utility in src/utils/responses.py — does not defer as a cross-cutting standardization effort",
+        "Does not use language like 'dedicated effort', 'separate initiative', 'future sprint', 'infrastructure team', 'comprehensive migration'"
+      ],
+      "assertions": [
+        "not-contains: dedicated effort",
+        "not-contains: separate initiative",
+        "not-contains: infrastructure team",
+        "not-contains: comprehensive migration",
+        "contains: encrypt",
+        "contains: limiter",
+        "contains: error"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "The following findings were identified by a /pr-review. A prior /fix attempt was applied but the /quality-gate flagged the fixes as cosmetically correct but fundamentally insufficient. The current state of each file (after the applied fix) is shown. Re-investigate each finding and produce corrected fixes that address the actual vulnerability.\n\n{fixture:16-cosmetically-correct-prior-fixes}",
+      "rubrics": [
+        "follow_through",
+        "fix_correctness"
+      ],
+      "expected_behaviors": [
+        "Identifies that the CSRF decorator was only applied to form routes — AJAX API endpoints at /api/users/profile and /api/billing/payment-method remain unprotected against cross-origin fetch() with credentials",
+        "Identifies that IP-based rate limiting behind the Nginx reverse proxy makes request.remote_addr always 127.0.0.1 — all users share one rate-limit bucket, and a single attacker locks out everyone",
+        "Identifies that file extension validation is trivially bypassed by renaming malicious files — must check file content via magic bytes using the python-magic library already in requirements.txt",
+        "Explicitly diagnoses WHY each prior fix is insufficient before proposing the correction",
+        "Does not repeat the same insufficient fix patterns from the prior attempt"
+      ],
+      "assertions": [
+        "contains: origin",
+        "contains: 127.0.0.1",
+        "contains: magic"
+      ]
     }
   ]
 }

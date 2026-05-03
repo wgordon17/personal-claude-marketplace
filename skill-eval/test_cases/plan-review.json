@@ -247,6 +247,24 @@
         "contains: task.py",
         "contains: ordering"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "Review this implementation plan for issues with scope alignment, completeness, and goal adherence.\n\n## Plan File\n{fixture:14-reasonable-scope-reduction}\n\nIdentify any gaps between the stated goal and what the plan actually delivers.",
+      "rubrics": ["finding_completeness", "plan_analysis_depth", "anti_deferral"],
+      "expected_behaviors": [
+        "Identifies that the goal says 'rollback capability' but Task 6 substitutes a manual runbook and defers automated rollback — a runbook is documentation, not capability",
+        "Identifies that the goal says 'security scanning' but Task 7 only implements dependency scanning (Dependabot) and defers SAST/DAST — dependency scanning catches known CVEs in libraries but not custom code vulnerabilities like SQL injection or XSS",
+        "Identifies that 'better addressed as a parallel initiative by the security team' is deferral language — the plan's own goal includes security scanning, so it cannot be delegated out of scope",
+        "Does NOT accept the phasing as 'reasonable for an initial release' — the goal makes no mention of phased delivery or initial release"
+      ],
+      "assertions": [
+        "contains: rollback",
+        "contains: runbook",
+        "contains: sast",
+        "not-contains: reasonable phasing",
+        "not-contains: acceptable for"
+      ]
     }
   ]
 }

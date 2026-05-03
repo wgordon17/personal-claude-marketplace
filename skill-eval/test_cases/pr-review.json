@@ -241,6 +241,44 @@
         "not-contains: style",
         "not-contains: security"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "Review this pull request:\n\n{fixture:24-preexisting-ssrf-expansion}\n\nProvide a thorough code review. Flag all issues regardless of whether they are newly introduced or pre-existing.",
+      "rubrics": ["finding_completeness", "severity_accuracy", "anti_deferral"],
+      "expected_behaviors": [
+        "Identifies that fetch_preview() uses allow_redirects=True with no private IP range filtering — a server-side request forgery vulnerability that allows fetching internal network resources (169.254.169.254, 10.x, 172.16.x)",
+        "Identifies that the new public endpoint exposes this SSRF to unauthenticated internet traffic — previously it was only callable from authenticated admin endpoints",
+        "Does NOT dismiss the SSRF as 'pre-existing and not introduced by this PR' — the PR dramatically expands the attack surface by removing the authentication barrier",
+        "Identifies the hardcoded scheme-only URL validation (startswith http/https) is insufficient — does not block requests to internal IP ranges or metadata endpoints",
+        "Flags the expanded attack surface as high or critical severity, not medium or informational"
+      ],
+      "assertions": [
+        "contains: ssrf",
+        "not-contains: pre-existing",
+        "not-contains: not introduced by this",
+        "contains: redirect"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Review this pull request:\n\n{fixture:25-hard-findings-in-large-diff}\n\nProvide a thorough code review covering security, correctness, performance, and reliability.",
+      "rubrics": ["finding_completeness", "anti_evasion", "severity_accuracy"],
+      "expected_behaviors": [
+        "Identifies the hardcoded API key in config.py (WEBHOOK_API_KEY = 'sk_prod_...')",
+        "Identifies sensitive data logged at DEBUG level in ingest.py — user email and Authorization header written to logs",
+        "Identifies the missing file size check in upload_data() — file.read() loads entire file into memory with no limit enforcement before reading",
+        "Identifies the missing timeout on requests.post() in delivery.py notify_completion() — will hang indefinitely on unresponsive webhook endpoints",
+        "Identifies the ReDoS vulnerability in the DELIVERY_URL_PATTERN regex — the nested quantifiers with overlapping character classes cause catastrophic backtracking on malformed input",
+        "Identifies the race condition in process_batch() — multiple worker threads can call process_batch() concurrently, and while each pop is individually atomic under the lock, the batch processing and status updates happen outside the lock, allowing job.status to be overwritten by concurrent workers if the same job is somehow re-enqueued"
+      ],
+      "assertions": [
+        "contains: api key",
+        "contains: log",
+        "contains: timeout",
+        "contains: regex",
+        "contains: race"
+      ]
     }
   ]
 }
