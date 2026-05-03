@@ -69,6 +69,7 @@ SKILL_GOAL_RUBRICS: frozenset[str] = frozenset(
         "pr_depth",
         "convention_adherence",
         "follow_through",
+        "implementer_judgment",
     }
 )
 

@@ -1715,3 +1715,18 @@ class TestRunEvalInfraError:
             )
 
         assert result["infra_error"] is False
+
+
+# ── Group 24: Implementer judgment rubric registration ───────────────────────
+
+
+def test_implementer_judgment_registered():
+    from deepeval.test_case import LLMTestCaseParams
+    from skill_eval.rubrics import RUBRIC_REGISTRY
+
+    assert "implementer_judgment" in RUBRIC_REGISTRY
+    assert RUBRIC_REGISTRY["implementer_judgment"]["evaluation_params"] == [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ]
