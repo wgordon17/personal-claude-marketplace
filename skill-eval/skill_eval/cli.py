@@ -143,6 +143,25 @@ def _deferred_imports() -> tuple:
     )
 
 
+def _deferred_composition_imports() -> tuple:
+    """Import composition eval modules after setting DEEPEVAL env vars."""
+    os.environ["DEEPEVAL_DISABLE_TIMEOUTS"] = "true"
+    os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "YES"
+    from skill_eval.judge import VertexSonnetJudge
+    from skill_eval.runner import (
+        compare_composition_results,
+        load_composition_config,
+        run_composition_eval,
+    )
+
+    return (
+        VertexSonnetJudge,
+        load_composition_config,
+        run_composition_eval,
+        compare_composition_results,
+    )
+
+
 def _eval_skills(
     skill_dirs: list[Path],
     repo_root: Path,
@@ -300,6 +319,55 @@ def _write_baselines(all_results: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _mode_composition(config_path: Path, repo_root: Path) -> bool:
+    """--composition mode: run composition eval from a JSON config file."""
+    (
+        VertexSonnetJudge,
+        load_composition_config,
+        run_composition_eval,
+        compare_composition_results,
+    ) = _deferred_composition_imports()
+
+    try:
+        config = load_composition_config(config_path)
+    except FileNotFoundError:
+        print(f"[skill-eval] Composition config not found: {config_path}", file=sys.stderr)
+        return False
+
+    compositions = config.get("compositions", [])
+    if not compositions:
+        print("[skill-eval] No compositions found in config", file=sys.stderr)
+        return True
+
+    judge = VertexSonnetJudge()
+    all_passed = True
+
+    for composition in compositions:
+        name = composition.get("name", "?")
+        print(f"  [composition] {name}...")
+        try:
+            result = run_composition_eval(composition, repo_root, judge)
+        except Exception as exc:
+            print(f"  [error] {name}: {exc}", file=sys.stderr)
+            all_passed = False
+            continue
+
+        if result.infra_error:
+            print(f"  [error] {name}: infra error during chain execution", file=sys.stderr)
+            all_passed = False
+            continue
+
+        print(f"\n{'Metric':<30} {'Score':>8}  Status")
+        print("-" * 50)
+        for metric, score in result.final_scores.items():
+            print(f"  {metric:<28} {score:>8.3f}")
+
+        if not result.final_scores:
+            print(f"  {name}: no rubrics configured — chain executed successfully")
+
+    return all_passed
+
+
 def _mode_prepush(repo_root: Path) -> bool:
     """Default pre-push mode: detect changed skills and eval them."""
     try:
@@ -407,6 +475,11 @@ def main() -> None:
         action="store_true",
         help="Run --all and write results to baselines.json",
     )
+    group.add_argument(
+        "--composition",
+        metavar="PATH",
+        help="Run composition eval from a JSON config file",
+    )
     parser.add_argument(
         "--locked",
         action="store_true",
@@ -457,6 +530,8 @@ def main() -> None:
         passed = _mode_all(repo_root)
     elif args.update_baselines:
         passed = _mode_update_baselines(repo_root)
+    elif args.composition:
+        passed = _mode_composition(Path(args.composition), repo_root)
     else:
         passed = _mode_prepush(repo_root)
 

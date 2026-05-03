@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-prepush eval-update-baselines
+.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-prepush eval-update-baselines eval-composition
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
@@ -33,3 +33,6 @@ eval:  ## Run skill evals for all skills with test cases
 
 eval-update-baselines:  ## Update baselines.json with current scores
 	cd skill-eval && uv run python -m skill_eval.cli --update-baselines
+
+eval-composition:  ## Run composition eval (set CONFIG=path/to/composition.json)
+	cd skill-eval && uv run python -m skill_eval.cli --composition $(CONFIG)
