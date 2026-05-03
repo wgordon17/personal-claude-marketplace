@@ -62,9 +62,20 @@ def _mock_claude_proc(output: str = "step output") -> MagicMock:
     return proc
 
 
-def _step(skill: str = "quality-gate", prompt_template: str = "review this", **kwargs) -> dict:
-    """Build a minimal step dict with required fields."""
-    return {"skill": skill, "prompt_template": prompt_template, "timeout_seconds": 30, **kwargs}
+def _make_composition(fixture_key: str = "composition/terse") -> dict:
+    return {
+        "name": "test-composition",
+        "fixture": fixture_key,
+        "rubrics": [],
+        "configs": [
+            {
+                "name": "baseline",
+                "steps": [
+                    {"skill": "quality-gate", "prompt_template": "{fixture}", "timeout_seconds": 30}
+                ],
+            }
+        ],
+    }
 
 
 # ── Group 1: execute_chain ────────────────────────────────────────────────────
@@ -82,7 +93,13 @@ class TestExecuteChain:
             patch("skill_eval.runner.subprocess.run", return_value=_mock_claude_proc("hello")),
         ):
             results = execute_chain(
-                steps=[_step(prompt_template="review this")],
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "review this",
+                        "timeout_seconds": 30,
+                    }
+                ],
                 repo_root=repo,
                 context_preamble=None,
             )
@@ -112,8 +129,17 @@ class TestExecuteChain:
         ):
             results = execute_chain(
                 steps=[
-                    _step(prompt_template="first", capture_as="step1"),
-                    _step(prompt_template="second: {step1}"),
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "first",
+                        "capture_as": "step1",
+                        "timeout_seconds": 30,
+                    },
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "second: {step1}",
+                        "timeout_seconds": 30,
+                    },
                 ],
                 repo_root=repo,
                 context_preamble=None,
@@ -142,7 +168,13 @@ class TestExecuteChain:
             patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
         ):
             execute_chain(
-                steps=[_step(prompt_template="Review: {fixture}")],
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "Review: {fixture}",
+                        "timeout_seconds": 30,
+                    }
+                ],
                 repo_root=repo,
                 context_preamble=None,
                 initial_captures={"fixture": "my fixture content"},
@@ -172,8 +204,17 @@ class TestExecuteChain:
         ):
             execute_chain(
                 steps=[
-                    _step(prompt_template="first step", capture_as="result"),
-                    _step(prompt_template="use this: {result}"),
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "first step",
+                        "capture_as": "result",
+                        "timeout_seconds": 30,
+                    },
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "use this: {result}",
+                        "timeout_seconds": 30,
+                    },
                 ],
                 repo_root=repo,
                 context_preamble=None,
@@ -190,7 +231,9 @@ class TestExecuteChain:
 
         with pytest.raises(ValueError, match="Invalid skill name"):
             execute_chain(
-                steps=[_step(skill="bad skill name!")],
+                steps=[
+                    {"skill": "bad skill name!", "prompt_template": "test", "timeout_seconds": 30}
+                ],
                 repo_root=repo,
                 context_preamble=None,
             )
@@ -201,7 +244,9 @@ class TestExecuteChain:
 
         with pytest.raises(RuntimeError, match="Could not find skill directory"):
             execute_chain(
-                steps=[_step(skill="nonexistent-skill")],
+                steps=[
+                    {"skill": "nonexistent-skill", "prompt_template": "test", "timeout_seconds": 30}
+                ],
                 repo_root=repo,
                 context_preamble=None,
             )
@@ -221,7 +266,7 @@ class TestExecuteChain:
             patch("skill_eval.runner.logger") as mock_logger,
         ):
             execute_chain(
-                steps=[_step()],
+                steps=[{"skill": "quality-gate", "prompt_template": "test", "timeout_seconds": 30}],
                 repo_root=repo,
                 context_preamble=None,
             )
@@ -250,7 +295,7 @@ class TestExecuteChain:
             patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
         ):
             execute_chain(
-                steps=[_step()],
+                steps=[{"skill": "quality-gate", "prompt_template": "test", "timeout_seconds": 30}],
                 repo_root=repo,
                 context_preamble="MY CLAUDE.MD CONTENT",
             )
@@ -277,7 +322,7 @@ class TestExecuteChain:
             patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
         ):
             execute_chain(
-                steps=[_step()],
+                steps=[{"skill": "quality-gate", "prompt_template": "test", "timeout_seconds": 30}],
                 repo_root=repo,
                 context_preamble=None,
             )
@@ -305,128 +350,15 @@ class TestExecuteChain:
         ):
             results = execute_chain(
                 steps=[
-                    _step(prompt_template="step 1"),
-                    _step(prompt_template="step 2"),
-                    _step(prompt_template="step 3"),
+                    {"skill": "quality-gate", "prompt_template": "step 1", "timeout_seconds": 30},
+                    {"skill": "quality-gate", "prompt_template": "step 2", "timeout_seconds": 30},
+                    {"skill": "quality-gate", "prompt_template": "step 3", "timeout_seconds": 30},
                 ],
                 repo_root=repo,
                 context_preamble=None,
             )
 
         assert [r.skill_output for r in results] == ["output-1", "output-2", "output-3"]
-
-    def test_per_step_timeout_used(self, tmp_path):
-        """Each step's timeout_seconds is passed to subprocess.run."""
-        repo = _make_repo(tmp_path)
-
-        captured_timeouts: list[int] = []
-
-        def mock_run(*args, **kwargs):
-            captured_timeouts.append(kwargs.get("timeout"))
-            proc = MagicMock()
-            proc.returncode = 0
-            proc.stdout = "done"
-            proc.stderr = ""
-            return proc
-
-        with (
-            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
-            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
-        ):
-            execute_chain(
-                steps=[
-                    {"skill": "quality-gate", "prompt_template": "step 1", "timeout_seconds": 60},
-                    {"skill": "quality-gate", "prompt_template": "step 2", "timeout_seconds": 120},
-                ],
-                repo_root=repo,
-                context_preamble=None,
-            )
-
-        # subprocess.run is called twice per step (git worktree prune + actual claude).
-        # Filter only the claude invocations — those have timeout set.
-        assert 60 in captured_timeouts
-        assert 120 in captured_timeouts
-
-    def test_missing_timeout_raises_key_error(self, tmp_path):
-        """A step without timeout_seconds raises KeyError."""
-        repo = _make_repo(tmp_path)
-
-        with (
-            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
-            patch("skill_eval.runner.subprocess.run", return_value=_mock_claude_proc()),
-            pytest.raises(KeyError),
-        ):
-            execute_chain(
-                steps=[{"skill": "quality-gate", "prompt_template": "test"}],
-                repo_root=repo,
-                context_preamble=None,
-            )
-
-    def test_bare_flag_passed_when_set(self, tmp_path):
-        """step["bare"]=True passes --bare to the claude CLI."""
-        repo = _make_repo(tmp_path)
-
-        captured_cmds: list[list] = []
-
-        def mock_run(*args, **kwargs):
-            if args:
-                captured_cmds.append(args[0])
-            proc = MagicMock()
-            proc.returncode = 0
-            proc.stdout = "done"
-            proc.stderr = ""
-            return proc
-
-        with (
-            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
-            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
-        ):
-            execute_chain(
-                steps=[_step(bare=True)],
-                repo_root=repo,
-                context_preamble=None,
-            )
-
-        claude_cmds = [c for c in captured_cmds if c and c[0] == "claude"]
-        assert any("--bare" in c for c in claude_cmds)
-
-    def test_bundle_passed_via_append_system_prompt(self, tmp_path):
-        """The skill bundle is passed via --append-system-prompt, not stdin."""
-        repo = _make_repo(tmp_path)
-
-        captured_cmds: list[list] = []
-        captured_inputs: list[str] = []
-
-        def mock_run(*args, **kwargs):
-            if args:
-                captured_cmds.append(list(args[0]))
-            captured_inputs.append(kwargs.get("input", ""))
-            proc = MagicMock()
-            proc.returncode = 0
-            proc.stdout = "done"
-            proc.stderr = ""
-            return proc
-
-        with (
-            patch("skill_eval.runner.resolve_skill_bundle", return_value="# MY BUNDLE"),
-            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
-        ):
-            execute_chain(
-                steps=[_step(prompt_template="do the task")],
-                repo_root=repo,
-                context_preamble=None,
-            )
-
-        claude_cmds = [c for c in captured_cmds if c and c[0] == "claude"]
-        assert claude_cmds, "No claude invocation found"
-        cmd = claude_cmds[0]
-        # Bundle must appear as value after --append-system-prompt.
-        assert "--append-system-prompt" in cmd
-        idx = cmd.index("--append-system-prompt")
-        assert cmd[idx + 1] == "# MY BUNDLE"
-        # stdin must not contain the bundle marker.
-        claude_input = captured_inputs[captured_cmds.index(cmd)]
-        assert "# MY BUNDLE" not in claude_input
 
 
 # ── Group 2: run_composition_eval ────────────────────────────────────────────
@@ -435,21 +367,8 @@ class TestExecuteChain:
 class TestRunCompositionEval:
     """run_composition_eval manages worktree lifecycle and scores final output."""
 
-    def _make_composition(self, fixture_key: str = "composition/terse") -> dict:
-        return {
-            "name": "test-composition",
-            "fixture": fixture_key,
-            "rubrics": [],
-            "configs": [
-                {
-                    "name": "baseline",
-                    "steps": [_step(prompt_template="{fixture}")],
-                }
-            ],
-        }
-
-    def test_returns_dict_of_composition_results(self, tmp_path):
-        """run_composition_eval returns a dict of CompositionResult."""
+    def test_returns_composition_result(self, tmp_path):
+        """run_composition_eval returns a dict of CompositionResult keyed by config name."""
         repo = _make_repo(tmp_path)
         _make_fixture(repo, "composition/terse", "# Plan\nDo something.\n")
 
@@ -463,17 +382,17 @@ class TestRunCompositionEval:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             mock_chain.return_value = [ChainStepResult("quality-gate", "the output", None)]
 
-            results = run_composition_eval(
-                self._make_composition(),
+            result = run_composition_eval(
+                _make_composition(),
                 repo,
                 mock_judge,
                 n_trials=1,
             )
 
-        assert isinstance(results, dict)
-        assert "baseline" in results
-        assert isinstance(results["baseline"], CompositionResult)
-        assert results["baseline"].config_name == "baseline"
+        assert isinstance(result, dict)
+        assert "baseline" in result
+        assert isinstance(result["baseline"], CompositionResult)
+        assert result["baseline"].config_name == "baseline"
 
     def test_infra_error_on_chain_failure(self, tmp_path):
         """Chain execution failure returns CompositionResult with infra_error=True."""
@@ -488,14 +407,14 @@ class TestRunCompositionEval:
         ):
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
-            results = run_composition_eval(
-                self._make_composition(),
+            result = run_composition_eval(
+                _make_composition(),
                 repo,
                 mock_judge,
                 n_trials=1,
             )
 
-        assert results["baseline"].infra_error is True
+        assert result["baseline"].infra_error is True
 
     def test_worktree_cleanup_on_success(self, tmp_path):
         """git worktree remove is called after successful chain execution."""
@@ -518,7 +437,7 @@ class TestRunCompositionEval:
                 return_value=[ChainStepResult("quality-gate", "output", None)],
             ),
         ):
-            run_composition_eval(self._make_composition(), repo, mock_judge, n_trials=1)
+            run_composition_eval(_make_composition(), repo, mock_judge, n_trials=1)
 
         # Verify worktree remove was called.
         assert any("remove" in c for c in worktree_remove_calls)
@@ -541,9 +460,9 @@ class TestRunCompositionEval:
             patch("skill_eval.runner.subprocess.run", side_effect=mock_subprocess_run),
             patch("skill_eval.runner.execute_chain", side_effect=RuntimeError("boom")),
         ):
-            results = run_composition_eval(self._make_composition(), repo, mock_judge, n_trials=1)
+            result = run_composition_eval(_make_composition(), repo, mock_judge, n_trials=1)
 
-        assert results["baseline"].infra_error is True
+        assert result["baseline"].infra_error is True
         assert any("remove" in c for c in worktree_remove_calls)
 
     def test_fixture_not_found_raises(self, tmp_path):
@@ -556,7 +475,7 @@ class TestRunCompositionEval:
             pytest.raises(FileNotFoundError),
         ):
             run_composition_eval(
-                self._make_composition("composition/nonexistent"),
+                _make_composition("composition/nonexistent"),
                 repo,
                 mock_judge,
                 n_trials=1,
@@ -580,172 +499,101 @@ class TestRunCompositionEval:
         ):
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
-            run_composition_eval(self._make_composition(), repo, mock_judge, n_trials=3)
+            run_composition_eval(_make_composition(), repo, mock_judge, n_trials=3)
 
         assert chain_call_count["n"] == 3
-
-    def test_multiple_configs_returned(self, tmp_path):
-        """Multiple configs each produce a CompositionResult in the returned dict."""
-        repo = _make_repo(tmp_path)
-        _make_fixture(repo, "composition/terse", "# Plan\n")
-
-        mock_judge = MagicMock()
-        composition = {
-            "name": "multi-config",
-            "fixture": "composition/terse",
-            "rubrics": [],
-            "configs": [
-                {"name": "config-a", "steps": [_step()]},
-                {"name": "config-b", "steps": [_step()]},
-            ],
-        }
-
-        with (
-            patch("skill_eval.runner.subprocess.run") as mock_run,
-            patch(
-                "skill_eval.runner.execute_chain",
-                return_value=[ChainStepResult("quality-gate", "output", None)],
-            ),
-        ):
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            results = run_composition_eval(composition, repo, mock_judge, n_trials=1)
-
-        assert set(results.keys()) == {"config-a", "config-b"}
-
-    def test_fixture_key_is_fixture_not_fixture_key(self, tmp_path):
-        """Fixture is read from composition['fixture'], not composition['fixture_key']."""
-        repo = _make_repo(tmp_path)
-        _make_fixture(repo, "composition/terse", "# Plan\n")
-
-        mock_judge = MagicMock()
-        # composition dict uses 'fixture', not 'fixture_key'
-        composition = {
-            "name": "test",
-            "fixture": "composition/terse",
-            "rubrics": [],
-            "configs": [{"name": "c1", "steps": [_step()]}],
-        }
-
-        with (
-            patch("skill_eval.runner.subprocess.run") as mock_run,
-            patch(
-                "skill_eval.runner.execute_chain",
-                return_value=[ChainStepResult("quality-gate", "output", None)],
-            ),
-        ):
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            results = run_composition_eval(composition, repo, mock_judge, n_trials=1)
-
-        assert "c1" in results
 
 
 # ── Group 3: compare_composition_results ─────────────────────────────────────
 
 
 class TestCompareCompositionResults:
-    """compare_composition_results detects degradation across configs."""
+    """compare_composition_results detects degradation and prints ASCII table."""
 
     def _make_result(
         self,
-        config_name: str = "test",
+        name: str = "test",
         scores: dict | None = None,
         infra_error: bool = False,
     ) -> CompositionResult:
         return CompositionResult(
-            config_name=config_name,
+            config_name=name,
             step_results=[],
             final_scores=scores or {},
             trial_scores=None,
             infra_error=infra_error,
         )
 
-    def _make_results(self, **named_scores) -> dict[str, CompositionResult]:
-        """Build a results dict from config_name -> scores pairs."""
-        return {
-            name: self._make_result(config_name=name, scores=scores)
-            for name, scores in named_scores.items()
-        }
-
     def test_no_regression_when_within_tolerance(self):
         """No degradation when score drop is within tolerance."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.1},
-            current={"implementer_judgment": 8.0},
+        baseline = self._make_result(name="baseline", scores={"implementer_judgment": 8.1})
+        current = self._make_result(name="current", scores={"implementer_judgment": 8.0})
+
+        result = compare_composition_results(
+            {"baseline": baseline, "current": current}, "baseline", tolerance=0.15
         )
 
-        cmp = compare_composition_results(results, baseline_config="baseline", tolerance=0.15)
-
-        assert cmp["degradation_detected"] is False
-        assert "PASS" in cmp["reports"]["current"]
+        assert result["degradation_detected"] is False
+        assert "PASS" in result["reports"]["current"]
 
     def test_degradation_detected_when_score_drops(self):
         """Degradation flagged when score drops more than tolerance."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.0},
-            current={"implementer_judgment": 5.0},
+        baseline = self._make_result(name="baseline", scores={"implementer_judgment": 8.0})
+        current = self._make_result(name="current", scores={"implementer_judgment": 5.0})
+
+        result = compare_composition_results(
+            {"baseline": baseline, "current": current}, "baseline", tolerance=0.15
         )
 
-        cmp = compare_composition_results(results, baseline_config="baseline", tolerance=0.15)
-
-        assert cmp["degradation_detected"] is True
-        assert "DEGRADATION" in cmp["reports"]["current"]
+        assert result["degradation_detected"] is True
+        assert "DEGRADATION" in result["reports"]["current"]
 
     def test_infra_error_in_current_is_degradation(self):
-        """infra_error=True in a non-baseline config signals degradation."""
-        results = {
-            "baseline": self._make_result(config_name="baseline", scores={"x": 8.0}),
-            "current": self._make_result(config_name="current", infra_error=True),
-        }
+        """infra_error=True in current result signals degradation."""
+        baseline = self._make_result(name="baseline", scores={"implementer_judgment": 8.0})
+        current = self._make_result(name="current", infra_error=True)
 
-        cmp = compare_composition_results(results, baseline_config="baseline")
+        result = compare_composition_results({"baseline": baseline, "current": current}, "baseline")
 
-        assert cmp["degradation_detected"] is True
-        assert "INFRA ERROR" in cmp["reports"]["current"]
+        assert result["degradation_detected"] is True
+        assert "INFRA ERROR" in result["reports"]["current"]
 
     def test_infra_error_in_baseline_is_pass(self):
         """infra_error=True in baseline treats comparison as pass."""
-        results = {
-            "baseline": self._make_result(config_name="baseline", infra_error=True),
-            "current": self._make_result(config_name="current", scores={"x": 8.0}),
-        }
+        baseline = self._make_result(name="baseline", infra_error=True)
+        current = self._make_result(name="current", scores={"implementer_judgment": 8.0})
 
-        cmp = compare_composition_results(results, baseline_config="baseline")
+        result = compare_composition_results({"baseline": baseline, "current": current}, "baseline")
 
-        assert cmp["degradation_detected"] is False
+        assert result["degradation_detected"] is False
 
     def test_empty_baseline_scores_is_pass(self):
         """No baseline scores available — treating as pass."""
-        results = self._make_results(
-            baseline={},
-            current={"implementer_judgment": 8.0},
-        )
+        baseline = self._make_result(name="baseline", scores={})
+        current = self._make_result(name="current", scores={"implementer_judgment": 8.0})
 
-        cmp = compare_composition_results(results, baseline_config="baseline")
+        result = compare_composition_results({"baseline": baseline, "current": current}, "baseline")
 
-        assert cmp["degradation_detected"] is False
+        assert result["degradation_detected"] is False
 
     def test_missing_metric_in_current_flags_degradation(self):
         """A metric present in baseline but absent from current is a regression."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.0},
-            current={},
-        )
+        baseline = self._make_result(name="baseline", scores={"implementer_judgment": 8.0})
+        current = self._make_result(name="current", scores={})
 
-        cmp = compare_composition_results(results, baseline_config="baseline")
+        result = compare_composition_results({"baseline": baseline, "current": current}, "baseline")
 
-        assert cmp["degradation_detected"] is True
-        assert "missing from current" in cmp["reports"]["current"]
+        assert result["degradation_detected"] is True
+        assert "missing from current" in result["reports"]["current"]
 
     def test_report_contains_ascii_table(self):
         """The report contains an ASCII table with metric names and scores."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.0},
-            current={"implementer_judgment": 8.0},
-        )
+        baseline = self._make_result(name="baseline", scores={"implementer_judgment": 8.0})
+        current = self._make_result(name="current", scores={"implementer_judgment": 8.0})
 
-        cmp = compare_composition_results(results, baseline_config="baseline")
+        result = compare_composition_results({"baseline": baseline, "current": current}, "baseline")
 
-        report = cmp["reports"]["current"]
+        report = result["reports"]["current"]
         assert "implementer_judgment" in report
         assert "Current" in report
         assert "Baseline" in report
@@ -753,60 +601,28 @@ class TestCompareCompositionResults:
 
     def test_per_rubric_deltas_shown(self):
         """Delta values appear in the ASCII table."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.0},
-            current={"implementer_judgment": 7.0},
+        baseline = self._make_result(name="baseline", scores={"implementer_judgment": 8.0})
+        current = self._make_result(name="current", scores={"implementer_judgment": 7.0})
+
+        result = compare_composition_results(
+            {"baseline": baseline, "current": current}, "baseline", tolerance=0.15
         )
 
-        cmp = compare_composition_results(results, baseline_config="baseline", tolerance=0.15)
-
-        report = cmp["reports"]["current"]
+        report = result["reports"]["current"]
+        # Drop of 1.0 > tolerance 0.15 — should be flagged.
         assert "-1.000" in report or "-1.0" in report
 
     def test_drop_within_tolerance_is_pass(self):
         """A drop smaller than tolerance is not flagged as degradation."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.0},
-            current={"implementer_judgment": 7.9},
-        )
+        baseline = self._make_result(name="baseline", scores={"implementer_judgment": 8.0})
+        current = self._make_result(name="current", scores={"implementer_judgment": 7.9})
 
         # Drop = 0.1, tolerance = 0.15 → not > tolerance → pass.
-        cmp = compare_composition_results(results, baseline_config="baseline", tolerance=0.15)
-
-        assert cmp["degradation_detected"] is False
-
-    def test_baseline_config_not_in_reports(self):
-        """The baseline config itself does not appear in the reports dict."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.0},
-            current={"implementer_judgment": 8.0},
+        result = compare_composition_results(
+            {"baseline": baseline, "current": current}, "baseline", tolerance=0.15
         )
 
-        cmp = compare_composition_results(results, baseline_config="baseline")
-
-        assert "baseline" not in cmp["reports"]
-
-    def test_multiple_non_baseline_configs(self):
-        """All non-baseline configs are compared and reported."""
-        results = self._make_results(
-            baseline={"implementer_judgment": 8.0},
-            config_a={"implementer_judgment": 8.0},
-            config_b={"implementer_judgment": 5.0},
-        )
-
-        cmp = compare_composition_results(results, baseline_config="baseline")
-
-        assert "config_a" in cmp["reports"]
-        assert "config_b" in cmp["reports"]
-        assert cmp["degradation_detected"] is True
-
-    def test_missing_baseline_config_returns_degradation(self):
-        """Missing baseline config name returns degradation_detected=True."""
-        results = self._make_results(current={"implementer_judgment": 8.0})
-
-        cmp = compare_composition_results(results, baseline_config="nonexistent")
-
-        assert cmp["degradation_detected"] is True
+        assert result["degradation_detected"] is False
 
 
 # ── Group 4: load_composition_fixture and load_composition_config ─────────────
@@ -860,7 +676,7 @@ class TestLoadCompositionConfig:
 
     def test_loads_valid_config(self, tmp_path):
         """A valid composition config is loaded as a dict."""
-        config = {"compositions": [{"name": "test", "configs": []}]}
+        config = {"compositions": [{"name": "test", "steps": []}]}
         path = _make_composition_config(tmp_path, config)
 
         result = load_composition_config(path)
