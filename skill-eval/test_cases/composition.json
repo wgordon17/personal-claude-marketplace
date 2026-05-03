@@ -1,0 +1,88 @@
+{
+  "compositions": [
+    {
+      "name": "terse-auth-plan-judgment",
+      "fixture_key": "composition/terse-auth-plan",
+      "rubrics": ["implementer_judgment"],
+      "expected_behaviors": [
+        "Chooses a JWT library (e.g. PyJWT) rather than manual token parsing",
+        "Uses secrets.token_urlsafe() or equivalent secure random generation",
+        "Applies decorator pattern or equivalent abstraction for role checking",
+        "Does not mechanically follow a step-by-step checklist"
+      ],
+      "steps": [
+        {
+          "skill": "incremental-planning",
+          "prompt": "{fixture}",
+          "capture_as": "plan_output"
+        },
+        {
+          "skill": "fix",
+          "prompt": "Implement the following plan:\n\n{plan_output}",
+          "capture_as": "implementation"
+        }
+      ]
+    },
+    {
+      "name": "overspecified-auth-plan-judgment",
+      "fixture_key": "composition/overspecified-auth-plan",
+      "rubrics": ["implementer_judgment"],
+      "expected_behaviors": [
+        "Does not use hashlib.sha256 for token generation — uses secrets or PyJWT",
+        "Does not create separate middleware files per role (avoids over-engineering)",
+        "Does not assert exact token hash strings in tests (avoids brittle assertions)",
+        "Shows independent judgment despite over-specified plan steps"
+      ],
+      "steps": [
+        {
+          "skill": "fix",
+          "prompt": "Implement the following plan:\n\n{fixture}",
+          "capture_as": "implementation"
+        }
+      ]
+    },
+    {
+      "name": "terse-crud-plan-judgment",
+      "fixture_key": "composition/terse-crud-plan",
+      "rubrics": ["implementer_judgment"],
+      "expected_behaviors": [
+        "Uses SQLAlchemy ORM queries, not raw SQL",
+        "Uses cursor-based or keyset pagination rather than OFFSET for scalability",
+        "Uses a schema validation library or structured approach instead of if/elif chains",
+        "Makes purposeful implementation decisions not dictated by the plan"
+      ],
+      "steps": [
+        {
+          "skill": "incremental-planning",
+          "prompt": "{fixture}",
+          "capture_as": "plan_output"
+        },
+        {
+          "skill": "fix",
+          "prompt": "Implement the following plan:\n\n{plan_output}",
+          "capture_as": "implementation"
+        }
+      ]
+    },
+    {
+      "name": "planted-issues-detection",
+      "fixture_key": "composition/planted-issues-diff",
+      "rubrics": ["finding_completeness", "severity_accuracy"],
+      "expected_behaviors": [
+        "Identifies SQL injection vulnerability (string interpolation in query)",
+        "Identifies missing authorization check on delete endpoint",
+        "Identifies brittle test assertion (exact error message string comparison)",
+        "Rates SQL injection as high severity",
+        "Rates missing auth check as high severity",
+        "Rates brittle assertion as low/medium severity"
+      ],
+      "steps": [
+        {
+          "skill": "quality-gate",
+          "prompt": "Review this implementation diff for issues:\n\n{fixture}",
+          "capture_as": "review_output"
+        }
+      ]
+    }
+  ]
+}
