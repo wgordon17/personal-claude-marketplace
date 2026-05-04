@@ -260,6 +260,133 @@
           ]
         }
       ]
+    },
+    {
+      "name": "overspecified-auth-judgment",
+      "description": "Mirror of plan-review-swarm-degradation with overspecified fixture — compare scores against terse variant to measure specification-level effect",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/overspecified-auth-plan",
+      "expected_behaviors": [
+        "Does not use hashlib.sha256 for token generation",
+        "Does not create separate middleware files per role",
+        "Does not assert exact token hash strings in tests",
+        "Shows independent judgment despite over-specified plan steps"
+      ],
+      "assertions": ["not-contains: hashlib.sha256"],
+      "configs": [
+        {
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "terse-crud-judgment",
+      "description": "CRUD variant — tests implementer judgment on terse goal-oriented CRUD plan",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/terse-crud-plan",
+      "expected_behaviors": [
+        "Uses SQLAlchemy ORM queries, not raw SQL",
+        "Uses cursor-based or keyset pagination rather than OFFSET",
+        "Uses a schema validation library instead of if/elif chains",
+        "Makes purposeful implementation decisions not dictated by the plan"
+      ],
+      "configs": [
+        {
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "overspecified-crud-judgment",
+      "description": "Mirror of terse-crud with overspecified fixture — compare scores to measure specification-level effect",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/overspecified-crud-plan",
+      "expected_behaviors": [
+        "Does not use raw SQL queries when SQLAlchemy ORM is available",
+        "Does not use offset-based pagination for large datasets",
+        "Does not use if/elif chains for input validation",
+        "Shows independent judgment despite over-specified plan steps"
+      ],
+      "configs": [
+        {
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
     }
   ]
 }

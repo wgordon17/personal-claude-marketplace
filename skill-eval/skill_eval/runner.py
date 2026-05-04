@@ -1327,13 +1327,7 @@ def _run_single_config(
                     trial_idx,
                     exc,
                 )
-                return CompositionResult(
-                    config_name=config_name,
-                    step_results=[],
-                    final_scores={},
-                    trial_scores=None,
-                    infra_error=True,
-                )
+                continue
 
             final_output = step_results[-1].skill_output if step_results else ""
             final_prompt = steps[-1].get("prompt_template", "") if steps else ""
@@ -1372,6 +1366,15 @@ def _run_single_config(
                 cwd=repo_root,
                 capture_output=True,
             )
+
+    if not trial_scores:
+        return CompositionResult(
+            config_name=config_name,
+            step_results=[],
+            final_scores={},
+            trial_scores=None,
+            infra_error=True,
+        )
 
     all_metric_names: set[str] = set()
     for ts in trial_scores:
