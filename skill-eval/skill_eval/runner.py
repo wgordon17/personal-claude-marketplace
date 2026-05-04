@@ -1236,6 +1236,7 @@ def execute_chain(
                 text=True,
                 timeout=timeout_seconds,
                 env=env,
+                cwd=str(repo_root),
             )
         except subprocess.TimeoutExpired:
             logger.warning("Step %r timed out after %ds", skill_name, timeout_seconds)
@@ -1243,11 +1244,9 @@ def execute_chain(
 
         if proc.returncode != 0:
             sanitized_stderr = _STDERR_SECRET_RE.sub(r"\1=[REDACTED]", proc.stderr or "")
-            logger.warning(
-                "Step %r exited with code %d: %s",
-                skill_name,
-                proc.returncode,
-                sanitized_stderr[:500],
+            raise RuntimeError(
+                f"claude CLI failed (step {skill_name!r}, exit {proc.returncode}): "
+                f"{sanitized_stderr[:500]}"
             )
 
         output = proc.stdout.strip()

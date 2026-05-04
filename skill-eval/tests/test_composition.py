@@ -251,8 +251,8 @@ class TestExecuteChain:
                 context_preamble=None,
             )
 
-    def test_stderr_secrets_sanitized(self, tmp_path, capsys):
-        """Secrets in stderr are redacted before logging."""
+    def test_stderr_secrets_sanitized(self, tmp_path):
+        """Secrets in stderr are redacted in the RuntimeError message."""
         repo = _make_repo(tmp_path)
 
         proc = MagicMock()
@@ -263,18 +263,20 @@ class TestExecuteChain:
         with (
             patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
             patch("skill_eval.runner.subprocess.run", return_value=proc),
-            patch("skill_eval.runner.logger") as mock_logger,
+            pytest.raises(RuntimeError, match=r"auth_key=\[REDACTED\]"),
         ):
             execute_chain(
-                steps=[{"skill": "quality-gate", "prompt_template": "test", "timeout_seconds": 30}],
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "test",
+                        "timeout_seconds": 30,
+                    }
+                ],
                 repo_root=repo,
                 context_preamble=None,
             )
-
-        # Verify the logged message doesn't contain the raw secret.
-        warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
-        for wc in warning_calls:
-            assert "supersecretvalue123" not in wc
+        # The raw secret must not appear in the error message.
 
     def test_context_preamble_included_in_prompt(self, tmp_path):
         """context_preamble is included in the step's stdin input."""
