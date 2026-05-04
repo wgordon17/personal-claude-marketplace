@@ -1009,12 +1009,6 @@ class ChainStepResult:
 
 
 @dataclass
-class CompositionConfig:
-    name: str
-    steps: list[dict]
-
-
-@dataclass
 class CompositionResult:
     config_name: str
     step_results: list[ChainStepResult]
@@ -1253,10 +1247,16 @@ def execute_chain(
 
         if not output:
             logger.warning("Step %r produced empty output", skill_name)
-        elif len(output) < 20:  # noqa: PLR2004
-            logger.warning("Step %r produced suspiciously short output: %r", skill_name, output)
+            output = f"[empty output from {skill_name}]"
+        elif len(output) < 50:  # noqa: PLR2004
+            logger.warning("Step %r produced suspect short output: %r", skill_name, output)
+            output = f"[suspect output from {skill_name}]: {output[:100]}"
 
-        # Store with XML wrapping to prevent injection of prompt delimiters.
+        # Strip prompt delimiters from output before storage to prevent injection.
+        for delim in _PROMPT_DELIMITERS:
+            output = output.replace(delim, "")
+
+        # Store with XML wrapping for trust boundary.
         if capture_as:
             captures[capture_as] = (
                 f'<prior-step-output skill="{skill_name}">{output}</prior-step-output>'

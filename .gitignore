@@ -10,3 +10,4 @@ node_modules/
 hack/
 .serena
 .claire/
+.skill-eval-worktrees/

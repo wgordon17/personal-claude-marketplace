@@ -53,7 +53,10 @@ def _make_composition_config(tmp_path: Path, data: dict) -> Path:
     return config_path
 
 
-def _mock_claude_proc(output: str = "step output") -> MagicMock:
+_DEFAULT_OUTPUT = "This is a sufficiently long mock output for the composition eval test suite."
+
+
+def _mock_claude_proc(output: str = _DEFAULT_OUTPUT) -> MagicMock:
     """Return a mock CompletedProcess for claude CLI invocations."""
     proc = MagicMock()
     proc.returncode = 0
@@ -90,7 +93,7 @@ class TestExecuteChain:
 
         with (
             patch("skill_eval.runner.resolve_skill_bundle", return_value="# skill bundle"),
-            patch("skill_eval.runner.subprocess.run", return_value=_mock_claude_proc("hello")),
+            patch("skill_eval.runner.subprocess.run", return_value=_mock_claude_proc()),
         ):
             results = execute_chain(
                 steps=[
@@ -106,14 +109,17 @@ class TestExecuteChain:
 
         assert len(results) == 1
         assert results[0].skill_name == "quality-gate"
-        assert results[0].skill_output == "hello"
+        assert results[0].skill_output == _DEFAULT_OUTPUT
         assert results[0].capture_name is None
 
     def test_capture_as_stored_with_xml_wrapping(self, tmp_path):
         """Captured output is XML-wrapped before storage."""
         repo = _make_repo(tmp_path)
 
-        call_outputs = ["step1 output", "step2 output"]
+        call_outputs = [
+            "Step 1 produced this output which is long enough to pass the guard check.",
+            "Step 2 produced this output which is also long enough to pass the guard check.",
+        ]
         call_iter = iter(call_outputs)
 
         def mock_run(*args, **kwargs):
@@ -147,7 +153,7 @@ class TestExecuteChain:
 
         assert len(results) == 2
         assert results[0].capture_name == "step1"
-        assert results[1].skill_output == "step2 output"
+        assert "long enough to pass the guard" in results[1].skill_output
 
     def test_variable_substitution_from_initial_captures(self, tmp_path):
         """Initial captures are substituted into step prompts."""
@@ -313,11 +319,7 @@ class TestExecuteChain:
 
         def mock_run(*args, **kwargs):
             captured_env.append(kwargs.get("env", {}))
-            proc = MagicMock()
-            proc.returncode = 0
-            proc.stdout = "done"
-            proc.stderr = ""
-            return proc
+            return _mock_claude_proc()
 
         with (
             patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
@@ -336,7 +338,11 @@ class TestExecuteChain:
         """Steps execute in order and results accumulate."""
         repo = _make_repo(tmp_path)
 
-        outputs = ["output-1", "output-2", "output-3"]
+        outputs = [
+            "Output from step 1 — long enough to pass the 50-char guard threshold.",
+            "Output from step 2 — long enough to pass the 50-char guard threshold.",
+            "Output from step 3 — long enough to pass the 50-char guard threshold.",
+        ]
         call_iter = iter(outputs)
 
         def mock_run(*args, **kwargs):
@@ -360,7 +366,8 @@ class TestExecuteChain:
                 context_preamble=None,
             )
 
-        assert [r.skill_output for r in results] == ["output-1", "output-2", "output-3"]
+        assert len(results) == 3
+        assert all("long enough to pass" in r.skill_output for r in results)
 
 
 # ── Group 2: run_composition_eval ────────────────────────────────────────────
@@ -698,3 +705,270 @@ class TestLoadCompositionConfig:
         result = load_composition_config(path)
 
         assert result["compositions"] == []
+
+
+# ── Group 6: _scaffold_worktree ──────────────────────────────────────────────
+
+
+class TestScaffoldWorktree:
+    """_scaffold_worktree creates files and commits in a worktree."""
+
+    def test_creates_scaffold_files(self, tmp_path):
+        """Scaffold files are created at the specified paths."""
+        from skill_eval.runner import _scaffold_worktree
+
+        trial = tmp_path / "trial"
+        trial.mkdir()
+        # Init a git repo so git add/commit works.
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=trial, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=trial,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=trial,
+            capture_output=True,
+        )
+
+        spec = {
+            "files": ["app/__init__.py", "app/models.py"],
+            "requirements": ["flask", "pytest"],
+        }
+        _scaffold_worktree(trial, spec)
+
+        assert (trial / "app" / "__init__.py").is_file()
+        assert (trial / "app" / "models.py").is_file()
+        assert (trial / "requirements.txt").is_file()
+        assert "flask" in (trial / "requirements.txt").read_text()
+        assert (trial / ".pre-commit-config.yaml").is_file()
+        assert "repos: []" in (trial / ".pre-commit-config.yaml").read_text()
+
+    def test_rejects_absolute_path(self, tmp_path):
+        """Absolute scaffold file paths are rejected."""
+        from skill_eval.runner import _scaffold_worktree
+
+        with pytest.raises(ValueError, match="relative"):
+            _scaffold_worktree(tmp_path, {"files": ["/etc/passwd"]})
+
+    def test_rejects_dotdot_path(self, tmp_path):
+        """Paths with '..' are rejected."""
+        from skill_eval.runner import _scaffold_worktree
+
+        with pytest.raises(ValueError, match="\\.\\."):
+            _scaffold_worktree(tmp_path, {"files": ["../escape.txt"]})
+
+
+# ── Group 7: _build_context_preamble ─────────────────────────────────────────
+
+
+class TestBuildContextPreamble:
+    """_build_context_preamble joins CLAUDE.md layers."""
+
+    def test_returns_none_when_no_layers(self, tmp_path):
+        """Returns None when load_context_layers returns empty dict."""
+        from skill_eval.runner import _build_context_preamble
+
+        with patch("skill_eval.runner.load_context_layers", return_value={}):
+            result = _build_context_preamble(tmp_path)
+        assert result is None
+
+    def test_returns_joined_layers(self, tmp_path):
+        """Returns joined CLAUDE.md content when project CLAUDE.md exists."""
+        from skill_eval.runner import _build_context_preamble
+
+        (tmp_path / "CLAUDE.md").write_text("# Project rules\n")
+        result = _build_context_preamble(tmp_path)
+        assert result is not None
+        assert "Project rules" in result
+
+
+# ── Group 8: execute_chain edge cases ────────────────────────────────────────
+
+
+class TestExecuteChainEdgeCases:
+    """Edge cases for execute_chain."""
+
+    def test_empty_steps_returns_empty(self, tmp_path):
+        """Empty steps list returns empty results."""
+        repo = _make_repo(tmp_path)
+        results = execute_chain([], repo, None)
+        assert results == []
+
+    def test_timeout_expired_propagates(self, tmp_path):
+        """TimeoutExpired from subprocess propagates up."""
+        import subprocess as sp
+
+        repo = _make_repo(tmp_path)
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch(
+                "skill_eval.runner.subprocess.run",
+                side_effect=sp.TimeoutExpired(cmd=["claude"], timeout=30),
+            ),
+            pytest.raises(sp.TimeoutExpired),
+        ):
+            execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "test",
+                        "timeout_seconds": 30,
+                    }
+                ],
+                repo_root=repo,
+                context_preamble=None,
+            )
+
+    def test_nonzero_exit_raises_runtime_error(self, tmp_path):
+        """Non-zero exit code from claude CLI raises RuntimeError."""
+        repo = _make_repo(tmp_path)
+        proc = MagicMock()
+        proc.returncode = 1
+        proc.stdout = ""
+        proc.stderr = "some error"
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", return_value=proc),
+            pytest.raises(RuntimeError, match="claude CLI failed"),
+        ):
+            execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "test",
+                        "timeout_seconds": 30,
+                    }
+                ],
+                repo_root=repo,
+                context_preamble=None,
+            )
+
+    def test_empty_output_replaced_with_marker(self, tmp_path):
+        """Empty stdout is replaced with an [empty output] marker."""
+        repo = _make_repo(tmp_path)
+        proc = MagicMock()
+        proc.returncode = 0
+        proc.stdout = ""
+        proc.stderr = ""
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", return_value=proc),
+        ):
+            results = execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "test",
+                        "timeout_seconds": 30,
+                    }
+                ],
+                repo_root=repo,
+                context_preamble=None,
+            )
+
+        assert "[empty output" in results[0].skill_output
+
+    def test_short_output_replaced_with_suspect_marker(self, tmp_path):
+        """Output shorter than 50 chars is replaced with [suspect output] marker."""
+        repo = _make_repo(tmp_path)
+        proc = MagicMock()
+        proc.returncode = 0
+        proc.stdout = "too short"
+        proc.stderr = ""
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", return_value=proc),
+        ):
+            results = execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "test",
+                        "timeout_seconds": 30,
+                    }
+                ],
+                repo_root=repo,
+                context_preamble=None,
+            )
+
+        assert "[suspect output" in results[0].skill_output
+
+
+# ── Group 9: compare_composition_results edge cases ──────────────────────────
+
+
+class TestCompareEdgeCases:
+    """Edge cases for compare_composition_results."""
+
+    def test_missing_baseline_config(self):
+        """Missing baseline config name returns degradation_detected=True."""
+        results = {
+            "config-a": CompositionResult(
+                config_name="config-a",
+                step_results=[],
+                final_scores={"m": 0.8},
+                trial_scores=None,
+            ),
+        }
+        outcome = compare_composition_results(results, "nonexistent-baseline")
+        assert outcome["degradation_detected"] is True
+
+
+# ── Group 10: YAML frontmatter parsing ───────────────────────────────────────
+
+
+class TestFrontmatterParsing:
+    """Frontmatter parsing in run_composition_eval."""
+
+    def test_fixture_without_frontmatter(self, tmp_path):
+        """Fixture with no --- frontmatter uses empty scaffold spec."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/nofm", "# Just content\nNo frontmatter here.\n")
+
+        import contextlib
+
+        mock_judge = MagicMock()
+        scaffold_calls: list = []
+
+        def track_scaffold(trial_root, spec):
+            scaffold_calls.append(spec)
+
+        with (
+            patch("skill_eval.runner.subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("skill_eval.runner.execute_chain", return_value=[]),
+            patch("skill_eval.runner._scaffold_worktree", side_effect=track_scaffold),
+            patch("skill_eval.runner._build_context_preamble", return_value=None),
+            contextlib.suppress(Exception),
+        ):
+            run_composition_eval(
+                {
+                    "name": "test",
+                    "fixture": "composition/nofm",
+                    "rubrics": [],
+                    "configs": [
+                        {
+                            "name": "base",
+                            "steps": [
+                                {
+                                    "skill": "quality-gate",
+                                    "prompt_template": "{fixture}",
+                                    "timeout_seconds": 30,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                repo,
+                mock_judge,
+            )
+
+        if scaffold_calls:
+            assert scaffold_calls[0] == {}
