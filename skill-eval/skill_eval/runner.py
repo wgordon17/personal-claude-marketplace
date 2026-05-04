@@ -1197,8 +1197,10 @@ def execute_chain(
         if bundle is None:
             raise RuntimeError(f"Could not resolve skill bundle for {skill_name!r}")
 
-        # Build the task prompt, prepending context preamble if present.
-        if context_preamble:
+        # Build the task prompt. Bare steps skip context preamble (repo context
+        # intentionally excluded — only the skill bundle provides instructions).
+        bare_mode = step.get("bare", False)
+        if context_preamble and not bare_mode:
             task_input = (
                 "=== BEHAVIORAL CONTEXT (CLAUDE.md) ===\n"
                 f"{context_preamble}\n"

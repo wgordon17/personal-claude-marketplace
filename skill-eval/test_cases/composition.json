@@ -74,57 +74,129 @@
     },
     {
       "name": "pr-review-fix-gate-degradation",
-      "description": "Tests whether repeated pr-review/fix cycles before gate reduces finding completeness",
+      "description": "Tests whether fix quality degrades and gate rubber-stamps after multiple pr-review/fix/gate cycles",
       "rubrics": ["phase_completion"],
       "fixture": "composition/planted-issues-diff",
       "configs": [
         {
-          "name": "1-review-cycle",
+          "name": "1-cycle",
           "steps": [
             {
               "skill": "pr-review",
               "prompt_template": "Review this diff for issues:\n{fixture}",
               "capture_as": "review_output",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues found in this review:\n{review_output}\n\nOriginal diff:\n{fixture}",
+              "capture_as": "fix_output",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on these changes:\n{fix_output}",
+              "capture_as": "gate_output",
               "timeout_seconds": 1200
             }
           ]
         },
         {
-          "name": "2-review-cycles",
+          "name": "2-cycles",
           "steps": [
             {
               "skill": "pr-review",
               "prompt_template": "Review this diff for issues:\n{fixture}",
               "capture_as": "review_1",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues found in this review:\n{review_1}\n\nOriginal diff:\n{fixture}",
+              "capture_as": "fix_1",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on these changes:\n{fix_1}",
+              "capture_as": "gate_1",
               "timeout_seconds": 1200
             },
             {
               "skill": "pr-review",
-              "prompt_template": "Review this diff again (prior review attached):\n{fixture}\n\nPrior review:\n{review_1}",
-              "capture_as": "review_output",
-              "timeout_seconds": 1200
-            }
-          ]
-        },
-        {
-          "name": "3-review-cycles",
-          "steps": [
-            {
-              "skill": "pr-review",
-              "prompt_template": "Review this diff for issues:\n{fixture}",
-              "capture_as": "review_1",
-              "timeout_seconds": 1200
-            },
-            {
-              "skill": "pr-review",
-              "prompt_template": "Review this diff again (prior review attached):\n{fixture}\n\nPrior review:\n{review_1}",
+              "prompt_template": "Review the fixed code again:\n{fix_1}\n\nPrior gate feedback:\n{gate_1}",
               "capture_as": "review_2",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues from the second review:\n{review_2}\n\nPrior fix:\n{fix_1}",
+              "capture_as": "fix_2",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on the updated changes:\n{fix_2}",
+              "capture_as": "gate_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "3-cycles",
+          "steps": [
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff for issues:\n{fixture}",
+              "capture_as": "review_1",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues:\n{review_1}\n\nOriginal diff:\n{fixture}",
+              "capture_as": "fix_1",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Quality gate:\n{fix_1}",
+              "capture_as": "gate_1",
               "timeout_seconds": 1200
             },
             {
               "skill": "pr-review",
-              "prompt_template": "Review this diff a third time (prior reviews attached):\n{fixture}\n\nPrior reviews:\n{review_1}\n{review_2}",
-              "capture_as": "review_output",
+              "prompt_template": "Review fixed code:\n{fix_1}\n\nGate feedback:\n{gate_1}",
+              "capture_as": "review_2",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix issues:\n{review_2}\n\nPrior fix:\n{fix_1}",
+              "capture_as": "fix_2",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Quality gate:\n{fix_2}",
+              "capture_as": "gate_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "pr-review",
+              "prompt_template": "Final review:\n{fix_2}\n\nGate feedback:\n{gate_2}",
+              "capture_as": "review_3",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Final fix:\n{review_3}\n\nPrior fix:\n{fix_2}",
+              "capture_as": "fix_3",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Final quality gate:\n{fix_3}",
+              "capture_as": "gate_output",
               "timeout_seconds": 1200
             }
           ]
