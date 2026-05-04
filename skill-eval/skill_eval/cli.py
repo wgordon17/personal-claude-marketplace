@@ -319,7 +319,9 @@ def _write_baselines(all_results: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _mode_composition(config_path: Path, repo_root: Path) -> bool:
+def _mode_composition(
+    config_path: Path, repo_root: Path, composition_name: str | None = None
+) -> bool:
     """--composition mode: run composition eval from a JSON config file."""
     (
         VertexSonnetJudge,
@@ -335,6 +337,14 @@ def _mode_composition(config_path: Path, repo_root: Path) -> bool:
         return False
 
     compositions = config.get("compositions", [])
+    if composition_name:
+        compositions = [c for c in compositions if c.get("name") == composition_name]
+        if not compositions:
+            print(
+                f"[skill-eval] No composition named {composition_name!r} in config",
+                file=sys.stderr,
+            )
+            return False
     if not compositions:
         print("[skill-eval] No compositions found in config", file=sys.stderr)
         return True
@@ -497,6 +507,11 @@ def main() -> None:
         help="Run composition eval from a JSON config file",
     )
     parser.add_argument(
+        "--composition-name",
+        metavar="NAME",
+        help="Run only the named composition (used with --composition for selective runs)",
+    )
+    parser.add_argument(
         "--locked",
         action="store_true",
         help=(
@@ -547,7 +562,7 @@ def main() -> None:
     elif args.update_baselines:
         passed = _mode_update_baselines(repo_root)
     elif args.composition:
-        passed = _mode_composition(Path(args.composition), repo_root)
+        passed = _mode_composition(Path(args.composition), repo_root, args.composition_name)
     else:
         passed = _mode_prepush(repo_root)
 

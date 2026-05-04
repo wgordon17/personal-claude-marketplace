@@ -18,8 +18,10 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -997,8 +999,38 @@ _COMPOSITION_FIXTURE_KEY_RE = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_/-]*$")
 # Regex for skill name validation in composition steps.
 _SKILL_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
-# Regex for sanitizing secrets from stderr.
-_STDERR_SECRET_RE = re.compile(r"(?i)(key|token|secret|password|auth)[=: ]\S+")
+# Regex for sanitizing secrets from stderr — matches keyword=value patterns
+# including quoted values ("val" / 'val') and bare values.
+_STDERR_SECRET_RE = re.compile(
+    r"(?i)(key|token|secret|password|auth|credential)"
+    r"""[=: ]+(?:"[^"]*"|'[^']*'|\S+)"""
+)
+# Standalone API key patterns (Anthropic, Google OAuth, AWS).
+_STDERR_API_KEY_RE = re.compile(r"sk-[a-zA-Z0-9]{10,}|ya29\.[a-zA-Z0-9_-]+|AKIA[A-Z0-9]{12,}")
+
+# Environment variables forwarded to claude CLI subprocesses.
+# Restricted to prevent leaking unrelated secrets (DB passwords, etc.).
+_SUBPROCESS_ENV_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "LANG",
+        "SHELL",
+        "USER",
+        "LOGNAME",
+        "TERM",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_VERTEX_PROJECT_ID",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_CLOUD_PROJECT",
+        "CLOUD_ML_REGION",
+        "CLOUDSDK_CONFIG",
+    }
+)
 
 
 @dataclass
@@ -1164,8 +1196,9 @@ def execute_chain(
     """
     captures: dict[str, str] = dict(initial_captures or {})
     results: list[ChainStepResult] = []
+    total_steps = len(steps)
 
-    for step in steps:
+    for step_idx, step in enumerate(steps, 1):
         skill_name = step["skill"]
         if not _SKILL_NAME_RE.match(skill_name):
             raise ValueError(f"Invalid skill name in chain step: {skill_name!r}")
@@ -1216,13 +1249,20 @@ def execute_chain(
             "--print",
             "--output-format",
             "text",
-            *(["--bare"] if step.get("bare", False) else []),
+            *(["--bare"] if bare_mode else []),
             "--append-system-prompt",
             bundle,
             "--permission-mode",
             "bypassPermissions",
         ]
-        env = {**os.environ, "CLAUDECODE": ""}
+        env = {k: v for k, v in os.environ.items() if k in _SUBPROCESS_ENV_ALLOWLIST}
+        env["CLAUDECODE"] = ""
+
+        print(
+            f"    step {step_idx}/{total_steps}: {skill_name}"
+            f" (timeout={timeout_seconds}s, {'bare' if bare_mode else 'full'})...",
+            flush=True,
+        )
 
         try:
             proc = subprocess.run(
@@ -1235,15 +1275,25 @@ def execute_chain(
                 cwd=str(repo_root),
             )
         except subprocess.TimeoutExpired:
-            logger.warning("Step %r timed out after %ds", skill_name, timeout_seconds)
+            print(f"    step {step_idx}/{total_steps}: {skill_name} TIMED OUT", flush=True)
             raise
 
         if proc.returncode != 0:
-            sanitized_stderr = _STDERR_SECRET_RE.sub(r"\1=[REDACTED]", proc.stderr or "")
+            sanitized = _STDERR_SECRET_RE.sub(r"\1=[REDACTED]", proc.stderr or "")
+            sanitized = _STDERR_API_KEY_RE.sub("[REDACTED_KEY]", sanitized)
+            print(
+                f"    step {step_idx}/{total_steps}: {skill_name} FAILED (exit {proc.returncode})",
+                flush=True,
+            )
             raise RuntimeError(
                 f"claude CLI failed (step {skill_name!r}, exit {proc.returncode}): "
-                f"{sanitized_stderr[:500]}"
+                f"{sanitized[:200]}"
             )
+
+        print(
+            f"    step {step_idx}/{total_steps}: {skill_name} done ({len(proc.stdout)} chars)",
+            flush=True,
+        )
 
         output = proc.stdout.strip()
 
@@ -1298,9 +1348,14 @@ def _run_single_config(
     last_step_results: list[ChainStepResult] = []
 
     for trial_idx in range(n_trials):
-        worktree_name = f"{composition_name}-{config_name}-trial-{trial_idx}"
+        suffix = uuid.uuid4().hex[:8]
+        worktree_name = f"{config_name}-t{trial_idx}-{suffix}"
         trial_root = repo_root / ".skill-eval-worktrees" / worktree_name
         trial_root.parent.mkdir(parents=True, exist_ok=True)
+        print(
+            f"  trial {trial_idx + 1}/{n_trials} ({config_name}): creating worktree...",
+            flush=True,
+        )
 
         try:
             subprocess.run(
@@ -1322,6 +1377,10 @@ def _run_single_config(
                 )
                 last_step_results = step_results
             except Exception as exc:
+                print(
+                    f"  trial {trial_idx + 1}/{n_trials} ({config_name}): FAILED — {exc}",
+                    flush=True,
+                )
                 logger.warning(
                     "Chain execution failed for %r config %r trial %d: %s",
                     composition_name,
@@ -1361,6 +1420,11 @@ def _run_single_config(
                     logger.warning("Metric %s failed: %s", metric.name, exc)
 
             trial_scores.append(tc_scores)
+            score_summary = ", ".join(f"{k}={v:.2f}" for k, v in tc_scores.items())
+            print(
+                f"  trial {trial_idx + 1}/{n_trials} ({config_name}): scored [{score_summary}]",
+                flush=True,
+            )
 
         finally:
             subprocess.run(
@@ -1441,16 +1505,22 @@ def run_composition_eval(
                 scaffold_spec = scaffold_spec.get("scaffold", {})
                 break
 
-    # Prune stale worktrees before creating new ones.
+    # Holistic pre-run cleanup: remove stale worktree directories from prior
+    # runs (crash recovery, kill -9, OOM), then prune git worktree metadata.
+    worktree_dir = repo_root / ".skill-eval-worktrees"
+    if worktree_dir.is_dir():
+        shutil.rmtree(worktree_dir, ignore_errors=True)
     subprocess.run(
         ["git", "worktree", "prune"],
         cwd=repo_root,
         capture_output=True,
     )
 
+    total_configs = len(configs)
     results: dict[str, CompositionResult] = {}
-    for config in configs:
+    for config_idx, config in enumerate(configs, 1):
         config_name = config["name"]
+        print(f"\n  config {config_idx}/{total_configs}: {config_name}", flush=True)
         results[config_name] = _run_single_config(
             composition_name=name,
             config=config,
