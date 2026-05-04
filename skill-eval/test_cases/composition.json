@@ -459,6 +459,94 @@
           ]
         }
       ]
+    },
+    {
+      "name": "swarm-quality-gate-degradation",
+      "description": "Tests whether repeated quality-gate cycles after swarm degrade review rigor (rubber-stamping)",
+      "rubrics": ["phase_completion"],
+      "fixture": "composition/terse-auth-plan",
+      "configs": [
+        {
+          "name": "swarm-only",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "swarm-1-gate",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on this implementation:\n{swarm_output}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "swarm-2-gates",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on this implementation:\n{swarm_output}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate again on this implementation:\n{swarm_output}\n\nPrior gate results:\n{gate_1}",
+              "capture_as": "gate_2",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "swarm-3-gates",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on this implementation:\n{swarm_output}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate again:\n{swarm_output}\n\nPrior gate:\n{gate_1}",
+              "capture_as": "gate_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate a third time:\n{swarm_output}\n\nPrior gates:\n{gate_1}\n{gate_2}",
+              "capture_as": "gate_3",
+              "timeout_seconds": 1200
+            }
+          ]
+        }
+      ]
     }
   ]
 }
