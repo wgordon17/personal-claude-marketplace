@@ -36,7 +36,6 @@ Your task is to review this implementation and identify all issues.
 +
 +@app.route('/widgets/<name>', methods=['GET'])
 +def get_widget(name):
-+    # BUG: SQL injection — user input interpolated directly into query string
 +    result = db.engine.execute(f"SELECT * FROM widgets WHERE name='{name}'").fetchone()
 +    if result is None:
 +        return jsonify({'error': 'not found'}), 404
@@ -45,7 +44,6 @@ Your task is to review this implementation and identify all issues.
 +
 +@app.route('/widgets/<int:widget_id>', methods=['DELETE'])
 +def delete_widget(widget_id):
-+    # BUG: no authorization check — any user can delete any widget
 +    widget = Widget.query.get(widget_id)
 +    if widget is None:
 +        return jsonify({'error': 'not found'}), 404
@@ -85,12 +83,10 @@ Your task is to review this implementation and identify all issues.
 +def test_get_missing_widget(client):
 +    resp = client.get('/widgets/nonexistent')
 +    assert resp.status_code == 404
-+    # BUG: brittle assertion — exact error message string will break if message changes
 +    assert resp.get_json() == {'error': 'not found'}
 +
 +
-+def test_delete_widget_no_auth(client):
++def test_delete_widget(client):
 +    resp = client.delete('/widgets/1')
-+    # This should be 403, but no auth check exists — it returns 404 or 204
 +    assert resp.status_code in (404, 204)
 ```

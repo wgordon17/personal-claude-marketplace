@@ -334,6 +334,63 @@ class TestExecuteChain:
         assert "CLAUDECODE" in captured_env[0]
         assert captured_env[0]["CLAUDECODE"] == ""
 
+    def test_env_allowlist_excludes_non_allowlisted_keys(self, tmp_path):
+        """Non-allowlisted env vars are absent from subprocess env."""
+        repo = _make_repo(tmp_path)
+
+        captured_env: list[dict] = []
+
+        def mock_run(*args, **kwargs):
+            captured_env.append(kwargs.get("env", {}))
+            return _mock_claude_proc()
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
+            patch.dict("os.environ", {"DATABASE_PASSWORD": "s3cr3t"}, clear=False),
+        ):
+            execute_chain(
+                steps=[{"skill": "quality-gate", "prompt_template": "test", "timeout_seconds": 30}],
+                repo_root=repo,
+                context_preamble=None,
+            )
+
+        assert "DATABASE_PASSWORD" not in captured_env[0]
+        assert "CLAUDECODE" in captured_env[0]
+
+    def test_bare_mode_skips_preamble_and_passes_flag(self, tmp_path):
+        """bare=True passes --bare to claude CLI and omits BEHAVIORAL CONTEXT from stdin."""
+        repo = _make_repo(tmp_path)
+
+        captured_cmds: list[list] = []
+        captured_inputs: list[str] = []
+
+        def mock_run(*args, **kwargs):
+            captured_cmds.append(args[0])
+            captured_inputs.append(kwargs.get("input", ""))
+            return _mock_claude_proc()
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
+        ):
+            execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "test",
+                        "timeout_seconds": 30,
+                        "bare": True,
+                    }
+                ],
+                repo_root=repo,
+                context_preamble="MY CLAUDE.MD CONTENT",
+            )
+
+        assert "--bare" in captured_cmds[0]
+        assert "BEHAVIORAL CONTEXT" not in captured_inputs[0]
+        assert "test" in captured_inputs[0]
+
     def test_multiple_steps_in_order(self, tmp_path):
         """Steps execute in order and results accumulate."""
         repo = _make_repo(tmp_path)
@@ -511,6 +568,49 @@ class TestRunCompositionEval:
             run_composition_eval(_make_composition(), repo, mock_judge, n_trials=3)
 
         assert chain_call_count["n"] == 3
+
+    def test_partial_trial_failure_averages_successful_trials(self, tmp_path):
+        """When some trials fail and some succeed, scores average over successes only."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/terse", "# Plan\n")
+
+        mock_judge = MagicMock()
+        call_count = {"n": 0}
+
+        def mock_chain(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RuntimeError("first trial failed")
+            return [ChainStepResult("quality-gate", f"output-{call_count['n']}", None)]
+
+        mock_metric = MagicMock()
+        mock_metric.name = "test_metric"
+        mock_metric.score = 0.8
+
+        composition = _make_composition()
+        composition["rubrics"] = ["implementer_judgment"]
+
+        with (
+            patch("skill_eval.runner.subprocess.run") as mock_run,
+            patch("skill_eval.runner.execute_chain", side_effect=mock_chain),
+            patch("skill_eval.runner.build_metrics", return_value=[mock_metric]),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            result = run_composition_eval(
+                composition,
+                repo,
+                mock_judge,
+                n_trials=3,
+            )
+
+        baseline = result["baseline"]
+        assert baseline.infra_error is False
+        assert baseline.trial_scores is not None
+        assert len(baseline.trial_scores) == 2
+        assert "test_metric" in baseline.final_scores
+        assert baseline.final_scores["test_metric"] == pytest.approx(0.8)
+        assert mock_metric.measure.call_count == 2
 
 
 # ── Group 3: compare_composition_results ─────────────────────────────────────
@@ -707,7 +807,7 @@ class TestLoadCompositionConfig:
         assert result["compositions"] == []
 
 
-# ── Group 6: _scaffold_worktree ──────────────────────────────────────────────
+# ── Group 5: _scaffold_worktree ──────────────────────────────────────────────
 
 
 class TestScaffoldWorktree:
@@ -762,7 +862,7 @@ class TestScaffoldWorktree:
             _scaffold_worktree(tmp_path, {"files": ["../escape.txt"]})
 
 
-# ── Group 7: _build_context_preamble ─────────────────────────────────────────
+# ── Group 6: _build_context_preamble ─────────────────────────────────────────
 
 
 class TestBuildContextPreamble:
@@ -786,7 +886,7 @@ class TestBuildContextPreamble:
         assert "Project rules" in result
 
 
-# ── Group 8: execute_chain edge cases ────────────────────────────────────────
+# ── Group 7: execute_chain edge cases ────────────────────────────────────────
 
 
 class TestExecuteChainEdgeCases:
@@ -902,7 +1002,7 @@ class TestExecuteChainEdgeCases:
         assert "[suspect output" in results[0].skill_output
 
 
-# ── Group 9: compare_composition_results edge cases ──────────────────────────
+# ── Group 8: compare_composition_results edge cases ──────────────────────────
 
 
 class TestCompareEdgeCases:
@@ -922,18 +1022,16 @@ class TestCompareEdgeCases:
         assert outcome["degradation_detected"] is True
 
 
-# ── Group 10: YAML frontmatter parsing ───────────────────────────────────────
+# ── Group 9: YAML frontmatter parsing ────────────────────────────────────────
 
 
 class TestFrontmatterParsing:
     """Frontmatter parsing in run_composition_eval."""
 
     def test_fixture_without_frontmatter(self, tmp_path):
-        """Fixture with no --- frontmatter uses empty scaffold spec."""
+        """Fixture with no --- frontmatter skips _scaffold_worktree entirely."""
         repo = _make_repo(tmp_path)
         _make_fixture(repo, "composition/nofm", "# Just content\nNo frontmatter here.\n")
-
-        import contextlib
 
         mock_judge = MagicMock()
         scaffold_calls: list = []
@@ -946,7 +1044,6 @@ class TestFrontmatterParsing:
             patch("skill_eval.runner.execute_chain", return_value=[]),
             patch("skill_eval.runner._scaffold_worktree", side_effect=track_scaffold),
             patch("skill_eval.runner._build_context_preamble", return_value=None),
-            contextlib.suppress(Exception),
         ):
             run_composition_eval(
                 {
@@ -970,5 +1067,67 @@ class TestFrontmatterParsing:
                 mock_judge,
             )
 
-        if scaffold_calls:
-            assert scaffold_calls[0] == {}
+        assert scaffold_calls == []
+
+    def test_frontmatter_stripped_from_fixture_content(self, tmp_path):
+        """Frontmatter (including planted_issues) is stripped before reaching execute_chain."""
+        repo = _make_repo(tmp_path)
+        fixture_text = (
+            "---\nscaffold:\n  files: []\nplanted_issues:\n  - secret answer\n---\n"
+            "\n# Body content\nThis is the plan.\n"
+        )
+        _make_fixture(repo, "composition/withfm", fixture_text)
+
+        mock_judge = MagicMock()
+        captured_captures: list[dict] = []
+
+        def mock_chain(*args, **kwargs):
+            captured_captures.append(kwargs.get("initial_captures", {}))
+            return [ChainStepResult("quality-gate", "output", None)]
+
+        with (
+            patch("skill_eval.runner.subprocess.run", return_value=MagicMock(returncode=0)),
+            patch("skill_eval.runner.execute_chain", side_effect=mock_chain),
+            patch("skill_eval.runner._scaffold_worktree"),
+            patch("skill_eval.runner._build_context_preamble", return_value=None),
+        ):
+            run_composition_eval(
+                {
+                    "name": "test",
+                    "fixture": "composition/withfm",
+                    "rubrics": [],
+                    "configs": [
+                        {
+                            "name": "base",
+                            "steps": [
+                                {
+                                    "skill": "quality-gate",
+                                    "prompt_template": "{fixture}",
+                                    "timeout_seconds": 30,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                repo,
+                mock_judge,
+            )
+
+        fixture_passed = captured_captures[0]["fixture"]
+        assert "planted_issues" not in fixture_passed
+        assert "secret answer" not in fixture_passed
+        assert "# Body content" in fixture_passed
+
+    def test_unterminated_frontmatter_raises(self, tmp_path):
+        """Fixture with opening --- but no closing --- raises ValueError."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/bad", "---\nkey: value\nno closing delimiter\n")
+
+        mock_judge = MagicMock()
+
+        with pytest.raises(ValueError, match="unterminated YAML frontmatter"):
+            run_composition_eval(
+                _make_composition("composition/bad"),
+                repo,
+                mock_judge,
+            )

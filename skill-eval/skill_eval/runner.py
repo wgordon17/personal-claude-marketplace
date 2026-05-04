@@ -843,12 +843,7 @@ def run_eval(
 
         # Wire expected_behaviors as expected_output for competency rubrics.
         expected = tc.get("expected_behaviors", [])
-        sanitized = []
-        for e in expected:
-            for delim in _PROMPT_DELIMITERS:
-                e = e.replace(delim, "")
-            sanitized.append(e.strip())
-        sanitized = [e for e in sanitized if e]
+        sanitized = _sanitize_expected_behaviors(expected)
         llm_tc = LLMTestCase(
             input=prompt,
             actual_output=response,
@@ -1038,6 +1033,7 @@ class ChainStepResult:
     skill_name: str
     skill_output: str
     capture_name: str | None
+    resolved_prompt: str = ""
 
 
 @dataclass
@@ -1107,6 +1103,18 @@ def load_composition_fixture(fixture_key: str, repo_root: Path) -> str:
     return candidate.read_text(encoding="utf-8")
 
 
+def _sanitize_expected_behaviors(behaviors: list[str]) -> list[str]:
+    """Strip prompt delimiters, trim whitespace, and remove empty strings."""
+    result = []
+    for e in behaviors:
+        for delim in _PROMPT_DELIMITERS:
+            e = e.replace(delim, "")
+        e = e.strip()
+        if e:
+            result.append(e)
+    return result
+
+
 def _build_context_preamble(repo_root: Path) -> str | None:
     """Build CLAUDE.md context preamble for composition steps.
 
@@ -1166,6 +1174,7 @@ def execute_chain(
     repo_root: Path,
     context_preamble: str | None,
     initial_captures: dict[str, str] | None = None,
+    skill_repo_root: Path | None = None,
 ) -> list[ChainStepResult]:
     """Execute a chain of skill steps sequentially, threading outputs between steps.
 
@@ -1181,10 +1190,13 @@ def execute_chain(
             code-quality/skills/), "prompt_template" (template string), and
             "timeout_seconds" (int, required). Optional: "capture_as" (name to
             store output under), "bare" (bool, passes --bare to claude CLI).
-        repo_root: Repository root for skill bundle resolution.
+        repo_root: Working directory for subprocess CWD.
         context_preamble: CLAUDE.md content to prepend to each step's task prompt.
         initial_captures: Pre-populated captures (e.g. fixture content). NOT
             XML-wrapped — trusted input from the eval harness.
+        skill_repo_root: Repository root for skill bundle resolution. Falls back
+            to ``repo_root`` when None. Use when ``repo_root`` is a worktree that
+            lacks ``code-quality/skills/``.
 
     Returns:
         List of ChainStepResult, one per step.
@@ -1219,14 +1231,17 @@ def execute_chain(
             resolved_prompt = prompt_template
 
         # Resolve skill bundle from code-quality/skills/.
+        _skill_root = skill_repo_root if skill_repo_root is not None else repo_root
         if "skill_dir" in step:
             skill_dir = Path(step["skill_dir"])
+            if not skill_dir.resolve().is_relative_to(_skill_root.resolve()):
+                raise ValueError(f"skill_dir {skill_dir!r} resolves outside skill repo root")
         else:
-            skill_dir = repo_root / "code-quality" / "skills" / skill_name
+            skill_dir = _skill_root / "code-quality" / "skills" / skill_name
         if not (skill_dir / "SKILL.md").is_file():
             raise RuntimeError(f"Could not find skill directory for {skill_name!r}")
 
-        bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
+        bundle = resolve_skill_bundle(skill_dir, repo_root=_skill_root)
         if bundle is None:
             raise RuntimeError(f"Could not resolve skill bundle for {skill_name!r}")
 
@@ -1319,6 +1334,7 @@ def execute_chain(
                 skill_name=skill_name,
                 skill_output=output,
                 capture_name=capture_as,
+                resolved_prompt=resolved_prompt if step_idx == total_steps else "",
             )
         )
 
@@ -1344,6 +1360,7 @@ def _run_single_config(
     steps: list[dict] = config["steps"]
     context_preamble = _build_context_preamble(repo_root)
 
+    sanitized_expected = _sanitize_expected_behaviors(expected_behaviors)
     trial_scores: list[dict[str, float]] = []
     last_step_results: list[ChainStepResult] = []
 
@@ -1374,6 +1391,7 @@ def _run_single_config(
                     trial_root,
                     context_preamble,
                     initial_captures={"fixture": fixture_content},
+                    skill_repo_root=repo_root,
                 )
                 last_step_results = step_results
             except Exception as exc:
@@ -1391,15 +1409,7 @@ def _run_single_config(
                 continue
 
             final_output = step_results[-1].skill_output if step_results else ""
-            final_prompt = steps[-1].get("prompt_template", "") if steps else ""
-
-            sanitized_expected = []
-            for e in expected_behaviors:
-                for delim in _PROMPT_DELIMITERS:
-                    e = e.replace(delim, "")
-                e = e.strip()
-                if e:
-                    sanitized_expected.append(e)
+            final_prompt = step_results[-1].resolved_prompt if step_results else ""
 
             llm_tc = LLMTestCase(
                 input=final_prompt,
@@ -1494,7 +1504,8 @@ def run_composition_eval(
 
     fixture_content = load_composition_fixture(fixture_key, repo_root)
 
-    # Parse YAML frontmatter for scaffold spec.
+    # Parse YAML frontmatter for scaffold spec, then strip it from fixture_content
+    # so the answer key (planted_issues, etc.) does not leak into LLM prompts.
     scaffold_spec: dict = {}
     lines = fixture_content.split("\n")
     if lines and _FRONTMATTER_RE.match(lines[0]):
@@ -1503,7 +1514,10 @@ def run_composition_eval(
                 frontmatter_text = "\n".join(lines[1:i])
                 scaffold_spec = yaml.safe_load(frontmatter_text) or {}
                 scaffold_spec = scaffold_spec.get("scaffold", {})
+                fixture_content = "\n".join(lines[i + 1 :]).lstrip("\n")
                 break
+        else:
+            raise ValueError(f"Fixture {fixture_key!r} has unterminated YAML frontmatter")
 
     # Holistic pre-run cleanup: remove stale worktree directories from prior
     # runs (crash recovery, kill -9, OOM), then prune git worktree metadata.
@@ -1570,22 +1584,20 @@ def compare_composition_results(
         if config_name == baseline_config:
             continue
 
-        name = config_name
-
         if result.infra_error:
-            reports[name] = f"{name}: INFRA ERROR — chain execution failed"
+            reports[config_name] = f"{config_name}: INFRA ERROR — chain execution failed"
             any_degradation = True
             continue
 
         if baseline.infra_error:
-            reports[name] = f"{name}: baseline had infra error — treating as pass"
+            reports[config_name] = f"{config_name}: baseline had infra error — treating as pass"
             continue
 
         current_scores = result.final_scores
         baseline_scores = baseline.final_scores
 
         if not baseline_scores:
-            reports[name] = f"{name}: no baseline scores — treating as pass"
+            reports[config_name] = f"{config_name}: no baseline scores — treating as pass"
             continue
 
         regressions: list[str] = []
@@ -1606,10 +1618,10 @@ def compare_composition_results(
         if degradation_detected:
             any_degradation = True
 
-        all_metrics = sorted(set(list(current_scores.keys()) + list(baseline_scores.keys())))
+        all_metrics = sorted(current_scores.keys() | baseline_scores.keys())
         header = f"{'Metric':<30} {'Current':>8} {'Baseline':>8} {'Delta':>8}"
         separator = "-" * len(header)
-        table_lines = [f"\n{name} (vs {baseline_config})", header, separator]
+        table_lines = [f"\n{config_name} (vs {baseline_config})", header, separator]
         for metric in all_metrics:
             curr_val = current_scores.get(metric, 0.0)
             base_val = baseline_scores.get(metric, 0.0)
@@ -1623,6 +1635,6 @@ def compare_composition_results(
         if regressions:
             status_line += "\n" + "\n".join(regressions)
 
-        reports[name] = "\n".join(table_lines) + status_line
+        reports[config_name] = "\n".join(table_lines) + status_line
 
     return {"degradation_detected": any_degradation, "reports": reports}

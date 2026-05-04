@@ -77,6 +77,16 @@
       "description": "Tests whether fix quality degrades and gate rubber-stamps after multiple pr-review/fix/gate cycles",
       "rubrics": ["phase_completion"],
       "fixture": "composition/planted-issues-diff",
+      "expected_behaviors": [
+        "Identifies SQL injection via string interpolation in get_widget query",
+        "Identifies missing authorization check on delete_widget endpoint",
+        "Identifies brittle exact-string assertion in test_get_missing_widget",
+        "Fixes SQL injection with parameterized queries or ORM methods"
+      ],
+      "assertions": [
+        "not-contains: f\"SELECT * FROM widgets WHERE name='{name}'\"",
+        "contains: injection"
+      ],
       "configs": [
         {
           "name": "1-cycle",
@@ -208,6 +218,10 @@
       "description": "Tests whether deep-research before incremental-planning degrades plan quality",
       "rubrics": ["phase_completion"],
       "fixture": "composition/terse-auth-plan",
+      "assertions": [
+        "contains: JWT",
+        "contains: token"
+      ],
       "configs": [
         {
           "name": "baseline-no-research",
@@ -279,6 +293,7 @@
         "Applies decorator pattern or equivalent abstraction for role checking",
         "Does not mechanically follow a step-by-step checklist"
       ],
+      "assertions": ["not-contains: hashlib.sha256"],
       "configs": [
         {
           "name": "baseline-swarm-only",
@@ -387,6 +402,7 @@
         "Uses a schema validation library instead of if/elif chains",
         "Makes purposeful implementation decisions not dictated by the plan"
       ],
+      "assertions": ["not-contains: db.engine.execute"],
       "configs": [
         {
           "name": "baseline-no-review",
@@ -429,6 +445,7 @@
         "Does not use if/elif chains for input validation",
         "Shows independent judgment despite over-specified plan steps"
       ],
+      "assertions": ["not-contains: db.engine.execute"],
       "configs": [
         {
           "name": "baseline-no-review",
@@ -465,6 +482,10 @@
       "description": "Tests whether repeated quality-gate cycles after swarm degrade review rigor (rubber-stamping)",
       "rubrics": ["phase_completion"],
       "fixture": "composition/terse-auth-plan",
+      "assertions": [
+        "contains: JWT",
+        "not-contains: hashlib.sha256"
+      ],
       "configs": [
         {
           "name": "swarm-only",
