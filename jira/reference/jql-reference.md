@@ -1,7 +1,7 @@
 # JQL Reference
 
 JQL (Jira Query Language) syntax reference for redhat.atlassian.net. Covers operators,
-functions, MGMT custom fields, and OSAC-specific query patterns.
+functions, OSAC custom fields, and OSAC-specific query patterns.
 
 **Official Atlassian documentation:**
 - [JQL operators](https://support.atlassian.com/jira-software-cloud/docs/jql-operators/)
@@ -87,10 +87,10 @@ Common orderings:
 
 ### Issue Identification
 
-- `key` — Issue key (e.g., `MGMT-12345`)
+- `key` — Issue key (e.g., `OSAC-12345`)
 - `id` — Internal issue ID
 - `issuetype` (or `type`) — Epic, Story, Task, Bug, Sub-task
-- `project` — Project key (e.g., `MGMT`, `OCM`, `ROSA`)
+- `project` — Project key (e.g., `OSAC`, `OCM`, `ROSA`)
 
 ### People
 
@@ -118,7 +118,7 @@ Common orderings:
 - `description` — Issue description body
 - `comment` — Issue comments
 - `labels` — Issue labels (e.g., `OSAC`, `gori-ga`)
-- `component` — Components (e.g., `OSAC`)
+- `component` — Components (not used in the OSAC project)
 - `text` — Searches both summary and description
 
 ### Links and Hierarchy
@@ -127,16 +127,20 @@ Common orderings:
 - `"Epic Link"` — Epic the issue belongs to (requires quotes)
 - `issueLink` — Linked issues
 
-## MGMT Custom Fields
+## OSAC Custom Fields
 
-These IDs are point-in-time snapshots (verified 2026-05-02). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
+These IDs are point-in-time snapshots (verified 2026-05-05). Use `getJiraIssueTypeMetaWithFields` to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom fields server-side.
 
 | Field | Custom Field ID | JQL Usage |
 |-------|-----------------|-----------|
-| Epic Link | `customfield_10014` | `"Epic Link" = MGMT-12345` |
+| Epic Link | `customfield_10014` | `"Epic Link" = OSAC-12345` |
 | Epic Name (Epic type only) | `customfield_10011` | `customfield_10011 = "My Epic Name"` |
 | Sprint | `customfield_10020` | `sprint in openSprints()` or `customfield_10020 = "OSAC Sprint 42"` |
 | Story Points | `customfield_10028` | `customfield_10028 IS EMPTY` (unused in OSAC) |
+| Blocked | `customfield_10517` | `customfield_10517 = "True"` |
+| Blocked Reason | `customfield_10483` | `customfield_10483 IS NOT EMPTY` |
+| Severity | `customfield_10840` | `customfield_10840 = "Critical"` |
+| Release Blocker | `customfield_10847` | `customfield_10847 = "Approved"` |
 
 **Note:** The `sprint` alias may work in `fields` parameter arrays; use the custom field ID or the `sprint` function in JQL filters for reliability.
 
@@ -244,48 +248,48 @@ For link traversal on Cloud, use `linkedIssues()` function in JQL, or `getJiraIs
 
 ## OSAC Query Patterns
 
-Pre-built JQL scoped to the OSAC component in MGMT project:
+Pre-built JQL scoped to the OSAC project:
 
 ### My Open OSAC Work
 
 ```jql
-project = MGMT AND component = OSAC AND assignee = currentUser() AND statusCategory != Done
+project = OSAC AND assignee = currentUser() AND statusCategory != Done
 ```
 
 ### Current Sprint
 
 ```jql
-project = MGMT AND component = OSAC AND sprint in openSprints()
+project = OSAC AND sprint in openSprints()
 ```
 
 ### OSAC Backlog
 
 ```jql
-project = MGMT AND component = OSAC AND statusCategory = "To Do"
+project = OSAC AND statusCategory = "To Do"
 ```
 
 ### OSAC Epics
 
 ```jql
-project = MGMT AND component = OSAC AND type = Epic AND statusCategory != Done ORDER BY status ASC
+project = OSAC AND type = Epic AND statusCategory != Done ORDER BY status ASC
 ```
 
 ### Recently Updated
 
 ```jql
-project = MGMT AND component = OSAC AND updated >= -7d ORDER BY updated DESC
+project = OSAC AND updated >= -7d ORDER BY updated DESC
 ```
 
 ### Issues Under an Epic
 
 ```jql
-"Epic Link" = MGMT-12345 AND statusCategory != Done
+"Epic Link" = OSAC-12345 AND statusCategory != Done
 ```
 
 ### By Label Track
 
 ```jql
-project = MGMT AND component = OSAC AND labels = "gori-ga" AND statusCategory != Done
+project = OSAC AND labels = "gori-ga" AND statusCategory != Done
 ```
 
 ## Query Construction Tips

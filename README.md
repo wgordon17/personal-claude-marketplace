@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 20 skills, 4 commands | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 21 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -46,6 +46,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/roadmap` - Stateful multi-plan phase sequencing with roadmap lifecycle management (update, cleanup, status/drift, fresh creation)
 - `/lsp-navigation` - PROACTIVE semantic code navigation
 - `/uv-python` - PROACTIVE Python tooling enforcement (uv over pip)
+- `/test-plan` - User-guided test plans, UAT validation, acceptance criteria, and BDD feature files
 - `/test-runner` - Efficient test execution patterns
 - `/fix` - Comprehensive finding fixer with spike execution for plan-review Research Gaps
 - `/reflect` - Mid-task self-reflection checkpoint via Serena metacognitive tools
@@ -85,9 +86,9 @@ Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__gith
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| jira | Jira integration via jira CLI — OSAC defaults with full redhat.atlassian.net support (MCP temporarily disabled) | 1 skill, 1 agent, 3 reference files | [README](jira/README.md) |
+| jira | Jira integration via Atlassian Rovo MCP — OSAC defaults with full redhat.atlassian.net support | 1 skill, 1 agent, 3 reference files | [README](jira/README.md) |
 
-Uses `jira` CLI (ankitpokhrel/jira-cli) for all Jira operations. Defaults to OSAC scope (project=MGMT, component=OSAC). Operates across any project on request.
+Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project=OSAC). Operates across any project on request.
 
 **Skill:** `/jira:jira` — Interactive Jira queries, issue management, and CRUD
 
@@ -139,11 +140,9 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 - **GITHUB_PERSONAL_ACCESS_TOKEN**: Set in your environment — Required for MCP server authentication. Needs `repo`, `workflow`, `read:org` scopes (or broader) depending on toolsets used.
 
-### For Jira CLI
+### For Jira (Atlassian Rovo MCP)
 
-- **jira CLI**: `brew install jira-cli` — run `jira init` to configure (server: redhat.atlassian.net, project: MGMT)
-- **API token**: Export `JIRA_API_TOKEN` and `JIRA_AUTH_TYPE` in your shell environment
-- **Optional write-command approval**: Add `Bash(jira issue create:*)`, `Bash(jira issue assign:*)`, `Bash(jira issue edit:*)`, `Bash(jira issue move:*)`, `Bash(jira issue comment add:*)`, `Bash(jira issue worklog add:*)`, `Bash(jira issue link:*)`, `Bash(jira epic create:*)`, `Bash(jira epic add:*)`, `Bash(jira sprint add:*)` to `~/.claude/settings.local.json` under `permissions.allow`. For read operations, also add `Bash(jira issue list:*)`, `Bash(jira issue view:*)`, `Bash(jira project:*)`. See [jira/README.md](jira/README.md) for the full JSON snippet.
+- **OAuth setup**: Run `/mcp` in Claude Code, authenticate the `mcp-atlassian-prod` server via Atlassian Rovo OAuth, and complete the OAuth flow in your browser. See [jira/README.md](jira/README.md) for details.
 
 ### For LSP Plugins
 
@@ -233,7 +232,7 @@ These MCP servers enhance functionality but are not required for core operation 
 | MCP Server | Plugin | Dependency | Purpose |
 |------------|--------|------------|---------|
 | **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
-| **[jira CLI](https://github.com/ankitpokhrel/jira-cli)** | jira | **Hard** (CLI must be installed) | Full Jira API: issue query, create, update, transitions, comments, worklogs via `jira` CLI commands. |
+| **[Atlassian Rovo MCP](https://www.atlassian.com/rovo)** | jira | **Hard** (OAuth required) | Full Jira API: issue query, create, update, transitions, comments, worklogs via `mcp__plugin_jira_mcp-atlassian-prod__*` tools. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
 | **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode. Alternative tools work. |
@@ -258,7 +257,7 @@ No hard dependencies on external plugins remain. All previously referenced exter
 
 Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** = degraded without it.
 
-| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | jira CLI |
+| Plugin | LSP plugins | Context7 | Serena | seq-thinking | claude-mem | uv | pre-commit | git-branchless | Rovo MCP |
 |--------|-------------|----------|--------|-------------|-----------|-----|-----------|----------------|----------|
 | **code-quality** | soft | HARD | soft | soft | soft | soft | -- | -- | -- |
 | **git-tools** | -- | soft | -- | -- | -- | HARD | soft | HARD | -- |

@@ -12,14 +12,14 @@ Invoke the `/jira:jira` skill for interactive Jira work:
 - Transition workflow status
 - Add comments and worklogs
 
-Defaults to OSAC scope (project=MGMT, component=OSAC). Drop the filter when asking about other projects.
+Defaults to OSAC scope (project=OSAC). Drop the filter when asking about other projects.
 
 ### Programmatic: `jira:jira-agent`
 
 Spawn the `jira:jira-agent` agent for background Jira operations from plan tasks, swarm implementers, or quality-gate verifiers:
 
 ```
-Spawn jira:jira-agent to create a MGMT task for X under epic MGMT-YYYYY
+Spawn jira:jira-agent to create an OSAC task for X under epic OSAC-YYYYY
 ```
 
 The agent carries full OSAC conventions and returns the created issue URL.
