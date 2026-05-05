@@ -152,7 +152,7 @@ Otherwise:
 2. Read `jira/reference/jira-formatting.md` for markdown guidance
 3. Call `createJiraIssue` with `projectKey`, `issueTypeName`, `summary`, `description`,
    `contentFormat: "markdown"`, `responseContentFormat: "markdown"`, `assignee_account_id`,
-   and `additional_fields` for labels, components, and epicLink if applicable
+   and `additional_fields` for labels and epicLink if applicable
 
 When creating Stories/Tasks/Bugs under an epic, add `"customfield_10014": "OSAC-12345"` (Epic Link) to `additional_fields`.
 

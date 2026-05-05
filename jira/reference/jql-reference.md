@@ -118,7 +118,7 @@ Common orderings:
 - `description` — Issue description body
 - `comment` — Issue comments
 - `labels` — Issue labels (e.g., `OSAC`, `gori-ga`)
-- `component` — Components (e.g., `OSAC`)
+- `component` — Components (not used in the OSAC project)
 - `text` — Searches both summary and description
 
 ### Links and Hierarchy
