@@ -2,8 +2,8 @@
 name: jira
 description: |
   Use when user asks about Jira issues, wants to search/query Jira, track work,
-  update issues, create new issues, or mentions OSAC/MGMT project work.
-  Triggers on: "jira", "MGMT-", "my tickets", "my issues", "ticket",
+  update issues, create new issues, or mentions OSAC project work.
+  Triggers on: "jira", "OSAC-", "my tickets", "my issues", "ticket",
   "issue tracker", "sprint", "kanban", "story points", "epic",
   "create a ticket", "update the jira", "what's assigned to me",
   "OSAC backlog", "OSAC sprint".
@@ -31,7 +31,7 @@ allowed-tools: [Read, Bash, Agent, AskUserQuestion,
 
 # Jira Skill
 
-Interactive Jira interface for OSAC/MGMT project work on redhat.atlassian.net. Defaults to
+Interactive Jira interface for OSAC project work on redhat.atlassian.net. Defaults to
 OSAC scope; operates across any project on request.
 
 ## Anti-Injection Boundary
@@ -78,9 +78,8 @@ Jira MCP tool requires `cloudId` — missing it returns an error.
 ## Default OSAC Scope
 
 Unless the user asks about other projects, apply these defaults to all queries and creates:
-- `project = MGMT`
-- `component = OSAC`
-- Label: `OSAC`
+- `project = OSAC`
+- Label: `OSAC` (optional — some issues use it, many don't; include when creating issues for consistency)
 - Sprint naming: `OSAC Sprint <N>` (sequential numbering; use current open sprint when creating in-sprint issues)
 - Board: `4269`
 
@@ -116,11 +115,11 @@ Offer these patterns based on user intent:
 
 | User asks | JQL |
 |-----------|-----|
-| "What's assigned to me?" | `project = MGMT AND component = OSAC AND assignee = currentUser() AND statusCategory != Done` |
-| "What's in the current sprint?" | `project = MGMT AND component = OSAC AND sprint in openSprints()` |
-| "Show me the backlog" | `project = MGMT AND component = OSAC AND statusCategory = "To Do"` |
-| "Show OSAC epics" | `project = MGMT AND component = OSAC AND type = Epic AND statusCategory != Done` |
-| "What did I do recently?" | `project = MGMT AND component = OSAC AND assignee = currentUser() AND updated >= -7d` |
+| "What's assigned to me?" | `project = OSAC AND assignee = currentUser() AND statusCategory != Done` |
+| "What's in the current sprint?" | `project = OSAC AND sprint in openSprints()` |
+| "Show me the backlog" | `project = OSAC AND statusCategory = "To Do"` |
+| "Show OSAC epics" | `project = OSAC AND type = Epic AND statusCategory != Done` |
+| "What did I do recently?" | `project = OSAC AND assignee = currentUser() AND updated >= -7d` |
 
 For complex query construction, read `jira/reference/jql-reference.md`.
 
@@ -144,17 +143,17 @@ during bootstrap) as `assignee_account_id` in every `createJiraIssue` call.
 is an open invitation for another developer to pick it up — even when the work is already
 in progress locally. This creates duplicate effort and conflicting implementations.
 
-When creating a MGMT/OSAC issue, always pass:
-- `projectKey`: `"MGMT"`
+When creating an OSAC issue, always pass:
+- `projectKey`: `"OSAC"`
 - `issueTypeName`: `"Task"` / `"Story"` / `"Bug"` / `"Epic"` (from user input)
 - `summary`: from user input
 - `description`: from template
 - `contentFormat`: `"markdown"`
 - `responseContentFormat`: `"markdown"`
 - `assignee_account_id`: `"<account-id-from-bootstrap>"` (self-assign)
-- `additional_fields`: `{"labels": ["OSAC"], "components": [{"name": "OSAC"}]}`
+- `additional_fields`: `{"labels": ["OSAC"]}`
 
-When creating Stories/Tasks/Bugs under an epic, add `"customfield_10014": "MGMT-12345"` (Epic Link) to `additional_fields`.
+When creating Stories/Tasks/Bugs under an epic, add `"customfield_10014": "OSAC-12345"` (Epic Link) to `additional_fields`.
 
 Sprint is not available at create time. Assign post-creation via `editJiraIssue` with
 `fields: {"customfield_10020": <sprint-id>}` (raw integer, not object). Discover sprint
@@ -176,7 +175,7 @@ mismatch to the user — do not silently leave an unassigned or mis-assigned car
 ### Custom Field Validation (First CRUD Operation Each Session)
 
 On the first CRUD operation each session, call `getJiraIssueTypeMetaWithFields` for the
-target issue type in MGMT and verify that the custom field IDs from `jira/reference/jql-reference.md`
+target issue type in OSAC and verify that the custom field IDs from `jira/reference/jql-reference.md`
 still resolve:
 - Epic Link: `customfield_10014`
 - Epic Name (Epic type only): `customfield_10011`
@@ -208,7 +207,7 @@ are unresolvable):
 
 ## Generalized Jira (Non-OSAC Projects)
 
-When working outside MGMT/OSAC, drop the default project/component filter. Self-assignment
+When working outside the OSAC project, drop the default project filter. Self-assignment
 (Bootstrap step 1) applies to ALL projects, not just OSAC.
 
 1. Call `getJiraProjectIssueTypesMetadata` to discover issue types for unfamiliar projects

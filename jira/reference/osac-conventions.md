@@ -1,6 +1,6 @@
 # OSAC Jira Conventions
 
-Point-in-time snapshot of OSAC/MGMT project conventions (verified 2026-05-02). These are
+Point-in-time snapshot of OSAC project conventions (verified 2026-05-05). These are
 observed patterns from live cards, not enforced schema — Jira does not prevent deviation.
 
 ## Issue Type Hierarchy
@@ -13,71 +13,38 @@ Epic
     └── Sub-task (rarely used)
 ```
 
-**Issue types used in MGMT/OSAC:**
+**Issue types in OSAC:**
 - **Epic** — Feature-level work items with structured description template, tracked across sprints
+- **Feature** — Capability or well-defined set of functionality spanning multiple teams/releases (hierarchy level 2, above Epic)
+- **Outcome** — Organizational objective focused on a measurable outcome (hierarchy level 3, above Feature)
 - **Story** — Scoped implementation work under an Epic — terse prose description
 - **Task** — Engineering/operational work without a user story framing
-- **Bug** — Defects; uses the Bugzilla-legacy workflow (see Status Workflows)
+- **Bug** — Defects
 - **Sub-task** — Rarely used; child of Story/Task
+- **Weakness** — Product Security: known security weaknesses for remediation tracking
+- **Vulnerability** — Product Security: CVE-based vulnerabilities from manifest data
 
 **Epic Link:** Stories, Tasks, and Bugs are linked to their parent Epic via `customfield_10014` (Epic Link) set to the parent epic key in `createJiraIssue` `additional_fields`.
 
 ## Status Workflows
 
-Two distinct workflows are observed in MGMT/OSAC:
-
-### Epic Workflow
-
-Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT-23842:
+All issue types in OSAC share a single simplified workflow (verified 2026-05-05 via
+`getTransitionsForJiraIssue` on OSAC-354, OSAC-2, OSAC-75):
 
 ```
-New → Planning → To Do → In Progress → Dev Complete → Release Pending → Closed
+New → Refinement → In Progress → Closed
 ```
 
-| Status | statusCategory |
-|--------|----------------|
-| New | To Do |
-| Planning | To Do |
-| To Do | To Do |
-| In Progress | In Progress |
-| Dev Complete | In Progress |
-| Release Pending | Done |
-| Closed | Done |
+| Status | statusCategory | Transition ID |
+|--------|----------------|---------------|
+| New | To Do | 51 |
+| Refinement | To Do | 61 |
+| In Progress | In Progress | 31 |
+| Closed | Done | 41 |
 
-### Task/Story Workflow
-
-Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT-24246 (Task):
-
-```
-To Do → In Progress → Code Review → Review → Closed
-```
-
-| Status | statusCategory |
-|--------|----------------|
-| To Do | To Do |
-| In Progress | In Progress |
-| Code Review | In Progress |
-| Review | In Progress |
-| Closed | Done |
-
-### Bug Workflow (Bugzilla-legacy)
-
-Verified 2026-05-02 via `getTransitionsForJiraIssue` on MGMT Bug:
-
-```
-New → ASSIGNED → POST → MODIFIED → ON_QA → Verified → Release Pending → Closed
-```
-
-| Status | statusCategory |
-|--------|----------------|
-| New | To Do |
-| ASSIGNED | In Progress |
-| POST | In Progress |
-| MODIFIED | In Progress |
-| ON_QA | In Progress |
-| Verified | Done |
-| Release Pending | Done |
-| Closed | Done |
+All transitions are global — any status can transition to any other status. This is a
+significant simplification from the old MGMT project which had separate workflows for
+Epics (7 states), Tasks/Stories (5 states), and Bugs (Bugzilla-legacy, 8 states).
 
 **Cross-project tip:** Use `statusCategory` in JQL for cross-project queries to avoid workflow-specific status names:
 ```jql
@@ -290,7 +257,7 @@ indicates who created the card, not who is working on it.
 
 ## Custom Field IDs
 
-These IDs are point-in-time snapshots (verified 2026-05-02). Use `getJiraIssueTypeMetaWithFields`
+These IDs are point-in-time snapshots (verified 2026-05-05). Use `getJiraIssueTypeMetaWithFields`
 to discover additional custom fields or verify IDs at runtime — Jira admins can remap custom
 fields server-side.
 
@@ -300,12 +267,16 @@ fields server-side.
 | Epic Name (Epic type only) | `customfield_10011` | Set in `createJiraIssue` `additional_fields` |
 | Sprint | `customfield_10020` | Sprint assignment |
 | Story Points | `customfield_10028` | Present but unused in OSAC |
+| Blocked | `customfield_10517` | Select: True/False (default: False) |
+| Blocked Reason | `customfield_10483` | Text field, has default |
+| Severity | `customfield_10840` | Select: Critical/Important/Moderate/Low/Informational |
+| Release Blocker | `customfield_10847` | Select: Approved/Proposed/Rejected |
 
-## MGMT Project Coordinates
+## OSAC Project Coordinates
 
 | Coordinate | Value |
 |-----------|-------|
-| Project key | `MGMT` |
-| Component | `OSAC` |
+| Project key | `OSAC` |
+| Project name | Open Sovereign AI Cloud Platform |
 | Board ID | `4269` |
 | Instance | `redhat.atlassian.net` |
