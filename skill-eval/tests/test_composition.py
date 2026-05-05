@@ -11,6 +11,7 @@ or git worktree calls in the test suite.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -46,8 +47,6 @@ def _make_fixture(repo: Path, key: str, content: str) -> None:
 
 def _make_composition_config(tmp_path: Path, data: dict) -> Path:
     """Write a composition config JSON and return its path."""
-    import json
-
     config_path = tmp_path / "composition.json"
     config_path.write_text(json.dumps(data))
     return config_path
@@ -113,7 +112,7 @@ class TestExecuteChain:
         assert results[0].capture_name is None
 
     def test_capture_as_stored_with_xml_wrapping(self, tmp_path):
-        """Captured output is XML-wrapped before storage."""
+        """Captured output is XML-wrapped when substituted into subsequent step prompts."""
         repo = _make_repo(tmp_path)
 
         call_outputs = [
@@ -121,8 +120,10 @@ class TestExecuteChain:
             "Step 2 produced this output which is also long enough to pass the guard check.",
         ]
         call_iter = iter(call_outputs)
+        captured_inputs: list[str] = []
 
         def mock_run(*args, **kwargs):
+            captured_inputs.append(kwargs.get("input", ""))
             proc = MagicMock()
             proc.returncode = 0
             proc.stdout = next(call_iter)
@@ -153,7 +154,9 @@ class TestExecuteChain:
 
         assert len(results) == 2
         assert results[0].capture_name == "step1"
-        assert "long enough to pass the guard" in results[1].skill_output
+        second_input = captured_inputs[1]
+        assert '<prior-step-output skill="quality-gate">' in second_input
+        assert "Step 1 produced this output" in second_input
 
     def test_variable_substitution_from_initial_captures(self, tmp_path):
         """Initial captures are substituted into step prompts."""
@@ -187,12 +190,16 @@ class TestExecuteChain:
             )
 
         assert "my fixture content" in captured_prompt[0]
+        assert "<prior-step-output" not in captured_prompt[0]
 
     def test_prior_step_output_xml_wrapped_in_next_prompt(self, tmp_path):
         """Prior step output is XML-wrapped when substituted into later prompts."""
         repo = _make_repo(tmp_path)
 
-        outputs = ["output from step1", "step2 done"]
+        outputs = [
+            "Output from step 1 — long enough to pass the 50-char guard threshold.",
+            "Output from step 2 — long enough to pass the 50-char guard threshold.",
+        ]
         call_iter = iter(outputs)
         captured_inputs: list[str] = []
 
@@ -226,20 +233,97 @@ class TestExecuteChain:
                 context_preamble=None,
             )
 
-        # The second prompt should contain the XML-wrapped output.
         second_input = captured_inputs[1]
         assert '<prior-step-output skill="quality-gate">' in second_input
-        assert "output from step1" in second_input
+        assert "Output from step 1" in second_input
 
-    def test_invalid_skill_name_raises(self, tmp_path):
-        """A skill name with invalid characters raises ValueError."""
+    def test_unknown_variable_left_as_is(self, tmp_path):
+        """Unknown {variable} references in prompt templates are left unchanged."""
+        repo = _make_repo(tmp_path)
+
+        captured_inputs: list[str] = []
+
+        def mock_run(*args, **kwargs):
+            captured_inputs.append(kwargs.get("input", ""))
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.stdout = _DEFAULT_OUTPUT
+            proc.stderr = ""
+            return proc
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
+        ):
+            execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "Review {fixture} and also {unknown_var}",
+                        "timeout_seconds": 30,
+                    }
+                ],
+                repo_root=repo,
+                context_preamble=None,
+                initial_captures={"fixture": "my fixture content"},
+            )
+
+        assert "my fixture content" in captured_inputs[0]
+        assert "{unknown_var}" in captured_inputs[0]
+
+    def test_curly_braces_in_captured_output_do_not_break_substitution(self, tmp_path):
+        """JSON or other curly-brace content in captured output is substituted safely."""
+        repo = _make_repo(tmp_path)
+
+        json_output = '{"key": "value", "count": 42, "items": ["a", "b"]} — ' + "x" * 20
+        call_outputs = [json_output, _DEFAULT_OUTPUT]
+        call_iter = iter(call_outputs)
+        captured_inputs: list[str] = []
+
+        def mock_run(*args, **kwargs):
+            captured_inputs.append(kwargs.get("input", ""))
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.stdout = next(call_iter)
+            proc.stderr = ""
+            return proc
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
+        ):
+            results = execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "produce json",
+                        "capture_as": "json_result",
+                        "timeout_seconds": 30,
+                    },
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "use this: {json_result}",
+                        "timeout_seconds": 30,
+                    },
+                ],
+                repo_root=repo,
+                context_preamble=None,
+            )
+
+        assert len(results) == 2
+        assert '{"key": "value"' in captured_inputs[1]
+
+    @pytest.mark.parametrize(
+        "bad_name",
+        ["bad skill name!", "path/traversal", "../escape", "/leading-slash", "has..dots"],
+    )
+    def test_invalid_skill_name_raises(self, tmp_path, bad_name):
+        """Skill names with invalid characters (spaces, /, .., leading slash) raise ValueError."""
         repo = _make_repo(tmp_path)
 
         with pytest.raises(ValueError, match="Invalid skill name"):
             execute_chain(
-                steps=[
-                    {"skill": "bad skill name!", "prompt_template": "test", "timeout_seconds": 30}
-                ],
+                steps=[{"skill": bad_name, "prompt_template": "test", "timeout_seconds": 30}],
                 repo_root=repo,
                 context_preamble=None,
             )
@@ -357,6 +441,37 @@ class TestExecuteChain:
 
         assert "DATABASE_PASSWORD" not in captured_env[0]
         assert "CLAUDECODE" in captured_env[0]
+
+    def test_subprocess_cmd_uses_required_flags(self, tmp_path):
+        """Subprocess cmd includes --append-system-prompt, --permission-mode, and uses stdin."""
+        repo = _make_repo(tmp_path)
+
+        captured_cmds: list[list] = []
+        captured_kwargs: list[dict] = []
+
+        def mock_run(*args, **kwargs):
+            captured_cmds.append(args[0])
+            captured_kwargs.append(kwargs)
+            return _mock_claude_proc()
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            patch("skill_eval.runner.subprocess.run", side_effect=mock_run),
+        ):
+            execute_chain(
+                steps=[{"skill": "quality-gate", "prompt_template": "test", "timeout_seconds": 30}],
+                repo_root=repo,
+                context_preamble=None,
+            )
+
+        cmd = captured_cmds[0]
+        assert "--append-system-prompt" in cmd
+        assert "--permission-mode" in cmd
+        idx = cmd.index("--permission-mode")
+        assert cmd[idx + 1] == "bypassPermissions"
+        assert "input" in captured_kwargs[0]
+        assert "-p" not in cmd
+        assert "--bare" not in cmd
 
     def test_bare_mode_skips_preamble_and_passes_flag(self, tmp_path):
         """bare=True passes --bare to claude CLI and omits BEHAVIORAL CONTEXT from stdin."""
@@ -481,6 +596,94 @@ class TestRunCompositionEval:
             )
 
         assert result["baseline"].infra_error is True
+        assert result["baseline"].final_scores == {}
+
+    def test_multi_config_produces_results_for_all(self, tmp_path):
+        """A composition with multiple configs returns results keyed by each config name."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/terse", "# Plan\n")
+
+        mock_judge = MagicMock()
+
+        composition = _make_composition()
+        composition["configs"].append(
+            {
+                "name": "with-review",
+                "steps": [
+                    {"skill": "quality-gate", "prompt_template": "{fixture}", "timeout_seconds": 30}
+                ],
+            }
+        )
+
+        with (
+            patch("skill_eval.runner.subprocess.run") as mock_run,
+            patch("skill_eval.runner.execute_chain") as mock_chain,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            mock_chain.return_value = [ChainStepResult("quality-gate", "output", None)]
+
+            result = run_composition_eval(composition, repo, mock_judge, n_trials=1)
+
+        assert len(result) == 2
+        assert "baseline" in result
+        assert "with-review" in result
+        assert result["baseline"].config_name == "baseline"
+        assert result["with-review"].config_name == "with-review"
+
+    def test_worktree_creation_uses_no_checkout_detach(self, tmp_path):
+        """git worktree add uses --no-checkout and --detach flags."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/terse", "# Plan\n")
+
+        mock_judge = MagicMock()
+        worktree_add_calls: list[list] = []
+
+        def mock_subprocess_run(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if isinstance(cmd, list) and "add" in cmd:
+                worktree_add_calls.append(cmd)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("skill_eval.runner.subprocess.run", side_effect=mock_subprocess_run),
+            patch(
+                "skill_eval.runner.execute_chain",
+                return_value=[ChainStepResult("quality-gate", "output", None)],
+            ),
+        ):
+            run_composition_eval(_make_composition(), repo, mock_judge, n_trials=1)
+
+        assert len(worktree_add_calls) >= 1
+        add_cmd = worktree_add_calls[0]
+        assert "--no-checkout" in add_cmd
+        assert "--detach" in add_cmd
+
+    def test_worktree_cleanup_uses_force(self, tmp_path):
+        """git worktree remove uses --force flag."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/terse", "# Plan\n")
+
+        mock_judge = MagicMock()
+        worktree_remove_calls: list[list] = []
+
+        def mock_subprocess_run(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if isinstance(cmd, list) and "remove" in cmd:
+                worktree_remove_calls.append(cmd)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("skill_eval.runner.subprocess.run", side_effect=mock_subprocess_run),
+            patch(
+                "skill_eval.runner.execute_chain",
+                return_value=[ChainStepResult("quality-gate", "output", None)],
+            ),
+        ):
+            run_composition_eval(_make_composition(), repo, mock_judge, n_trials=1)
+
+        assert len(worktree_remove_calls) >= 1
+        remove_cmd = worktree_remove_calls[0]
+        assert "--force" in remove_cmd
 
     def test_worktree_cleanup_on_success(self, tmp_path):
         """git worktree remove is called after successful chain execution."""
@@ -611,6 +814,122 @@ class TestRunCompositionEval:
         assert "test_metric" in baseline.final_scores
         assert baseline.final_scores["test_metric"] == pytest.approx(0.8)
         assert mock_metric.measure.call_count == 2
+        assert len(baseline.step_results) == 1
+        assert baseline.step_results[0].skill_name == "quality-gate"
+        assert baseline.step_results[0].skill_output == "output-3"
+
+    def test_metric_failure_returns_zero_score(self, tmp_path):
+        """When metric.measure() raises, the metric gets score 0.0 without aborting."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/terse", "# Plan\n")
+
+        mock_judge = MagicMock()
+
+        mock_chain_result = [ChainStepResult("quality-gate", "output content here", None)]
+
+        failing_metric = MagicMock()
+        failing_metric.name = "broken_metric"
+        failing_metric.measure.side_effect = RuntimeError("judge API down")
+
+        passing_metric = MagicMock()
+        passing_metric.name = "good_metric"
+        passing_metric.score = 0.9
+
+        composition = _make_composition()
+        composition["rubrics"] = ["implementer_judgment"]
+
+        with (
+            patch("skill_eval.runner.subprocess.run") as mock_run,
+            patch("skill_eval.runner.execute_chain", return_value=mock_chain_result),
+            patch("skill_eval.runner.build_metrics", return_value=[failing_metric, passing_metric]),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            result = run_composition_eval(composition, repo, mock_judge, n_trials=1)
+
+        baseline = result["baseline"]
+        assert baseline.infra_error is False
+        assert baseline.final_scores["broken_metric"] == 0.0
+        assert baseline.final_scores["good_metric"] == pytest.approx(0.9)
+
+    def test_no_expected_behaviors_passes_none_expected_output(self, tmp_path):
+        """When expected_behaviors is absent, LLMTestCase.expected_output is None."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/terse", "# Plan\n")
+
+        mock_judge = MagicMock()
+        mock_chain_result = [ChainStepResult("quality-gate", "output content here", None)]
+
+        mock_metric = MagicMock()
+        mock_metric.name = "phase_completion"
+        mock_metric.score = 0.7
+
+        composition = _make_composition()
+        composition["rubrics"] = ["phase_completion"]
+
+        captured_tc: list = []
+
+        def capture_tc(tc):
+            captured_tc.append(tc)
+
+        mock_metric.measure.side_effect = capture_tc
+
+        with (
+            patch("skill_eval.runner.subprocess.run") as mock_run,
+            patch("skill_eval.runner.execute_chain", return_value=mock_chain_result),
+            patch("skill_eval.runner.build_metrics", return_value=[mock_metric]),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            run_composition_eval(composition, repo, mock_judge, n_trials=1)
+
+        assert len(captured_tc) == 1
+        assert captured_tc[0].expected_output is None
+
+    def test_empty_assertions_produces_no_assertion_metrics(self, tmp_path):
+        """When assertions is [] or absent, no assertion metrics are added."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(repo, "composition/terse", "# Plan\n")
+
+        mock_judge = MagicMock()
+        mock_chain_result = [ChainStepResult("quality-gate", "output content here", None)]
+
+        composition = _make_composition()
+        composition["assertions"] = []
+
+        with (
+            patch("skill_eval.runner.subprocess.run") as mock_run,
+            patch("skill_eval.runner.execute_chain", return_value=mock_chain_result),
+            patch("skill_eval.runner.build_assertion_metrics") as mock_build_assert,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            result = run_composition_eval(composition, repo, mock_judge, n_trials=1)
+
+        mock_build_assert.assert_not_called()
+        assert result["baseline"].final_scores == {}
+
+    def test_scaffold_called_per_trial(self, tmp_path):
+        """_scaffold_worktree is called once per trial."""
+        repo = _make_repo(tmp_path)
+        _make_fixture(
+            repo,
+            "composition/terse",
+            "---\nscaffold:\n  files:\n    - app.py\n  requirements:\n    - flask\n---\n# Plan\n",
+        )
+
+        mock_judge = MagicMock()
+        mock_chain_result = [ChainStepResult("quality-gate", "output content here", None)]
+
+        composition = _make_composition()
+
+        with (
+            patch("skill_eval.runner.subprocess.run") as mock_run,
+            patch("skill_eval.runner.execute_chain", return_value=mock_chain_result),
+            patch("skill_eval.runner._scaffold_worktree") as mock_scaffold,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            run_composition_eval(composition, repo, mock_judge, n_trials=3)
+
+        assert mock_scaffold.call_count == 3
 
 
 # ── Group 3: compare_composition_results ─────────────────────────────────────
@@ -773,6 +1092,11 @@ class TestLoadCompositionFixture:
         content = load_composition_fixture("composition/valid-key", repo)
 
         assert "# content" in content
+
+    def test_leading_slash_key_rejected(self, tmp_path):
+        """Keys starting with '/' are rejected (would create absolute path)."""
+        with pytest.raises(ValueError, match="Invalid fixture key"):
+            load_composition_fixture("/etc/passwd", tmp_path)
 
     def test_path_traversal_key_rejected(self, tmp_path):
         """Keys containing '..' are rejected by validation."""
@@ -1000,6 +1324,25 @@ class TestExecuteChainEdgeCases:
             )
 
         assert "[suspect output" in results[0].skill_output
+
+    def test_missing_timeout_seconds_raises_key_error(self, tmp_path):
+        """A step dict missing 'timeout_seconds' raises KeyError."""
+        repo = _make_repo(tmp_path)
+
+        with (
+            patch("skill_eval.runner.resolve_skill_bundle", return_value="# bundle"),
+            pytest.raises(KeyError),
+        ):
+            execute_chain(
+                steps=[
+                    {
+                        "skill": "quality-gate",
+                        "prompt_template": "test",
+                    }
+                ],
+                repo_root=repo,
+                context_preamble=None,
+            )
 
 
 # ── Group 8: compare_composition_results edge cases ──────────────────────────

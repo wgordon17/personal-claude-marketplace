@@ -163,31 +163,31 @@
             },
             {
               "skill": "fix",
-              "prompt_template": "Fix the issues:\n{review_1}\n\nOriginal diff:\n{fixture}",
+              "prompt_template": "Fix the issues found in this review:\n{review_1}\n\nOriginal diff:\n{fixture}",
               "capture_as": "fix_1",
               "timeout_seconds": 600
             },
             {
               "skill": "quality-gate",
-              "prompt_template": "Quality gate:\n{fix_1}",
+              "prompt_template": "Run quality gate on these changes:\n{fix_1}",
               "capture_as": "gate_1",
               "timeout_seconds": 1200
             },
             {
               "skill": "pr-review",
-              "prompt_template": "Review fixed code:\n{fix_1}\n\nGate feedback:\n{gate_1}",
+              "prompt_template": "Review the fixed code again:\n{fix_1}\n\nPrior gate feedback:\n{gate_1}",
               "capture_as": "review_2",
               "timeout_seconds": 900
             },
             {
               "skill": "fix",
-              "prompt_template": "Fix issues:\n{review_2}\n\nPrior fix:\n{fix_1}",
+              "prompt_template": "Fix the issues from the second review:\n{review_2}\n\nPrior fix:\n{fix_1}",
               "capture_as": "fix_2",
               "timeout_seconds": 600
             },
             {
               "skill": "quality-gate",
-              "prompt_template": "Quality gate:\n{fix_2}",
+              "prompt_template": "Run quality gate on the updated changes:\n{fix_2}",
               "capture_as": "gate_2",
               "timeout_seconds": 1200
             },
@@ -555,7 +555,7 @@
             },
             {
               "skill": "quality-gate",
-              "prompt_template": "Run quality gate again:\n{swarm_output}\n\nPrior gate:\n{gate_1}",
+              "prompt_template": "Run quality gate again on this implementation:\n{swarm_output}\n\nPrior gate results:\n{gate_1}",
               "capture_as": "gate_2",
               "timeout_seconds": 1200
             },

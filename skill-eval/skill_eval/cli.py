@@ -118,10 +118,15 @@ def _verify_eval_integrity(repo_root: Path) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _deferred_imports() -> tuple:
-    """Import eval modules after setting DEEPEVAL env vars."""
+def _configure_deepeval_env() -> None:
+    """Set DEEPEVAL environment variables required before importing eval modules."""
     os.environ["DEEPEVAL_DISABLE_TIMEOUTS"] = "true"
     os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "YES"
+
+
+def _deferred_imports() -> tuple:
+    """Import eval modules after setting DEEPEVAL env vars."""
+    _configure_deepeval_env()
     from skill_eval.judge import VertexSonnetJudge
     from skill_eval.runner import (
         compare_baselines,
@@ -145,8 +150,7 @@ def _deferred_imports() -> tuple:
 
 def _deferred_composition_imports() -> tuple:
     """Import composition eval modules after setting DEEPEVAL env vars."""
-    os.environ["DEEPEVAL_DISABLE_TIMEOUTS"] = "true"
-    os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "YES"
+    _configure_deepeval_env()
     from skill_eval.judge import VertexSonnetJudge
     from skill_eval.runner import (
         compare_composition_results,

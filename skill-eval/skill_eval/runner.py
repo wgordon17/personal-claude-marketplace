@@ -50,6 +50,7 @@ _RE_ANGLE = re.compile(
     re.DOTALL,
 )
 
+_MIN_STEP_OUTPUT_LEN: int = 50
 
 # Skill-goal rubrics that use EXPECTED_OUTPUT and require expected_behaviors.
 # Shared between load_eval_config() validation and tests.
@@ -1033,7 +1034,7 @@ class ChainStepResult:
     skill_name: str
     skill_output: str
     capture_name: str | None
-    resolved_prompt: str = ""
+    resolved_prompt: str = ""  # populated only for the final chain step; "" for all prior steps
 
 
 @dataclass
@@ -1315,7 +1316,7 @@ def execute_chain(
         if not output:
             logger.warning("Step %r produced empty output", skill_name)
             output = f"[empty output from {skill_name}]"
-        elif len(output) < 50:  # noqa: PLR2004
+        elif len(output) < _MIN_STEP_OUTPUT_LEN:
             logger.warning("Step %r produced suspect short output: %r", skill_name, output)
             output = f"[suspect output from {skill_name}]: {output[:100]}"
 
@@ -1362,7 +1363,7 @@ def _run_single_config(
 
     sanitized_expected = _sanitize_expected_behaviors(expected_behaviors)
     trial_scores: list[dict[str, float]] = []
-    last_step_results: list[ChainStepResult] = []
+    trial_step_results: list[list[ChainStepResult]] = []
 
     for trial_idx in range(n_trials):
         suffix = uuid.uuid4().hex[:8]
@@ -1393,7 +1394,7 @@ def _run_single_config(
                     initial_captures={"fixture": fixture_content},
                     skill_repo_root=repo_root,
                 )
-                last_step_results = step_results
+                trial_step_results.append(step_results)
             except Exception as exc:
                 print(
                     f"  trial {trial_idx + 1}/{n_trials} ({config_name}): FAILED — {exc}",
@@ -1409,10 +1410,9 @@ def _run_single_config(
                 continue
 
             final_output = step_results[-1].skill_output if step_results else ""
-            final_prompt = step_results[-1].resolved_prompt if step_results else ""
 
             llm_tc = LLMTestCase(
-                input=final_prompt,
+                input=fixture_content,
                 actual_output=final_output,
                 expected_output="\n".join(sanitized_expected) if sanitized_expected else None,
             )
@@ -1421,13 +1421,20 @@ def _run_single_config(
             if assertions:
                 metrics.append(build_assertion_metrics(assertions))
 
-            tc_scores: dict[str, float] = {}
-            for metric in metrics:
+            def _score_one(metric: object, _tc: object = llm_tc) -> tuple[str, float]:
                 try:
-                    metric.measure(llm_tc)
-                    tc_scores[metric.name] = metric.score if metric.score is not None else 0.0
+                    metric.measure(_tc)  # type: ignore[union-attr]
+                    return metric.name, metric.score if metric.score is not None else 0.0  # type: ignore[union-attr]
                 except Exception as exc:
-                    logger.warning("Metric %s failed: %s", metric.name, exc)
+                    m_name = getattr(metric, "name", type(metric).__name__)
+                    logger.warning("Metric %s failed: %s", m_name, exc)
+                    return m_name, 0.0
+
+            tc_scores: dict[str, float] = {}
+            if metrics:
+                with ThreadPoolExecutor(max_workers=len(metrics)) as metric_pool:
+                    for name, score in metric_pool.map(_score_one, metrics):
+                        tc_scores[name] = score
 
             trial_scores.append(tc_scores)
             score_summary = ", ".join(f"{k}={v:.2f}" for k, v in tc_scores.items())
@@ -1442,6 +1449,8 @@ def _run_single_config(
                 cwd=repo_root,
                 capture_output=True,
             )
+
+    last_step_results = trial_step_results[-1] if trial_step_results else []
 
     if not trial_scores:
         return CompositionResult(
