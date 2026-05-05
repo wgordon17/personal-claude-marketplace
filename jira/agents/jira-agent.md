@@ -130,7 +130,7 @@ another developer while the work is already in progress locally.
 
 If the spawning prompt includes a `<spawn-data>` block (e.g., from `/incremental-planning`),
 extract the `summary`, `description`, and `issuetype` fields from it and use them verbatim —
-skip the description template from osac-conventions.md, but OSAC Defaults (project, component,
+skip the description template from osac-conventions.md, but OSAC Defaults (project,
 label) and self-assignment still apply. If `issuetype` is "Epic", use the Epic creation
 pattern below (structured description template required). Use `summary` from spawn-data
 for the `summary` parameter.

@@ -801,7 +801,7 @@ d. Update the plan file: change `**Tracker:** github:linked#N` → `**Tracker:**
 
 a. **Jira project key:** Present an `AskUserQuestion` asking for the target Jira
    project key. If the jira plugin's OSAC conventions are detected (e.g., CLAUDE.md
-   mentions OSAC/MGMT), default to `MGMT`. Otherwise, require the user to provide
+   mentions OSAC), default to `OSAC`. Otherwise, require the user to provide
    the project key.
 b. Draft the issue title and body per the Issue Format rules above (Title Rules for
    the title, Body Rules for the body, Issue Sanitization for stripping internal terms)
