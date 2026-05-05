@@ -138,6 +138,7 @@ These IDs are point-in-time snapshots (verified 2026-05-05). Use `getJiraIssueTy
 | Sprint | `customfield_10020` | `sprint in openSprints()` or `customfield_10020 = "OSAC Sprint 42"` |
 | Story Points | `customfield_10028` | `customfield_10028 IS EMPTY` (unused in OSAC) |
 | Blocked | `customfield_10517` | `customfield_10517 = "True"` |
+| Blocked Reason | `customfield_10483` | `customfield_10483 IS NOT EMPTY` |
 | Severity | `customfield_10840` | `customfield_10840 = "Critical"` |
 | Release Blocker | `customfield_10847` | `customfield_10847 = "Approved"` |
 

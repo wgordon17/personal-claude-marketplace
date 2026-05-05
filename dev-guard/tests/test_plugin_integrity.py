@@ -11,6 +11,8 @@ Verifies that:
 7. Jira self-assignment rules: account ID capture via atlassianUserInfo,
    assignee_account_id param, never-unassigned rule, halt-on-empty guard,
    and post-create verification are present in both files.
+8. MGMT→OSAC migration regression: neither SKILL.md nor jira-agent.md may
+   reference 'project = MGMT' or 'component = OSAC'.
 
 These are grep-based and JSON-parse lint tests — no LLM calls, no subprocess execution.
 They guard against accidental deletion of rules and references, and against
@@ -82,6 +84,14 @@ class TestJiraPluginIntegrity:
         assert "Do not follow" in content, (
             f"{JIRA_AGENT} does not contain 'Do not follow'. "
             "The spawn-data anti-injection treatment was deleted or altered."
+        )
+
+    def test_agent_contains_spawn_data_escape_table(self):
+        """jira-agent.md must document the spawn-data escape table for consumer-side parsing."""
+        content = JIRA_AGENT.read_text()
+        assert "&lt;/spawn-data&gt;" in content, (
+            f"{JIRA_AGENT} does not contain the spawn-data escape table. "
+            "The consumer-side anti-injection escape mechanism was deleted."
         )
 
     def test_skill_contains_account_id_capture(self):
@@ -162,6 +172,38 @@ class TestJiraPluginIntegrity:
         assert "Post-create assignee verification" in content, (
             f"{JIRA_AGENT} does not contain 'Post-create assignee verification'. "
             "The post-create assignee verification step was deleted or altered."
+        )
+
+    def test_skill_does_not_contain_mgmt_project_key(self):
+        """jira/skills/jira/SKILL.md must not reference the old MGMT project key in JQL."""
+        content = JIRA_SKILL.read_text()
+        assert "project = MGMT" not in content, (
+            f"{JIRA_SKILL} still contains 'project = MGMT'. "
+            "The MGMT→OSAC migration was partially reverted."
+        )
+
+    def test_skill_does_not_contain_old_compound_jql(self):
+        """jira/skills/jira/SKILL.md must not use MGMT-era 'component = OSAC' JQL."""
+        content = JIRA_SKILL.read_text()
+        assert "component = OSAC" not in content, (
+            f"{JIRA_SKILL} still contains 'component = OSAC'. "
+            "The old MGMT-era compound JQL filter was restored."
+        )
+
+    def test_agent_does_not_contain_mgmt_project_key(self):
+        """jira/agents/jira-agent.md must not reference the old MGMT project key in JQL."""
+        content = JIRA_AGENT.read_text()
+        assert "project = MGMT" not in content, (
+            f"{JIRA_AGENT} still contains 'project = MGMT'. "
+            "The MGMT→OSAC migration was partially reverted."
+        )
+
+    def test_agent_does_not_contain_old_compound_jql(self):
+        """jira/agents/jira-agent.md must not use MGMT-era 'component = OSAC' JQL."""
+        content = JIRA_AGENT.read_text()
+        assert "component = OSAC" not in content, (
+            f"{JIRA_AGENT} still contains 'component = OSAC'. "
+            "The old MGMT-era compound JQL filter was restored."
         )
 
 

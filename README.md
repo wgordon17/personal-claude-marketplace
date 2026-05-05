@@ -18,7 +18,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 20 skills, 4 commands | [README](code-quality/README.md) |
+| code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 21 skills, 4 commands | [README](code-quality/README.md) |
 
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
@@ -46,6 +46,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/roadmap` - Stateful multi-plan phase sequencing with roadmap lifecycle management (update, cleanup, status/drift, fresh creation)
 - `/lsp-navigation` - PROACTIVE semantic code navigation
 - `/uv-python` - PROACTIVE Python tooling enforcement (uv over pip)
+- `/test-plan` - User-guided test plans, UAT validation, acceptance criteria, and BDD feature files
 - `/test-runner` - Efficient test execution patterns
 - `/fix` - Comprehensive finding fixer with spike execution for plan-review Research Gaps
 - `/reflect` - Mid-task self-reflection checkpoint via Serena metacognitive tools
