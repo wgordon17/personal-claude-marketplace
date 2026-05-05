@@ -58,10 +58,10 @@ These standard markdown features convert cleanly to ADF:
 
 ## Issue Key Auto-Linking
 
-Write bare issue keys (`MGMT-12345`) in descriptions and comments — Jira auto-links them in the UI. No special markdown syntax needed.
+Write bare issue keys (`OSAC-12345`) in descriptions and comments — Jira auto-links them in the UI. No special markdown syntax needed.
 
 ```markdown
-This task depends on MGMT-12345 and blocks MGMT-67890.
+This task depends on OSAC-12345 and blocks OSAC-67890.
 ```
 
 ## Code Blocks

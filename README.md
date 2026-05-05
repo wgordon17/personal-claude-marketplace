@@ -87,7 +87,7 @@ Requires `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable. Enables `mcp__gith
 |--------|-------------|------------|------|
 | jira | Jira integration via jira CLI — OSAC defaults with full redhat.atlassian.net support (MCP temporarily disabled) | 1 skill, 1 agent, 3 reference files | [README](jira/README.md) |
 
-Uses `jira` CLI (ankitpokhrel/jira-cli) for all Jira operations. Defaults to OSAC scope (project=MGMT, component=OSAC). Operates across any project on request.
+Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project=OSAC). Operates across any project on request.
 
 **Skill:** `/jira:jira` — Interactive Jira queries, issue management, and CRUD
 
@@ -141,7 +141,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ### For Jira CLI
 
-- **jira CLI**: `brew install jira-cli` — run `jira init` to configure (server: redhat.atlassian.net, project: MGMT)
+- **jira CLI**: `brew install jira-cli` — run `jira init` to configure (server: redhat.atlassian.net, project: OSAC)
 - **API token**: Export `JIRA_API_TOKEN` and `JIRA_AUTH_TYPE` in your shell environment
 - **Optional write-command approval**: Add `Bash(jira issue create:*)`, `Bash(jira issue assign:*)`, `Bash(jira issue edit:*)`, `Bash(jira issue move:*)`, `Bash(jira issue comment add:*)`, `Bash(jira issue worklog add:*)`, `Bash(jira issue link:*)`, `Bash(jira epic create:*)`, `Bash(jira epic add:*)`, `Bash(jira sprint add:*)` to `~/.claude/settings.local.json` under `permissions.allow`. For read operations, also add `Bash(jira issue list:*)`, `Bash(jira issue view:*)`, `Bash(jira project:*)`. See [jira/README.md](jira/README.md) for the full JSON snippet.
 

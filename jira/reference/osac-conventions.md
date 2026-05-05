@@ -5,13 +5,17 @@ observed patterns from live cards, not enforced schema — Jira does not prevent
 
 ## Issue Type Hierarchy
 
-OSAC uses a two-level flat hierarchy in practice:
+OSAC uses a multi-level hierarchy:
 
 ```
-Epic
-└── Story / Task / Bug
-    └── Sub-task (rarely used)
+Outcome (level 3)
+└── Feature (level 2)
+    └── Epic (level 1)
+        └── Story / Task / Bug / Weakness / Vulnerability (level 0)
+            └── Sub-task (level -1, rarely used)
 ```
+
+In practice, most OSAC work uses the Epic → Story/Task/Bug levels.
 
 **Issue types in OSAC:**
 - **Epic** — Feature-level work items with structured description template, tracked across sprints
