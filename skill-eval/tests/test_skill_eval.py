@@ -208,6 +208,42 @@ class TestHookPrePushDispatch:
         mock_pp.assert_called_once_with(tmp_path)
 
 
+class TestHookCompositionDispatch:
+    """--composition dispatches to _mode_composition, not _mode_prepush."""
+
+    def test_composition_flag_calls_mode_composition(self, tmp_path, tty_stdin):
+        from skill_eval import cli
+
+        with (
+            patch.object(sys, "argv", ["hook", "--composition", "/some/path.json"]),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_composition", return_value=True) as mock_comp,
+            patch("skill_eval.cli._mode_prepush") as mock_prepush,
+            pytest.raises(SystemExit),
+        ):
+            cli.main()
+
+        mock_comp.assert_called_once_with(Path("/some/path.json"), tmp_path, None)
+        mock_prepush.assert_not_called()
+
+    def test_composition_name_flag_forwarded(self, tmp_path, tty_stdin):
+        from skill_eval import cli
+
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["hook", "--composition", "/p.json", "--composition-name", "my-comp"],
+            ),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_composition", return_value=True) as mock_comp,
+            pytest.raises(SystemExit),
+        ):
+            cli.main()
+
+        mock_comp.assert_called_once_with(Path("/p.json"), tmp_path, "my-comp")
+
+
 # ── Group 2: load_eval_config ─────────────────────────────────────────────────
 
 
@@ -1715,3 +1751,19 @@ class TestRunEvalInfraError:
             )
 
         assert result["infra_error"] is False
+
+
+# ── Group 28: Implementer judgment rubric ────────────────────────────────────
+
+
+class TestImplementerJudgmentRubric:
+    def test_implementer_judgment_registered(self):
+        from deepeval.test_case import LLMTestCaseParams
+        from skill_eval.rubrics import RUBRIC_REGISTRY
+
+        assert "implementer_judgment" in RUBRIC_REGISTRY
+        assert RUBRIC_REGISTRY["implementer_judgment"]["evaluation_params"] == [
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.EXPECTED_OUTPUT,
+        ]

@@ -118,10 +118,15 @@ def _verify_eval_integrity(repo_root: Path) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _deferred_imports() -> tuple:
-    """Import eval modules after setting DEEPEVAL env vars."""
+def _configure_deepeval_env() -> None:
+    """Set DEEPEVAL environment variables required before importing eval modules."""
     os.environ["DEEPEVAL_DISABLE_TIMEOUTS"] = "true"
     os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "YES"
+
+
+def _deferred_imports() -> tuple:
+    """Import eval modules after setting DEEPEVAL env vars."""
+    _configure_deepeval_env()
     from skill_eval.judge import VertexSonnetJudge
     from skill_eval.runner import (
         compare_baselines,
@@ -140,6 +145,24 @@ def _deferred_imports() -> tuple:
         run_eval,
         compare_baselines,
         load_context_layers,
+    )
+
+
+def _deferred_composition_imports() -> tuple:
+    """Import composition eval modules after setting DEEPEVAL env vars."""
+    _configure_deepeval_env()
+    from skill_eval.judge import VertexSonnetJudge
+    from skill_eval.runner import (
+        compare_composition_results,
+        load_composition_config,
+        run_composition_eval,
+    )
+
+    return (
+        VertexSonnetJudge,
+        load_composition_config,
+        run_composition_eval,
+        compare_composition_results,
     )
 
 
@@ -300,6 +323,81 @@ def _write_baselines(all_results: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _mode_composition(
+    config_path: Path, repo_root: Path, composition_name: str | None = None
+) -> bool:
+    """--composition mode: run composition eval from a JSON config file."""
+    (
+        VertexSonnetJudge,
+        load_composition_config,
+        run_composition_eval,
+        compare_composition_results,
+    ) = _deferred_composition_imports()
+
+    try:
+        config = load_composition_config(config_path)
+    except FileNotFoundError:
+        print(f"[skill-eval] Composition config not found: {config_path}", file=sys.stderr)
+        return False
+
+    compositions = config.get("compositions", [])
+    if composition_name:
+        compositions = [c for c in compositions if c.get("name") == composition_name]
+        if not compositions:
+            print(
+                f"[skill-eval] No composition named {composition_name!r} in config",
+                file=sys.stderr,
+            )
+            return False
+    if not compositions:
+        print("[skill-eval] No compositions found in config", file=sys.stderr)
+        return True
+
+    judge = VertexSonnetJudge()
+    all_passed = True
+
+    for composition in compositions:
+        name = composition.get("name", "?")
+        configs = composition.get("configs", [])
+        print(f"  [composition] {name} ({len(configs)} config(s))...")
+
+        try:
+            results = run_composition_eval(composition, repo_root, judge)
+        except Exception as exc:
+            print(f"  [error] {name}: {exc}", file=sys.stderr)
+            all_passed = False
+            continue
+
+        for config_name, result in results.items():
+            if result.infra_error:
+                print(
+                    f"  [error] {name}/{config_name}: infra error during chain execution",
+                    file=sys.stderr,
+                )
+                all_passed = False
+                continue
+
+            print(f"\n  [{name}/{config_name}]")
+            print(f"  {'Metric':<30} {'Score':>8}")
+            print("  " + "-" * 40)
+            for metric, score in result.final_scores.items():
+                print(f"    {metric:<28} {score:>8.3f}")
+
+            if not result.final_scores:
+                print("    no rubrics configured — chain executed successfully")
+
+        # Compare all non-baseline configs against the first config as baseline.
+        if len(results) > 1 and configs:
+            baseline_config = configs[0]["name"]
+            comparison = compare_composition_results(results, baseline_config)
+            if comparison["degradation_detected"]:
+                all_passed = False
+            for report in comparison["reports"].values():
+                print(report)
+
+    return all_passed
+
+
 def _mode_prepush(repo_root: Path) -> bool:
     """Default pre-push mode: detect changed skills and eval them."""
     try:
@@ -407,6 +505,16 @@ def main() -> None:
         action="store_true",
         help="Run --all and write results to baselines.json",
     )
+    group.add_argument(
+        "--composition",
+        metavar="PATH",
+        help="Run composition eval from a JSON config file",
+    )
+    parser.add_argument(
+        "--composition-name",
+        metavar="NAME",
+        help="Run only the named composition (used with --composition for selective runs)",
+    )
     parser.add_argument(
         "--locked",
         action="store_true",
@@ -457,6 +565,8 @@ def main() -> None:
         passed = _mode_all(repo_root)
     elif args.update_baselines:
         passed = _mode_update_baselines(repo_root)
+    elif args.composition:
+        passed = _mode_composition(Path(args.composition), repo_root, args.composition_name)
     else:
         passed = _mode_prepush(repo_root)
 
