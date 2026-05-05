@@ -32,7 +32,7 @@ OLD_PHRASE = "After every create or update operation"
 
 
 class TestJiraPluginIntegrity:
-    """Structural tests for Jira plugin rules: URL directive, self-assignment, data safety."""
+    """Jira plugin rules: URL directive, self-assignment, data safety, MGMT regression."""
 
     def test_skill_contains_url_directive(self):
         """jira/skills/jira/SKILL.md must contain the URL presentation directive."""
