@@ -8,12 +8,6 @@ rules:
   plugin-naming:
     enabled: true
     severity: warning
-  commands-dir-required:
-    enabled: false
-    severity: warning
-  commands-exist:
-    enabled: false
-    severity: info
   command-naming:
     enabled: true
     severity: warning

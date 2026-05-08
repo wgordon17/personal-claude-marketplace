@@ -10,7 +10,7 @@ on:
       - '**/hooks.json'
       - '**/plugin.json'
       - '**/SKILL.md'
-      - '.claudelint.yaml'
+      - '.skillsaw.yaml'
       - '.github/workflows/plugin-lint.yml'
   workflow_dispatch:
 
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
       - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7
-      - run: uvx claudelint --strict
+      - run: uvx skillsaw --strict
 
       - name: No README in skill directories
         run: |
