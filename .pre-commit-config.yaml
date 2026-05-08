@@ -8,10 +8,10 @@ repos:
 
   - repo: local
     hooks:
-      - id: claudelint
-        name: claudelint
+      - id: skillsaw
+        name: skillsaw
         language: system
-        entry: uvx claudelint --strict
+        entry: uvx skillsaw --strict
         pass_filenames: false
         files: \.(json|md|yaml)$
 
