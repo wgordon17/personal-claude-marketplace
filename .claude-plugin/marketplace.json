@@ -15,7 +15,11 @@
       "source": "./pyright-uvx",
       "description": "Python language server (via uvx - always latest)",
       "category": "development",
-      "tags": ["python", "lsp", "uvx"],
+      "tags": [
+        "python",
+        "lsp",
+        "uvx"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -26,7 +30,12 @@
       "source": "./vtsls-npx",
       "description": "TypeScript/JavaScript language server (via npx - always latest)",
       "category": "development",
-      "tags": ["typescript", "javascript", "lsp", "npx"],
+      "tags": [
+        "typescript",
+        "javascript",
+        "lsp",
+        "npx"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -37,7 +46,10 @@
       "source": "./gopls-go",
       "description": "Go language server (requires gopls on PATH)",
       "category": "development",
-      "tags": ["go", "lsp"],
+      "tags": [
+        "go",
+        "lsp"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -48,7 +60,12 @@
       "source": "./vscode-html-css-npx",
       "description": "HTML/CSS language servers (via npx - always latest)",
       "category": "development",
-      "tags": ["html", "css", "lsp", "npx"],
+      "tags": [
+        "html",
+        "css",
+        "lsp",
+        "npx"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -59,7 +76,11 @@
       "source": "./rust-analyzer-rustup",
       "description": "Rust language server (requires rust-analyzer via rustup)",
       "category": "development",
-      "tags": ["rust", "lsp", "rustup"],
+      "tags": [
+        "rust",
+        "lsp",
+        "rustup"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -70,7 +91,12 @@
       "source": "./dev-guard",
       "description": "Development environment policy enforcement: tool selection guard, commit validation, pre-push review, URL fetch guard, trust management, oc/kubectl introspection, subagent completion verification, decision persistence, anti-deferral enforcement, shared behavioral feedback, path hallucination guard",
       "category": "quality",
-      "tags": ["hooks", "git", "validation", "policies"],
+      "tags": [
+        "hooks",
+        "git",
+        "validation",
+        "policies"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -81,7 +107,24 @@
       "source": "./code-quality",
       "description": "Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning (with issue tracking and PR boundary markers), roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, summarize, and test-plan",
       "category": "quality",
-      "tags": ["agents", "architecture", "security", "qa", "performance", "audit", "lsp", "python", "testing", "planning", "roadmap", "pr-review", "plan-review", "session", "reflection", "indexing"],
+      "tags": [
+        "agents",
+        "architecture",
+        "security",
+        "qa",
+        "performance",
+        "audit",
+        "lsp",
+        "python",
+        "testing",
+        "planning",
+        "roadmap",
+        "pr-review",
+        "plan-review",
+        "session",
+        "reflection",
+        "indexing"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -92,7 +135,12 @@
       "source": "./git-tools",
       "description": "Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation",
       "category": "productivity",
-      "tags": ["git", "hooks", "commits", "history"],
+      "tags": [
+        "git",
+        "hooks",
+        "commits",
+        "history"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -103,7 +151,13 @@
       "source": "./github-mcp",
       "description": "GitHub MCP server with full toolsets for repository management, code security, and workflow automation",
       "category": "productivity",
-      "tags": ["github", "mcp", "issues", "pull-requests", "code-security"],
+      "tags": [
+        "github",
+        "mcp",
+        "issues",
+        "pull-requests",
+        "code-security"
+      ],
       "author": {
         "name": "wgordon17"
       }
@@ -114,18 +168,28 @@
       "source": "./jira",
       "description": "Jira integration for issue tracking, querying, and management — OSAC defaults with full redhat.atlassian.net support",
       "category": "productivity",
-      "tags": ["jira", "mcp", "issue-tracking", "osac"],
+      "tags": [
+        "jira",
+        "mcp",
+        "issue-tracking",
+        "osac"
+      ],
       "author": {
         "name": "wgordon17"
       }
     },
     {
       "name": "drawio",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./drawio",
       "description": "Draw.io diagram generation skill — creates native .drawio files with optional PNG/SVG/PDF export via draw.io Desktop CLI. Vendored from jgraph/drawio-mcp (Apache 2.0).",
       "category": "productivity",
-      "tags": ["drawio", "diagrams", "diagramming", "mxgraph"],
+      "tags": [
+        "drawio",
+        "diagrams",
+        "diagramming",
+        "mxgraph"
+      ],
       "author": {
         "name": "wgordon17"
       }
