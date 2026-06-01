@@ -464,12 +464,13 @@ For cases where you want a **full** re-layout — moving vertices to canonical p
 | `stress` | `stress` | Small-to-mid general graphs (usually tighter than force) |
 | `radial` | `radial` | Concentric layers around a root |
 
-**Usually omit `postLayout`.** The automatic edge-routing pass above handles the common case. Only set `postLayout` when the user explicitly wants a canonical layout, or when you know vertex placement is significantly off.
+**For XML diagrams: usually omit `postLayout`.** You authored the coordinates yourself, so the layout is already deliberate — the automatic edge-routing pass handles the rest. Set `postLayout` only when the user explicitly wants a canonical layout, or when you know vertex placement is significantly off.
 
-**When NOT to use:**
+**For Mermaid diagrams: see the `postLayout` parameter description for when to set it.** Complex Mermaid flowcharts (≥ ~20 nodes, ≥ 3 decision diamonds, feedback edges, or ≥ 3 endpoints) need `postLayout: "verticalFlow"` (for `flowchart TD/TB`) or `"horizontalFlow"` (for `flowchart LR/RL`) — along with `startNodeIds` and `endNodeIds` — because the native parser's layout goes cramped or unbalanced past that threshold. Simple flowcharts and all non-flowchart Mermaid types (sequence, class, ER, sankey, …) need no `postLayout`.
+
+**When NOT to use (XML):**
 - The user has asked for specific positions (swim lanes with exact lanes, architecture diagrams with meaningful spatial arrangement).
 - The diagram relies on containers/grouping where spatial layout encodes information.
-- For Mermaid diagrams — the native Mermaid layout already runs through full ELK; `postLayout` would override that with a different algorithm.
 
 ## Style reference
 
