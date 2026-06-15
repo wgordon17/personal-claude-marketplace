@@ -453,23 +453,17 @@ This also means: there is no server-side post-processing pass. What you generate
 
 ## Post-layout (optional, overrides vertex positions)
 
-For cases where you want a **full** re-layout — moving vertices to canonical positions — set the optional `postLayout` parameter on `create_diagram`. Vertices animate (morph) from their original positions to the algorithm's layout.
+For cases where you want a **full** re-layout — moving vertices to canonical positions — set the optional `postLayout` parameter on `create_diagram` to `"elk"` (ELK's `layered` flow algorithm). Vertices animate (morph) from their original positions to the algorithm's layout. Best for flowcharts, process diagrams, state diagrams, decision flows, pipelines, and hierarchical/directional diagrams.
 
-| Value | ELK algorithm | Best for |
-|-------|---------------|----------|
-| `verticalFlow` | `layered` (DOWN) | Flowcharts, process diagrams |
-| `horizontalFlow` | `layered` (RIGHT) | Pipelines, swim lanes |
-| `tree` | `mrtree` | Org charts, decision trees, hierarchies |
-| `force` | `force` | Networks without clear hierarchy |
-| `stress` | `stress` | Small-to-mid general graphs (usually tighter than force) |
-| `radial` | `radial` | Concentric layers around a root |
+For `postLayout: "elk"`, the flow **direction** is separate: on **XML** set the optional `direction` field (`"vertical"` (default) or `"horizontal"`); on **Mermaid** it is read from the flowchart code (`flowchart TD/TB` → vertical, `LR/RL` → horizontal) and `direction` is ignored.
 
-**Usually omit `postLayout`.** The automatic edge-routing pass above handles the common case. Only set `postLayout` when the user explicitly wants a canonical layout, or when you know vertex placement is significantly off.
+**For XML diagrams: usually omit `postLayout`.** You authored the coordinates yourself, so the layout is already deliberate — the automatic edge-routing pass handles the rest. Set `postLayout` only when the user explicitly wants a canonical layout, or when you know vertex placement is significantly off. When you do use `postLayout: "elk"`, add `direction: "horizontal"` if the flow reads left-to-right.
 
-**When NOT to use:**
+**For Mermaid diagrams: see the `postLayout` parameter description for when to set it.** Complex Mermaid flowcharts (≥ ~20 nodes, ≥ 3 decision diamonds, feedback edges, or ≥ 3 endpoints) need `postLayout: "elk"` because the native parser's layout goes cramped or unbalanced past that threshold — the direction follows the flowchart code, so no `direction` is needed. Simple flowcharts and all non-flowchart Mermaid types (sequence, class, ER, sankey, …) need no `postLayout`.
+
+**When NOT to use (XML):**
 - The user has asked for specific positions (swim lanes with exact lanes, architecture diagrams with meaningful spatial arrangement).
 - The diagram relies on containers/grouping where spatial layout encodes information.
-- For Mermaid diagrams — the native Mermaid layout already runs through full ELK; `postLayout` would override that with a different algorithm.
 
 ## Style reference
 
