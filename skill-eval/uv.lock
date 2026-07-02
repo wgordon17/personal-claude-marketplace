@@ -1453,6 +1453,7 @@ dependencies = [
     { name = "anthropic", extra = ["vertex"] },
     { name = "deepeval" },
     { name = "instructor" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -1466,6 +1467,7 @@ requires-dist = [
     { name = "anthropic", extras = ["vertex"], specifier = ">=0.80.0" },
     { name = "deepeval", specifier = ">=3.0" },
     { name = "instructor", specifier = ">=1.0,<2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [package.metadata.requires-dev]

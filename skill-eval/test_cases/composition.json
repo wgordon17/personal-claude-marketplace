@@ -1,0 +1,573 @@
+{
+  "compositions": [
+    {
+      "name": "plan-review-swarm-degradation",
+      "description": "Tests whether repeated plan-review before swarm degrades implementer judgment",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/terse-auth-plan",
+      "expected_behaviors": [
+        "Chooses a JWT library (e.g. PyJWT) rather than manual token parsing",
+        "Uses secrets.token_urlsafe() or equivalent secure random generation",
+        "Applies decorator pattern or equivalent abstraction for role checking",
+        "Does not mechanically follow a step-by-step checklist"
+      ],
+      "assertions": ["not-contains: hashlib.sha256"],
+      "configs": [
+        {
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "3-review-cycles",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan (updated after prior feedback):\n{fixture}\n\nPrior review:\n{review_1}",
+              "capture_as": "review_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan (updated after two rounds of feedback):\n{fixture}\n\nPrior reviews:\n{review_1}\n{review_2}",
+              "capture_as": "review_3",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating all review feedback):\n{fixture}\n\nReview feedback:\n{review_3}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pr-review-fix-gate-degradation",
+      "description": "Tests whether fix quality degrades and gate rubber-stamps after multiple pr-review/fix/gate cycles",
+      "rubrics": ["phase_completion"],
+      "fixture": "composition/planted-issues-diff",
+      "expected_behaviors": [
+        "Identifies SQL injection via string interpolation in get_widget query",
+        "Identifies missing authorization check on delete_widget endpoint",
+        "Identifies brittle exact-string assertion in test_get_missing_widget",
+        "Fixes SQL injection with parameterized queries or ORM methods"
+      ],
+      "assertions": [
+        "not-contains: f\"SELECT * FROM widgets WHERE name='{name}'\"",
+        "contains: injection"
+      ],
+      "configs": [
+        {
+          "name": "1-cycle",
+          "steps": [
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff for issues:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues found in this review:\n{review_output}\n\nOriginal diff:\n{fixture}",
+              "capture_as": "fix_output",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on these changes:\n{fix_output}",
+              "capture_as": "gate_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "2-cycles",
+          "steps": [
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff for issues:\n{fixture}",
+              "capture_as": "review_1",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues found in this review:\n{review_1}\n\nOriginal diff:\n{fixture}",
+              "capture_as": "fix_1",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on these changes:\n{fix_1}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review the fixed code again:\n{fix_1}\n\nPrior gate feedback:\n{gate_1}",
+              "capture_as": "review_2",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues from the second review:\n{review_2}\n\nPrior fix:\n{fix_1}",
+              "capture_as": "fix_2",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on the updated changes:\n{fix_2}",
+              "capture_as": "gate_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "3-cycles",
+          "steps": [
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review this diff for issues:\n{fixture}",
+              "capture_as": "review_1",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues found in this review:\n{review_1}\n\nOriginal diff:\n{fixture}",
+              "capture_as": "fix_1",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on these changes:\n{fix_1}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "pr-review",
+              "prompt_template": "Review the fixed code again:\n{fix_1}\n\nPrior gate feedback:\n{gate_1}",
+              "capture_as": "review_2",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Fix the issues from the second review:\n{review_2}\n\nPrior fix:\n{fix_1}",
+              "capture_as": "fix_2",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on the updated changes:\n{fix_2}",
+              "capture_as": "gate_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "pr-review",
+              "prompt_template": "Final review:\n{fix_2}\n\nGate feedback:\n{gate_2}",
+              "capture_as": "review_3",
+              "timeout_seconds": 900
+            },
+            {
+              "skill": "fix",
+              "prompt_template": "Final fix:\n{review_3}\n\nPrior fix:\n{fix_2}",
+              "capture_as": "fix_3",
+              "timeout_seconds": 600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Final quality gate:\n{fix_3}",
+              "capture_as": "gate_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deep-research-planning-degradation",
+      "description": "Tests whether deep-research before incremental-planning degrades plan quality",
+      "rubrics": ["phase_completion"],
+      "fixture": "composition/terse-auth-plan",
+      "assertions": [
+        "contains: JWT",
+        "contains: token"
+      ],
+      "configs": [
+        {
+          "name": "baseline-no-research",
+          "steps": [
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "1-research-cycle",
+          "steps": [
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research best practices for:\n{fixture}",
+              "capture_as": "research_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}\n\nResearch findings:\n{research_output}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "3-research-cycles",
+          "steps": [
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research best practices for:\n{fixture}",
+              "capture_as": "research_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research implementation patterns for:\n{fixture}\n\nPrior research:\n{research_1}",
+              "capture_as": "research_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research security considerations for:\n{fixture}\n\nPrior research:\n{research_1}\n{research_2}",
+              "capture_as": "research_3",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}\n\nResearch findings:\n{research_3}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "planning-swarm-comparison",
+      "description": "Compares swarm with vs without incremental-planning upfront",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/terse-auth-plan",
+      "expected_behaviors": [
+        "Chooses a JWT library (e.g. PyJWT) rather than manual token parsing",
+        "Uses secrets.token_urlsafe() or equivalent secure random generation",
+        "Applies decorator pattern or equivalent abstraction for role checking",
+        "Does not mechanically follow a step-by-step checklist"
+      ],
+      "assertions": ["not-contains: hashlib.sha256"],
+      "configs": [
+        {
+          "name": "baseline-swarm-only",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "planning-then-swarm",
+          "steps": [
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{plan_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "research-planning-swarm",
+          "steps": [
+            {
+              "skill": "deep-research",
+              "prompt_template": "Research best practices for:\n{fixture}",
+              "capture_as": "research_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "incremental-planning",
+              "prompt_template": "{fixture}\n\nResearch findings:\n{research_output}",
+              "capture_as": "plan_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{plan_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "overspecified-auth-judgment",
+      "description": "Mirror of plan-review-swarm-degradation with overspecified fixture — compare scores against terse variant to measure specification-level effect",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/overspecified-auth-plan",
+      "expected_behaviors": [
+        "Does not use hashlib.sha256 for token generation",
+        "Does not create separate middleware files per role",
+        "Does not assert exact token hash strings in tests",
+        "Shows independent judgment despite over-specified plan steps"
+      ],
+      "assertions": ["not-contains: hashlib.sha256"],
+      "configs": [
+        {
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "terse-crud-judgment",
+      "description": "CRUD variant — tests implementer judgment on terse goal-oriented CRUD plan",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/terse-crud-plan",
+      "expected_behaviors": [
+        "Uses SQLAlchemy ORM queries, not raw SQL",
+        "Uses cursor-based or keyset pagination rather than OFFSET",
+        "Uses a schema validation library instead of if/elif chains",
+        "Makes purposeful implementation decisions not dictated by the plan"
+      ],
+      "assertions": ["not-contains: db.engine.execute"],
+      "configs": [
+        {
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "overspecified-crud-judgment",
+      "description": "Mirror of terse-crud with overspecified fixture — compare scores to measure specification-level effect",
+      "rubrics": ["implementer_judgment", "phase_completion"],
+      "fixture": "composition/overspecified-crud-plan",
+      "expected_behaviors": [
+        "Does not use raw SQL queries when SQLAlchemy ORM is available",
+        "Does not use offset-based pagination for large datasets",
+        "Does not use if/elif chains for input validation",
+        "Shows independent judgment despite over-specified plan steps"
+      ],
+      "assertions": ["not-contains: db.engine.execute"],
+      "configs": [
+        {
+          "name": "baseline-no-review",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "1-review-cycle",
+          "steps": [
+            {
+              "skill": "plan-review",
+              "prompt_template": "Review this plan:\n{fixture}",
+              "capture_as": "review_output",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan (incorporating review feedback):\n{fixture}\n\nReview feedback:\n{review_output}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "swarm-quality-gate-degradation",
+      "description": "Tests whether repeated quality-gate cycles after swarm degrade review rigor (rubber-stamping)",
+      "rubrics": ["phase_completion"],
+      "fixture": "composition/terse-auth-plan",
+      "assertions": [
+        "contains: JWT",
+        "not-contains: hashlib.sha256"
+      ],
+      "configs": [
+        {
+          "name": "swarm-only",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            }
+          ]
+        },
+        {
+          "name": "swarm-1-gate",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on this implementation:\n{swarm_output}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "swarm-2-gates",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on this implementation:\n{swarm_output}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate again on this implementation:\n{swarm_output}\n\nPrior gate results:\n{gate_1}",
+              "capture_as": "gate_2",
+              "timeout_seconds": 1200
+            }
+          ]
+        },
+        {
+          "name": "swarm-3-gates",
+          "steps": [
+            {
+              "skill": "swarm",
+              "prompt_template": "Implement this plan:\n{fixture}",
+              "capture_as": "swarm_output",
+              "timeout_seconds": 3600
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate on this implementation:\n{swarm_output}",
+              "capture_as": "gate_1",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate again on this implementation:\n{swarm_output}\n\nPrior gate results:\n{gate_1}",
+              "capture_as": "gate_2",
+              "timeout_seconds": 1200
+            },
+            {
+              "skill": "quality-gate",
+              "prompt_template": "Run quality gate a third time:\n{swarm_output}\n\nPrior gates:\n{gate_1}\n{gate_2}",
+              "capture_as": "gate_3",
+              "timeout_seconds": 1200
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1855,6 +1855,90 @@ FOLLOW_THROUGH_RUBRIC = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 24. IMPLEMENTER JUDGMENT (composition eval)
+#     Tests whether an implementer exercises independent judgment when following
+#     a plan — making purposeful technical decisions rather than mechanically
+#     transcribing plan steps. High scores require the implementer to treat the
+#     plan as a goal guide, not a checklist, and demonstrate agency in HOW the
+#     goal is achieved.
+# ──────────────────────────────────────────────────────────────────────────────
+
+IMPLEMENTER_JUDGMENT_RUBRIC = {
+    "name": "implementer_judgment",
+    "evaluation_steps": [
+        (
+            "Check whether the implementation demonstrates independent technical"
+            " decisions — library selection, error handling strategy, abstraction"
+            " boundaries, naming — that go beyond what the plan prescribes"
+        ),
+        (
+            "Check whether the implementation mechanically transcribes plan"
+            " steps verbatim, or whether it translates plan goals into code"
+            " using the implementer's own judgment about HOW to achieve them"
+        ),
+        (
+            "Compare the implementation against the expected output (answer key)"
+            " behaviors — check whether key independent decisions listed in the"
+            " answer key (e.g., 'uses secrets.token_urlsafe', 'decorator pattern')"
+            " appear in the actual output, not just plan-dictated choices"
+        ),
+        (
+            "Check whether the implementation treats the plan as a checklist"
+            " (steps executed in order, minimal deviation) versus a goal guide"
+            " (goal understood, implementation path chosen independently)"
+        ),
+    ],
+    "evaluation_params": [
+        LLMTestCaseParams.INPUT,
+        LLMTestCaseParams.ACTUAL_OUTPUT,
+        LLMTestCaseParams.EXPECTED_OUTPUT,
+    ],
+    "rubric": [
+        Rubric(
+            score_range=(0, 0),
+            expected_outcome=(
+                "Implementation mechanically follows every plan step in"
+                " sequence — no library choices, no structural decisions,"
+                " no error handling beyond what the plan names explicitly"
+            ),
+        ),
+        Rubric(
+            score_range=(3, 3),
+            expected_outcome=(
+                "Implementation makes 1-2 small choices (variable naming,"
+                " minor formatting) but otherwise transcribes plan steps"
+                " without exercising judgment on approach or structure"
+            ),
+        ),
+        Rubric(
+            score_range=(5, 5),
+            expected_outcome=(
+                "Implementation makes some independent decisions but remains"
+                " noticeably rigid — follows plan ordering, avoids choosing"
+                " between equivalent approaches, defers to plan wording"
+            ),
+        ),
+        Rubric(
+            score_range=(8, 8),
+            expected_outcome=(
+                "Implementation clearly exercises judgment: selects libraries,"
+                " structures abstractions, or handles errors in ways that go"
+                " beyond plan prescriptions and reflect purposeful choices"
+            ),
+        ),
+        Rubric(
+            score_range=(10, 10),
+            expected_outcome=(
+                "Plan treated as a goal guide — implementer independently"
+                " chooses approach, library, abstraction pattern, and error"
+                " strategy; plan steps are a destination, not a script"
+            ),
+        ),
+    ],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # REGISTRY
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1884,4 +1968,5 @@ RUBRIC_REGISTRY: dict[str, dict] = {
     "pr_depth": PR_DEPTH_RUBRIC,
     "convention_adherence": CONVENTION_ADHERENCE_RUBRIC,
     "follow_through": FOLLOW_THROUGH_RUBRIC,
+    "implementer_judgment": IMPLEMENTER_JUDGMENT_RUBRIC,
 }
