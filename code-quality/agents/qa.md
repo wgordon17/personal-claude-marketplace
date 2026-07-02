@@ -1,7 +1,7 @@
 ---
 name: qa
 description: Use when reviewing code quality, test coverage, code smells, maintainability issues, or when user asks about "test strategy", "code quality", "technical debt", "code review"
-tools: Read, Glob, Grep, LSP, Bash
+tools: Read, LSP, Bash
 model: sonnet
 color: green
 ---

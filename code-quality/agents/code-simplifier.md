@@ -3,7 +3,7 @@ name: code-simplifier
 description: Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.
 model: sonnet
 color: magenta
-tools: Read, Glob, Grep, LSP, Edit, Write
+tools: Read, Bash, LSP, Edit, Write
 ---
 
 You are an expert code simplification specialist. You analyze recently modified code and

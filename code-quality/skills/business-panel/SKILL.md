@@ -4,7 +4,7 @@ description: |
   Use when user needs multi-stakeholder analysis, business impact assessment, or wants
   perspectives from different roles. Triggers on: "analyze from business perspective",
   "what would stakeholders think", "impact analysis", "business case for", "ROI of"
-allowed-tools: [Read, Glob, Grep, WebSearch, WebFetch, Skill]
+allowed-tools: [Read, Bash, WebSearch, WebFetch, Skill]
 ---
 
 # business-panel — Multi-Stakeholder Analysis Mode

@@ -6,7 +6,7 @@ description: |
   "investigate X exhaustively", "compare X options", "evaluate alternatives for".
   Supports two modes: External (web research, current behavior) and Bridged (internal
   project investigation followed by external best-practices research).
-allowed-tools: [WebSearch, WebFetch, Read, Write, Glob, Grep, Agent, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs]
+allowed-tools: [WebSearch, WebFetch, Read, Write, Agent, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs]
 ---
 
 # deep-research — 5-Hop Deep Research Mode

@@ -1,7 +1,7 @@
 ---
 name: security
 description: Use when reviewing code for security vulnerabilities, analyzing authentication/authorization patterns, assessing security risks, or when user mentions "security", "vulnerability", "authentication", "authorization", "injection", "XSS", "CSRF"
-tools: Read, Glob, Grep, LSP, WebSearch
+tools: Read, Bash, LSP, WebSearch
 model: sonnet
 color: red
 ---

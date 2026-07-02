@@ -5,7 +5,7 @@ description: |
   pause and evaluate: "am I on track?", "have I gathered enough info?", "am I actually done?".
   Triggers on: completing a significant chunk of work, before claiming done, when feeling uncertain
   about direction, after a long sequence of tool calls, before making large code changes.
-allowed-tools: [mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information, mcp__serena__think_about_whether_you_are_done, mcp__serena__summarize_changes, mcp__serena__read_memory, mcp__serena__write_memory, mcp__serena__list_memories, Read, Glob, Grep]
+allowed-tools: [mcp__serena__think_about_task_adherence, mcp__serena__think_about_collected_information, mcp__serena__think_about_whether_you_are_done, mcp__serena__summarize_changes, mcp__serena__read_memory, mcp__serena__write_memory, mcp__serena__list_memories, Read, Bash]
 ---
 
 # Reflect — Mid-Task Self-Reflection Checkpoint

@@ -8,7 +8,7 @@ description: >-
   hack/speculative/, hack/map-reduce/, hack/unfuck/, or hack/BUGS.md. Supports all 8
   artifact-producing skill outputs plus GitHub PRs. For quick PR summaries (not deep code
   review). Cross-session: reads persisted artifacts and audits against current codebase state.
-allowed-tools: [Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
+allowed-tools: [Read, Edit, Bash, Agent, AskUserQuestion]
 ---
 
 # Summarize
