@@ -6,7 +6,7 @@ description: |
   Spawns 6 parallel specialized reviewers (feasibility, scope, dependencies, unknown unknowns,
   architect, security), verifies findings by re-reading the plan, and prints a structured
   terminal report. Designed for cross-session use: write a plan in session A, review in session B.
-allowed-tools: [Read, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
+allowed-tools: [Read, Edit, Bash, Agent, AskUserQuestion]
 ---
 
 # Plan Review Skill

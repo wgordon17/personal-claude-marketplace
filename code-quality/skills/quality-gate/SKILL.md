@@ -4,7 +4,7 @@ description: |
   Use when about to claim ANY work is complete — code, research, planning,
   config, or general answers. Also after /swarm, /spawn, subagent-driven
   development, or any significant deliverable.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, SendMessage, Skill]
+allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, SendMessage, Skill]
 ---
 
 # Quality Gate

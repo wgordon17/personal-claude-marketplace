@@ -8,7 +8,7 @@ description: >-
   Trigger phrases: "roadmap", "sequence plans", "coordinate multiple plans",
   "plan execution order", "roadmap status", "roadmap cleanup", "update roadmap",
   "roadmap drift", or when 2+ plans need ordering.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Bash, ToolSearch]
+allowed-tools: [Read, Write, Edit, Agent, AskUserQuestion, Bash, ToolSearch]
 ---
 
 # Roadmap

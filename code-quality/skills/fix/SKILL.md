@@ -8,7 +8,7 @@ description: |
   Auto-detects fix target (plan file, code, bugs). For plan-review Research Gaps and
   Unknown Unknowns, runs actual spikes and verification — executes the research, not just
   documents it.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch]
+allowed-tools: [Read, Write, Edit, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch]
 ---
 
 # Fix Skill

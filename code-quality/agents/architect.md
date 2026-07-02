@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Use when designing system architecture, evaluating technology choices, planning large-scale refactoring, or answering "how should I structure", "what's the best architecture for", "design the system" questions
-tools: Read, Glob, Grep, LSP, WebSearch, WebFetch
+tools: Read, Bash, LSP, WebSearch, WebFetch
 model: opus
 color: blue
 ---

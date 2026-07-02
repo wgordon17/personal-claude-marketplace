@@ -57,6 +57,10 @@ class GitRule(NamedTuple):
 # Exception matches → allow (skip the block).
 RULES: list[CommandRule] = [
     # ── Category A: Use native tools (no Bash permission needed) ──
+    # NOTE: grep, rg, find -name, and ls rules were removed in v1.63.0.
+    # Claude Code v2.1.117+ replaced the Grep/Glob tools with embedded
+    # ugrep/bfs on native macOS/Linux builds — search now routes through
+    # Bash, making those blocking rules a deadlock.
     CommandRule(
         "cat-file",
         re.compile(r"^\s*cat\s+(?!<<)\S"),
@@ -74,33 +78,6 @@ RULES: list[CommandRule] = [
         re.compile(r"^\s*tail\s+"),
         re.compile(r"\|"),
         "Use the Read tool with `offset` parameter instead of `tail`.",
-    ),
-    CommandRule(
-        "grep",
-        re.compile(r"^\s*grep\b"),
-        None,
-        "Use the Grep tool instead of `grep`. For `| wc -l` use `output_mode: 'count'`. "
-        "For `| head` use `head_limit`.",
-    ),
-    CommandRule(
-        "rg",
-        re.compile(r"^\s*rg\b"),
-        None,
-        "Use the Grep tool instead of `rg`. For `| wc -l` use `output_mode: 'count'`. "
-        "For `| head` use `head_limit`.",
-    ),
-    CommandRule(
-        "find-name",
-        re.compile(r"^\s*find\b.*-name"),
-        None,
-        "Use the Glob tool -- it's auto-approved and supports patterns like '**/*.py'.",
-    ),
-    CommandRule(
-        "ls-dir",
-        re.compile(r"^\s*ls\s"),
-        re.compile(r"\|"),
-        "Use the Glob tool for file listings -- it's auto-approved and supports patterns "
-        "like '**/*.py'. Use `ls` via Bash only when you need permissions/metadata.",
     ),
     CommandRule(
         "sed-i",
@@ -124,8 +101,7 @@ RULES: list[CommandRule] = [
         "cat-heredoc",
         re.compile(r"^\s*cat\s*<<"),
         None,
-        "Use the Write tool for file content, or native tools (Grep/Read) "
-        "for the downstream operation.",
+        "Use the Write tool for file content, or the Read tool for the downstream operation.",
     ),
     CommandRule(
         "pager",
@@ -942,8 +918,8 @@ def _handle_post_tool_use(data: dict) -> None:
 
 
 # Rules to skip when checking pipe segments — these redirect to native tools
-# (Read, Grep, Glob, Edit, Write) that can't process piped command output.
-# When grep/cat/head/etc. appear after |, they're filtering command output,
+# (Read, Edit, Write) that can't process piped command output.
+# When cat/head/etc. appear after |, they're filtering command output,
 # not doing standalone file operations that native tools could replace.
 _PIPE_SEGMENT_SKIP = frozenset(
     {
@@ -951,10 +927,6 @@ _PIPE_SEGMENT_SKIP = frozenset(
         "cat-file",
         "head-file",
         "tail-file",
-        "grep",
-        "rg",
-        "find-name",
-        "ls-dir",
         "sed-i",
         "awk-redir",
         "echo-redir",

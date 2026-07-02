@@ -5,7 +5,7 @@ description: |
   adding comments) or when delegating Jira work to a background agent. Spawned
   by swarm implementers, quality-gate verifiers, or any agent needing programmatic
   Jira access. Carries OSAC conventions for OSAC project work.
-tools: Read, Grep, Bash,
+tools: Read, Bash,
   mcp__plugin_jira_mcp-atlassian-prod__atlassianUserInfo,
   mcp__plugin_jira_mcp-atlassian-prod__getAccessibleAtlassianResources,
   mcp__plugin_jira_mcp-atlassian-prod__searchJiraIssuesUsingJql,

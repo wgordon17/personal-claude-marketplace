@@ -1,7 +1,7 @@
 ---
 name: lsp-navigation
 description: PROACTIVE skill - Use when navigating code, understanding symbol definitions, finding references, or exploring call hierarchies. Triggers include questions like "where is X defined", "what calls Y", "show usages of Z", or any code exploration task. Prefer LSP over grep for semantic navigation.
-allowed-tools: [LSP, Read, Grep, Glob]
+allowed-tools: [LSP, Read, Bash]
 ---
 
 # lsp-navigation

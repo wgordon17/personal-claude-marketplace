@@ -4,7 +4,7 @@ description: |
   Generate a PROJECT_INDEX.md for token-efficient codebase orientation. Use when starting work
   on an unfamiliar repo, when agents need project context without reading the full codebase,
   or when asked to "index the repo", "create a project index", "map the codebase".
-allowed-tools: [Read, Glob, Grep, Write, Bash]
+allowed-tools: [Read, Write, Bash]
 ---
 
 # Repository Indexing

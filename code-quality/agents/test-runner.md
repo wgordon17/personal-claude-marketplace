@@ -1,7 +1,7 @@
 ---
 name: test-runner
 description: Test execution specialist - runs tests efficiently, parses failures, and reports results. Does NOT fix code (use bug-fixer agent for fixes)
-tools: Bash, Read, Grep, TodoWrite
+tools: Bash, Read, TodoWrite
 model: haiku
 color: green
 ---

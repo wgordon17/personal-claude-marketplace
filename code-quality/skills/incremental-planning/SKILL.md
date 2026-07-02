@@ -9,7 +9,7 @@ description: >-
   overlapping bug entries), per-task quality review (sonnet subagent), tiered breakpoints for
   scope vs detail ambiguity, and assumption surfacing in Phase 6. Provides research context
   and summaries in chat for feedback. Never displays full plan content in chat.
-allowed-tools: [Read, Write, Edit, Glob, Grep, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
+allowed-tools: [Read, Write, Edit, Agent, Bash, AskUserQuestion, LSP, Skill, ToolSearch]
 ---
 
 # Incremental Planning

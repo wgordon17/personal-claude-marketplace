@@ -126,7 +126,7 @@ def _run_with_extra_cmd_rules(command, rules_file):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Category A: Native tool redirections (13 rules)
+# Category A: Native tool redirections (9 rules — grep/rg/find/ls removed in v1.63.0)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -140,13 +140,13 @@ class TestNativeToolRedirections:
             ("git log | head -5", 0, None),
             ("tail -50 file.py", 2, "Read tool"),
             ("ps aux | tail -5", 0, None),
-            ("grep -rn pattern src/", 2, "Grep tool"),
-            ("grep -r pattern src/ | wc -l", 2, "Grep tool"),
-            ("grep -rn pattern src/ 2>/dev/null | head -5", 2, "Grep tool"),
+            ("grep -rn pattern src/", 0, None),
+            ("grep -r pattern src/ | wc -l", 0, None),
+            ("grep -rn pattern src/ 2>/dev/null | head -5", 0, None),
             ("git log | grep fix", 0, None),
-            ("rg pattern src/", 2, "Grep tool"),
-            ("rg pattern src/ | wc -l", 2, "Grep tool"),
-            ('find . -name "*.py"', 2, "Glob tool"),
+            ("rg pattern src/", 0, None),
+            ("rg pattern src/ | wc -l", 0, None),
+            ('find . -name "*.py"', 0, None),
             ("sed -i s/old/new/g file", 2, "Edit tool"),
             ("awk '{print $1}' f > out", 2, "Edit tool"),
             ("echo hello > output.txt", 2, "Write tool"),
@@ -160,7 +160,7 @@ class TestNativeToolRedirections:
             ("vim file.py", 2, "Interactive editors"),
             ("vi file.py", 2, "Interactive editors"),
             ("emacs file.py", 2, "Interactive editors"),
-            ("ls -la /path", 2, "Glob tool"),
+            ("ls -la /path", 0, None),
             ("ls /path | grep pattern", 0, None),
         ],
         ids=[
@@ -170,13 +170,13 @@ class TestNativeToolRedirections:
             "head-pipe-allow",
             "tail-file",
             "tail-pipe-allow",
-            "grep-blocked",
-            "grep-pipe-wc-blocked",
-            "grep-pipe-head-blocked",
-            "grep-pipe-allow",
-            "rg-blocked",
-            "rg-pipe-wc-blocked",
-            "find-name",
+            "grep-passthrough",
+            "grep-pipe-wc-passthrough",
+            "grep-pipe-head-passthrough",
+            "grep-pipe-passthrough",
+            "rg-passthrough",
+            "rg-pipe-wc-passthrough",
+            "find-name-passthrough",
             "sed-i",
             "awk-redirect",
             "echo-redirect",
@@ -190,8 +190,8 @@ class TestNativeToolRedirections:
             "vim-blocked",
             "vi-blocked",
             "emacs-blocked",
-            "ls-dir-blocked",
-            "ls-pipe-allow",
+            "ls-dir-passthrough",
+            "ls-pipe-passthrough",
         ],
     )
     def test_redirections(self, command, expected_exit, expected_msg):
@@ -369,7 +369,7 @@ class TestProjectConventions:
             ("bash scripts/ci-check.sh", 2, "make"),
             ("sh install.sh", 2, "make"),
             ("bash -c 'cat file.py'", 2, "Read tool"),
-            ("bash -c 'grep -rn pat src/'", 2, "Grep tool"),
+            ("bash -c 'grep -rn pat src/'", 2, "directly"),
             ("bash -c 'python script.py'", 2, "uv run"),
             ("bash -c 'git status'", 2, "directly"),
             ("bash -e script.sh", 0, None),
@@ -726,7 +726,7 @@ class TestChainedCommands:
         [
             ('echo "=== label ===" && cat file.py', 2, "directly"),
             ("cd /app && cat file.py", 2, "Read tool"),
-            ("cd /app && grep -rn pattern src/", 2, "Grep tool"),
+            ("cd /app && grep -rn pattern src/", 0, None),
             ('git status && echo "done"', 2, "directly"),
             ("cd /app ; python script.py", 2, "uv run"),
             ("test -f x || cat fallback.py", 2, "Read tool"),
@@ -930,7 +930,7 @@ class TestNewlineSeparation:
         "command, expected_exit, expected_msg",
         [
             ("git status\ncat file.py", 2, "Read tool"),
-            ("git status\npwd\ngrep pattern src/", 2, "Grep tool"),
+            ("git status\npwd\ngrep pattern src/", 0, None),
             ('git log\necho "done"', 2, "directly"),
             ("# comment\ncat file.py", 2, "Read tool"),
         ],
@@ -992,7 +992,7 @@ class TestEnvVarPrefix:
         [
             ("FOO=bar python script.py", 2, "uv run"),
             ("FOO=bar cat file.py", 2, "Read tool"),
-            ("FOO=bar grep pattern src/", 2, "Grep tool"),
+            ("FOO=bar grep pattern src/", 0, None),
             ("ENV=1 bash deploy.sh", 2, "make"),
             ("A=1 B=2 python script.py", 2, "uv run"),
             ("FOO=bar make build", 0, None),
@@ -1028,7 +1028,7 @@ class TestSubshells:
         [
             ("echo $(cat file.py)", 2, "Read tool"),
             ("echo `cat file.py`", 2, "Read tool"),
-            ("result=$(grep -rn pat src/)", 2, "Grep tool"),
+            ("result=$(grep -rn pat src/)", 0, None),
             ("echo $(uv run script.py)", 0, None),
             ("echo $(echo $(cat f.py))", 2, "Read tool"),
         ],
@@ -2387,13 +2387,13 @@ class TestShellControlStructures:
             ("for x in a b c; do cat file.txt; done", 2, "Read tool"),
             # if/then with cat
             ("if true; then cat file.py; fi", 2, "Read tool"),
-            # while/do with grep
-            ("while true; do grep pattern src/; done", 2, "Grep tool"),
-            # for loop with ls (the original motivating example)
+            # while/do with grep (passthrough since v1.63.0)
+            ("while true; do grep pattern src/; done", 0, None),
+            # for loop with ls (passthrough since v1.63.0)
             (
                 'for dir in /path/*; do ls -la "$dir"; done',
-                2,
-                "Glob tool",
+                0,
+                None,
             ),
             # nested: if inside do
             ("for x in a; do if true; then cat f.py; fi; done", 2, "Read tool"),
@@ -2406,8 +2406,8 @@ class TestShellControlStructures:
         ids=[
             "for-do-cat",
             "if-then-cat",
-            "while-do-grep",
-            "for-do-ls",
+            "while-do-grep-passthrough",
+            "for-do-ls-passthrough",
             "nested-if-in-do",
             "git-deny-in-if",
             "safe-in-for",
@@ -5623,10 +5623,10 @@ class TestSessionEnd:
     def test_summary_counts_blocked_events(self, session_db):
         env, db_path = session_db
         _run_session_start(env, session_id="s1")
-        # Trigger a blocked command (grep is blocked by deny rule)
+        # Trigger a blocked command (cat is blocked by deny rule)
         run_guard(
             "Bash",
-            {"command": "grep foo bar.txt"},
+            {"command": "cat foo.txt"},
             env=env,
             payload_extra={"session_id": "s1"},
         )

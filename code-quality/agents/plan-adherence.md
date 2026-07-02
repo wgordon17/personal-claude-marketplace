@@ -3,7 +3,7 @@ name: plan-adherence
 description: "Verifies implementation against plan file tasks. Reads plan, extracts tasks/checkboxes, verifies each against git diff and source code, escalates unchecked tasks via AskUserQuestion."
 model: opus
 color: orange
-tools: Read, Glob, Grep, Bash, LSP, AskUserQuestion, SendMessage
+tools: Read, Bash, LSP, AskUserQuestion, SendMessage
 ---
 
 # code-quality:plan-adherence — Plan Adherence Verification Agent

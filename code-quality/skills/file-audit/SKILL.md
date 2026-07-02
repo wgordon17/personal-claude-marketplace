@@ -8,7 +8,7 @@ description: |
   - "Validate library usage"
   - "Review the entire project"
   Analyzes files in parallel with LSP and Context7, detecting issues, duplicates, and documentation drift.
-allowed-tools: [LSP, Read, Grep, Glob, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs]
+allowed-tools: [LSP, Read, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs]
 ---
 
 # file-audit
