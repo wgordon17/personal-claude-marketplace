@@ -11,7 +11,7 @@ description: >-
   (file-audit, code-quality:index-repo, code-quality:code-simplifier,
   code-quality:architect, code-quality:security, code-quality:qa, code-quality:code-reviewer,
   code-quality:test-runner) into a unified cleanup workflow.
-allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
+allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
 ---
 
 # /unfuck — Comprehensive Repo Cleanup
@@ -19,6 +19,10 @@ allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, TeamCreate, Tea
 One-shot command that launches a full agent swarm to discover, plan, and fix everything wrong
 with a codebase: dead code, duplicates, security issues, AI slop, architectural drift,
 complexity, and documentation rot.
+
+**Prerequisite:** Agent teams require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to be set in the
+environment or `settings.json` — without it, named teammates spawned via `Agent(name=...)` do
+not join a shared implicit team and `SendMessage` routing between them will not work.
 
 ## Quick Start
 
@@ -41,8 +45,7 @@ Phase 4 verifies everything passes and generates a report.
 ### Phase 0: Index & Setup
 1. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
    (Run-ID Naming Convention section)
-2. Create TeamCreate swarm: `cleanup-{run_id}` (using the run ID from step 1)
-3. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection
+2. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection (the implicit team is established automatically by these first named teammate spawns — no separate setup call is needed)
 4. Create feature branch: `cleanup/comprehensive-{run-id}` (from `origin/main`)
 5. Create `{memory_dir}/unfuck/{run-id}/discovery/` directory for agent output
 6. Collect setup results and build context bundle for discovery agents
@@ -157,7 +160,7 @@ The orchestrator assigns categories in priority order (security → dead code �
 
 | File | Content |
 |------|---------|
-| `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide with JSON schemas, dedup algorithm, rollback procedures, TeamCreate config, and error handling |
+| `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide with JSON schemas, dedup algorithm, rollback procedures, agent roster config, and error handling |
 | `references/discovery-agents.md` | Full prompts for all 7 discovery agents — role, methodology, external tool commands, LSP patterns, classification/LoE/risk guides, output format |
 | `references/implementation-agents.md` | Full prompts for all 7 implementation agents — fix strategies, paired skills, safety rules, test cadence, commit formats |
 | `references/ai-slop-checklist.md` | 32 anti-patterns across 7 categories (structural, error handling, naming, comments, testing, imports, types) with before/after examples and false-positive guidance |

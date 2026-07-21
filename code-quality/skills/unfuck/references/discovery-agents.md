@@ -1,6 +1,6 @@
 # Discovery Agent Prompts
 
-Seven self-contained prompt templates for Phase 1 discovery agents. Each is spawned as a TeamCreate teammate (see `orchestration-playbook.md` Phase 1). The orchestrator prepends `{context_bundle}` containing: project path, detected languages, available external tools, tool-selection-guard warning, PROJECT_INDEX.md content, and (for Agent 5) the AI slop checklist.
+Seven self-contained prompt templates for Phase 1 discovery agents. Each is spawned as a named teammate (see `orchestration-playbook.md` Phase 1). The orchestrator prepends `{context_bundle}` containing: project path, detected languages, available external tools, tool-selection-guard warning, PROJECT_INDEX.md content, and (for Agent 5) the AI slop checklist.
 
 All agents share the same output JSON schema (see [Shared Output Schema](#shared-output-schema) at the bottom).
 

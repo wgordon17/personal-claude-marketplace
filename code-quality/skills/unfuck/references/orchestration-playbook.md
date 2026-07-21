@@ -42,17 +42,18 @@ All paths in this playbook use `{run_dir}` to refer to this directory. The orche
 
 ### Parallel Setup
 
-Phase 0 has several independent tasks that SHOULD run in parallel using TeamCreate:
+Phase 0 has several independent tasks that SHOULD run in parallel:
 
-1. **Create team immediately:** `TeamCreate(team_name="cleanup-{run_id}")` — needed before spawning any teammates
-2. **Launch parallel setup teammates** — spawn these as background teammates in a single message:
+1. **Launch parallel setup teammates immediately** — spawn these as named teammates in a single
+   message (the implicit team is established automatically by these first spawns, no separate
+   setup call needed):
    - `setup-indexer`: Runs `code-quality:index-repo` to create PROJECT_INDEX.md
    - `setup-tools`: Detects available external tools (version checks)
    - `setup-languages`: Detects project languages from config files
-3. **While teammates work**, the orchestrator creates the run directory, feature branch, and output directories (Steps 0.4-0.5)
-4. **Collect results** from setup teammates (they send summaries via SendMessage)
-5. **Build context bundle** (Step 0.7) using collected results
-6. **Shut down setup teammates** before spawning Phase 1 agents
+2. **While teammates work**, the orchestrator creates the run directory, feature branch, and output directories (Steps 0.4-0.5)
+3. **Collect results** from setup teammates (they send summaries via SendMessage)
+4. **Build context bundle** (Step 0.6) using collected results
+5. **Shut down setup teammates** before spawning Phase 1 agents
 
 This parallelism saves time since `code-quality:index-repo` and tool detection are the slowest setup steps.
 
@@ -127,13 +128,7 @@ This creates:
 - `{run_dir}/` -- root for all cleanup artifacts for this run
 - `{run_dir}/discovery/` -- Phase 1 agent outputs
 
-### Step 0.6: Create team
-
-```
-TeamCreate(team_name="cleanup-{run_id}", description="Comprehensive repo cleanup swarm")
-```
-
-### Step 0.7: Prepare agent context bundle
+### Step 0.6: Prepare agent context bundle
 
 Build a context string that will be prepended to every discovery agent prompt. The context bundle contains:
 
@@ -164,11 +159,11 @@ Store this context string for use in Phase 1.
 
 ## Phase 1: Discovery (7 Parallel Teammates)
 
-Spawn **ALL 7 agents** as TeamCreate teammates in a **single message** (7 parallel Agent calls). Every agent MUST be spawned — do not skip agents based on earlier runs or existing discovery files. If previous results exist from an earlier run, the orchestrator should mention them in the agent prompt as prior context, but the agent must still perform its own fresh analysis.
+Spawn **ALL 7 agents** as named teammates in a **single message** (7 parallel Agent calls). Every agent MUST be spawned — do not skip agents based on earlier runs or existing discovery files. If previous results exist from an earlier run, the orchestrator should mention them in the agent prompt as prior context, but the agent must still perform its own fresh analysis.
 
 Each teammate runs in its own independent context window, writes its JSON findings to disk, and sends a brief summary to the team lead via `SendMessage`. This avoids context pressure on the orchestrator — the orchestrator never calls `TaskOutput` or reads full agent transcripts.
 
-**Why teammates, not background Agents:** Background `Agent(run_in_background=true)` agents dump their full output into the orchestrator's context when checked via `TaskOutput`. With 7 agents producing detailed findings, this causes context overflow. TeamCreate teammates have independent context windows and communicate via short `SendMessage` summaries.
+**Why teammates, not background Agents:** Background `Agent(run_in_background=true)` agents dump their full output into the orchestrator's context when checked via `TaskOutput`. With 7 agents producing detailed findings, this causes context overflow. Teammates have independent context windows and communicate via short `SendMessage` summaries.
 
 **CRITICAL:** All 7 agents MUST be launched in the SAME message. Do not conditionally skip agents. The orchestrator should wait for all 7 completion summaries before proceeding to Phase 2.
 
@@ -188,35 +183,35 @@ Each teammate runs in its own independent context window, writes its JSON findin
 
 ### Launching Pattern
 
-In a single message, issue 7 parallel Agent calls with `team_name` to spawn as teammates:
+In a single message, issue 7 parallel Agent calls with `name` to spawn as teammates:
 
 ```
 Agent(name="dead-code-hunter", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 1 prompt from discovery-agents.md]")
 
 Agent(name="duplicate-detector", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 2 prompt from discovery-agents.md]")
 
 Agent(name="security-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 3 prompt from discovery-agents.md]")
 
 Agent(name="architecture-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 4 prompt from discovery-agents.md]")
 
 Agent(name="ai-slop-detector", subagent_type="general-purpose", model="opus",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 5 prompt from discovery-agents.md]")
 
 Agent(name="complexity-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 6 prompt from discovery-agents.md]")
 
 Agent(name="documentation-auditor", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Agent 7 prompt from discovery-agents.md]")
 ```
 
@@ -272,7 +267,7 @@ Spawn a single `synthesis-planner` teammate using opus:
 
 ```
 Agent(name="synthesis-planner", subagent_type="general-purpose", model="opus",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[Full synthesis instructions below]\n\nRun directory: {run_dir}")
 ```
 
@@ -457,19 +452,19 @@ Spawn 4 persistent teammates in a single message. They collaborate on each categ
 
 ```
 Agent(name="impl-writer", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the WRITER on the implementation team. You implement fixes from the cleanup plan.\nYour teammates are: impl-qa (reviews your changes), impl-tester (runs tests), impl-docs (updates docs).\n\nWait for the team lead to assign you a category. For each category:\n1. Read the category's findings from {run_dir}/cleanup-plan.md\n2. Apply fixes using the strategies from references/implementation-agents.md\n3. When done with a category, message impl-qa to review your changes\n4. After QA approval and tests pass, commit the category\n5. Message the team lead that the category is complete\n\n[Full implementation agent shared rules from references/implementation-agents.md]")
 
 Agent(name="impl-qa", subagent_type="general-purpose", model="opus",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are QA on the implementation team. You review changes made by impl-writer.\n\nWhen impl-writer messages you that a category is ready for review:\n1. Read the modified files (git diff)\n2. Verify changes match the cleanup plan findings\n3. Check for regressions, broken imports, missing error handling\n4. Use LSP findReferences to verify no callers are broken\n5. If issues found, message impl-writer with specific feedback\n6. If clean, message impl-tester to run the test suite\n\nApply code-review rigor: no assumptions, verify everything.")
 
 Agent(name="impl-tester", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the TESTER on the implementation team. You run tests and formatters.\n\nWhen impl-qa messages you that changes are reviewed:\n1. Run the project's test suite (auto-detect: make test / uv run pytest / npm test / etc.)\n2. Run the formatter (make format / uvx ruff format / etc.)\n3. If tests pass: message impl-writer to commit\n4. If tests fail: message impl-writer with the failure details for rollback\n\nAuto-detect test commands from Makefile, pyproject.toml, or package.json.")
 
 Agent(name="impl-docs", subagent_type="general-purpose", model="sonnet",
-     team_name="cleanup-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\nYou are the DOCUMENTER on the implementation team. You update docs after code changes.\n\nFor each completed category:\n1. Check if the changes affect any documentation (README, docstrings, config docs)\n2. If so, update documentation to reflect the changes\n3. Match existing documentation style, verify commands work\n4. Message impl-writer when doc updates are ready to include in the commit\n\nDo NOT create new documentation files. Only update existing ones.")
 ```
 
@@ -724,15 +719,15 @@ If reflection identifies gaps, address them before announcing completion.
 
 ### Step 4.6b: Team cleanup
 
-Shut down any remaining teammates and delete the team:
+Shut down each remaining active teammate individually:
 
 ```
-SendMessage(to="*", message={"type": "shutdown_request", "reason": "Cleanup complete"})
-TeamDelete()
+SendMessage(to="<name>", message={"type": "shutdown_request", "reason": "Cleanup complete"})
+# ... repeat for every teammate still active ...
 ```
 
-This removes `~/.claude/teams/cleanup-{run_id}/` and associated task files. Without this step,
-each `/unfuck` run leaves an orphaned team directory that is never cleaned up.
+Teams are implicit and scoped to the session — there is no separate team-level directory or
+lifecycle to tear down beyond shutting down each teammate.
 
 ### Step 4.7: Announce completion
 
@@ -836,13 +831,7 @@ See `code-quality/references/finding-classification.md` for the canonical classi
 
 ---
 
-## TeamCreate Configuration
-
-```
-TeamCreate:
-  team_name: "cleanup-{run_id}"
-  description: "Comprehensive repo cleanup -- setup, discovery, synthesis, and implementation swarm"
-```
+## Agent Roster Configuration
 
 ### Setup Members (Phase 0 -- spawned in parallel for initialization)
 
