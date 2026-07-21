@@ -2634,7 +2634,7 @@ Review all `skills/*/SKILL.md` files modified during this swarm:
 
 ### Content Quality
 - All phases are documented with clear actions
-- Agent spawn calls include all required parameters (name, subagent_type, model, team_name, prompt)
+- Agent spawn calls include all required parameters (name, subagent_type, model, prompt)
 - All agent prompts include the turn counting instruction in the context bundle
 - JSON schemas referenced in the skill exist in `references/communication-schema.md`
 - All structured message examples include `turn_count` field
