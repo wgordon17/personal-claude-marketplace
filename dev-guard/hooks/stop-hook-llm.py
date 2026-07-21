@@ -49,7 +49,7 @@ _MAX_INPUT = 2 * 1024 * 1024  # 2 MB — includes recent message history
 # Strip Claude Code context-window suffixes like [1m] — Vertex AI doesn't accept them
 _RAW_MODEL = os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-6")
 _MODEL = re.sub(r"\[.*\]$", "", _RAW_MODEL)
-_MAX_TOKENS = 1024
+_MAX_TOKENS = 2048
 _TIMEOUT = 50  # seconds — stop-hook.py allows 60, leave buffer
 
 
@@ -194,7 +194,13 @@ def _build_prompt(ctx: dict) -> str:
     criteria.append(
         "CLAIM ACCURACY: Do the claims in the final message match the work evidence? "
         "Check that tools listed as used appear in the tools list, that git changes "
-        "described match the diff stat, and that completion claims are supported by evidence."
+        "described match the diff stat, and that completion claims are supported by evidence. "
+        "Note: only tool NAMES are shown here, not their outputs. For a claim like "
+        "'tests pass', the presence of an execution tool (e.g. Bash) is sufficient "
+        "circumstantial support — do not fail solely because the specific command or "
+        "output isn't visible. Only flag a claim as unsupported when the tools used are "
+        "actively inconsistent with it (e.g. claiming tests were run but no execution "
+        "tool appears at all)."
     )
     criteria.append(
         "COMPLETENESS: Does the final message address the MOST RECENT user request "
