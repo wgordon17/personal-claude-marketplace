@@ -128,6 +128,7 @@ def _deferred_imports() -> tuple:
         load_baselines,
         load_context_layers,
         load_eval_config,
+        reset_progress_log,
         resolve_skill_bundle,
         run_eval,
     )
@@ -140,6 +141,7 @@ def _deferred_imports() -> tuple:
         run_eval,
         compare_baselines,
         load_context_layers,
+        reset_progress_log,
     )
 
 
@@ -158,8 +160,10 @@ def _eval_skills(
         run_eval,
         compare_baselines,
         _load_context_layers,
+        reset_progress_log,
     ) = _deferred_imports()
 
+    reset_progress_log()
     judge = VertexSonnetJudge()
     baselines = load_baselines()
     all_results: list[dict] = []
