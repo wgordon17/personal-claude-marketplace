@@ -20,6 +20,10 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 |--------|-------------|------------|------|
 | code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 21 skills, 4 commands | [README](code-quality/README.md) |
 
+**Prerequisite for `/swarm` and `/unfuck`:** these skills spawn multiple named teammates that
+communicate via `SendMessage`, which requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to be set
+in the environment or `settings.json`.
+
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
 - `code-quality:security` - Application security specialist (OWASP, auth, vulnerability detection)
@@ -36,7 +40,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/file-audit` - Deep code quality audit system
 - `/bug-investigation` - PROACTIVE interactive bug hunting with background agents
 - `/unfuck` - Comprehensive one-shot repo cleanup
-- `/swarm` - Full agent team implementation via TeamCreate
+- `/swarm` - Full agent team implementation
 - `/quality-gate` - PROACTIVE multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates
 - `/pr-review` - Multi-agent PR review with finding verification
 - `/plan-review` - Multi-agent plan review with finding verification

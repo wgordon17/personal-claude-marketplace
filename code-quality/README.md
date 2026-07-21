@@ -2,6 +2,10 @@
 
 Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, summarize, and test-plan.
 
+**Prerequisite for `/swarm` and `/unfuck`:** these skills spawn multiple named teammates that
+communicate via `SendMessage`, which requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to be set
+in the environment or `settings.json`.
+
 ## Agents (8)
 
 | Agent | Purpose | Model |
@@ -24,7 +28,7 @@ Code quality agents, development utilities, and orchestration skills: architectu
 | `/file-audit` | Deep code quality audit system | Manual |
 | `/bug-investigation` | Interactive bug hunting with background agents | PROACTIVE |
 | `/unfuck` | Comprehensive one-shot repo cleanup | Manual |
-| `/swarm` | Full agent team implementation via TeamCreate | Manual |
+| `/swarm` | Full agent team implementation | Manual |
 | `/quality-gate` | Multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates | PROACTIVE |
 | `/pr-review` | Multi-agent PR review with finding verification | Manual |
 | `/plan-review` | Multi-agent plan review with independent fresh-context reviewers | Manual |
