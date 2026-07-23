@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-prepush eval-update-baselines
+.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
@@ -25,7 +25,7 @@ prek:  ## Run pre-commit on all files
 prek-install:  ## Install pre-commit + pre-push hooks
 	uvx prek install --install-hooks --hook-type pre-commit --hook-type pre-push
 
-eval-prepush:  ## Pre-push: eval only changed skills
+eval-changed:  ## On-demand: eval only changed skills (run before opening/merging a PR)
 	cd skill-eval && uv run python -m skill_eval.cli
 
 eval:  ## Run skill evals for all skills with test cases
@@ -33,3 +33,6 @@ eval:  ## Run skill evals for all skills with test cases
 
 eval-update-baselines:  ## Update baselines.json with current scores
 	cd skill-eval && uv run python -m skill_eval.cli --update-baselines
+
+eval-coverage-check:  ## CI: flag changed skills whose test_cases file wasn't updated (no AI creds needed)
+	cd skill-eval && uv run python -m skill_eval.cli --coverage-check
