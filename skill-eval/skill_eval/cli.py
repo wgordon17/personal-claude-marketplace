@@ -2,11 +2,18 @@
 
 Entry point: python -m skill_eval.cli
 
+Run on demand (e.g. before opening/merging a PR) — not wired to a git hook.
+DeepEval evals need local Vertex AI credentials, so they can't run in CI;
+--coverage-check is the CI-side counterpart and needs no AI credentials.
+
 Modes:
-  (default)              Pre-push: detect changed SKILL.md/reference files and
-                         eval only affected skills.
+  (default)              Detect changed SKILL.md/reference files against
+                         origin/main and eval only affected skills.
   --all                  Eval all skills that have test cases.
   --update-baselines     Run --all and write results to baselines.json.
+  --coverage-check       Non-blocking: flag changed skills whose test_cases
+                         file wasn't also updated. No AI credentials needed —
+                         safe for CI.
   --locked               Verify no uncommitted changes in skill-eval/ before running.
 
 All DeepEval and skill_eval.* imports are DEFERRED until after git-diff
@@ -128,6 +135,7 @@ def _deferred_imports() -> tuple:
         load_baselines,
         load_context_layers,
         load_eval_config,
+        reset_progress_log,
         resolve_skill_bundle,
         run_eval,
     )
@@ -140,6 +148,7 @@ def _deferred_imports() -> tuple:
         run_eval,
         compare_baselines,
         load_context_layers,
+        reset_progress_log,
     )
 
 
@@ -158,8 +167,10 @@ def _eval_skills(
         run_eval,
         compare_baselines,
         _load_context_layers,
+        reset_progress_log,
     ) = _deferred_imports()
 
+    reset_progress_log()
     judge = VertexSonnetJudge()
     baselines = load_baselines()
     all_results: list[dict] = []
@@ -300,17 +311,19 @@ def _write_baselines(all_results: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _mode_prepush(repo_root: Path) -> bool:
-    """Default pre-push mode: detect changed skills and eval them."""
-    try:
-        merge_base = _merge_base()
-    except subprocess.CalledProcessError:
-        print("[skill-eval] Could not determine merge base — skipping evals", file=sys.stderr)
-        return True
+def _detect_changed_skills(
+    repo_root: Path,
+    changed: list[str],
+    candidate_skill_dirs: list[Path],
+) -> set[Path]:
+    """Return skill dirs affected by a set of changed files.
 
-    changed = _changed_files(merge_base)
-
-    # Separate SKILL.md changes from reference file changes.
+    candidate_skill_dirs bounds which skills are checked for plugin-level
+    reference-file bundling — pass all skill dirs, or just those with test
+    cases, depending on the caller's scope. Only imports resolve_skill_bundle
+    (a deferred, DeepEval-adjacent import) when a plugin-level reference
+    file actually changed, keeping the no-op fast path at stdlib speed.
+    """
     changed_skill_dirs: set[Path] = set()
     changed_ref_files: list[str] = []
 
@@ -329,10 +342,9 @@ def _mode_prepush(repo_root: Path) -> bool:
 
     # For plugin-level reference changes, find which skills bundle that file.
     if changed_ref_files:
-        skills_with_cases = _skill_dirs_with_test_cases(repo_root)
         resolve_skill_bundle = _deferred_imports()[1]
 
-        for skill_dir in skills_with_cases:
+        for skill_dir in candidate_skill_dirs:
             if skill_dir in changed_skill_dirs:
                 continue
             bundle = resolve_skill_bundle(skill_dir, repo_root=repo_root)
@@ -343,6 +355,22 @@ def _mode_prepush(repo_root: Path) -> bool:
                 if ref_name in bundle:
                     changed_skill_dirs.add(skill_dir)
                     break
+
+    return changed_skill_dirs
+
+
+def _mode_prepush(repo_root: Path) -> bool:
+    """Default mode: detect changed skills (vs. origin/main) and eval them."""
+    try:
+        merge_base = _merge_base()
+    except subprocess.CalledProcessError:
+        print("[skill-eval] Could not determine merge base — skipping evals", file=sys.stderr)
+        return True
+
+    changed = _changed_files(merge_base)
+    changed_skill_dirs = _detect_changed_skills(
+        repo_root, changed, _skill_dirs_with_test_cases(repo_root)
+    )
 
     # Filter to only skills that have test cases.
     skills_to_eval = [
@@ -385,6 +413,74 @@ def _mode_update_baselines(repo_root: Path) -> bool:
     return _eval_skills(skill_dirs, repo_root, update_baselines=True)
 
 
+def _mode_coverage_check(repo_root: Path) -> bool:
+    """--coverage-check mode: flag skill changes without a matching eval-fixture
+    update. Always returns True — this is a non-blocking, informational check
+    for CI (no AI credentials needed, unlike the other modes).
+    """
+    try:
+        merge_base = _merge_base()
+    except subprocess.CalledProcessError:
+        print("[eval-coverage] Could not determine merge base — skipping", file=sys.stderr)
+        return True
+
+    changed = _changed_files(merge_base)
+    changed_skill_dirs = _detect_changed_skills(repo_root, changed, _find_all_skill_dirs(repo_root))
+
+    if not changed_skill_dirs:
+        print("[eval-coverage] No skill changes detected.")
+        return True
+
+    test_cases_dir = Path(__file__).parent.parent / "test_cases"
+    changed_set = set(changed)
+    findings: list[str] = []
+
+    for skill_dir in sorted(changed_skill_dirs):
+        skill_name = skill_dir.name
+        test_case_file = test_cases_dir / f"{skill_name}.json"
+        try:
+            rel_test_case = test_case_file.relative_to(repo_root).as_posix()
+        except ValueError:
+            rel_test_case = str(test_case_file)
+
+        if not test_case_file.exists():
+            findings.append(
+                f"- `{skill_name}` changed but has no eval coverage (no `{rel_test_case}`)."
+            )
+        elif rel_test_case not in changed_set:
+            findings.append(
+                f"- `{skill_name}` changed but `{rel_test_case}` was not updated in this PR."
+            )
+
+    if not findings:
+        print("[eval-coverage] All changed skills have matching eval updates.")
+        return True
+
+    summary = "\n".join(
+        [
+            "## Skill Eval Coverage",
+            "",
+            "Non-blocking reminder — review whether these need eval-fixture updates:",
+            "",
+            *findings,
+            "",
+            "Run `make eval-changed` locally to verify affected skills still pass their evals"
+            " (requires local Vertex AI credentials — not available in CI).",
+        ]
+    )
+    print(summary)
+
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        try:
+            with open(step_summary, "a", encoding="utf-8") as f:
+                f.write(summary + "\n")
+        except OSError:
+            pass
+
+    return True  # non-blocking by design
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -395,7 +491,7 @@ def main() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
 
-    parser = argparse.ArgumentParser(description="Skill evaluation pre-push hook (DeepEval-based)")
+    parser = argparse.ArgumentParser(description="Skill evaluation CLI (DeepEval-based)")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--all",
@@ -407,6 +503,14 @@ def main() -> None:
         action="store_true",
         help="Run --all and write results to baselines.json",
     )
+    group.add_argument(
+        "--coverage-check",
+        action="store_true",
+        help=(
+            "Non-blocking: flag changed skills whose test_cases file wasn't"
+            " also updated. No AI credentials needed — safe for CI."
+        ),
+    )
     parser.add_argument(
         "--locked",
         action="store_true",
@@ -417,7 +521,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Drain stdin (pre-push hooks receive ref data on stdin — ignore it).
+    # Drain stdin (in case invoked as a git hook — ignore any ref data).
     if not sys.stdin.isatty():
         sys.stdin.read()
 
@@ -457,6 +561,8 @@ def main() -> None:
         passed = _mode_all(repo_root)
     elif args.update_baselines:
         passed = _mode_update_baselines(repo_root)
+    elif args.coverage_check:
+        passed = _mode_coverage_check(repo_root)
     else:
         passed = _mode_prepush(repo_root)
 

@@ -1,7 +1,7 @@
 ---
 name: swarm
 description: >-
-  Full TeamCreate agent swarm for implementation tasks. Launches a pipelined team
+  Full agent swarm for implementation tasks. Launches a pipelined team
   of 21+ specialized agents (Architect, Security Design Reviewer, Reduction Analyst,
   Implementer, Reviewer, Test-Writer, Test-Runner, Boundary Updater, Security, QA,
   Code-Reviewer, Performance, Plan Adherence, Fixer, Test Coverage Agent,
@@ -10,16 +10,20 @@ description: >-
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
   Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
-allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, TeamCreate, TeamDelete,
+allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion,
   SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill]
 ---
 
 # /swarm — Full Agent Swarm Implementation
 
-You MUST use the full TeamCreate swarm described here. Do not take shortcuts. Do not implement
+You MUST use the full swarm described here. Do not take shortcuts. Do not implement
 the task yourself. Your role is orchestration — you route work, relay context, make judgment
 calls, and coordinate the pipeline. Every phase of implementation goes through the appropriate
 specialist agent.
+
+**Prerequisite:** Agent teams require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to be set in the
+environment or `settings.json` — without it, named teammates spawned via `Agent(name=...)` do
+not join a shared implicit team and `SendMessage` routing between them will not work.
 
 ---
 
@@ -93,8 +97,9 @@ whether a feature branch is needed. If not already on a feature branch, create o
 `upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
 depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `code-quality/references/project-memory-reference.md`
 (Run-ID Naming Convention section) and create the audit trail directory at `{memory_dir}/swarm/{run-id}/`.
-Call `TeamCreate("swarm-{run_id}")` (using the run ID generated above), then create all tasks upfront with `addBlockedBy` dependencies
-so the full task graph is visible from the start.
+Create all tasks upfront with `addBlockedBy` dependencies so the full task graph is visible from
+the start. The implicit team is established automatically by the first named teammate spawn in
+Phase 2 — no separate setup call is needed.
 
 **Test Plan Discovery:** After branch creation and run-ID generation, discover the plan file
 using Branch-header matching: search `{memory_dir}/plans/` for files whose `**Branch:**` header
@@ -140,8 +145,8 @@ If `incremental`:
   extract the basename, strip the run-id prefix (`{branch-slug}-{timestamp}-`) and `.md`
   extension, then apply the Branch Slug Sanitization Rules from `project-memory-reference.md`.
   Rename the Phase 0-created branch to `feat/{plan-slug}-pr1` (via `git branch -m`). This
-  rename happens AFTER TeamCreate and test baseline — the team name uses the run-id, not the
-  branch name. The rename is a git-only operation that does not affect the team or audit trail.
+  rename happens after the test baseline. The rename is a git-only operation that does not
+  affect the audit trail, which is keyed to the run-id independent of the branch name.
   This establishes the naming convention that resume uses for subsequent boundaries.
 If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
 
@@ -172,11 +177,9 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
 - Announce: "Resuming swarm. Prior work merged. Remaining tasks: {list}."
   Include the checkpoint's `context_summary` in the Implementer's briefing so it has context
   about what was built in earlier boundaries.
-- **Resume Phase 0 variant:** Still run these Phase 0 steps for the new session:
-  TeamCreate with session-scoped name (`swarm-{original_run_id}-s{session_counter}` where
-  `{original_run_id}` is extracted from the checkpoint's `run_dir` field and
-  session_counter increments from the count of completed_prs + 1), test baseline, git
-  status check. Reuse the original run-id's `{run_dir}` (from checkpoint's `run_dir` field)
+- **Resume Phase 0 variant:** Still run these Phase 0 steps for the new session: test
+  baseline, git status check. The new session gets its own implicit team automatically —
+  no team setup step is needed. Reuse the original run-id's `{run_dir}` (from checkpoint's `run_dir` field)
   for audit trail continuity — do NOT generate a new run-id. Read `architect-plan.json`
   from the original run_dir (path stored in checkpoint's `architect_plan` field) to restore
   architectural context.
@@ -474,7 +477,9 @@ After completing all tasks in the current PR boundary (all components for tasks 
    in the plan file with `#{pr_number}`.
 8. Announce: "Draft PR #{pr_number} created. Checkpoint saved.
    After merge, invoke /swarm to continue with remaining tasks."
-9. Clean up: TeamDelete, exit swarm gracefully
+9. Clean up: send `SendMessage(to="<name>", message={"type": "shutdown_request", "reason":
+   "PR boundary complete"})` to each still-active teammate (Architect, Implementer, Reviewer,
+   Test-Writer, Test-Runner, and any others not already shut down), then exit swarm gracefully
 
 If this is the LAST PR boundary: skip the boundary stop (steps 1-9 above). Instead, proceed
 with normal Phase 4 → Phase 5 → Phase 6 (docs) → Phase 7 (verification) completion flow.
@@ -813,7 +818,8 @@ If `{tracker}` matches `jira:PROJ-N`:
 
 Generate the final audit report at
 `{run_dir}/swarm-report.md`. Announce completion with a summary and report path.
-Shut down all teammates via `SendMessage(to="*", message={"type": "shutdown_request", "reason": "Swarm complete"})` and call `TeamDelete`.
+Shut down each active teammate individually via `SendMessage(to="<name>", message={"type":
+"shutdown_request", "reason": "Swarm complete"})`.
 
 ---
 
@@ -827,7 +833,7 @@ Phase 0: Pre-flight
   +-- Baseline tests
   +-- Git branch check/create
   +-- Generate run-ID, create {memory_dir}/swarm/{run-id}/
-  +-- TeamCreate + TaskGraph
+  +-- Create TaskGraph (implicit team established by first named teammate spawn)
   +-- Extract {tracker} from plan file (default: none)
   +-- Workflow detection: extract **Workflow:** from plan header
        |
@@ -899,7 +905,7 @@ Phase 3: Pipelined Implementation
      |   +-- gh pr create --draft feat/{slug}-pr{N}          |
      |   +-- gh issue comment (if tracker exists)            |
      |   +-- Boundary Updater: set pr_number in checkpoint + update plan **PRs:**   |
-     |   +-- Announce PR + checkpoint, TeamDelete, exit      |
+     |   +-- Announce PR + checkpoint, shutdown teammates, exit |
      |   [user merges PR, invokes /swarm again → Phase 0]    |
      +-------------------------------------------------------+
      |
@@ -952,7 +958,7 @@ Phase 7: Verification & Completion
   +-- /unfuck sweep (if 20+ files changed)
   +-- Issue tracking: add in-progress label (GH) or transition card (Jira)
   +-- Generate {run_dir}/swarm-report.md
-  +-- Shutdown all teammates, TeamDelete
+  +-- Shutdown each active teammate individually
 ```
 
 ---
@@ -1104,7 +1110,7 @@ agent that does the job right over multiple sonnet agents that require rework.
 
 | File | Content |
 |------|---------|
-| `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, TeamCreate config, and git workflow |
+| `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, agent roster config, and git workflow |
 | `references/agent-prompts.md` | Full prompt templates for all 21+ agents — role, boundaries, communication protocol, output format |
 | `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |

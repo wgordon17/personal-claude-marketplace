@@ -2354,6 +2354,30 @@ class TestHooksJsonConfiguration:
                     except re.error as e:
                         pytest.fail(f"Invalid regex '{matcher}' in {event_name}: {e}")
 
+    def test_pretooluse_no_duplicate_matchers(self):
+        """PreToolUse must not register the same matcher twice.
+
+        Claude Code runs all hooks matching the same tool in parallel and
+        merges results non-deterministically: for updatedInput, the last
+        hook to finish wins, silently discarding any rewrite from a hook
+        that loses the race (see hooks-guide.md "Combine results from
+        multiple hooks"). This bit RTK compression — a second Bash-matched
+        hook with no output of its own intermittently clobbered the
+        rewritten command from tool-selection-guard.py. Consolidate any new
+        per-tool logic into an existing matcher's "hooks" array instead of
+        adding a new top-level entry with the same matcher.
+        """
+        with open(HOOKS_FILE) as f:
+            data = json.load(f)
+        pretooluse = data["hooks"].get("PreToolUse", [])
+        counts: dict[str, int] = {}
+        for hook_group in pretooluse:
+            matcher = hook_group.get("matcher", "")
+            if matcher:
+                counts[matcher] = counts.get(matcher, 0) + 1
+        duplicates = {m: c for m, c in counts.items() if c > 1}
+        assert not duplicates, f"Duplicate PreToolUse matcher(s): {duplicates}"
+
     def test_all_hook_commands_reference_existing_scripts(self):
         """All command hooks should reference scripts that exist relative to hooks dir."""
         hooks_dir = os.path.join(os.path.dirname(__file__), os.pardir, "hooks")

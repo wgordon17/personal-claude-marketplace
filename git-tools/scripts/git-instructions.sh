@@ -312,6 +312,9 @@ cat <<PR_WORKFLOW
    git log --oneline origin/${MAINLINE}..HEAD
    git diff origin/${MAINLINE}...HEAD
    \`\`\`
+   Check the commit list for WIP-style language (wip, try, maybe, testing, debug, temp,
+   experiment, fixup, squash) or more than 2 commits sharing the same \`(scope)\` —
+   squash or reword before pushing if either turns up.
 
 2. **Push to origin**:
    \`\`\`bash

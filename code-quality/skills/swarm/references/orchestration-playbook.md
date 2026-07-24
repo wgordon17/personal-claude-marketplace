@@ -265,15 +265,10 @@ Write {run_dir}/escalations.json with: []
 
 Initialize `design_escalation_count = 0` as tracked Lead state (used in Phase 4 escalation routing).
 
-### Step 0.7: TeamCreate
+### Step 0.7: Create All Tasks Upfront
 
-```
-TeamCreate(team_name="swarm-{run_id}", description="Full swarm: <task summary>")
-```
-
-Call this BEFORE creating any tasks — tasks require an active team.
-
-### Step 0.8: Create All Tasks Upfront
+The implicit team is established automatically by the first named teammate spawn in Phase 2 —
+no setup call is needed before creating tasks.
 
 Create all tasks in a single batch before spawning any agents. Wire dependencies with `addBlockedBy`.
 
@@ -430,7 +425,6 @@ Agent(
   name="architect",
   subagent_type="code-quality:architect",
   model="opus",
-  team_name="swarm-{run_id}",
   prompt="[context bundle from communication-schema.md]\n\n[architect prompt from agent-prompts.md]"
 )
 ```
@@ -536,7 +530,6 @@ Agent(
   name="security-design",
   subagent_type="code-quality:security",
   model="opus",
-  team_name="swarm-{run_id}",
   prompt="[context bundle from communication-schema.md]\n\n[security design prompt from agent-prompts.md]"
 )
 ```
@@ -703,12 +696,12 @@ For each contested component, spawn competitor agents simultaneously:
 
 ```
 Agent(name="competitor-1", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      isolation="worktree",
      prompt="[speculative context bundle]\n\n[competitor prompt — see below]")
 
 Agent(name="competitor-2", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      isolation="worktree",
      prompt="[speculative context bundle]\n\n[competitor prompt — see below]")
 ```
@@ -753,8 +746,7 @@ Spawn a single judge agent after all competitors have submitted:
 
 ```
 Agent(name="speculative-judge", subagent_type="general-purpose", model="opus",
-     team_name="swarm-{run_id}",
-     prompt="[speculative context bundle]\n\n[judge prompt from speculative skill agent-prompts.md]")
+        prompt="[speculative context bundle]\n\n[judge prompt from speculative skill agent-prompts.md]")
 ```
 
 The judge receives a `JudgmentRequest` with all `ImplementationResult` objects, the
@@ -913,20 +905,18 @@ components — do NOT shut them down between components. Also spawn the Architec
 
 ```
 Agent(name="implementer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[implementer prompt from agent-prompts.md]")
 
 Agent(name="reviewer", subagent_type="general-purpose", model="opus",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[reviewer prompt from agent-prompts.md]")
 
 Agent(name="test-writer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[test-writer prompt from agent-prompts.md]")
 
 Agent(name="test-runner", subagent_type="code-quality:test-runner", model="haiku",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[test-runner prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[test-runner prompt from agent-prompts.md]")
 ```
 
 Note: reviewer and test-runner are read-only — no bypassPermissions needed. Only implementer
@@ -1103,7 +1093,7 @@ When an agent's `turn_count` exceeds its threshold AND it is between components 
 4. **Spawn replacement** with the same name, type, model, and mode:
    ```
    Agent(name="implementer", subagent_type="general-purpose", model="sonnet",
-        team_name="swarm-{run_id}", mode="bypassPermissions",
+        mode="bypassPermissions",
         prompt="[context bundle]\n\n[implementer prompt from agent-prompts.md]\n\n"
                "=== CONTINUATION FROM PREVIOUS AGENT ===\n"
                "<HandoffSummary JSON>\n"
@@ -1257,7 +1247,6 @@ Agent(
   name="bdd-step-writer",
   subagent_type="general-purpose",
   model="sonnet",
-  team_name="swarm-{run_id}",
   mode="bypassPermissions",
   prompt="[context bundle]\n\n"
          "TEST PLAN CONTEXT:\n{TEST_PLAN}\n\n"
@@ -1320,50 +1309,40 @@ Spawn ALL reviewers simultaneously in a SINGLE message. Do not spawn them sequen
 **Core reviewers (always spawn):**
 ```
 Agent(name="security-reviewer", subagent_type="code-quality:security", model="opus",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[security-reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[security-reviewer prompt from agent-prompts.md]")
 
 Agent(name="qa-reviewer", subagent_type="code-quality:qa", model="opus",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[qa-reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[qa-reviewer prompt from agent-prompts.md]")
 
 Agent(name="code-reviewer", subagent_type="code-quality:code-reviewer", model="sonnet",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[code-reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[code-reviewer prompt from agent-prompts.md]")
 
 Agent(name="performance-reviewer", subagent_type="code-quality:performance", model="sonnet",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[performance-reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[performance-reviewer prompt from agent-prompts.md]")
 ```
 
 **Optional reviewers (spawn if auto-detected or user-requested in Phase 1):**
 ```
 Agent(name="ui-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[ui-reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[ui-reviewer prompt from agent-prompts.md]")
 
 Agent(name="api-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[api-reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[api-reviewer prompt from agent-prompts.md]")
 
 Agent(name="db-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[db-reviewer prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[db-reviewer prompt from agent-prompts.md]")
 
 Agent(name="plugin-validator", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[plugin-validator prompt — include plugin validation checklist]")
+        prompt="[context bundle]\n\n[plugin-validator prompt — include plugin validation checklist]")
 
 Agent(name="skill-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[skill-reviewer prompt — include skill validation checklist]")
+        prompt="[context bundle]\n\n[skill-reviewer prompt — include skill validation checklist]")
 
 # Conditional: only if incremental plan file found
 # If Phase 0 Step 0.4.5 already set {plan_file_path}, reuse it — do not re-discover.
 # Otherwise discover via Branch-header matching (search {memory_dir}/plans/ for **Branch:** match).
 Agent(name="plan-adherence", subagent_type="code-quality:plan-adherence", model="opus",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[plan-adherence prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[plan-adherence prompt from agent-prompts.md]")
 ```
 
 **Note on plugin-dev agents:** The `plugin-dev:plugin-validator` and `plugin-dev:skill-reviewer`
@@ -1458,8 +1437,7 @@ If any finding is classified as **design-level** AND `design_escalation_count < 
 4. Respawn Architect with the findings:
    ```
    Agent(name="architect", subagent_type="code-quality:architect", model="opus",
-        team_name="swarm-{run_id}",
-        prompt="[context bundle]\n\n[architect prompt from agent-prompts.md]\n\n"
+              prompt="[context bundle]\n\n[architect prompt from agent-prompts.md]\n\n"
                "=== DESIGN ESCALATION FROM PHASE 4 ===\n"
                "The following findings from Phase 4 review indicate a design-level issue "
                "that requires plan revision:\n\n"
@@ -1554,12 +1532,10 @@ Spawn both analysts simultaneously after Phase 4 escalation routing completes:
 
 ```
 Agent(name="structural-concurrency", subagent_type="general-purpose", model="opus",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[structural-concurrency analyst prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[structural-concurrency analyst prompt from agent-prompts.md]")
 
 Agent(name="structural-integration", subagent_type="general-purpose", model="opus",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[structural-integration analyst prompt from agent-prompts.md]")
+        prompt="[context bundle]\n\n[structural-integration analyst prompt from agent-prompts.md]")
 ```
 
 ### Step 4.5.2: Structural Analyst Outputs
@@ -1622,7 +1598,7 @@ Proceed to Phase 6.
 
 ```
 Agent(name="fixer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[fixer prompt from agent-prompts.md]\n\n"
             "CONSOLIDATED FINDINGS:\n<JSON findings from synthesis>")
 ```
@@ -1665,7 +1641,7 @@ code paths, spawn the Test Coverage Agent:
 
 ```
 Agent(name="test-coverage-agent", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[test coverage agent prompt from agent-prompts.md]\n\n"
             "TEST COVERAGE FINDINGS:\n<JSON test findings from Phase 4/4.5>\n\n"
             "PHASE 3 TEST SUMMARIES:\n<TestHandoff summaries from Phase 3 Test-Writer>")
@@ -1682,7 +1658,7 @@ After fixer and test coverage agent complete (and deferrals are handled), spawn 
 
 ```
 Agent(name="code-simplifier", subagent_type="code-quality:code-simplifier", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[code-simplifier prompt from agent-prompts.md]")
 ```
 
@@ -1797,7 +1773,7 @@ the agent prompt. Then spawn the Docs agent:
 
 ```
 Agent(name="docs", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[docs prompt from agent-prompts.md]\n\n"
             "FILES MODIFIED THIS SWARM:\n<git diff --name-only from branch start>\n\n"
             "DOCUMENTATION IMPACT (from architect):\n<documentation_impact JSON>")
@@ -1856,7 +1832,7 @@ After the Docs agent commits, spawn the Docs Reviewer to verify the work:
 
 ```
 Agent(name="docs-reviewer", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="default",
+     mode="default",
      prompt="[context bundle]\n\n[docs-reviewer prompt from agent-prompts.md]\n\n"
             "DOCUMENTATION IMPACT (from architect):\n<documentation_impact JSON>\n\n"
             "DOCS AGENT REPORT:\n<docs agent completion summary>")
@@ -1887,7 +1863,7 @@ After Docs agent is shut down, spawn the Lessons Extractor:
 
 ```
 Agent(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
-     team_name="swarm-{run_id}", mode="bypassPermissions",
+     mode="bypassPermissions",
      prompt="[context bundle]\n\n[lessons-extractor prompt from agent-prompts.md]\n\n"
             "Run directory: {run_dir}\n"
             "Swarm date: {YYYY-MM-DD}\n"
@@ -1912,8 +1888,7 @@ SendMessage(to="lessons-extractor", message={"type": "shutdown_request", "reason
 
 ```
 Agent(name="verifier", subagent_type="code-quality:test-runner", model="haiku",
-     team_name="swarm-{run_id}",
-     prompt="[context bundle]\n\n[verifier prompt from agent-prompts.md]\n\n"
+        prompt="[context bundle]\n\n[verifier prompt from agent-prompts.md]\n\n"
             "BASELINE: {baseline from Phase 0.1}\n\n"
             "{if bdd_framework_info is set:}"
             "BDD FRAMEWORK INFO:\n{bdd_framework_info}\n\n"
@@ -2086,8 +2061,7 @@ directory is not discoverable by future agents — project memory files are.
 
 ```
 SendMessage(to="verifier", message={"type": "shutdown_request", "reason": "Swarm complete"})
-# ... any remaining agents ...
-TeamDelete()
+# ... send shutdown_request to each remaining active teammate individually ...
 ```
 
 ---
@@ -2170,13 +2144,7 @@ If a plan file was detected in Phase 0.4, adopt its commit strategy exactly. The
 
 ---
 
-## TeamCreate Configuration
-
-```
-TeamCreate:
-  team_name: "swarm-{run_id}"
-  description: "Full swarm: <task summary>"
-```
+## Agent Roster Configuration
 
 ### Full Agent Roster
 

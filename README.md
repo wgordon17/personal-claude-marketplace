@@ -20,6 +20,10 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 |--------|-------------|------------|------|
 | code-quality | Code quality agents, development utilities, and orchestration skills | 8 agents, 21 skills, 4 commands | [README](code-quality/README.md) |
 
+**Prerequisite for `/swarm` and `/unfuck`:** these skills spawn multiple named teammates that
+communicate via `SendMessage`, which requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to be set
+in the environment or `settings.json`.
+
 **Agents:**
 - `code-quality:architect` - System architecture specialist (design, technology choices, refactoring)
 - `code-quality:security` - Application security specialist (OWASP, auth, vulnerability detection)
@@ -36,7 +40,7 @@ Personal Claude Code plugins: LSP servers, code quality agents, development util
 - `/file-audit` - Deep code quality audit system
 - `/bug-investigation` - PROACTIVE interactive bug hunting with background agents
 - `/unfuck` - Comprehensive one-shot repo cleanup
-- `/swarm` - Full agent team implementation via TeamCreate
+- `/swarm` - Full agent team implementation
 - `/quality-gate` - PROACTIVE multi-pass review with adversarial lenses, fresh-context subagents, and blocking gates
 - `/pr-review` - Multi-agent PR review with finding verification
 - `/plan-review` - Multi-agent plan review with finding verification
@@ -98,13 +102,12 @@ Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| dev-guard | Tool selection policies, commit validation, pre-push review, and subagent completion verification | 5 hooks | [README](dev-guard/README.md) |
+| dev-guard | Tool selection policies, commit validation, and subagent completion verification | 4 hooks | [README](dev-guard/README.md) |
 
 > **⚠️ Important:** Dev-guard's `"ask"` action uses Claude Code's JSON `hookSpecificOutput` protocol. This correctly overrides `permissions.allow` auto-approve rules in the CLI but is [not supported in VS Code](https://github.com/anthropics/claude-code/issues/13339). See the [dev-guard README](dev-guard/README.md#action-field) for details.
 
 **Hooks:**
 - **PreToolUse: Tool Selection Guard** - Enforces native tool usage, Python/Rust tooling, git safety, URL fetch guard
-- **PreToolUse: Pre-push Review** - Commit summary and suggestions when pushing 3+ commits
 - **PostToolUse: Commit Validation** - Conventional Commits format enforcement
 - **Stop:** Quality stop gate - Deterministic triage + LLM evaluation for completion claims and write activity
 - **SubagentStop:** FixSummary validation - Structural completeness check for Fixer subagent outputs

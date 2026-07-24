@@ -11,6 +11,7 @@ Run with: uv run --project skill-eval pytest tests/test_skill_eval.py -v --tb=sh
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -206,6 +207,155 @@ class TestHookPrePushDispatch:
             cli.main()
 
         mock_pp.assert_called_once_with(tmp_path)
+
+
+class TestHookCoverageCheckDispatch:
+    """--coverage-check dispatches to _mode_coverage_check, not _mode_prepush."""
+
+    def test_coverage_check_flag_calls_mode_coverage_check(self, tmp_path, tty_stdin):
+        from skill_eval import cli
+
+        with (
+            patch.object(sys, "argv", ["hook", "--coverage-check"]),
+            patch("skill_eval.cli._repo_root", return_value=tmp_path),
+            patch("skill_eval.cli._mode_coverage_check", return_value=True) as mock_cc,
+            patch("skill_eval.cli._mode_prepush") as mock_prepush,
+            pytest.raises(SystemExit) as exc,
+        ):
+            cli.main()
+
+        mock_cc.assert_called_once_with(tmp_path)
+        mock_prepush.assert_not_called()
+        assert exc.value.code == 0
+
+
+# ── Group 1b: _detect_changed_skills ────────────────────────────────────────
+
+
+class TestDetectChangedSkills:
+    """_detect_changed_skills(repo_root, changed, candidate_skill_dirs)."""
+
+    def test_skill_md_change_detected(self, tmp_path):
+        from skill_eval.cli import _detect_changed_skills
+
+        repo, skill_dir = _make_repo(tmp_path)
+        changed = ["code-quality/skills/quality-gate/SKILL.md"]
+
+        result = _detect_changed_skills(repo, changed, [skill_dir])
+
+        assert result == {skill_dir}
+
+    def test_per_skill_reference_change_detected(self, tmp_path):
+        from skill_eval.cli import _detect_changed_skills
+
+        repo, skill_dir = _make_repo(tmp_path)
+        changed = ["code-quality/skills/quality-gate/references/checklist.md"]
+
+        result = _detect_changed_skills(repo, changed, [skill_dir])
+
+        assert result == {skill_dir}
+
+    def test_unrelated_file_not_detected(self, tmp_path):
+        from skill_eval.cli import _detect_changed_skills
+
+        repo, skill_dir = _make_repo(tmp_path)
+        changed = ["README.md", "dev-guard/hooks/tool-selection-guard.py"]
+
+        result = _detect_changed_skills(repo, changed, [skill_dir])
+
+        assert result == set()
+
+    def test_plugin_reference_change_resolves_bundling_skill(self, tmp_path):
+        from skill_eval.cli import _detect_changed_skills
+
+        repo, skill_dir = _make_repo(tmp_path)
+        (repo / "code-quality" / "references" / "checklist.md").write_text("# Checklist\n")
+        _write_skill_md(skill_dir, "# Skill\nSee `code-quality/references/checklist.md`.\n")
+        changed = ["code-quality/references/checklist.md"]
+
+        result = _detect_changed_skills(repo, changed, [skill_dir])
+
+        assert result == {skill_dir}
+
+    def test_plugin_reference_change_skips_skill_that_does_not_bundle_it(self, tmp_path):
+        from skill_eval.cli import _detect_changed_skills
+
+        repo, skill_dir = _make_repo(tmp_path)
+        _write_skill_md(skill_dir, "# Skill\nNo references here.\n")
+        changed = ["code-quality/references/checklist.md"]
+
+        result = _detect_changed_skills(repo, changed, [skill_dir])
+
+        assert result == set()
+
+
+# ── Group 1c: _mode_coverage_check ──────────────────────────────────────────
+
+
+class TestModeCoverageCheck:
+    """_mode_coverage_check: non-blocking — always returns True."""
+
+    def test_no_changed_skills_returns_true(self, tmp_path):
+        from skill_eval import cli
+
+        with (
+            patch("skill_eval.cli._merge_base", return_value="abc123"),
+            patch("skill_eval.cli._changed_files", return_value=["README.md"]),
+            patch("skill_eval.cli._detect_changed_skills", return_value=set()),
+        ):
+            assert cli._mode_coverage_check(tmp_path) is True
+
+    def test_covered_skill_not_touched_flags_but_returns_true(self, tmp_path, capsys):
+        """swarm.json is a real, checked-in test_cases file — exercises the
+        'has coverage but wasn't touched' branch against real repo state."""
+        from skill_eval import cli
+
+        skill_dir = tmp_path / "code-quality" / "skills" / "swarm"
+        skill_dir.mkdir(parents=True)
+
+        with (
+            patch("skill_eval.cli._merge_base", return_value="abc123"),
+            patch(
+                "skill_eval.cli._changed_files",
+                return_value=["code-quality/skills/swarm/SKILL.md"],
+            ),
+            patch("skill_eval.cli._detect_changed_skills", return_value={skill_dir}),
+        ):
+            result = cli._mode_coverage_check(tmp_path)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert "swarm" in captured.out
+        assert "was not updated" in captured.out
+
+    def test_uncovered_skill_flags_missing_test_cases(self, tmp_path, capsys):
+        from skill_eval import cli
+
+        skill_dir = tmp_path / "code-quality" / "skills" / "definitely-fake-skill-xyz"
+        skill_dir.mkdir(parents=True)
+
+        with (
+            patch("skill_eval.cli._merge_base", return_value="abc123"),
+            patch(
+                "skill_eval.cli._changed_files",
+                return_value=["code-quality/skills/definitely-fake-skill-xyz/SKILL.md"],
+            ),
+            patch("skill_eval.cli._detect_changed_skills", return_value={skill_dir}),
+        ):
+            result = cli._mode_coverage_check(tmp_path)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert "no eval coverage" in captured.out
+
+    def test_merge_base_failure_returns_true(self, tmp_path):
+        from skill_eval import cli
+
+        with patch(
+            "skill_eval.cli._merge_base",
+            side_effect=subprocess.CalledProcessError(1, "git"),
+        ):
+            assert cli._mode_coverage_check(tmp_path) is True
 
 
 # ── Group 2: load_eval_config ─────────────────────────────────────────────────

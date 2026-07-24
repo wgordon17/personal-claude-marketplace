@@ -1,6 +1,6 @@
 # Dev Guard Plugin
 
-Development environment policy enforcement: tool selection guard, commit validation, pre-push review, subagent completion verification, and anti-deferral enforcement.
+Development environment policy enforcement: tool selection guard, commit validation, subagent completion verification, and anti-deferral enforcement.
 
 ## Hooks
 
@@ -14,14 +14,6 @@ Development environment policy enforcement: tool selection guard, commit validat
 - **Command guard** — User-defined command blocking rules (via `COMMAND_GUARD_EXTRA_RULES`)
 - **Interactive command blocking** — Prevents `git rebase -i`, `git add -p`, and other interactive commands
 - **Plan mode redirect** — Redirects `EnterPlanMode` to incremental-planning skill
-
-### PreToolUse: Pre-push Review
-
-**pre-push-review.sh** — `Bash(git push origin*)`
-- Triggers when pushing 3+ commits
-- Shows commit summary and suggestions
-- Warns about WIP commits or duplicate scopes
-- **Non-blocking** — push proceeds after review
 
 ### PostToolUse: Commit Message Validation
 

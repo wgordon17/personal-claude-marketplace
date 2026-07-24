@@ -39,3 +39,19 @@ jobs:
             echo "$files"
             exit 1
           fi
+
+  eval-coverage-check:
+    name: Skill Eval Coverage Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7
+      - run: uv python install 3.13
+      - run: git fetch origin main
+      # Non-blocking by design (see skill_eval/cli.py _mode_coverage_check) —
+      # no AI credentials available in CI, this only flags a diff-coverage
+      # gap for a human to review, it never fails the job.
+      - run: make eval-coverage-check

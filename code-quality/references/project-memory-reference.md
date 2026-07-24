@@ -100,7 +100,6 @@ RUN_ID="${BRANCH_SLUG}-${TIMESTAMP}"
 | Audit trail directories | `{memory_dir}/{skill}/{run-id}/` | `hack/swarm/feat-auth-1711388400/` |
 | Report/plan filenames | `{memory_dir}/{type}/{run-id}-<topic>.md` | `hack/plans/feat-auth-1711388400-scope.md` |
 | Git branch names | `{skill}/{run-id}-<task-slug>` or `{skill}/{run-id}` | `swarm/feat-auth-1711388400-api` |
-| TeamCreate team names | `{prefix}-{run-id}` | `swarm-feat-auth-1711388400` |
 | Test plan documents | `{memory_dir}/test-plans/{run-id}.md` | `hack/test-plans/feat-auth-1711388400.md` |
 | Staged feature files | `{memory_dir}/test-plans/{run-id}-features/` | `hack/test-plans/feat-auth-1711388400-features/` |
 
@@ -123,7 +122,7 @@ Skills that spawn agents must choose the right orchestration pattern. The decidi
 
 ```
 Do agents need to send structured messages to EACH OTHER (not just the lead)?
-├── YES → TeamCreate with run-ID team name
+├── YES → Spawn named teammates via Agent(name="...") — implicit team, no setup call needed
 └── NO
     ├── Do agents edit files that would conflict in parallel?
     │   └── YES → Agent(isolation="worktree")
@@ -138,24 +137,25 @@ Do agents need to send structured messages to EACH OTHER (not just the lead)?
 
 | Pattern | When to Use | Communication | Context Isolation |
 |---------|------------|---------------|-------------------|
-| **TeamCreate** | Persistent agents with bidirectional handoffs, rejection/retry loops | SendMessage between teammates | Yes (separate context per teammate) |
+| **Named teammates** | Persistent agents with bidirectional handoffs, rejection/retry loops | SendMessage between teammates | Yes (separate context per teammate) |
 | **Parallel foreground** | Independent workers that report findings back | Result returns inline | Yes (separate context per agent) |
 | **Background** | Fire-and-forget; lead continues other work | Agent writes to files, lead reads later | Yes |
 | **Worktree isolation** | Competing implementations that edit the same files | Result returns inline + worktree path | Yes + file isolation |
 | **Plain foreground** | Simple one-off tasks (1-2 agents) | Result returns inline | Yes |
 
-### Team Naming Convention
+### Teammate Naming Convention
 
-Skills using `TeamCreate` MUST include the run ID in the team name to prevent cross-session
-collisions. Team files persist at `~/.claude/teams/{team-name}/` and are home-directory-scoped
-(not project-scoped), so hardcoded names collide across projects and sessions.
+As of Claude Code v2.1.178, `TeamCreate`/`TeamDelete` were removed — every session has one
+implicit team, and named teammates are spawned directly via `Agent(name="...")`. Teammate names
+are scoped to the caller's own session rather than a shared home-directory-scoped registry, so
+the collision risk that motivated run-ID-suffixed team names under the old model no longer
+applies. Use plain role names for teammates (`"architect"`, `"team-lead"`, `"implementer"`) —
+no run-ID suffix needed.
 
-| Skill | Team Name Pattern |
+| Skill | Teammate Naming |
 |-------|------------------|
-| `/swarm` | `swarm-{run-id}` |
-| `/unfuck` | `cleanup-{run-id}` |
-
-New skills using TeamCreate must follow the same `{prefix}-{run-id}` pattern.
+| `/swarm` | Plain role names (`architect`, `implementer`, `reviewer`, etc.) |
+| `/unfuck` | Plain role names (`dead-code-hunter`, `security-auditor`, etc.) |
 
 ---
 

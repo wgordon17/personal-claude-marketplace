@@ -44,6 +44,30 @@ _RE_ANGLE = re.compile(
     re.DOTALL,
 )
 
+# Progress log path — pre-commit/prek-style hook runners buffer a hook's entire
+# stdout until it exits, so this file is the only way to see live progress
+# during a long eval triggered from the pre-push git hook.
+_PROGRESS_LOG_PATH = Path(__file__).parent.parent / ".cache" / "eval-progress.log"
+
+
+def reset_progress_log() -> None:
+    """Truncate the progress log. Call once per invocation, before any run_eval() call."""
+    try:
+        _PROGRESS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _PROGRESS_LOG_PATH.write_text("", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _log_progress(message: str) -> None:
+    """Print progress and also append it to _PROGRESS_LOG_PATH (best-effort)."""
+    print(message, flush=True)
+    try:
+        with _PROGRESS_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(message + "\n")
+    except OSError:
+        pass
+
 
 # Skill-goal rubrics that use EXPECTED_OUTPUT and require expected_behaviors.
 # Shared between load_eval_config() validation and tests.
@@ -813,7 +837,7 @@ def run_eval(
                 tc_infra = True
 
         with print_lock:
-            print(f"    tc {tc_id} ({tc_idx}/{total_tc}): executing...", flush=True)
+            _log_progress(f"    tc {tc_id} ({tc_idx}/{total_tc}): executing...")
 
         # Step 1: Execute the skill.
         try:
@@ -822,7 +846,7 @@ def run_eval(
             )
         except Exception as exc:
             with print_lock:
-                print(f"    tc {tc_id}: EXEC FAILED: {exc}", flush=True)
+                _log_progress(f"    tc {tc_id}: EXEC FAILED: {exc}")
             logger.warning("skill execution failed for %s tc %s: %s", skill_name, tc_id, exc)
             return {"id": tc_id, "prompt": prompt, "scores": {}, "passed": False, "infra": True}
 
@@ -863,7 +887,7 @@ def run_eval(
 
         status = "PASS" if tc_pass else "FAIL"
         with print_lock:
-            print(f"    tc {tc_id} ({tc_idx}/{total_tc}): {status}", flush=True)
+            _log_progress(f"    tc {tc_id} ({tc_idx}/{total_tc}): {status}")
 
         return {
             "id": tc_id,

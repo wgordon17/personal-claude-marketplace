@@ -58,7 +58,7 @@ _mcp_key = mcp_key
 _WRITE_TOOLS = frozenset({"Edit", "Write", "NotebookEdit"})
 
 # Agent/task tool names
-_AGENT_TOOLS = frozenset({"Agent", "Task", "TeamCreate"})
+_AGENT_TOOLS = frozenset({"Agent"})
 
 # Interactive question tool — agent is legitimately asking the user
 _QUESTION_TOOL = "AskUserQuestion"
