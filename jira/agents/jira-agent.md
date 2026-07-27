@@ -163,7 +163,6 @@ Then call `createJiraIssue` with the extracted values and OSAC Defaults:
 - `description`: from spawn-data
 - `contentFormat`: `"markdown"`
 - `assignee_account_id`: from bootstrap
-- `additional_fields`: `{"labels": ["OSAC"]}`
 
 Otherwise:
 1. Read `jira/reference/osac-conventions.md` for the appropriate description template

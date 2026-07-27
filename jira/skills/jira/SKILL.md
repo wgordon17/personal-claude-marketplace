@@ -151,7 +151,6 @@ When creating an OSAC issue, always pass:
 - `contentFormat`: `"markdown"`
 - `responseContentFormat`: `"markdown"`
 - `assignee_account_id`: `"<account-id-from-bootstrap>"` (self-assign)
-- `additional_fields`: `{"labels": ["OSAC"]}`
 
 When creating Stories/Tasks/Bugs under an epic, add `"customfield_10014": "OSAC-12345"` (Epic Link) to `additional_fields`.
 

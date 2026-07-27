@@ -1,6 +1,6 @@
 # OSAC Jira Conventions
 
-Point-in-time snapshot of OSAC project conventions (verified 2026-05-05). These are
+Point-in-time snapshot of OSAC project conventions (verified 2026-07-27). These are
 observed patterns from live cards, not enforced schema — Jira does not prevent deviation.
 
 ## Issue Type Hierarchy
@@ -221,7 +221,6 @@ See `jira/reference/jira-formatting.md` for markdown guidance.
 
 | Label | Usage |
 |-------|-------|
-| `OSAC` | Standard — apply to all OSAC issues |
 | `gori-ga` | GORI GA feature track |
 | `vmaas` | VmaaS feature track |
 | `vmaas-gori` | Combined VmaaS+GORI feature track |
@@ -229,7 +228,11 @@ See `jira/reference/jira-formatting.md` for markdown guidance.
 | `backlog` | Backlog items (lower-priority) |
 | `demo-summit` | Summit demo milestone |
 
-Always include the `OSAC` label on creation.
+Label usage is inconsistent in practice — most OSAC issues carry no label at all. A
+spot-check of the 15 most recently created issues (verified 2026-07-27) found only 2 with
+the `OSAC` label; the rest were unlabeled or used unrelated labels (`jira-autofix`,
+`e2e-demo`, `bootstrap`, `jira-triage-not-fixable`). The `OSAC` label is not a required
+convention for issue creation.
 
 ### Field Defaults
 
