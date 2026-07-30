@@ -66,12 +66,17 @@ After completing Phase 1.25 domain classification, classify the research mode vi
 - **Bridged** — Internal investigation first, then external research informed by the internal findings. Use when the question references this project's code, patterns, or architecture.
 
 **Routing:**
-- **External selected**: skip Phase 2.5, proceed directly to Phase 2.
-- **Bridged selected**: run Phase 2.5 as the first step within Phase 2 (before source gathering).
+- Both selections proceed to Phase 1.6 next.
 
-### Phase 2: Source Gathering (40+ Sources Target)
+### Phase 1.6: Initial Research
 
-#### Phase 2.5: Internal Investigation *(Bridged mode only)*
+Before asking the user any clarifying questions, build real understanding of the topic through tool-based research. This ensures that questions in Phase 1.75 are grounded in current information rather than the model's assumptions or stale training data. Track sources gathered during Phase 1.6 in a running list named `{initial_sources}` — External Mode's 3-6 sources, or Bridged Mode's 1-3 external-check searches (distinct from Bridged Mode's internal file and pattern findings, which are tracked separately). `{initial_sources}` carries forward and counts toward Phase 2's 40+ source target — these sources are not discarded or re-fetched once Phase 2 begins, and Phase 2's running source count continues from `{initial_sources}`'s existing entries rather than restarting at zero.
+
+#### External Mode
+
+Run a light-touch research pass to establish the topic's landscape, major sub-questions, and terminology — roughly 3-6 sources as a starting guideline, not a hard cap (a genuinely tangled topic can use more). Use `WebSearch` and `WebFetch` to survey the current state of the topic. If Phase 1.25 classified the domain as Science & Technology and a specific library or framework is already named in the question, include a quick Context7 `resolve-library-id` lookup too — if a library is resolved here, Phase 2's later "Library Documentation via Context7" step should reuse this resolved library ID rather than re-resolving it, only running fresh `resolve-library-id` calls for libraries not already identified in Phase 1.6. This is not the full Phase 2 source-gathering push — it is scoped to "enough to ask a good question," not "enough to answer the research question."
+
+#### Bridged Mode
 
 1. **Structural discovery** — Launch an Explore `Agent` to map relevant codebase areas. Use Serena `get_symbols_overview` if the Serena MCP is configured.
 
@@ -93,11 +98,38 @@ After completing Phase 1.25 domain classification, classify the research mode vi
 
 Store this summary as `{internal_findings}`. It becomes the feed-forward context for Phase 2 source gathering and informs all subsequent phases.
 
+5. **External check** — Run 1-3 targeted external searches specifically on the patterns, libraries, or approaches surfaced in steps 1-4. The aim is to catch things like "this pattern is deprecated upstream" or "the ecosystem has moved past this approach" before asking questions in Phase 1.75. Add the search sources (URLs/queries) to `{initial_sources}` for Phase 2's carry-forward source count. Append the analytical conclusion (what was learned — e.g., a specific deprecation or ecosystem shift) to `{internal_findings}` for informing Phase 1.75's exit-condition evaluation and Phase 2's informed queries.
+
+For either mode: always explicitly state what initial research found — the specific sources consulted, patterns discovered, and terminology established — not a one-line status. If nothing about the original research question needs to change based on what was found, say so explicitly (e.g., "Initial research confirms the framing holds — no surprises.") rather than silently skipping this reporting. Do not fabricate surprises that were not found.
+
+### Phase 1.75: Clarify
+
+Proceed to Phase 2 only once the following four exit conditions are satisfiable:
+
+(a) The decision this research will inform and who/what it is for
+(b) Which evaluation criteria matter most and their relative weight
+(c) Explicit scope boundaries and non-goals
+(d) Any surprises surfaced in Phase 1.6 have been explicitly raised with the user and resolved (not silently absorbed into the plan)
+
+Items (a) and (b) are not new questions invented here — Phase 1 already poses these as model-internal, self-directed reasoning prompts ("What decision will this inform?", "What matters most to the user?"), answered provisionally with no `AskUserQuestion` call. Phase 1.75 is where that provisional framing is confirmed or corrected with the user via `AskUserQuestion`, now informed by Phase 1.6 findings — not a second, disconnected round of scoping questions.
+
+**Gating rule (Adaptive-zero):** First evaluate whether all four exit conditions are already satisfiable from context alone — Phase 1's scope-definition reasoning, Phase 1.6's initial-research findings, and the calling context (including a caller-provided research question that may already answer some items). If all four are already satisfiable, proceed directly to Phase 2 without calling `AskUserQuestion` at all — zero rounds is the expected outcome for an already-scoped or unambiguous topic, not merely a theoretical edge case. If any exit condition is not yet satisfiable from context, ask via `AskUserQuestion`; there is no fixed minimum beyond what is needed to resolve the remaining items, and no ceiling — a genuinely tangled topic may need several rounds. If the user explicitly signals they cannot or will not continue answering (e.g., "I don't know, just proceed"), do not block indefinitely: document the unresolved exit-condition items as explicit assumptions, state them plainly in chat (mirroring Phase 1.6's "no surprises" reporting requirement — no silent skip), and proceed to Phase 2.
+
+The context-evaluation step itself always executes as part of Phase 1.75 — the phase is never skipped. That is distinct from asking the user a question, which happens only when the evaluation finds a gap. Do not conflate "this step always runs" (true) with "this step always asks a question" (false).
+
+Questions must be informed by and reference specific Phase 1.6 findings — not generic boilerplate questions asked without regard to what was just discovered.
+
+This step always runs, whether `/deep-research` was invoked directly by the user or via the `Skill` tool from another skill's Lead (e.g., `/fix`, `/incremental-planning`, `/speculative`). There is no argument-suffix bypass for this step — contrast with the `Mode:` suffix, which only bypasses the Phase 1.5 mode-selection question, not this step.
+
+Store the confirmed answers to (a)-(c) as `{research_scope}`. Following the same feed-forward pattern used for internal findings in Phase 1.6, `{research_scope}` becomes the context for the rest of the research: Phase 2's source-gathering queries, Phase 4's stakeholder selection, and Phase 5's comparison-table weighting should all be shaped by the decision, criteria weights, and scope boundaries captured here.
+
+### Phase 2: Source Gathering (40+ Sources Target)
+
 Organize sources into categories:
 
 | Source Type | What to Look For | Priority | Universal Equivalent |
 |-------------|------------------|----------|----------------------|
-| **Internal sources** *(Bridged only)* | Project code, patterns, decisions from `{internal_findings}` | Highest | Internal sources *(no universal equivalent — Bridged-mode specific)* |
+| **Internal sources** *(Bridged only, produced in Phase 1.6)* | Project code, patterns, decisions from `{internal_findings}` | Highest | Internal sources *(no universal equivalent — Bridged-mode specific)* |
 | **Library documentation** | *(Science & Technology)* Current API docs via Context7 MCP (`resolve-library-id` → `query-docs`) | Highest | Authoritative/official sources (FDA, USDA, building codes, RFCs, specs) |
 | **Primary sources** | Official documentation, specifications, papers | Highest | Primary sources |
 | **Secondary sources** | Tutorials, blog posts, case studies | High | Secondary sources |
@@ -231,6 +263,8 @@ If no memory directory exists, deliver the report in the conversation only.
 - Date range: [most recent to oldest]
 - Key search queries used
 - Hop depth achieved
+- Initial research (Phase 1.6): [count] sources consulted before Phase 2
+- Clarify (Phase 1.75): [count] rounds of questions asked
 - *(Bridged mode)* Internal files investigated: [count]
 - *(Bridged mode)* Patterns identified: [count]
 - *(Bridged mode)* MCP tools used: [list, e.g., Serena get_symbols_overview, claude-mem search]
@@ -400,7 +434,7 @@ The invoking skill's Lead uses the `Skill` tool to invoke `/deep-research` direc
 
 ### Leaf Skill
 
-`/deep-research` is a leaf skill — it does not invoke other skills. It uses `Agent` for internal exploration subagents only (Explore agents in Phase 2.5). This is the terminal node in the skill invocation graph.
+`/deep-research` is a leaf skill — it does not invoke other skills. It uses `Agent` for internal exploration subagents only (Explore agents in Phase 1.6). This is the terminal node in the skill invocation graph.
 
 ### Trust Model
 
