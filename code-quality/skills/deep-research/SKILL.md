@@ -125,7 +125,7 @@ Store the confirmed answers to (a)-(c) as `{research_scope}`. Following the same
 
 ### Phase 2: Source Gathering (40+ Sources Target)
 
-Organize sources into categories:
+Organize sources into categories, targeting queries toward the decision, criteria weights, and scope boundaries captured in `{research_scope}`:
 
 | Source Type | What to Look For | Priority | Universal Equivalent |
 |-------------|------------------|----------|----------------------|
@@ -146,6 +146,7 @@ Organize sources into categories:
 - If Context7 MCP is configured, for each library call `mcp__context7__resolve-library-id` to find the library, then call `mcp__context7__query-docs` with targeted queries to fetch current API docs, migration guides, or configuration references
 - If Context7 MCP is not configured, skip this step — web-based source gathering later in Phase 2 will cover documentation
 - Include Context7 results as "Library documentation" sources in the source count
+- Libraries already resolved during Phase 1.6's External Mode branch should be skipped here rather than re-resolved — only libraries not yet identified get a fresh `resolve-library-id` call in this step
 
 In **Bridged mode**, research queries for all external source types should be informed by `{internal_findings}`. For example, if internal investigation revealed a pain point with a specific pattern, target external sources that address that specific pattern rather than the topic generically.
 
@@ -184,6 +185,8 @@ Include viewpoints from:
 | **Current maintainers** *(Bridged only)* | What works in the existing codebase, what's painful, migration cost | Current maintainers *(no universal equivalent — Bridged-mode specific)* |
 | **Security auditor, compliance team** | Safety, compliance, standards, regulations | Regulator/Guardian (FDA, building inspector, medical board) |
 
+Stakeholder selection should be informed by `{research_scope}` — prioritize perspectives most relevant to the decision's scope boundaries and criteria weighting.
+
 ### Phase 5: Synthesis
 
 1. **Create comparison tables**
@@ -194,6 +197,7 @@ Include viewpoints from:
      recent commits (6-month threshold from today), recent releases (12-month threshold),
      license, CVE status — plus bus factor and release integrity from Supply Chain Assessment.
      Use the Date Verification Protocol: state the actual gap in months, not "recently updated"
+   - Weight comparison criteria according to the evaluation priorities captured in `{research_scope}`
 
 2. **Identify consensus opinions**
    - What do most sources agree on?
@@ -430,7 +434,7 @@ Other skills should invoke `/deep-research` when they encounter any of these str
 
 ### Invocation Guidance
 
-The invoking skill's Lead uses the `Skill` tool to invoke `/deep-research` directly. The Lead runs the skill itself (not via a subagent). Pass the research question and mode as the skill argument: `[research question]. Mode: [External|Bridged]`. This bypasses the Phase 1.5 AskUserQuestion when the invoking skill already knows the appropriate mode.
+The invoking skill's Lead uses the `Skill` tool to invoke `/deep-research` directly. The Lead runs the skill itself (not via a subagent). Pass the research question and mode as the skill argument: `[research question]. Mode: [External|Bridged]`. This bypasses the Phase 1.5 AskUserQuestion when the invoking skill already knows the appropriate mode. The `Mode:` suffix bypass applies only to the Phase 1.5 mode-selection question — Phase 1.75's clarify step has no such bypass and always runs, including when `/deep-research` is invoked by another skill's Lead via the `Skill` tool.
 
 ### Leaf Skill
 
