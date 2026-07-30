@@ -394,6 +394,7 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 - `branch-from-local-main` — Branching from local main (may be stale)
 - `branch-from-non-upstream` — Branching from non-upstream refs (stacking risk)
 - `branch-needs-fetch` — Requires fetch before rebase (dynamic, matches current branch)
+- `skip-env-bypass` — SKIP=/PREK_SKIP= selectively bypassing pre-commit/prek hooks
 
 **oc/kubectl introspection rules (ask actions):**
 - `oc-critical` — Critical resource modifications

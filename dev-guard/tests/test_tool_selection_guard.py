@@ -88,6 +88,30 @@ def assert_ask_decision(result, expected_reason_fragment=None, test_id=""):
         )
 
 
+def assert_not_ask_decision(result, expected_msg=None, test_id=""):
+    """Assert the hook did NOT return a permissionDecision: ask JSON response.
+
+    Distinguishes true passthrough/allow from an ask decision — both exit 0,
+    so checking exit code alone cannot tell them apart.
+    """
+    assert result.returncode == 0, (
+        f"[{test_id}] Expected exit 0, got {result.returncode}. stderr: {result.stderr.strip()!r}"
+    )
+    if result.stdout.strip():
+        try:
+            output = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            output = {}
+        decision = output.get("hookSpecificOutput", {}).get("permissionDecision")
+        assert decision != "ask", (
+            f"[{test_id}] Expected a non-ask decision, got permissionDecision={decision!r}"
+        )
+    if expected_msg:
+        assert expected_msg in (result.stderr + result.stdout), (
+            f"[{test_id}] Expected '{expected_msg}' in output. stderr: {result.stderr.strip()!r}"
+        )
+
+
 def assert_allow_decision(result, expected_reason_fragment=None, test_id=""):
     """Assert that the hook returned a permissionDecision: allow JSON response."""
     assert result.returncode == 0, (
@@ -1533,7 +1557,7 @@ class TestGitSafetyAsk:
         if expected_ask:
             assert_ask_decision(result, expected_msg)
         else:
-            assert_guard(result, 0, expected_msg)
+            assert_not_ask_decision(result, expected_msg)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
