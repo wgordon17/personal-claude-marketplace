@@ -6,7 +6,7 @@ arguments:
     description: "add, remove, or list"
     required: true
   - name: rule_name
-    description: "Rule name shown in the ask prompt (e.g. stash-drop, config-global-write)"
+    description: "Rule name shown in the ask prompt (e.g. remote-remove, config-global-write)"
     required: false
 ---
 
