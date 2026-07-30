@@ -1285,16 +1285,13 @@ def _is_branch_from_non_upstream(cmd: str) -> bool:
 
 # Each rule: (name, check_function, message)
 # check_function(cmd) -> bool
-#
-# NOTE: git reset --hard, git stash drop, and git checkout -- were removed as
-# dev-guard rules (see git history) — Claude Code's Auto Mode classifier now
-# blocks these by default natively (semantic judgment, not regex), and dev-guard
-# duplicating them only added a redundant subprocess round-trip with no added
-# safety margin. git rm, force-push, and history-rewriting rules stay here
-# because Auto Mode either doesn't document covering them or is currently more
-# permissive than this repo's workflow policy requires (e.g. it allows direct
-# pushes to the default branch by default).
 GIT_DENY_RULES: list[GitRule] = [
+    GitRule(
+        "reset-hard",
+        lambda cmd: bool(re.search(r"git\s+reset\s+--hard", cmd)),
+        "git reset --hard is FORBIDDEN. "
+        "Use 'git reset --mixed' or 'git stash' to preserve changes.",
+    ),
     GitRule(
         "push-force",
         lambda cmd: bool(re.search(r"git\s+push", cmd)) and _has_force_flag(cmd),
@@ -1420,7 +1417,28 @@ GIT_DENY_RULES: list[GitRule] = [
 ]
 
 # ASK rules prompt user for confirmation (permissionDecision "ask")
+#
+# NOTE: "checkout-dash-dash" (git checkout -- <path>) was removed as a
+# dev-guard rule (see git history) — Claude Code's Auto Mode classifier
+# documents blocking this by default (the "." whole-tree form explicitly,
+# broader forms via its general "discarding uncommitted changes" semantic
+# category). "reset-hard" and "stash-drop" were considered for the same
+# removal but restored after review found concrete gaps Auto Mode doesn't
+# cover: (1) Auto Mode's classifier is documented as absent entirely in
+# bypassPermissions mode, which this repo's own background subagents use,
+# and dev-guard's own GUARD_BYPASS=1 escape hatch only re-checks
+# GIT_DENY_RULES — removing reset-hard from that list left zero enforcement
+# for GUARD_BYPASS=1 + bypassPermissions combined; (2) a correctly-scoped
+# worktree "git stash drop stash@{N}" relied on this generic ask rule as a
+# second, destructiveness-specific confirmation after _check_worktree_stash's
+# ownership check passed — removing it left the common case (valid ref,
+# correct worktree) with zero confirmation, not just an edge case.
 GIT_ASK_RULES: list[GitRule] = [
+    GitRule(
+        "stash-drop",
+        lambda cmd: bool(re.search(r"git\s+stash\s+drop", cmd)),
+        "git stash drop permanently deletes a stash. Confirm this is intentional.",
+    ),
     GitRule(
         "config-global-write",
         lambda cmd: (
@@ -1734,8 +1752,7 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
             matched_segment=cmd,
         )
 
-    # Worktree stash safety — cross-worktree collision prevention, independent
-    # of the (now-removed) generic stash-drop destructiveness rule.
+    # Worktree stash safety — must come before generic stash-drop ASK rule
     _check_worktree_stash(cmd)
 
     # ASK rules — prompt user for confirmation

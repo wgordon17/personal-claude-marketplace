@@ -812,7 +812,7 @@ class TestPipeSegments:
             # python tooling rules still fire in pipe segments
             ("cmd | pytest tests/", 2, "make py-test"),
             # git safety in pipe segment
-            ("echo y | git branch -D feature", 2, "FORBIDDEN"),
+            ("echo y | git reset --hard", 2, "FORBIDDEN"),
             # chain + pipe combo
             (
                 "cd /app && oc get deploy -o json | python3 -c "
@@ -966,10 +966,12 @@ class TestNewlineSeparation:
         [
             # Backslash continuation joins lines — guard sees the full command
             ("git push \\\n--force", 2, "FORBIDDEN"),
+            ("git reset \\\n--hard", 2, "FORBIDDEN"),
             ("cat \\\nfile.py", 2, "Read tool"),
         ],
         ids=[
             "continuation-push-force",
+            "continuation-reset-hard",
             "continuation-cat-file",
         ],
     )
@@ -1407,6 +1409,9 @@ class TestGitSafetyDeny:
     @pytest.mark.parametrize(
         "command, expected_exit, expected_msg",
         [
+            # reset --hard
+            ("git reset --hard", 2, "FORBIDDEN"),
+            ("git reset --hard HEAD~3", 2, "FORBIDDEN"),
             ("git reset --mixed HEAD~1", 0, None),
             # force push
             ("git push --force origin feature", 2, "FORBIDDEN"),
@@ -1443,11 +1448,14 @@ class TestGitSafetyDeny:
             ("git clean -Xdf", 2, "FORBIDDEN"),
             ("git clean -df", 0, None),
             # chain awareness
+            ("git status && git reset --hard", 2, "FORBIDDEN"),
             ("git add . && git push -f origin main", 2, "FORBIDDEN"),
             # filter-branch
             ("git filter-branch --tree-filter 'rm -f x'", 2, "FORBIDDEN"),
         ],
         ids=[
+            "reset-hard",
+            "reset-hard-ref",
             "reset-mixed-allow",
             "push-force",
             "push-f-short",
@@ -1473,6 +1481,7 @@ class TestGitSafetyDeny:
             "clean-x",
             "clean-X",
             "clean-df-allow",
+            "reset-hard-in-chain",
             "force-push-in-chain",
             "filter-branch",
         ],
@@ -1491,6 +1500,7 @@ class TestGitSafetyAsk:
     @pytest.mark.parametrize(
         "command, expected_ask, expected_msg",
         [
+            ("git stash drop", True, "permanently deletes"),
             ("git filter-repo --invert-paths --path secret.txt", True, "permanently"),
             ("git reflog delete HEAD@{2}", True, "recovery points"),
             ("git reflog expire --expire=now", True, "recovery points"),
@@ -1499,8 +1509,14 @@ class TestGitSafetyAsk:
             ("git config --global user.name foo", True, "permission"),
             ("git config --global --get user.name", False, None),
             ("git config --global --list", False, None),
+            # checkout-dash-dash was removed as a dev-guard rule — Auto Mode's
+            # classifier covers this natively now (see GIT_ASK_RULES comment).
+            # This pins the new passthrough behavior so a future accidental
+            # re-add or removal-of-removal is caught either direction.
+            ("git checkout -- file.py", False, None),
         ],
         ids=[
+            "stash-drop",
             "filter-repo",
             "reflog-delete",
             "reflog-expire",
@@ -1509,6 +1525,7 @@ class TestGitSafetyAsk:
             "config-global-write",
             "config-global-get-allow",
             "config-global-list-allow",
+            "checkout-dash-dash-now-allowed",
         ],
     )
     def test_git_ask(self, command, expected_ask, expected_msg):
@@ -1950,8 +1967,7 @@ class TestWorktreeStash:
             {"command": "git stash drop stash@{0}"},
             env=self._env(tmp_path),
         )
-        # drop with matching ref → worktree check passes; no generic stash-drop
-        # ask rule anymore, so this falls through to a plain allow
+        # drop with matching ref → worktree check passes, then stash-drop ASK rule fires
         assert result.returncode == 0
 
     # ── BLOCKED: pop/apply/drop targeting another worktree's stash ──
@@ -2410,7 +2426,7 @@ class TestShellControlStructures:
             # nested: if inside do
             ("for x in a; do if true; then cat f.py; fi; done", 2, "Read tool"),
             # git safety inside control structure
-            ("if true; then git branch -D feature; fi", 2, "FORBIDDEN"),
+            ("if true; then git reset --hard; fi", 2, "FORBIDDEN"),
             # safe command inside control structure — passes
             ("for x in a b; do git status; done", 0, None),
             ("if true; then make build; fi", 0, None),
@@ -3979,9 +3995,9 @@ class TestTrustIntegration:
 
     def test_block_rule_never_trusted(self, tmp_path):
         """Block rules (exit 2) are never bypassed by trust."""
-        # "push-force" is a deny (block) rule, trust should not help
-        self._setup_trust(tmp_path, "push-force")
-        result = self._run("git push --force origin feature", tmp_path)
+        # "reset-hard" is a deny (block) rule, trust should not help
+        self._setup_trust(tmp_path, "reset-hard")
+        result = self._run("git reset --hard", tmp_path)
         assert result.returncode == 2
 
     def test_session_trust_expires(self, tmp_path):
