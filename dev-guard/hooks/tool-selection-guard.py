@@ -1285,13 +1285,16 @@ def _is_branch_from_non_upstream(cmd: str) -> bool:
 
 # Each rule: (name, check_function, message)
 # check_function(cmd) -> bool
+#
+# NOTE: git reset --hard, git stash drop, and git checkout -- were removed as
+# dev-guard rules (see git history) — Claude Code's Auto Mode classifier now
+# blocks these by default natively (semantic judgment, not regex), and dev-guard
+# duplicating them only added a redundant subprocess round-trip with no added
+# safety margin. git rm, force-push, and history-rewriting rules stay here
+# because Auto Mode either doesn't document covering them or is currently more
+# permissive than this repo's workflow policy requires (e.g. it allows direct
+# pushes to the default branch by default).
 GIT_DENY_RULES: list[GitRule] = [
-    GitRule(
-        "reset-hard",
-        lambda cmd: bool(re.search(r"git\s+reset\s+--hard", cmd)),
-        "git reset --hard is FORBIDDEN. "
-        "Use 'git reset --mixed' or 'git stash' to preserve changes.",
-    ),
     GitRule(
         "push-force",
         lambda cmd: bool(re.search(r"git\s+push", cmd)) and _has_force_flag(cmd),
@@ -1427,16 +1430,6 @@ GIT_ASK_RULES: list[GitRule] = [
         ),
         "git config --global modifications require permission. "
         "Read operations (--get, --list) are allowed.",
-    ),
-    GitRule(
-        "stash-drop",
-        lambda cmd: bool(re.search(r"git\s+stash\s+drop", cmd)),
-        "git stash drop permanently deletes a stash. Confirm this is intentional.",
-    ),
-    GitRule(
-        "checkout-dash-dash",
-        lambda cmd: bool(re.search(r"git\s+checkout\s+--", cmd)),
-        "git checkout -- is destructive and deprecated. Consider using 'git restore' instead.",
     ),
     GitRule(
         "filter-repo",
@@ -1741,7 +1734,8 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
             matched_segment=cmd,
         )
 
-    # Worktree stash safety — must come before generic stash-drop ASK rule
+    # Worktree stash safety — cross-worktree collision prevention, independent
+    # of the (now-removed) generic stash-drop destructiveness rule.
     _check_worktree_stash(cmd)
 
     # ASK rules — prompt user for confirmation

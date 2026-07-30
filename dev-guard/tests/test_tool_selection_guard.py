@@ -812,7 +812,7 @@ class TestPipeSegments:
             # python tooling rules still fire in pipe segments
             ("cmd | pytest tests/", 2, "make py-test"),
             # git safety in pipe segment
-            ("echo y | git reset --hard", 2, "FORBIDDEN"),
+            ("echo y | git branch -D feature", 2, "FORBIDDEN"),
             # chain + pipe combo
             (
                 "cd /app && oc get deploy -o json | python3 -c "
@@ -966,12 +966,10 @@ class TestNewlineSeparation:
         [
             # Backslash continuation joins lines — guard sees the full command
             ("git push \\\n--force", 2, "FORBIDDEN"),
-            ("git reset \\\n--hard", 2, "FORBIDDEN"),
             ("cat \\\nfile.py", 2, "Read tool"),
         ],
         ids=[
             "continuation-push-force",
-            "continuation-reset-hard",
             "continuation-cat-file",
         ],
     )
@@ -1409,9 +1407,6 @@ class TestGitSafetyDeny:
     @pytest.mark.parametrize(
         "command, expected_exit, expected_msg",
         [
-            # reset --hard
-            ("git reset --hard", 2, "FORBIDDEN"),
-            ("git reset --hard HEAD~3", 2, "FORBIDDEN"),
             ("git reset --mixed HEAD~1", 0, None),
             # force push
             ("git push --force origin feature", 2, "FORBIDDEN"),
@@ -1448,14 +1443,11 @@ class TestGitSafetyDeny:
             ("git clean -Xdf", 2, "FORBIDDEN"),
             ("git clean -df", 0, None),
             # chain awareness
-            ("git status && git reset --hard", 2, "FORBIDDEN"),
             ("git add . && git push -f origin main", 2, "FORBIDDEN"),
             # filter-branch
             ("git filter-branch --tree-filter 'rm -f x'", 2, "FORBIDDEN"),
         ],
         ids=[
-            "reset-hard",
-            "reset-hard-ref",
             "reset-mixed-allow",
             "push-force",
             "push-f-short",
@@ -1481,7 +1473,6 @@ class TestGitSafetyDeny:
             "clean-x",
             "clean-X",
             "clean-df-allow",
-            "reset-hard-in-chain",
             "force-push-in-chain",
             "filter-branch",
         ],
@@ -1500,8 +1491,6 @@ class TestGitSafetyAsk:
     @pytest.mark.parametrize(
         "command, expected_ask, expected_msg",
         [
-            ("git stash drop", True, "permanently deletes"),
-            ("git checkout -- file.py", True, "destructive"),
             ("git filter-repo --invert-paths --path secret.txt", True, "permanently"),
             ("git reflog delete HEAD@{2}", True, "recovery points"),
             ("git reflog expire --expire=now", True, "recovery points"),
@@ -1512,8 +1501,6 @@ class TestGitSafetyAsk:
             ("git config --global --list", False, None),
         ],
         ids=[
-            "stash-drop",
-            "checkout-dash-dash",
             "filter-repo",
             "reflog-delete",
             "reflog-expire",
@@ -1963,7 +1950,8 @@ class TestWorktreeStash:
             {"command": "git stash drop stash@{0}"},
             env=self._env(tmp_path),
         )
-        # drop with matching ref → worktree check passes, then stash-drop ASK rule fires
+        # drop with matching ref → worktree check passes; no generic stash-drop
+        # ask rule anymore, so this falls through to a plain allow
         assert result.returncode == 0
 
     # ── BLOCKED: pop/apply/drop targeting another worktree's stash ──
@@ -2422,7 +2410,7 @@ class TestShellControlStructures:
             # nested: if inside do
             ("for x in a; do if true; then cat f.py; fi; done", 2, "Read tool"),
             # git safety inside control structure
-            ("if true; then git reset --hard; fi", 2, "FORBIDDEN"),
+            ("if true; then git branch -D feature; fi", 2, "FORBIDDEN"),
             # safe command inside control structure — passes
             ("for x in a b; do git status; done", 0, None),
             ("if true; then make build; fi", 0, None),
@@ -3979,10 +3967,10 @@ class TestTrustIntegration:
 
     def test_trusted_rule_allows_silently(self, tmp_path):
         """An ask rule with a trust entry auto-allows with trusted reason."""
-        # git checkout -- triggers the "checkout-dash-dash" ask rule
-        # (avoids git stash drop which hits the worktree stash guard in worktrees)
-        self._setup_trust(tmp_path, "checkout-dash-dash")
-        result = self._run("git checkout -- file.py", tmp_path)
+        # git remote remove triggers the "remote-remove" ask rule — a plain
+        # regex match with no worktree/subprocess side effects, good test vehicle
+        self._setup_trust(tmp_path, "remote-remove")
+        result = self._run("git remote remove upstream", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         hook_output = output.get("hookSpecificOutput", {})
@@ -3991,45 +3979,45 @@ class TestTrustIntegration:
 
     def test_block_rule_never_trusted(self, tmp_path):
         """Block rules (exit 2) are never bypassed by trust."""
-        # "reset-hard" is a deny (block) rule, trust should not help
-        self._setup_trust(tmp_path, "reset-hard")
-        result = self._run("git reset --hard", tmp_path)
+        # "push-force" is a deny (block) rule, trust should not help
+        self._setup_trust(tmp_path, "push-force")
+        result = self._run("git push --force origin feature", tmp_path)
         assert result.returncode == 2
 
     def test_session_trust_expires(self, tmp_path):
         """Session-scoped trust only works for the matching session."""
-        self._setup_trust(tmp_path, "checkout-dash-dash", scope="session", sid="session-A")
+        self._setup_trust(tmp_path, "remote-remove", scope="session", sid="session-A")
         # Right session -> trusted
-        result = self._run("git checkout -- file.py", tmp_path, session_id="session-A")
+        result = self._run("git remote remove upstream", tmp_path, session_id="session-A")
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert "[trusted]" in output.get("hookSpecificOutput", {}).get(
             "permissionDecisionReason", ""
         )
         # Wrong session -> ask
-        result = self._run("git checkout -- file.py", tmp_path, session_id="session-B")
+        result = self._run("git remote remove upstream", tmp_path, session_id="session-B")
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
 
     def test_match_pattern_filters(self, tmp_path):
         """Trust with match pattern only matches commands containing the pattern."""
-        self._setup_trust(tmp_path, "checkout-dash-dash", match_pattern="file.py")
-        result = self._run("git checkout -- file.py", tmp_path)
+        self._setup_trust(tmp_path, "remote-remove", match_pattern="upstream")
+        result = self._run("git remote remove upstream", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert "[trusted]" in output.get("hookSpecificOutput", {}).get(
             "permissionDecisionReason", ""
         )
-        # Different file -> not trusted, falls through to ask
-        result = self._run("git checkout -- other.py", tmp_path)
+        # Different remote -> not trusted, falls through to ask
+        result = self._run("git remote remove origin", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
 
     def test_untrusted_rule_still_asks(self, tmp_path):
         """Without trust, ask rules still prompt."""
-        result = self._run("git checkout -- file.py", tmp_path)
+        result = self._run("git remote remove upstream", tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         assert output.get("hookSpecificOutput", {}).get("permissionDecision") == "ask"
@@ -4062,23 +4050,23 @@ class TestTrustCommand:
 
     def test_add_and_list(self, tmp_path):
         """--trust add creates a rule visible in --trust list."""
-        result = self._run_trust(["add", "stash-drop", "--scope", "always"], tmp_path)
+        result = self._run_trust(["add", "remote-remove", "--scope", "always"], tmp_path)
         assert result.returncode == 0
         assert "Trusted" in result.stdout
         result = self._run_trust(["list"], tmp_path)
         assert result.returncode == 0
-        assert "stash-drop" in result.stdout
+        assert "remote-remove" in result.stdout
 
     def test_add_with_match(self, tmp_path):
         """--trust add with --match stores the pattern."""
-        self._run_trust(["add", "stash-drop", "--match", "deploy"], tmp_path)
+        self._run_trust(["add", "remote-remove", "--match", "deploy"], tmp_path)
         result = self._run_trust(["list"], tmp_path)
         assert "deploy" in result.stdout
 
     def test_remove(self, tmp_path):
         """--trust remove deletes a rule."""
-        self._run_trust(["add", "stash-drop"], tmp_path)
-        result = self._run_trust(["remove", "stash-drop"], tmp_path)
+        self._run_trust(["add", "remote-remove"], tmp_path)
+        result = self._run_trust(["remove", "remote-remove"], tmp_path)
         assert result.returncode == 0
         assert "Removed" in result.stdout
         result = self._run_trust(["list"], tmp_path)
@@ -4086,9 +4074,9 @@ class TestTrustCommand:
 
     def test_remove_with_match(self, tmp_path):
         """--trust remove with --match only removes the matching entry."""
-        self._run_trust(["add", "stash-drop", "--match", "deploy"], tmp_path)
-        self._run_trust(["add", "stash-drop", "--match", "pod"], tmp_path)
-        self._run_trust(["remove", "stash-drop", "--match", "deploy"], tmp_path)
+        self._run_trust(["add", "remote-remove", "--match", "deploy"], tmp_path)
+        self._run_trust(["add", "remote-remove", "--match", "pod"], tmp_path)
+        self._run_trust(["remove", "remote-remove", "--match", "deploy"], tmp_path)
         result = self._run_trust(["list"], tmp_path)
         assert "pod" in result.stdout
         assert "deploy" not in result.stdout
@@ -4120,7 +4108,7 @@ class TestTrustCommand:
 
     def test_session_scope_without_session(self, tmp_path):
         """--trust add --session without --session-id fails with clear message."""
-        result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
+        result = self._run_trust(["add", "remote-remove", "--session"], tmp_path)
         assert result.returncode == 2
         assert "Session-scoped trust requires --session-id" in result.stderr
 
@@ -4131,26 +4119,26 @@ class TestTrustCommand:
         _run_guard_with_db(
             "Bash", {"command": "git status"}, tmp_path, session_id="test-session-xyz"
         )
-        result = self._run_trust(["add", "stash-drop", "--session"], tmp_path)
+        result = self._run_trust(["add", "remote-remove", "--session"], tmp_path)
         assert result.returncode == 2
         assert "Session-scoped trust requires --session-id" in result.stderr
 
     def test_unknown_flag_rejected_bug003(self, tmp_path):
         """BUG-003: Unknown flags are rejected (not silently ignored)."""
-        result = self._run_trust(["add", "stash-drop", "--unknown-flag", "value"], tmp_path)
+        result = self._run_trust(["add", "remote-remove", "--unknown-flag", "value"], tmp_path)
         assert result.returncode == 2
         assert "Usage error" in result.stderr or "unrecognized" in result.stderr.lower()
 
     def test_remove_rejects_scope_flag_bug003(self, tmp_path):
         """BUG-003: remove action doesn't accept --scope flag."""
-        result = self._run_trust(["remove", "stash-drop", "--scope", "session"], tmp_path)
+        result = self._run_trust(["remove", "remote-remove", "--scope", "session"], tmp_path)
         assert result.returncode == 2
         assert "unrecognized" in result.stderr.lower()
 
     def test_session_shorthand_bug003(self, tmp_path):
         """BUG-003: --session shorthand requires explicit --session-id (DB fallback removed)."""
         result = self._run_trust(
-            ["add", "stash-drop", "--session", "--session-id", "test-session-xyz"], tmp_path
+            ["add", "remote-remove", "--session", "--session-id", "test-session-xyz"], tmp_path
         )
         assert result.returncode == 0
         assert "Trusted" in result.stdout
@@ -4161,7 +4149,7 @@ class TestTrustCommand:
 
     def test_always_shorthand_bug003(self, tmp_path):
         """BUG-003: --always shorthand works as alias for --scope always."""
-        result = self._run_trust(["add", "stash-drop", "--always"], tmp_path)
+        result = self._run_trust(["add", "remote-remove", "--always"], tmp_path)
         assert result.returncode == 0
         assert "Trusted" in result.stdout
         # Verify it was added with always scope
@@ -4172,7 +4160,7 @@ class TestTrustCommand:
     def test_explicit_session_id_bug004(self, tmp_path):
         """BUG-004: --session-id <id> allows explicit session ID specification."""
         result = self._run_trust(
-            ["add", "stash-drop", "--scope", "session", "--session-id", "explicit-id-123"],
+            ["add", "remote-remove", "--scope", "session", "--session-id", "explicit-id-123"],
             tmp_path,
         )
         assert result.returncode == 0
@@ -4180,13 +4168,13 @@ class TestTrustCommand:
         # Verify the rule was added and is session-scoped
         result = self._run_trust(["list"], tmp_path)
         assert result.returncode == 0
-        assert "stash-drop" in result.stdout
+        assert "remote-remove" in result.stdout
         assert "session" in result.stdout
 
     def test_explicit_session_id_with_shorthand_bug004(self, tmp_path):
         """BUG-004: --session-id works with --session shorthand."""
         result = self._run_trust(
-            ["add", "stash-drop", "--session", "--session-id", "custom-session"],
+            ["add", "remote-remove", "--session", "--session-id", "custom-session"],
             tmp_path,
         )
         assert result.returncode == 0
@@ -4194,14 +4182,16 @@ class TestTrustCommand:
         # Verify the rule was added
         result = self._run_trust(["list"], tmp_path)
         assert result.returncode == 0
-        assert "stash-drop" in result.stdout
+        assert "remote-remove" in result.stdout
 
     def test_trust_hint_includes_session_id_bug004(self, tmp_path):
         """BUG-004: Ask prompt trust hint includes --session-id when available."""
         # Set up a guard check with a session ID and capture the ask output
-        # (uses checkout-dash-dash to avoid worktree stash guard interference)
         result = _run_guard_with_db(
-            "Bash", {"command": "git checkout -- file.py"}, tmp_path, session_id="test-session-abc"
+            "Bash",
+            {"command": "git remote remove upstream"},
+            tmp_path,
+            session_id="test-session-abc",
         )
         assert result.returncode == 0
         output = json.loads(result.stdout)
@@ -5685,7 +5675,7 @@ class TestSessionEnd:
         conn.execute(
             "INSERT INTO trusted_rules (rule_name, match_pattern, scope, session_id, created_ts) "
             "VALUES (?, ?, ?, ?, ?)",
-            ("stash-drop", None, "session", "old-session", stale_ts),
+            ("remote-remove", None, "session", "old-session", stale_ts),
         )
         # Recent session-scoped entry
         conn.execute(
@@ -5697,7 +5687,7 @@ class TestSessionEnd:
         conn.execute(
             "INSERT INTO trusted_rules (rule_name, match_pattern, scope, session_id, created_ts) "
             "VALUES (?, ?, ?, ?, ?)",
-            ("stash-drop", None, "always", None, stale_ts),
+            ("remote-remove", None, "always", None, stale_ts),
         )
         conn.commit()
         conn.close()
@@ -5709,11 +5699,11 @@ class TestSessionEnd:
         conn.close()
         entries = [(r[0], r[1], r[2]) for r in rows]
         # Stale session entry deleted
-        assert ("stash-drop", "session", "old-session") not in entries
+        assert ("remote-remove", "session", "old-session") not in entries
         # Recent session entry survives
         assert ("git-reset-hard", "session", "s-prune") in entries
         # always-scoped entry survives (different scope, TTL only targets 'session')
-        assert ("stash-drop", "always", None) in entries
+        assert ("remote-remove", "always", None) in entries
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

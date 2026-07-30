@@ -88,8 +88,8 @@ claude plugin install dev-guard@personal-claude-marketplace
 The guard includes approximately 70 built-in rules across several categories:
 - **Command rules** (~37): Native tool redirections, Python tooling, git safety, interactive commands, project conventions
 - **URL rules** (~10): GitHub, GitLab, Google, Atlassian, Slack authenticated URLs
-- **Git deny rules** (~14): Force push, branch deletion, filter-branch, unsafe operations (always enforced)
-- **Git ask rules** (~8): Stash drop, filter-repo, rebase, config modifications (can be trusted)
+- **Git deny rules** (~13): Force push, branch deletion, filter-branch, unsafe operations (always enforced)
+- **Git ask rules** (~6): Filter-repo, reflog delete/expire, remote removal, config modifications (can be trusted)
 - **oc/kubectl introspection** (~4): Critical, high, medium, low risk assessments (dynamic)
 
 All rule names and guidance messages are defined in the source file `dev-guard/hooks/tool-selection-guard.py`.
@@ -173,8 +173,8 @@ Custom command rules inherit all built-in processing:
 Pipes (`|`) are analyzed segment-by-segment to prevent dangerous patterns while allowing legitimate filtering:
 
 - **Pipe-aware matching:** Commands connected by `|` are checked individually. The first segment is checked normally by all rules; subsequent segments are checked with limited context since they're processing piped output rather than reading files.
-- **Skipped rules in pipes:** Certain rules like `cat-file`, `grep`, and `echo-noop` are skipped in pipe context because after `|` they're legitimate filtering operations. For example, `some-command | grep pattern` doesn't trigger the grep redirect rule since grep is filtering output, not doing the file operation that native tools would replace. Exception: `echo-noop` and `printf-noop` are enforced on the **terminal** (last) pipe segment, since that output goes to the user rather than feeding another command downstream.
-- **Allow rules and pipes:** Even if the first segment matches an `action: "allow"` rule and would exit 0, dangerous subsequent pipe segments are still checked and can block or ask. Example: `safe-command | git reset --hard` is blocked on the git reset rule regardless of the first segment's allow status.
+- **Skipped rules in pipes:** Certain rules like `cat-file` and `echo-noop` are skipped in pipe context because after `|` they're legitimate filtering operations. For example, `some-command | cat` doesn't trigger the cat redirect rule since it's filtering output, not doing the file operation that native tools would replace. Exception: `echo-noop` and `printf-noop` are enforced on the **terminal** (last) pipe segment, since that output goes to the user rather than feeding another command downstream.
+- **Allow rules and pipes:** Even if the first segment matches an `action: "allow"` rule and would exit 0, dangerous subsequent pipe segments are still checked and can block or ask. Example: `safe-command | git branch -D feature` is blocked on the branch-D rule regardless of the first segment's allow status.
 - **Processing order:** For each subcommand, pipes and subshells are checked **before** the full command rules. This ensures dangerous segments trigger deny/ask before any allow rule can short-circuit.
 
 ### Action Field
@@ -265,7 +265,7 @@ Users can trust ask rules to auto-approve them without manual confirmation:
 1. Run a command that triggers an ask rule
 2. Receive permission prompt with trust hint
 3. Approve the command
-4. Run `/dev-guard trust add stash-drop --scope always` to auto-approve in the future
+4. Run `/dev-guard trust add remote-remove --scope always` to auto-approve in the future
 5. Next session: same command auto-approves without prompting
 
 ## Processing Pipeline
@@ -387,8 +387,6 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 
 **Git safety rules (ask actions):**
 - `config-global-write` — Global git config modifications
-- `stash-drop` — Destructive stash operations
-- `checkout-dash-dash` — Destructive checkout with -- (deprecated, use git restore)
 - `filter-repo` — History-rewriting git filter-repo
 - `reflog-delete-expire` — Reflog delete/expire operations
 - `remote-remove` — Removing a git remote
@@ -408,7 +406,7 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 
 | Prefix | Scope | Use case |
 |--------|-------|----------|
-| `GUARD_BYPASS=1` | All Bash rules except GIT_DENY_RULES | Override tool selection and command guard rules; git safety (force push, reset --hard, etc.) is always enforced |
+| `GUARD_BYPASS=1` | All Bash rules except GIT_DENY_RULES | Override tool selection and command guard rules; git safety (force push, branch -D, etc.) is always enforced |
 | `ALLOW_FETCH=1` | URL rules (curl/wget only) | Fetch an authenticated URL after confirming alternatives |
 
 ## Author
