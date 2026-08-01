@@ -767,6 +767,62 @@ BLOCKED_URL_RULES: list[URLRule] = [
         "mcp__plugin_fetchaller-mcp_fetchaller__search_realtor instead.",
         action="ask",
     ),
+    # LinkedIn jobs (public)
+    URLRule(
+        "linkedin-jobs-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?linkedin\.com/jobs/"),
+        "LinkedIn's public job board blocks Claude Code's built-in WebFetch, but "
+        "job postings are readable logged-out. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_linkedin_jobs / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__get_linkedin_job instead.",
+    ),
+    # Login-gated (no public path -- Wayback fallback only)
+    URLRule(
+        "linkedin-login-gated",
+        re.compile(r"(?:^|//)(?:www\.)?linkedin\.com/"),
+        "Most LinkedIn content (profiles, feed, posts) requires a logged-in "
+        "session that no fetch tool can provide. Try "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
+        "given first -- some content may be public. If that returns a login "
+        "wall or empty result, try "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
+        '"https://archive.org/wayback/available?url=" + that same URL -- if '
+        "the JSON response has a non-empty archived_snapshots.closest.url, "
+        "fetch that URL next, but only if its host is archive.org or "
+        "web.archive.org. If nothing works, tell the user this needs a "
+        "logged-in session and ask them to paste the content -- do not keep "
+        "retrying beyond this sequence.",
+    ),
+    URLRule(
+        "quora-login-gated",
+        re.compile(r"(?:^|//)(?:www\.)?quora\.com/"),
+        "Quora gates most content behind a login wall. Try "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
+        "given first -- some content may be public. If that returns a login "
+        "wall or empty result, try "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
+        '"https://archive.org/wayback/available?url=" + that same URL -- if '
+        "the JSON response has a non-empty archived_snapshots.closest.url, "
+        "fetch that URL next, but only if its host is archive.org or "
+        "web.archive.org. If nothing works, tell the user this needs a "
+        "logged-in session and ask them to paste the content -- do not keep "
+        "retrying beyond this sequence.",
+    ),
+    URLRule(
+        "twitter-x-login-gated",
+        re.compile(r"(?:^|//)(?:www\.|mobile\.)?(?:twitter|x)\.com/"),
+        "Twitter/X gates most content behind a login wall. Try "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
+        "given first -- some content may be public. If that returns a login "
+        "wall or empty result, try "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
+        '"https://archive.org/wayback/available?url=" + that same URL -- if '
+        "the JSON response has a non-empty archived_snapshots.closest.url, "
+        "fetch that URL next, but only if its host is archive.org or "
+        "web.archive.org. If nothing works, tell the user this needs a "
+        "logged-in session and ask them to paste the content -- do not keep "
+        "retrying beyond this sequence.",
+    ),
 ]
 
 

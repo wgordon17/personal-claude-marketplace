@@ -746,6 +746,31 @@ class TestWebFetchGuard:
                 "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
             ),
             ("https://WWW.REDDIT.COM/r/test", 2, "fetchaller"),
+            (
+                "https://www.linkedin.com/jobs/view/1234567890",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__get_linkedin_job",
+            ),
+            (
+                "https://www.linkedin.com/in/someuser",
+                2,
+                "archive.org/wayback/available",
+            ),
+            (
+                "https://www.quora.com/Some-Question",
+                2,
+                "archive.org/wayback/available",
+            ),
+            (
+                "https://x.com/someuser/status/123",
+                2,
+                "archive.org/wayback/available",
+            ),
+            (
+                "https://twitter.com/someuser/status/123",
+                2,
+                "archive.org/wayback/available",
+            ),
             # ALLOWED
             ("https://example.com", 0, None),
             ("https://github.com/org/repo", 0, None),
@@ -767,6 +792,11 @@ class TestWebFetchGuard:
             "wikipedia-blocked",
             "npm-blocked",
             "reddit-blocked-mixed-case",
+            "linkedin-jobs-blocked",
+            "linkedin-login-gated",
+            "quora-login-gated",
+            "twitter-x-login-gated-x-domain",
+            "twitter-x-login-gated-twitter-domain",
             "example-com",
             "github-public",
             "python-docs",
@@ -777,6 +807,14 @@ class TestWebFetchGuard:
     def test_webfetch_guard(self, url, expected_exit, expected_msg):
         result = run_webfetch(url)
         assert_guard(result, expected_exit, expected_msg)
+
+    def test_linkedin_jobs_rule_still_wins_over_general_rule(self):
+        """Regression guard: linkedin-jobs-blocked must stay ordered before
+        linkedin-login-gated in BLOCKED_URL_RULES, since both patterns match
+        job-board URLs and _check_url_rules returns the first match."""
+        result = run_webfetch("https://www.linkedin.com/jobs/view/1234567890")
+        assert_guard(result, 2, "get_linkedin_job")
+        assert "archive.org/wayback/available" not in (result.stderr + result.stdout)
 
     @pytest.mark.parametrize(
         "url, expected_reason_fragment",
