@@ -113,5 +113,28 @@ Never auto-track `main`. To bump the pin:
   personal, single-user setup — revisit if this ever runs in a
   shared/multi-tenant environment.
 
-Tool capability audit: see the note added by the mcp_constants.py
-allow-listing task (Task 2) — will be filled in by Task 6.
+**Tool capability audit** (performed at the pinned commit,
+`a74501c7eac721a0604782f73ccfef5cab1975df`, and re-required on every future
+SHA bump per the manual update process above):
+
+- **`fetch`** is a generic authenticated HTTP client — `tools/fetch.py`
+  allows both GET and POST, up to 32 custom headers (including
+  `authorization`), and request bodies up to 1MB. Because of that, it is
+  deliberately *not* included in `dev-guard`'s blanket `MCP_READ_ONLY`
+  allow-list. Instead, `tool-selection-guard.py` gates each call: a plain GET
+  with no custom headers or body is auto-approved (the normal
+  blocked-domain-redirect case this plugin exists for), while a POST or any
+  call carrying custom headers/body asks for confirmation first.
+- **`search`** is a plain HTTP GET against Google or DuckDuckGo
+  (`search/google.py`, `search/ddg.py`) — no browser automation, no state.
+  It's included in `MCP_READ_ONLY`, and is in fact a safer tool than several
+  others already on that list.
+- **The remaining 10 tools** (`browse_reddit`, `search_reddit`,
+  `search_marketplace`, `search_realtor`, `search_linkedin_jobs`,
+  `get_linkedin_job`, `get_aliexpress_product`, `search_aliexpress`,
+  `get_alibaba_product`, `search_alibaba`) are read-only at the MCP schema
+  level — only query/filter/ID parameters, `additionalProperties: False`, no
+  mutation-shaped fields anywhere. Facebook Marketplace was additionally
+  spot-checked at the source level (`facebook_marketplace/graphql.py`) and
+  confirmed to use only hardcoded, non-mutating GraphQL query IDs, not
+  caller-controlled queries. All 10 are included in `MCP_READ_ONLY`.

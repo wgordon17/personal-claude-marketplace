@@ -124,6 +124,7 @@ claude plugin install code-quality@personal-claude-marketplace
 claude plugin install git-tools@personal-claude-marketplace
 claude plugin install github-mcp@personal-claude-marketplace
 claude plugin install jira@personal-claude-marketplace
+claude plugin install fetchaller-mcp@personal-claude-marketplace
 
 # Install LSP plugins (pick what you need)
 claude plugin install pyright-uvx@personal-claude-marketplace
