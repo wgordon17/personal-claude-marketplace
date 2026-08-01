@@ -904,6 +904,25 @@ class TestWebSearchGuard:
         result = run_websearch("python tips", blocked_domains=["reddit.com"])
         assert_guard(result, 0, None)
 
+    def test_allowed_domains_ask_tier_domain(self):
+        """An ask-tier domain (action='ask' in BLOCKED_URL_RULES, e.g.
+        amazon-blocked) should surface as a permissionDecision: ask, not a
+        hard block -- mirroring TestWebFetchGuard.test_webfetch_inferred_domains_ask."""
+        result = run_websearch("best laptop deals", allowed_domains=["amazon.com"])
+        assert_ask_decision(result, "fetchaller")
+
+    def test_allowed_domains_mixed_case_still_blocked(self):
+        """_check_url_rules lowercases before matching -- a mixed-case
+        domain filter must not bypass the block."""
+        result = run_websearch("claude code tips", allowed_domains=["Reddit.COM"])
+        assert_guard(result, 2, "fetchaller")
+
+    def test_allowed_domains_multiple_one_blocked(self):
+        """_handle_websearch checks each domain in the list and exits on the
+        first match -- a blocked domain later in the list must still trigger."""
+        result = run_websearch("claude code tips", allowed_domains=["example.com", "reddit.com"])
+        assert_guard(result, 2, "fetchaller")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Chained command splitting
@@ -6149,6 +6168,16 @@ class TestMCPReadOnlyFrozenset:
         assert key == "evil-server__find_symbol"
         assert key not in MCP_READ_ONLY
 
+    def test_fetchaller_fetch_tool_absent(self):
+        """fetchaller's `fetch` tool must never join the blanket allow-list --
+        it's a generic HTTP client and stays call-time gated in
+        _handle_mcp_tool() instead (see TestFetchallerFetchGate). This guards
+        against a future accidental re-addition alongside fetchaller's other
+        read-only tools."""
+        from mcp_constants import MCP_READ_ONLY, mcp_key
+
+        assert mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__fetch") not in MCP_READ_ONLY
+
 
 class TestMCPGuardIntegration:
     """Integration tests: run the guard with MCP tool names and verify output."""
@@ -6281,3 +6310,21 @@ class TestFetchallerFetchGate:
             env=env,
         )
         assert_ask_decision(result, "fetchaller-fetch-mutating-call", test_id="fetchaller-get-body")
+
+    def test_unrecognized_body_param_name_fails_open(self, session_db):
+        """Known limitation, not a bug (see the SECURITY comment above
+        _FETCHALLER_FETCH_KEY in tool-selection-guard.py): the gate only
+        recognizes the exact keys 'method'/'headers'/'body'. A caller-supplied
+        key the gate doesn't know about -- e.g. 'payload' instead of 'body' --
+        is invisible to it, so a default-method GET with an unrecognized
+        payload-shaped key is still auto-approved. This pins that behavior so
+        a future fetchaller-mcp schema change (or a gate fix that recognizes
+        more parameter names) shows up as a deliberate, visible diff here
+        rather than a silent regression."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "payload": "some data"},
+            env=env,
+        )
+        assert_allow_decision(result, test_id="fetchaller-unrecognized-body-param")

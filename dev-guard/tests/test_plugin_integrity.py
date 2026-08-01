@@ -496,6 +496,16 @@ class TestFetchallerMcpConfigSecurity:
         args = self._load_args()
         assert "--http" not in args, "fetchaller-mcp/.mcp.json must not enable --http hosted mode"
 
+    def test_wafer_py_version_pinned(self):
+        """The wafer-py[browser] pin must stay present and exact -- guards
+        against it being accidentally dropped during a future SHA bump."""
+        args = self._load_args()
+        with_index = args.index("--with")
+        assert args[with_index + 1] == "wafer-py[browser]==0.4.4", (
+            "fetchaller-mcp/.mcp.json must pin 'wafer-py[browser]==0.4.4' via --with, "
+            f"got: {args[with_index + 1]!r}"
+        )
+
 
 BUG_INVESTIGATION_SKILL = REPO_ROOT / "code-quality" / "skills" / "bug-investigation" / "SKILL.md"
 QUALITY_GATE_SKILL = REPO_ROOT / "code-quality" / "skills" / "quality-gate" / "SKILL.md"
