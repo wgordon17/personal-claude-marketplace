@@ -652,6 +652,22 @@ class TestURLFetchGuard:
                 2,
                 "mcp__github__",
             ),
+            # BLOCKED: bot-blocked public content
+            (
+                "curl https://www.reddit.com/r/ClaudeAI/top/",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "curl https://en.wikipedia.org/wiki/Web_scraping",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "wget https://www.npmjs.com/package/express",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
         ],
         ids=[
             # Blocked
@@ -687,6 +703,10 @@ class TestURLFetchGuard:
             "bypass-github-api",
             # Pipe
             "curl-pipe-jq",
+            # Bot-blocked public content
+            "reddit-blocked-curl",
+            "wikipedia-blocked-curl",
+            "npm-blocked-wget",
         ],
     )
     def test_url_fetch_guard(self, command, expected_exit, expected_msg):
@@ -710,6 +730,22 @@ class TestWebFetchGuard:
             ("https://github.com/org/repo/settings", 2, "mcp__github__"),
             ("https://gitlab.com/api/v4/projects/123", 2, "glab"),
             ("https://drive.google.com/file/d/abc/view", 2, "Google"),
+            (
+                "https://www.reddit.com/r/ClaudeAI/top/",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "https://en.wikipedia.org/wiki/Web_scraping",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "https://www.npmjs.com/package/express",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            ("https://WWW.REDDIT.COM/r/test", 2, "fetchaller"),
             # ALLOWED
             ("https://example.com", 0, None),
             ("https://github.com/org/repo", 0, None),
@@ -727,6 +763,10 @@ class TestWebFetchGuard:
             "github-settings",
             "gitlab-api",
             "google-drive",
+            "reddit-blocked",
+            "wikipedia-blocked",
+            "npm-blocked",
+            "reddit-blocked-mixed-case",
             "example-com",
             "github-public",
             "python-docs",
@@ -737,6 +777,43 @@ class TestWebFetchGuard:
     def test_webfetch_guard(self, url, expected_exit, expected_msg):
         result = run_webfetch(url)
         assert_guard(result, expected_exit, expected_msg)
+
+    @pytest.mark.parametrize(
+        "url, expected_reason_fragment",
+        [
+            ("https://www.amazon.com/dp/B0EXAMPLE", "fetchaller"),
+            ("https://www.ebay.com/itm/12345", "fetchaller"),
+            ("https://stackoverflow.com/questions/12345", "fetchaller"),
+            ("https://news.ycombinator.com/item?id=12345", "fetchaller"),
+            ("https://medium.com/@someuser/some-article", "fetchaller"),
+            ("https://www.aliexpress.com/item/12345.html", "fetchaller"),
+            ("https://www.alibaba.com/product-detail/example_12345.html", "fetchaller"),
+            ("https://www.facebook.com/marketplace/item/12345", "fetchaller"),
+            ("https://www.realtor.com/realestateandhomes-detail/123-Main-St", "fetchaller"),
+        ],
+        ids=[
+            "amazon-ask",
+            "ebay-ask",
+            "stackoverflow-ask",
+            "hackernews-ask",
+            "medium-ask",
+            "aliexpress-ask",
+            "alibaba-ask",
+            "facebook-marketplace-ask",
+            "realtor-ask",
+        ],
+    )
+    def test_webfetch_inferred_domains_ask(self, url, expected_reason_fragment):
+        result = run_webfetch(url)
+        assert_ask_decision(result, expected_reason_fragment)
+
+    def test_webfetch_inferred_domains_false_positive_regression(self):
+        result = run_webfetch("https://getmedium.com/unrelated")
+        assert_guard(result, 0, None)
+
+    def test_webfetch_inferred_domains_unrelated_regression(self):
+        result = run_webfetch("https://example.com")
+        assert_guard(result, 0, None)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

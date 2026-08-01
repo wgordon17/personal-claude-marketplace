@@ -604,10 +604,12 @@ def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
     sys.exit(0)
 
 
-# ── Category F: Authenticated URL fetch guard ──
+# ── Category F: Authenticated + bot-blocked URL fetch guard ──
 # Each rule: (name, url_pattern, guidance_message)
 # url_pattern: regex matched against the full URL
-AUTH_URL_RULES: list[URLRule] = [
+# Some entries redirect around bot-blocking on public content rather than an
+# actual authentication requirement.
+BLOCKED_URL_RULES: list[URLRule] = [
     # GitHub
     URLRule(
         "github-api",
@@ -671,6 +673,99 @@ AUTH_URL_RULES: list[URLRule] = [
         re.compile(r"(api|hooks)\.slack\.com/"),
         "This Slack URL requires authentication. "
         "Use the Slack MCP tools or access Slack via Playwright MCP.",
+    ),
+    # Bot-blocked public content (non-authenticated)
+    URLRule(
+        "reddit-blocked",
+        re.compile(r"(?:^|//)(?:www\.|old\.)?reddit\.com/"),
+        "Reddit blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch for a specific URL, or "
+        "mcp__plugin_fetchaller-mcp_fetchaller__browse_reddit / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_reddit for subreddit "
+        "browsing and search.",
+    ),
+    URLRule(
+        "wikipedia-blocked",
+        re.compile(r"(?:^|//)(?:[a-z]+\.)?wikipedia\.org/"),
+        "Wikipedia blocks Claude Code's built-in WebFetch (rejects non-browser "
+        "User-Agent). Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+    ),
+    URLRule(
+        "npm-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?npmjs\.com/"),
+        "npmjs.com blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+    ),
+    URLRule(
+        "amazon-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?amazon\.(?:com|ca|co\.uk|de|fr|it|es|com\.au|co\.jp)/"),
+        "Amazon commonly blocks Claude Code's built-in WebFetch (bot protection). "
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "ebay-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?ebay\.(?:com|ca|co\.uk|de)/"),
+        "eBay commonly blocks Claude Code's built-in WebFetch (bot protection). "
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "stackoverflow-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?(?:stackoverflow\.com|[a-z]+\.stackexchange\.com)/"),
+        "Stack Overflow/Stack Exchange sites are more reliable via the fetchaller "
+        "MCP server. Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "hackernews-blocked",
+        re.compile(r"(?:^|//)news\.ycombinator\.com/"),
+        "Hacker News is more reliable via the fetchaller MCP server. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "medium-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?medium\.com/"),
+        "Medium commonly blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch instead. Paywalled articles "
+        "may still return incomplete content -- that's a login-wall limitation, "
+        "not a tool failure; don't retry, ask the user for the content instead.",
+        action="ask",
+    ),
+    URLRule(
+        "aliexpress-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?aliexpress\.com/"),
+        "AliExpress blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch for a specific URL, or "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_aliexpress / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__get_aliexpress_product for "
+        "structured product data.",
+        action="ask",
+    ),
+    URLRule(
+        "alibaba-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?alibaba\.com/"),
+        "Alibaba.com blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch for a specific URL, or "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_alibaba / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__get_alibaba_product for "
+        "structured product data.",
+        action="ask",
+    ),
+    URLRule(
+        "facebook-marketplace-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?facebook\.com/marketplace/"),
+        "Facebook Marketplace blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_marketplace instead.",
+        action="ask",
+    ),
+    URLRule(
+        "realtor-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?realtor\.com/"),
+        "Realtor.com blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_realtor instead.",
+        action="ask",
     ),
 ]
 
@@ -770,15 +865,16 @@ def _extract_urls(text: str) -> list[str]:
 
 
 def _check_url_rules(url: str) -> tuple[str, str, str] | None:
-    """Check a URL against AUTH_URL_RULES. Returns (name, guidance, action) or None."""
-    for rule in AUTH_URL_RULES:
-        if rule.pattern.search(url):
+    """Check a URL against BLOCKED_URL_RULES. Returns (name, guidance, action) or None."""
+    lowered = url.lower()
+    for rule in BLOCKED_URL_RULES:
+        if rule.pattern.search(lowered):
             return (rule.name, rule.guidance, rule.action)
     return None
 
 
 def _check_fetch_command(cmd: str) -> bool:
-    """Check curl/wget commands for authenticated URLs. Exits on block or ask match.
+    """Check curl/wget commands for authenticated or bot-blocked URLs. Exits on block or ask match.
 
     Returns True if the command was a curl/wget (so caller knows to log),
     or False if not a fetch command.
@@ -2940,7 +3036,7 @@ def _get_askable_rule_names() -> set[str]:
         if rule.action == "ask":
             names.add(rule.name)
     # User-defined URL rules with action=ask
-    for rule in AUTH_URL_RULES:
+    for rule in BLOCKED_URL_RULES:
         if rule.action == "ask":
             names.add(rule.name)
     # oc introspection rules (dynamic)
@@ -3560,7 +3656,7 @@ def _parse_hook_input() -> dict:
 
 
 def _handle_webfetch(tool_input: dict) -> NoReturn:
-    """Check WebFetch URLs against auth rules. Always exits via sys.exit(0)."""
+    """Check WebFetch URLs against auth/bot-block rules. Always exits via sys.exit(0)."""
     url = tool_input.get("url", "")
     if url:
         result = _check_url_rules(url)
@@ -3714,7 +3810,7 @@ def main() -> None:
     config = _load_unified_config()
     for section, target, converter in [
         ("command_rules", RULES, _cmd_rule_from_entry),
-        ("url_rules", AUTH_URL_RULES, _url_rule_from_entry),
+        ("url_rules", BLOCKED_URL_RULES, _url_rule_from_entry),
     ]:
         entries = config.get(section)
         if isinstance(entries, list):
@@ -3728,7 +3824,7 @@ def main() -> None:
         )
 
     # Env var overrides (additive — stacks on top of unified config)
-    AUTH_URL_RULES.extend(_load_extra_rules("URL_GUARD_EXTRA_RULES", _url_rule_from_entry))
+    BLOCKED_URL_RULES.extend(_load_extra_rules("URL_GUARD_EXTRA_RULES", _url_rule_from_entry))
     RULES.extend(_load_extra_rules("COMMAND_GUARD_EXTRA_RULES", _cmd_rule_from_entry))
     _TRUSTED_GIT_DIRS.extend(_load_trusted_dirs())
 

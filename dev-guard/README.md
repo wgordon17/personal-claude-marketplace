@@ -286,7 +286,7 @@ stdin JSON → parse → session state → hook dispatch (PreToolUse or PostTool
 2. **Session state:** Persists session ID to database for trust scope validation
 3. **Early exits:** Non-Bash tools pass through; EnterPlanMode redirects to skill
 4. **GUARD_BYPASS check:** If prefix present, enforce only GIT_DENY_RULES
-5. **Fetch command check:** curl/wget commands checked against AUTH_URL_RULES
+5. **Fetch command check:** curl/wget commands checked against BLOCKED_URL_RULES
 6. **Split commands:** Break on command delimiters (&&, ||, ;, newline)
 7. **Per-subcommand analysis:**
    - Extract bash -c inner commands
