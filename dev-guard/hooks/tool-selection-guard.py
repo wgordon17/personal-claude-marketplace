@@ -615,6 +615,27 @@ def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
 # match that fragment, so such rules protect WebFetch/curl/wget only, not
 # WebSearch. Keep new bot-blocked entries domain-only (no required path
 # segment) if they should also apply to WebSearch.
+
+# Shared fetch/Wayback fallback sequence for login-gated domains (LinkedIn,
+# Quora, Twitter/X) -- identical for all three, only the intro sentence differs.
+_LOGIN_GATED_FETCH_SEQUENCE = (
+    "Try mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
+    "given first -- some content may be public. If that returns a login "
+    "wall or empty result, try mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
+    '"https://archive.org/wayback/available?url=" + that same URL -- if '
+    "the JSON response has a non-empty archived_snapshots.closest.url, "
+    "fetch that URL next, but only if its host is archive.org or "
+    "web.archive.org. If nothing works, tell the user this needs a "
+    "logged-in session and ask them to paste the content -- do not keep "
+    "retrying beyond this sequence."
+)
+
+
+def _login_gated_guidance(intro: str) -> str:
+    """Build a login-gated URLRule guidance string from a site-specific intro."""
+    return f"{intro} {_LOGIN_GATED_FETCH_SEQUENCE}"
+
+
 BLOCKED_URL_RULES: list[URLRule] = [
     # GitHub
     URLRule(
@@ -786,48 +807,20 @@ BLOCKED_URL_RULES: list[URLRule] = [
     URLRule(
         "linkedin-login-gated",
         re.compile(r"(?:^|//)(?:www\.)?linkedin\.com/"),
-        "Most LinkedIn content (profiles, feed, posts) requires a logged-in "
-        "session that no fetch tool can provide. Try "
-        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
-        "given first -- some content may be public. If that returns a login "
-        "wall or empty result, try "
-        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
-        '"https://archive.org/wayback/available?url=" + that same URL -- if '
-        "the JSON response has a non-empty archived_snapshots.closest.url, "
-        "fetch that URL next, but only if its host is archive.org or "
-        "web.archive.org. If nothing works, tell the user this needs a "
-        "logged-in session and ask them to paste the content -- do not keep "
-        "retrying beyond this sequence.",
+        _login_gated_guidance(
+            "Most LinkedIn content (profiles, feed, posts) requires a logged-in "
+            "session that no fetch tool can provide."
+        ),
     ),
     URLRule(
         "quora-login-gated",
         re.compile(r"(?:^|//)(?:www\.)?quora\.com/"),
-        "Quora gates most content behind a login wall. Try "
-        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
-        "given first -- some content may be public. If that returns a login "
-        "wall or empty result, try "
-        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
-        '"https://archive.org/wayback/available?url=" + that same URL -- if '
-        "the JSON response has a non-empty archived_snapshots.closest.url, "
-        "fetch that URL next, but only if its host is archive.org or "
-        "web.archive.org. If nothing works, tell the user this needs a "
-        "logged-in session and ask them to paste the content -- do not keep "
-        "retrying beyond this sequence.",
+        _login_gated_guidance("Quora gates most content behind a login wall."),
     ),
     URLRule(
         "twitter-x-login-gated",
         re.compile(r"(?:^|//)(?:www\.|mobile\.)?(?:twitter|x)\.com/"),
-        "Twitter/X gates most content behind a login wall. Try "
-        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
-        "given first -- some content may be public. If that returns a login "
-        "wall or empty result, try "
-        "mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
-        '"https://archive.org/wayback/available?url=" + that same URL -- if '
-        "the JSON response has a non-empty archived_snapshots.closest.url, "
-        "fetch that URL next, but only if its host is archive.org or "
-        "web.archive.org. If nothing works, tell the user this needs a "
-        "logged-in session and ask them to paste the content -- do not keep "
-        "retrying beyond this sequence.",
+        _login_gated_guidance("Twitter/X gates most content behind a login wall."),
     ),
 ]
 
@@ -3746,6 +3739,21 @@ def _handle_webfetch(tool_input: dict) -> NoReturn:
 # most rules) doesn't fit. Keyed by BLOCKED_URL_RULES rule name; domains with
 # no entry here (all fetch-only, non-login-gated rules) fall back to
 # _DEFAULT_WEBSEARCH_HINT.
+
+# Shared suffix for login-gated domains' WebSearch hints -- identical for
+# LinkedIn/Quora/Twitter-X, only the intro clause differs.
+_LOGIN_GATED_SEARCH_HINT_SUFFIX = (
+    "restricting a search to this domain won't surface anything a fetch "
+    "tool could retrieve either. Drop the domain restriction, or ask the "
+    "user for the specific content."
+)
+
+
+def _login_gated_search_hint(intro: str) -> str:
+    """Build a login-gated WebSearch hint from a site-specific intro clause."""
+    return f"{intro} -- {_LOGIN_GATED_SEARCH_HINT_SUFFIX}"
+
+
 _WEBSEARCH_TOOL_HINTS: dict[str, str] = {
     "reddit-blocked": (
         "Use mcp__plugin_fetchaller-mcp_fetchaller__search_reddit to search "
@@ -3770,23 +3778,12 @@ _WEBSEARCH_TOOL_HINTS: dict[str, str] = {
         "Use mcp__plugin_fetchaller-mcp_fetchaller__search_linkedin_jobs to "
         "search LinkedIn's job board directly."
     ),
-    "linkedin-login-gated": (
-        "LinkedIn's general content requires a logged-in session -- "
-        "restricting a search to this domain won't surface anything a fetch "
-        "tool could retrieve either. Drop the domain restriction, or ask the "
-        "user for the specific content."
+    "linkedin-login-gated": _login_gated_search_hint(
+        "LinkedIn's general content requires a logged-in session"
     ),
-    "quora-login-gated": (
-        "Quora gates most content behind a login wall -- restricting a "
-        "search to this domain won't surface anything a fetch tool could "
-        "retrieve either. Drop the domain restriction, or ask the user for "
-        "the specific content."
-    ),
-    "twitter-x-login-gated": (
-        "Twitter/X gates most content behind a login wall -- restricting a "
-        "search to this domain won't surface anything a fetch tool could "
-        "retrieve either. Drop the domain restriction, or ask the user for "
-        "the specific content."
+    "quora-login-gated": _login_gated_search_hint("Quora gates most content behind a login wall"),
+    "twitter-x-login-gated": _login_gated_search_hint(
+        "Twitter/X gates most content behind a login wall"
     ),
 }
 _DEFAULT_WEBSEARCH_HINT = (
