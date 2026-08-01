@@ -10,7 +10,7 @@ Development environment policy enforcement: tool selection guard, commit validat
 - **Native tool redirections** — Redirects `grep`/`find`/`cat`/`sed` to Grep/Glob/Read/Edit tools
 - **Python tooling** — Enforces `uv run`/`uvx` over bare `python`/`pip`
 - **Git safety** — Blocks force pushes, branch deletions, commits to main, and other destructive operations
-- **URL fetch guard** — Blocks WebFetch/curl/wget for authenticated services (extensible via `URL_GUARD_EXTRA_RULES`)
+- **URL fetch guard** — Blocks or redirects WebFetch, WebSearch domain filters, and curl/wget for authenticated services and bot-blocked public sites (extensible via `URL_GUARD_EXTRA_RULES`)
 - **Command guard** — User-defined command blocking rules (via `COMMAND_GUARD_EXTRA_RULES`)
 - **Interactive command blocking** — Prevents `git rebase -i`, `git add -p`, and other interactive commands
 - **Plan mode redirect** — Redirects `EnterPlanMode` to incremental-planning skill

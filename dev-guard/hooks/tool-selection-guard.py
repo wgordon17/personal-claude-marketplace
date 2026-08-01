@@ -3797,15 +3797,15 @@ _DEFAULT_WEBSEARCH_HINT = (
 def _handle_websearch(tool_input: dict) -> NoReturn:
     """Redirect WebSearch to a fetchaller MCP tool, but only when the domain
     filters target a known-blocked domain (same BLOCKED_URL_RULES patterns
-    Tasks 3-4 add for WebFetch) -- general searches with no blocked-domain
-    filter pass through unaffected, so existing WebSearch consumers
-    (architect/security/performance agents, deep-research/business-panel
-    skills) aren't broken by this. Guidance is search-appropriate, not
-    BLOCKED_URL_RULES's fetch-oriented text -- see _WEBSEARCH_TOOL_HINTS.
-    Only allowed_domains is checked -- blocked_domains means the caller is
-    EXCLUDING that domain from results, which is already the safe behavior
-    this guard exists to encourage, not a call to redirect."""
-    domains = tool_input.get("allowed_domains", [])
+    WebFetch uses) -- general searches with no blocked-domain filter pass
+    through unaffected, so existing WebSearch consumers (architect/security/
+    performance agents, deep-research/business-panel skills) aren't broken by
+    this. Guidance is search-appropriate, not BLOCKED_URL_RULES's
+    fetch-oriented text -- see _WEBSEARCH_TOOL_HINTS. Only allowed_domains is
+    checked -- blocked_domains means the caller is EXCLUDING that domain from
+    results, which is already the safe behavior this guard exists to
+    encourage, not a call to redirect."""
+    domains = tool_input.get("allowed_domains") or []
     # Reconstruct each bare domain as a URL-shaped fragment so it matches
     # BLOCKED_URL_RULES patterns like "(?:^|//)(?:www\.)?reddit\.com/", which
     # require a leading "^"/"//" and trailing "/" -- a plain "reddit.com"
@@ -3939,6 +3939,11 @@ def _increment_tool_counter(session_id: str) -> None:
 # fetchaller's `fetch` tool is a generic HTTP client (caller-controlled
 # method/headers/body) — unlike every other MCP_READ_ONLY entry, it is not
 # safe to allow-list by name alone. It gets a call-time gate below instead.
+# SECURITY: this gate depends on fetchaller's fetch tool using exactly the
+# parameter names "method"/"headers"/"body" -- if a future fetchaller-mcp
+# version renames these, this gate silently fails open (auto-approves)
+# rather than failing closed. Re-verify these parameter names against
+# fetchaller's actual tool schema on every SHA bump.
 _FETCHALLER_FETCH_KEY = _mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__fetch")
 
 

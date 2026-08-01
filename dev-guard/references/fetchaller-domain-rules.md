@@ -49,11 +49,15 @@ evidence tier and by how the domain is handled.
 this wasn't independently confirmed against a live LinkedIn job posting the
 way Reddit and `web.archive.org` were during planning), yet it's placed in
 *redirect / block* rather than *redirect / ask* alongside the other
-inferred-tier domains. A Phase 4 reviewer flagged this as a minor
-plan-internal inconsistency during the swarm that built this feature — worth
-noting for future maintainers, not something to fix retroactively.
+inferred-tier domains. This is a deliberate inconsistency worth being aware
+of — not something to fix retroactively.
 
 New domains can be added later either by extending `BLOCKED_URL_RULES`
 directly (following this same evidence-tier/category review), or, for a
 personal addition that doesn't require a plugin release, via
 `~/.claude/dev-guard.json`'s `url_rules` extension point.
+
+`tool-selection-guard.py`'s `_WEBSEARCH_TOOL_HINTS` dict must be kept in
+sync with `BLOCKED_URL_RULES` rule names: a domain added there without a
+matching `_WEBSEARCH_TOOL_HINTS` entry silently falls back to the generic
+`_DEFAULT_WEBSEARCH_HINT` for WebSearch guidance.
