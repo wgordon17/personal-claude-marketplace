@@ -599,6 +599,20 @@ def run_webfetch(url: str) -> subprocess.CompletedProcess:
     return run_guard("WebFetch", {"url": url, "prompt": "test"})
 
 
+def run_websearch(
+    query: str,
+    allowed_domains: list | None = None,
+    blocked_domains: list | None = None,
+) -> subprocess.CompletedProcess:
+    """Shorthand: invoke guard as WebSearch tool."""
+    tool_input = {"query": query}
+    if allowed_domains:
+        tool_input["allowed_domains"] = allowed_domains
+    if blocked_domains:
+        tool_input["blocked_domains"] = blocked_domains
+    return run_guard("WebSearch", tool_input)
+
+
 class TestURLFetchGuard:
     """Bash curl/wget commands against authenticated service URLs."""
 
@@ -851,6 +865,43 @@ class TestWebFetchGuard:
 
     def test_webfetch_inferred_domains_unrelated_regression(self):
         result = run_webfetch("https://example.com")
+        assert_guard(result, 0, None)
+
+
+class TestWebSearchGuard:
+    """WebSearch tool calls: allowed_domains filter matched against BLOCKED_URL_RULES."""
+
+    def test_general_search_untouched(self):
+        result = run_websearch("python asyncio tutorial")
+        assert_guard(result, 0, None)
+
+    def test_unrelated_general_search_regression(self):
+        result = run_websearch("best practices for REST APIs")
+        assert_guard(result, 0, None)
+
+    def test_allowed_domains_reddit_blocked(self):
+        result = run_websearch("claude code tips", allowed_domains=["reddit.com"])
+        assert_guard(result, 2, "fetchaller")
+
+    def test_free_text_domain_mention_not_caught(self):
+        """Known limitation, not a bug: a domain named inside the free-text
+        query string (rather than passed structurally via allowed_domains)
+        isn't reconstructed into a URL and checked -- only allowed_domains is
+        inspected. This test documents that so a future change to this
+        behavior is a deliberate, visible diff rather than a silent
+        regression."""
+        result = run_websearch("site:reddit.com claude code")
+        assert_guard(result, 0, None)
+
+    def test_allowed_domains_unrelated_regression(self):
+        result = run_websearch("some query", allowed_domains=["example.com"])
+        assert_guard(result, 0, None)
+
+    def test_blocked_domains_reddit_not_triggered(self):
+        """blocked_domains means the caller is already excluding Reddit from
+        results -- that's the safe behavior this guard encourages, not a
+        call to redirect."""
+        result = run_websearch("python tips", blocked_domains=["reddit.com"])
         assert_guard(result, 0, None)
 
 

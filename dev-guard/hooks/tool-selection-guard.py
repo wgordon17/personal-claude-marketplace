@@ -609,6 +609,12 @@ def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
 # url_pattern: regex matched against the full URL
 # Some entries redirect around bot-blocking on public content rather than an
 # actual authentication requirement.
+# NOTE: entries here are also matched by _handle_websearch (WebSearch) against
+# a synthetic domain-only fragment "//{domain}/" -- path-qualified patterns
+# (e.g. github-auth-content's requirement of /settings|pulls|.../) can never
+# match that fragment, so such rules protect WebFetch/curl/wget only, not
+# WebSearch. Keep new bot-blocked entries domain-only (no required path
+# segment) if they should also apply to WebSearch.
 BLOCKED_URL_RULES: list[URLRule] = [
     # GitHub
     URLRule(
@@ -921,7 +927,10 @@ def _extract_urls(text: str) -> list[str]:
 
 
 def _check_url_rules(url: str) -> tuple[str, str, str] | None:
-    """Check a URL against BLOCKED_URL_RULES. Returns (name, guidance, action) or None."""
+    """Check a URL (or URL-shaped fragment) against BLOCKED_URL_RULES.
+
+    Returns (name, guidance, action) or None.
+    """
     lowered = url.lower()
     for rule in BLOCKED_URL_RULES:
         if rule.pattern.search(lowered):
@@ -3731,6 +3740,95 @@ def _handle_webfetch(tool_input: dict) -> NoReturn:
     sys.exit(0)
 
 
+# WebSearch-appropriate replacements for BLOCKED_URL_RULES's WebFetch-oriented
+# guidance text -- a domain-restricted WebSearch call has no single URL to
+# fetch, so "use fetch for a specific URL" (BLOCKED_URL_RULES's lead-in for
+# most rules) doesn't fit. Keyed by BLOCKED_URL_RULES rule name; domains with
+# no entry here (all fetch-only, non-login-gated rules) fall back to
+# _DEFAULT_WEBSEARCH_HINT.
+_WEBSEARCH_TOOL_HINTS: dict[str, str] = {
+    "reddit-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_reddit to search "
+        "Reddit directly, or mcp__plugin_fetchaller-mcp_fetchaller__browse_reddit "
+        "to browse a subreddit."
+    ),
+    "aliexpress-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_aliexpress to "
+        "search AliExpress directly."
+    ),
+    "alibaba-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_alibaba to search Alibaba.com directly."
+    ),
+    "facebook-marketplace-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_marketplace to "
+        "search Facebook Marketplace directly."
+    ),
+    "realtor-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_realtor to search Realtor.com directly."
+    ),
+    "linkedin-jobs-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_linkedin_jobs to "
+        "search LinkedIn's job board directly."
+    ),
+    "linkedin-login-gated": (
+        "LinkedIn's general content requires a logged-in session -- "
+        "restricting a search to this domain won't surface anything a fetch "
+        "tool could retrieve either. Drop the domain restriction, or ask the "
+        "user for the specific content."
+    ),
+    "quora-login-gated": (
+        "Quora gates most content behind a login wall -- restricting a "
+        "search to this domain won't surface anything a fetch tool could "
+        "retrieve either. Drop the domain restriction, or ask the user for "
+        "the specific content."
+    ),
+    "twitter-x-login-gated": (
+        "Twitter/X gates most content behind a login wall -- restricting a "
+        "search to this domain won't surface anything a fetch tool could "
+        "retrieve either. Drop the domain restriction, or ask the user for "
+        "the specific content."
+    ),
+}
+_DEFAULT_WEBSEARCH_HINT = (
+    "Use mcp__plugin_fetchaller-mcp_fetchaller__fetch to retrieve specific pages from this domain."
+)
+
+
+def _handle_websearch(tool_input: dict) -> NoReturn:
+    """Redirect WebSearch to a fetchaller MCP tool, but only when the domain
+    filters target a known-blocked domain (same BLOCKED_URL_RULES patterns
+    Tasks 3-4 add for WebFetch) -- general searches with no blocked-domain
+    filter pass through unaffected, so existing WebSearch consumers
+    (architect/security/performance agents, deep-research/business-panel
+    skills) aren't broken by this. Guidance is search-appropriate, not
+    BLOCKED_URL_RULES's fetch-oriented text -- see _WEBSEARCH_TOOL_HINTS.
+    Only allowed_domains is checked -- blocked_domains means the caller is
+    EXCLUDING that domain from results, which is already the safe behavior
+    this guard exists to encourage, not a call to redirect."""
+    domains = tool_input.get("allowed_domains", [])
+    # Reconstruct each bare domain as a URL-shaped fragment so it matches
+    # BLOCKED_URL_RULES patterns like "(?:^|//)(?:www\.)?reddit\.com/", which
+    # require a leading "^"/"//" and trailing "/" -- a plain "reddit.com"
+    # string alone (no "//" prefix) never matches those patterns.
+    for domain in domains:
+        result = _check_url_rules(f"//{domain.rstrip('/')}/")
+        if result:
+            rule_name, _guidance, action = result
+            hint = _WEBSEARCH_TOOL_HINTS.get(rule_name, _DEFAULT_WEBSEARCH_HINT)
+            _exit_with_decision(
+                "WebSearch's own results are fine, but this domain filter "
+                f"targets a site Claude Code's built-in fetch can't reliably "
+                f"reach. {hint}",
+                action,
+                rule_name=rule_name,
+                matched_segment=domain,
+                category="url",
+                detail={"tool": "WebSearch", "phase": "pre"},
+            )
+    _log_url_event(tool_input.get("query", ""), None, "allowed", "WebSearch")
+    sys.exit(0)
+
+
 def _handle_bash_command(command: str) -> NoReturn:
     """Process a Bash command through all guard checks. Always exits."""
     if not command:
@@ -3952,6 +4050,9 @@ def main() -> None:
 
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
+
+    elif tool_name == "WebSearch":
+        _handle_websearch(tool_input)
 
     if tool_name.startswith("mcp__"):
         _handle_mcp_tool(tool_name, tool_input)
