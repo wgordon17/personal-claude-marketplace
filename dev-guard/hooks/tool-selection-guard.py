@@ -3782,16 +3782,48 @@ def _increment_tool_counter(session_id: str) -> None:
         pass
 
 
-def _handle_mcp_tool(tool_name: str) -> NoReturn:
+# fetchaller's `fetch` tool is a generic HTTP client (caller-controlled
+# method/headers/body) — unlike every other MCP_READ_ONLY entry, it is not
+# safe to allow-list by name alone. It gets a call-time gate below instead.
+_FETCHALLER_FETCH_KEY = _mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__fetch")
+
+
+def _handle_mcp_tool(tool_name: str, tool_input: dict) -> NoReturn:
     """Handle MCP tool auto-approval or passthrough.
 
     Uses server-qualified keys to prevent cross-server name spoofing.
     Known read-only tools (and sequential-thinking tools via _MCP_THINK_PREFIX)
     are auto-approved; unknown MCP tools pass through to settings.json.
 
+    fetchaller's `fetch` tool is special-cased: it's a generic HTTP client, so
+    it's gated on the actual call — a plain GET with no custom headers/body is
+    auto-approved, anything else (POST, and/or caller-supplied headers/body,
+    which can carry a request to a write-capable public endpoint) asks for
+    confirmation.
+
     Always exits via sys.exit(0) — never returns to the caller.
     """
     key = _mcp_key(tool_name)
+
+    if key == _FETCHALLER_FETCH_KEY:
+        method = str(tool_input.get("method") or "GET").strip().upper()
+        has_headers = bool(tool_input.get("headers"))
+        has_body = bool(tool_input.get("body"))
+        if method == "GET" and not has_headers and not has_body:
+            _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
+            print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
+            sys.exit(0)
+        _exit_with_decision(
+            "fetchaller's fetch tool can send data to arbitrary public URLs via a POST "
+            "method and/or caller-supplied headers/body — this is not a plain read/fetch. "
+            "Confirm this call is intended.",
+            "ask",
+            rule_name="fetchaller-fetch-mutating-call",
+            matched_segment=tool_name,
+            category="mcp",
+            detail={"method": method, "has_headers": has_headers, "has_body": has_body},
+        )
+
     if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
         _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
         print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
@@ -3866,7 +3898,7 @@ def main() -> None:
         _handle_webfetch(tool_input)
 
     if tool_name.startswith("mcp__"):
-        _handle_mcp_tool(tool_name)
+        _handle_mcp_tool(tool_name, tool_input)
 
     if tool_name != "Bash":
         sys.exit(0)

@@ -6132,3 +6132,63 @@ class TestMCPGuardIntegration:
         assert result.returncode == 0
         # Should NOT get permissionDecision: allow (server not recognized)
         assert '"allow"' not in result.stdout
+
+
+class TestFetchallerFetchGate:
+    """fetchaller's `fetch` tool is call-time gated, not name-allow-listed:
+    a plain GET is auto-approved, anything with a POST method or
+    caller-supplied headers/body asks for confirmation.
+    """
+
+    FETCH_TOOL = "mcp__plugin_fetchaller-mcp_fetchaller__fetch"
+
+    def test_no_method_key_is_allowed(self, session_db):
+        """Omitting `method` entirely defaults to GET — auto-approved."""
+        env, _ = session_db
+        result = run_guard(self.FETCH_TOOL, {"url": "https://example.com"}, env=env)
+        assert_allow_decision(result, test_id="fetchaller-no-method")
+
+    def test_explicit_get_is_allowed(self, session_db):
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "method": "get"},
+            env=env,
+        )
+        assert_allow_decision(result, test_id="fetchaller-explicit-get")
+
+    def test_post_asks(self, session_db):
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "method": "POST", "body": '{"a": 1}'},
+            env=env,
+        )
+        assert_ask_decision(result, "fetchaller-fetch-mutating-call", test_id="fetchaller-post")
+
+    def test_get_with_headers_asks(self, session_db):
+        """A GET carrying caller-supplied headers still asks — the gate keys off
+        headers/body presence regardless of method."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {
+                "url": "https://example.com",
+                "method": "GET",
+                "headers": {"Authorization": "Bearer x"},
+            },
+            env=env,
+        )
+        assert_ask_decision(
+            result, "fetchaller-fetch-mutating-call", test_id="fetchaller-get-headers"
+        )
+
+    def test_get_with_body_asks(self, session_db):
+        """A GET carrying a body still asks — same reasoning as headers above."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "method": "GET", "body": "payload"},
+            env=env,
+        )
+        assert_ask_decision(result, "fetchaller-fetch-mutating-call", test_id="fetchaller-get-body")

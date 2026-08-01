@@ -86,6 +86,38 @@ MCP_READ_ONLY: frozenset[str] = frozenset(
         "metadata-service",
         ["get_cluster_info", "get_cluster_cves", "list_clusters"],
     )
+    # fetchaller-mcp: unlike the stateless-by-design entries above (Serena,
+    # context7, etc.), these tools drive real browser automation (Playwright/
+    # wafer-py) against live third-party sites. Read-only status here is a
+    # manual audit finding, not an inherent property — verified at pinned SHA
+    # a74501c7eac721a0604782f73ccfef5cab1975df (github.com/Averyy/fetchaller-mcp):
+    # every tool below has a fixed, query/filter-only MCP schema with no
+    # mutation-shaped parameters (no vote/comment/apply/message/save/submit
+    # fields), and the one deep-traced internal client (Facebook Marketplace's
+    # GraphQL layer) uses hardcoded read-only doc_ids, not caller-controlled
+    # queries. This audit must be redone on every SHA bump.
+    #
+    # `fetch` is deliberately NOT in this list: it's a generic HTTP client
+    # (caller-controlled method/headers/body) that can issue authenticated
+    # POST requests to arbitrary public URLs. It gets its own call-time gate
+    # in tool-selection-guard.py's _handle_mcp_tool() instead, which inspects
+    # the actual method/headers/body before deciding allow vs. ask.
+    + _qualify(
+        "plugin_fetchaller-mcp_fetchaller",
+        [
+            "browse_reddit",
+            "search_reddit",
+            "search",
+            "search_marketplace",
+            "search_realtor",
+            "search_linkedin_jobs",
+            "get_linkedin_job",
+            "get_aliexpress_product",
+            "search_aliexpress",
+            "get_alibaba_product",
+            "search_alibaba",
+        ],
+    )
     + _qualify(
         "plugin_github-mcp_github",
         [
