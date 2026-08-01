@@ -20,6 +20,7 @@ version drift between plugin manifests.
 """
 
 import json
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -469,6 +470,31 @@ class TestPluginVersionParity:
         assert not missing, "Phantom marketplace entries (no plugin.json on disk):\n" + "\n".join(
             f"  - {m}" for m in missing
         )
+
+
+FETCHALLER_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / ".mcp.json"
+
+
+class TestFetchallerMcpConfigSecurity:
+    """Structural guardrails on fetchaller-mcp/.mcp.json's security-critical fields."""
+
+    def _load_args(self) -> list[str]:
+        data = json.loads(FETCHALLER_MCP_JSON.read_text())
+        return data["mcpServers"]["fetchaller"]["args"]
+
+    def test_pinned_to_full_commit_sha(self):
+        """The git ref must be a full 40-char commit SHA, never a branch/tag/main."""
+        args = self._load_args()
+        from_arg = args[args.index("--from") + 1]
+        ref = from_arg.rsplit("@", 1)[-1]
+        assert re.match(r"^[0-9a-f]{40}$", ref), (
+            f"fetchaller-mcp/.mcp.json must pin to a full 40-char commit SHA, got: {ref!r}"
+        )
+
+    def test_no_http_mode_flag(self):
+        """--http must never appear in args (stdio-only, per Security Flags)."""
+        args = self._load_args()
+        assert "--http" not in args, "fetchaller-mcp/.mcp.json must not enable --http hosted mode"
 
 
 BUG_INVESTIGATION_SKILL = REPO_ROOT / "code-quality" / "skills" / "bug-investigation" / "SKILL.md"
