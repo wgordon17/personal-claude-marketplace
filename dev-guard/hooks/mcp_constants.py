@@ -95,7 +95,8 @@ MCP_READ_ONLY: frozenset[str] = frozenset(
     # mutation-shaped parameters (no vote/comment/apply/message/save/submit
     # fields), and the one deep-traced internal client (Facebook Marketplace's
     # GraphQL layer) uses hardcoded read-only doc_ids, not caller-controlled
-    # queries. This audit must be redone on every SHA bump.
+    # queries. See fetchaller-mcp/README.md's "Tool capability audit" section
+    # for the full re-verification process required on every SHA bump.
     #
     # `fetch` is deliberately NOT in this list: it's a generic HTTP client
     # (caller-controlled method/headers/body) that can issue authenticated
