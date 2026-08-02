@@ -3755,6 +3755,22 @@ def _login_gated_search_hint(intro: str) -> str:
 
 
 _WEBSEARCH_TOOL_HINTS: dict[str, str] = {
+    "github-api": (
+        "This URL targets the GitHub API which requires authentication. "
+        "Use GitHub MCP tools (mcp__github__*) instead."
+    ),
+    "google-sheets": (
+        "Google Sheets requires authentication. "
+        "Use a Google MCP tool or `gcloud` CLI to access spreadsheet data."
+    ),
+    "jira-server": (
+        "This Jira server URL requires authentication. "
+        "Use the `jira` CLI or Atlassian MCP tools instead."
+    ),
+    "slack-api": (
+        "This Slack URL requires authentication. "
+        "Use the Slack MCP tools or access Slack via Playwright MCP."
+    ),
     "reddit-blocked": (
         "Use mcp__plugin_fetchaller-mcp_fetchaller__search_reddit to search "
         "Reddit directly, or mcp__plugin_fetchaller-mcp_fetchaller__browse_reddit "

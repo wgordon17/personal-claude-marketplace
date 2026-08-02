@@ -923,6 +923,16 @@ class TestWebSearchGuard:
         result = run_websearch("claude code tips", allowed_domains=["example.com", "reddit.com"])
         assert_guard(result, 2, "fetchaller")
 
+    def test_allowed_domains_auth_only_domain_not_fetchaller(self):
+        """Pre-existing auth-only rules (github-api, google-sheets, jira-server,
+        slack-api) are domain-only patterns that also match _handle_websearch's
+        synthetic domain fragment, but fetchaller can't bypass their
+        authentication -- guidance must point to the rule's own tool, not the
+        generic fetchaller default."""
+        result = run_websearch("test query", allowed_domains=["api.github.com"])
+        assert_guard(result, 2, "mcp__github__")
+        assert "fetchaller" not in (result.stderr + result.stdout)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Chained command splitting
