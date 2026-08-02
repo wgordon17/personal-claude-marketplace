@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "fetchaller": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/Averyy/fetchaller-mcp@a74501c7eac721a0604782f73ccfef5cab1975df",
+        "--with",
+        "wafer-py[browser]==0.4.4",
+        "fetchaller-mcp"
+      ],
+      "env": {
+        "BROWSER_EXECUTABLE_PATH": "${BROWSER_EXECUTABLE_PATH}"
+      }
+    }
+  }
+}

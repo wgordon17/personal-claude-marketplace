@@ -1,0 +1,6 @@
+{
+  "name": "fetchaller-mcp",
+  "description": "Pinned MCP fetch/search server for domains that block Claude's built-in WebFetch/WebSearch (Reddit and 15 other sites), verified live against Reddit and web.archive.org",
+  "version": "1.0.0",
+  "author": { "name": "wgordon17" }
+}

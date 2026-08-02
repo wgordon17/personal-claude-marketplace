@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
+.PHONY: all lint format test test-llm test-live typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
@@ -10,11 +10,14 @@ format:  ## Auto-format with ruff
 	uv run ruff format .
 	uv run ruff check --fix .
 
-test:  ## Run pytest (excludes LLM integration tests)
-	uv run pytest -m "not llm and not eval"
+test:  ## Run pytest (excludes LLM integration and live/network tests)
+	uv run pytest -m "not llm and not eval and not slow"
 
 test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 	uv run --group dev --group llm pytest -m llm -v
+
+test-live:  ## Run live/network-dependent smoke tests (requires network access)
+	RUN_LIVE_TESTS=1 uv run pytest -m slow -v
 
 typecheck:  ## Pyright type checking (dev-guard/hooks)
 	uv run pyright

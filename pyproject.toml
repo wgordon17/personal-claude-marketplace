@@ -13,6 +13,7 @@ addopts = "-v --tb=short -n4"
 markers = [
     "llm: marks tests that make real LLM API calls (deselect with '-m \"not llm\"')",
     "eval: marks skill evaluation tests (deselect with '-m \"not eval\"')",
+    "slow: marks slow/network-dependent tests not run by default (deselect with '-m \"not slow\"')",
 ]
 
 [tool.ruff]

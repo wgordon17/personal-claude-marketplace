@@ -604,10 +604,39 @@ def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
     sys.exit(0)
 
 
-# ── Category F: Authenticated URL fetch guard ──
+# ── Category F: Authenticated + bot-blocked URL fetch guard ──
 # Each rule: (name, url_pattern, guidance_message)
 # url_pattern: regex matched against the full URL
-AUTH_URL_RULES: list[URLRule] = [
+# Some entries redirect around bot-blocking on public content rather than an
+# actual authentication requirement.
+# NOTE: entries here are also matched by _handle_websearch (WebSearch) against
+# a synthetic domain-only fragment "//{domain}/" -- path-qualified patterns
+# (e.g. github-auth-content's requirement of /settings|pulls|.../) can never
+# match that fragment, so such rules protect WebFetch/curl/wget only, not
+# WebSearch. Keep new bot-blocked entries domain-only (no required path
+# segment) if they should also apply to WebSearch.
+
+# Shared fetch/Wayback fallback sequence for login-gated domains (LinkedIn,
+# Quora, Twitter/X) -- identical for all three, only the intro sentence differs.
+_LOGIN_GATED_FETCH_SEQUENCE = (
+    "Try mcp__plugin_fetchaller-mcp_fetchaller__fetch on the exact URL you were "
+    "given first -- some content may be public. If that returns a login "
+    "wall or empty result, try mcp__plugin_fetchaller-mcp_fetchaller__fetch on "
+    '"https://archive.org/wayback/available?url=" + that same URL -- if '
+    "the JSON response has a non-empty archived_snapshots.closest.url, "
+    "fetch that URL next, but only if its host is archive.org or "
+    "web.archive.org. If nothing works, tell the user this needs a "
+    "logged-in session and ask them to paste the content -- do not keep "
+    "retrying beyond this sequence."
+)
+
+
+def _login_gated_guidance(intro: str) -> str:
+    """Build a login-gated URLRule guidance string from a site-specific intro."""
+    return f"{intro} {_LOGIN_GATED_FETCH_SEQUENCE}"
+
+
+BLOCKED_URL_RULES: list[URLRule] = [
     # GitHub
     URLRule(
         "github-api",
@@ -671,6 +700,127 @@ AUTH_URL_RULES: list[URLRule] = [
         re.compile(r"(api|hooks)\.slack\.com/"),
         "This Slack URL requires authentication. "
         "Use the Slack MCP tools or access Slack via Playwright MCP.",
+    ),
+    # Bot-blocked public content (non-authenticated)
+    URLRule(
+        "reddit-blocked",
+        re.compile(r"(?:^|//)(?:www\.|old\.)?reddit\.com/"),
+        "Reddit blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch for a specific URL, or "
+        "mcp__plugin_fetchaller-mcp_fetchaller__browse_reddit / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_reddit for subreddit "
+        "browsing and search.",
+    ),
+    URLRule(
+        "wikipedia-blocked",
+        re.compile(r"(?:^|//)(?:[a-z]+\.)?wikipedia\.org/"),
+        "Wikipedia blocks Claude Code's built-in WebFetch (rejects non-browser "
+        "User-Agent). Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+    ),
+    URLRule(
+        "npm-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?npmjs\.com/"),
+        "npmjs.com blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+    ),
+    URLRule(
+        "amazon-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?amazon\.(?:com|ca|co\.uk|de|fr|it|es|com\.au|co\.jp)/"),
+        "Amazon commonly blocks Claude Code's built-in WebFetch (bot protection). "
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "ebay-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?ebay\.(?:com|ca|co\.uk|de)/"),
+        "eBay commonly blocks Claude Code's built-in WebFetch (bot protection). "
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "stackoverflow-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?(?:stackoverflow\.com|[a-z]+\.stackexchange\.com)/"),
+        "Stack Overflow/Stack Exchange sites are more reliable via the fetchaller "
+        "MCP server. Use mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "hackernews-blocked",
+        re.compile(r"(?:^|//)news\.ycombinator\.com/"),
+        "Hacker News is more reliable via the fetchaller MCP server. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch instead.",
+        action="ask",
+    ),
+    URLRule(
+        "medium-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?medium\.com/"),
+        "Medium commonly blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch instead. Paywalled articles "
+        "may still return incomplete content -- that's a login-wall limitation, "
+        "not a tool failure; don't retry, ask the user for the content instead.",
+        action="ask",
+    ),
+    URLRule(
+        "aliexpress-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?aliexpress\.com/"),
+        "AliExpress blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch for a specific URL, or "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_aliexpress / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__get_aliexpress_product for "
+        "structured product data.",
+        action="ask",
+    ),
+    URLRule(
+        "alibaba-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?alibaba\.com/"),
+        "Alibaba.com blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__fetch for a specific URL, or "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_alibaba / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__get_alibaba_product for "
+        "structured product data.",
+        action="ask",
+    ),
+    URLRule(
+        "facebook-marketplace-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?facebook\.com/marketplace/"),
+        "Facebook Marketplace blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_marketplace instead.",
+        action="ask",
+    ),
+    URLRule(
+        "realtor-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?realtor\.com/"),
+        "Realtor.com blocks Claude Code's built-in WebFetch. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_realtor instead.",
+        action="ask",
+    ),
+    # LinkedIn jobs (public)
+    URLRule(
+        "linkedin-jobs-blocked",
+        re.compile(r"(?:^|//)(?:www\.)?linkedin\.com/jobs/"),
+        "LinkedIn's public job board blocks Claude Code's built-in WebFetch, but "
+        "job postings are readable logged-out. Use "
+        "mcp__plugin_fetchaller-mcp_fetchaller__search_linkedin_jobs / "
+        "mcp__plugin_fetchaller-mcp_fetchaller__get_linkedin_job instead.",
+    ),
+    # Login-gated (no public path -- Wayback fallback only)
+    URLRule(
+        "linkedin-login-gated",
+        re.compile(r"(?:^|//)(?:www\.)?linkedin\.com/"),
+        _login_gated_guidance(
+            "Most LinkedIn content (profiles, feed, posts) requires a logged-in "
+            "session that no fetch tool can provide."
+        ),
+    ),
+    URLRule(
+        "quora-login-gated",
+        re.compile(r"(?:^|//)(?:www\.)?quora\.com/"),
+        _login_gated_guidance("Quora gates most content behind a login wall."),
+    ),
+    URLRule(
+        "twitter-x-login-gated",
+        re.compile(r"(?:^|//)(?:www\.|mobile\.)?(?:twitter|x)\.com/"),
+        _login_gated_guidance("Twitter/X gates most content behind a login wall."),
     ),
 ]
 
@@ -770,15 +920,19 @@ def _extract_urls(text: str) -> list[str]:
 
 
 def _check_url_rules(url: str) -> tuple[str, str, str] | None:
-    """Check a URL against AUTH_URL_RULES. Returns (name, guidance, action) or None."""
-    for rule in AUTH_URL_RULES:
-        if rule.pattern.search(url):
+    """Check a URL (or URL-shaped fragment) against BLOCKED_URL_RULES.
+
+    Returns (name, guidance, action) or None.
+    """
+    lowered = url.lower()
+    for rule in BLOCKED_URL_RULES:
+        if rule.pattern.search(lowered):
             return (rule.name, rule.guidance, rule.action)
     return None
 
 
 def _check_fetch_command(cmd: str) -> bool:
-    """Check curl/wget commands for authenticated URLs. Exits on block or ask match.
+    """Check curl/wget commands for authenticated or bot-blocked URLs. Exits on block or ask match.
 
     Returns True if the command was a curl/wget (so caller knows to log),
     or False if not a fetch command.
@@ -2940,7 +3094,7 @@ def _get_askable_rule_names() -> set[str]:
         if rule.action == "ask":
             names.add(rule.name)
     # User-defined URL rules with action=ask
-    for rule in AUTH_URL_RULES:
+    for rule in BLOCKED_URL_RULES:
         if rule.action == "ask":
             names.add(rule.name)
     # oc introspection rules (dynamic)
@@ -3560,7 +3714,7 @@ def _parse_hook_input() -> dict:
 
 
 def _handle_webfetch(tool_input: dict) -> NoReturn:
-    """Check WebFetch URLs against auth rules. Always exits via sys.exit(0)."""
+    """Check WebFetch URLs against auth/bot-block rules. Always exits via sys.exit(0)."""
     url = tool_input.get("url", "")
     if url:
         result = _check_url_rules(url)
@@ -3576,6 +3730,122 @@ def _handle_webfetch(tool_input: dict) -> NoReturn:
             )
         else:
             _log_url_event(url, None, "allowed", "WebFetch")
+    sys.exit(0)
+
+
+# WebSearch-appropriate replacements for BLOCKED_URL_RULES's WebFetch-oriented
+# guidance text -- a domain-restricted WebSearch call has no single URL to
+# fetch, so "use fetch for a specific URL" (BLOCKED_URL_RULES's lead-in for
+# most rules) doesn't fit. Keyed by BLOCKED_URL_RULES rule name; domains with
+# no entry here (all fetch-only, non-login-gated rules) fall back to
+# _DEFAULT_WEBSEARCH_HINT.
+
+# Shared suffix for login-gated domains' WebSearch hints -- identical for
+# LinkedIn/Quora/Twitter-X, only the intro clause differs.
+_LOGIN_GATED_SEARCH_HINT_SUFFIX = (
+    "restricting a search to this domain won't surface anything a fetch "
+    "tool could retrieve either. Drop the domain restriction, or ask the "
+    "user for the specific content."
+)
+
+
+def _login_gated_search_hint(intro: str) -> str:
+    """Build a login-gated WebSearch hint from a site-specific intro clause."""
+    return f"{intro} -- {_LOGIN_GATED_SEARCH_HINT_SUFFIX}"
+
+
+_WEBSEARCH_TOOL_HINTS: dict[str, str] = {
+    "github-api": (
+        "This URL targets the GitHub API which requires authentication. "
+        "Use GitHub MCP tools (mcp__github__*) instead."
+    ),
+    "google-sheets": (
+        "Google Sheets requires authentication. "
+        "Use a Google MCP tool or `gcloud` CLI to access spreadsheet data."
+    ),
+    "jira-server": (
+        "This Jira server URL requires authentication. "
+        "Use the `jira` CLI or Atlassian MCP tools instead."
+    ),
+    "slack-api": (
+        "This Slack URL requires authentication. "
+        "Use the Slack MCP tools or access Slack via Playwright MCP."
+    ),
+    "reddit-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_reddit to search "
+        "Reddit directly, or mcp__plugin_fetchaller-mcp_fetchaller__browse_reddit "
+        "to browse a subreddit."
+    ),
+    "aliexpress-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_aliexpress to "
+        "search AliExpress directly."
+    ),
+    "alibaba-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_alibaba to search Alibaba.com directly."
+    ),
+    "facebook-marketplace-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_marketplace to "
+        "search Facebook Marketplace directly."
+    ),
+    "realtor-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_realtor to search Realtor.com directly."
+    ),
+    "linkedin-jobs-blocked": (
+        "Use mcp__plugin_fetchaller-mcp_fetchaller__search_linkedin_jobs to "
+        "search LinkedIn's job board directly."
+    ),
+    "linkedin-login-gated": _login_gated_search_hint(
+        "LinkedIn's general content requires a logged-in session"
+    ),
+    "quora-login-gated": _login_gated_search_hint("Quora gates most content behind a login wall"),
+    "twitter-x-login-gated": _login_gated_search_hint(
+        "Twitter/X gates most content behind a login wall"
+    ),
+}
+_DEFAULT_WEBSEARCH_HINT = (
+    "Use mcp__plugin_fetchaller-mcp_fetchaller__fetch to retrieve specific pages from this domain."
+)
+
+
+def _handle_websearch(tool_input: dict) -> NoReturn:
+    """Redirect WebSearch to a fetchaller MCP tool when a domain filter
+    targets a known-blocked domain.
+
+    Scope: only allowed_domains is checked, against the same
+    BLOCKED_URL_RULES patterns WebFetch uses. A general search with no
+    blocked-domain filter passes through unaffected, so existing WebSearch
+    consumers that don't restrict to a blocked domain aren't affected.
+
+    blocked_domains is excluded from this check: it means the caller is
+    already excluding that domain from results, which is the safe behavior
+    this guard exists to encourage -- not a call to redirect.
+
+    Guidance text is search-appropriate rather than reusing
+    BLOCKED_URL_RULES's fetch-oriented text (e.g. "fetch this specific URL"
+    doesn't fit a domain-restricted search with no single URL) -- see
+    _WEBSEARCH_TOOL_HINTS for the per-rule replacements.
+    """
+    domains = tool_input.get("allowed_domains") or []
+    # Reconstruct each bare domain as a URL-shaped fragment so it matches
+    # BLOCKED_URL_RULES patterns like "(?:^|//)(?:www\.)?reddit\.com/", which
+    # require a leading "^"/"//" and trailing "/" -- a plain "reddit.com"
+    # string alone (no "//" prefix) never matches those patterns.
+    for domain in domains:
+        result = _check_url_rules(f"//{domain.rstrip('/')}/")
+        if result:
+            rule_name, _guidance, action = result
+            hint = _WEBSEARCH_TOOL_HINTS.get(rule_name, _DEFAULT_WEBSEARCH_HINT)
+            _exit_with_decision(
+                "WebSearch's own results are fine, but this domain filter "
+                f"targets a site Claude Code's built-in fetch can't reliably "
+                f"reach. {hint}",
+                action,
+                rule_name=rule_name,
+                matched_segment=domain,
+                category="url",
+                detail={"tool": "WebSearch", "phase": "pre"},
+            )
+    _log_url_event(tool_input.get("query", ""), None, "allowed", "WebSearch")
     sys.exit(0)
 
 
@@ -3686,16 +3956,59 @@ def _increment_tool_counter(session_id: str) -> None:
         pass
 
 
-def _handle_mcp_tool(tool_name: str) -> NoReturn:
+# fetchaller's `fetch` tool is a generic HTTP client (caller-controlled
+# method/headers/body) — unlike every other MCP_READ_ONLY entry, it is not
+# safe to allow-list by name alone. It gets a call-time gate below instead.
+# SECURITY: this gate depends on fetchaller's fetch tool using exactly the
+# parameter names "method"/"headers"/"body" -- if a future fetchaller-mcp
+# version renames these, this gate silently fails open (auto-approves)
+# rather than failing closed. See fetchaller-mcp/README.md's Tool capability
+# audit section for the full re-verification process.
+_FETCHALLER_FETCH_KEY = _mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__fetch")
+
+
+def _handle_mcp_tool(tool_name: str, tool_input: dict) -> NoReturn:
     """Handle MCP tool auto-approval or passthrough.
 
     Uses server-qualified keys to prevent cross-server name spoofing.
     Known read-only tools (and sequential-thinking tools via _MCP_THINK_PREFIX)
     are auto-approved; unknown MCP tools pass through to settings.json.
 
+    fetchaller's `fetch` tool is special-cased: it's a generic HTTP client, so
+    it's gated on the actual call — a plain GET with no custom headers/body is
+    auto-approved, anything else (POST, and/or caller-supplied headers/body,
+    which can carry a request to a write-capable public endpoint) asks for
+    confirmation.
+
     Always exits via sys.exit(0) — never returns to the caller.
     """
     key = _mcp_key(tool_name)
+
+    if key == _FETCHALLER_FETCH_KEY:
+        method = str(tool_input.get("method") or "GET").strip().upper()
+        has_headers = bool(tool_input.get("headers"))
+        has_body = bool(tool_input.get("body"))
+        if method == "GET" and not has_headers and not has_body:
+            _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
+            print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
+            sys.exit(0)
+        url = tool_input.get("url")
+        _exit_with_decision(
+            "fetchaller's fetch tool can send data to arbitrary public URLs via a POST "
+            "method and/or caller-supplied headers/body — this is not a plain read/fetch. "
+            "Confirm this call is intended.",
+            "ask",
+            rule_name="fetchaller-fetch-mutating-call",
+            matched_segment=url or tool_name,
+            category="mcp",
+            detail={
+                "method": method,
+                "has_headers": has_headers,
+                "has_body": has_body,
+                "url": url or "",
+            },
+        )
+
     if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):
         _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
         print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
@@ -3714,7 +4027,7 @@ def main() -> None:
     config = _load_unified_config()
     for section, target, converter in [
         ("command_rules", RULES, _cmd_rule_from_entry),
-        ("url_rules", AUTH_URL_RULES, _url_rule_from_entry),
+        ("url_rules", BLOCKED_URL_RULES, _url_rule_from_entry),
     ]:
         entries = config.get(section)
         if isinstance(entries, list):
@@ -3728,7 +4041,7 @@ def main() -> None:
         )
 
     # Env var overrides (additive — stacks on top of unified config)
-    AUTH_URL_RULES.extend(_load_extra_rules("URL_GUARD_EXTRA_RULES", _url_rule_from_entry))
+    BLOCKED_URL_RULES.extend(_load_extra_rules("URL_GUARD_EXTRA_RULES", _url_rule_from_entry))
     RULES.extend(_load_extra_rules("COMMAND_GUARD_EXTRA_RULES", _cmd_rule_from_entry))
     _TRUSTED_GIT_DIRS.extend(_load_trusted_dirs())
 
@@ -3769,8 +4082,11 @@ def main() -> None:
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
 
+    elif tool_name == "WebSearch":
+        _handle_websearch(tool_input)
+
     if tool_name.startswith("mcp__"):
-        _handle_mcp_tool(tool_name)
+        _handle_mcp_tool(tool_name, tool_input)
 
     if tool_name != "Bash":
         sys.exit(0)

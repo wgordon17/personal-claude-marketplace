@@ -599,6 +599,20 @@ def run_webfetch(url: str) -> subprocess.CompletedProcess:
     return run_guard("WebFetch", {"url": url, "prompt": "test"})
 
 
+def run_websearch(
+    query: str,
+    allowed_domains: list | None = None,
+    blocked_domains: list | None = None,
+) -> subprocess.CompletedProcess:
+    """Shorthand: invoke guard as WebSearch tool."""
+    tool_input = {"query": query}
+    if allowed_domains:
+        tool_input["allowed_domains"] = allowed_domains
+    if blocked_domains:
+        tool_input["blocked_domains"] = blocked_domains
+    return run_guard("WebSearch", tool_input)
+
+
 class TestURLFetchGuard:
     """Bash curl/wget commands against authenticated service URLs."""
 
@@ -652,6 +666,22 @@ class TestURLFetchGuard:
                 2,
                 "mcp__github__",
             ),
+            # BLOCKED: bot-blocked public content
+            (
+                "curl https://www.reddit.com/r/ClaudeAI/top/",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "curl https://en.wikipedia.org/wiki/Web_scraping",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "wget https://www.npmjs.com/package/express",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
         ],
         ids=[
             # Blocked
@@ -687,6 +717,10 @@ class TestURLFetchGuard:
             "bypass-github-api",
             # Pipe
             "curl-pipe-jq",
+            # Bot-blocked public content
+            "reddit-blocked-curl",
+            "wikipedia-blocked-curl",
+            "npm-blocked-wget",
         ],
     )
     def test_url_fetch_guard(self, command, expected_exit, expected_msg):
@@ -710,6 +744,47 @@ class TestWebFetchGuard:
             ("https://github.com/org/repo/settings", 2, "mcp__github__"),
             ("https://gitlab.com/api/v4/projects/123", 2, "glab"),
             ("https://drive.google.com/file/d/abc/view", 2, "Google"),
+            (
+                "https://www.reddit.com/r/ClaudeAI/top/",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "https://en.wikipedia.org/wiki/Web_scraping",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            (
+                "https://www.npmjs.com/package/express",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__fetch",
+            ),
+            ("https://WWW.REDDIT.COM/r/test", 2, "fetchaller"),
+            (
+                "https://www.linkedin.com/jobs/view/1234567890",
+                2,
+                "mcp__plugin_fetchaller-mcp_fetchaller__get_linkedin_job",
+            ),
+            (
+                "https://www.linkedin.com/in/someuser",
+                2,
+                "archive.org/wayback/available",
+            ),
+            (
+                "https://www.quora.com/Some-Question",
+                2,
+                "archive.org/wayback/available",
+            ),
+            (
+                "https://x.com/someuser/status/123",
+                2,
+                "archive.org/wayback/available",
+            ),
+            (
+                "https://twitter.com/someuser/status/123",
+                2,
+                "archive.org/wayback/available",
+            ),
             # ALLOWED
             ("https://example.com", 0, None),
             ("https://github.com/org/repo", 0, None),
@@ -727,6 +802,15 @@ class TestWebFetchGuard:
             "github-settings",
             "gitlab-api",
             "google-drive",
+            "reddit-blocked",
+            "wikipedia-blocked",
+            "npm-blocked",
+            "reddit-blocked-mixed-case",
+            "linkedin-jobs-blocked",
+            "linkedin-login-gated",
+            "quora-login-gated",
+            "twitter-x-login-gated-x-domain",
+            "twitter-x-login-gated-twitter-domain",
             "example-com",
             "github-public",
             "python-docs",
@@ -737,6 +821,137 @@ class TestWebFetchGuard:
     def test_webfetch_guard(self, url, expected_exit, expected_msg):
         result = run_webfetch(url)
         assert_guard(result, expected_exit, expected_msg)
+
+    def test_linkedin_jobs_rule_still_wins_over_general_rule(self):
+        """Regression guard: linkedin-jobs-blocked must stay ordered before
+        linkedin-login-gated in BLOCKED_URL_RULES, since both patterns match
+        job-board URLs and _check_url_rules returns the first match."""
+        result = run_webfetch("https://www.linkedin.com/jobs/view/1234567890")
+        assert_guard(result, 2, "get_linkedin_job")
+        assert "archive.org/wayback/available" not in (result.stderr + result.stdout)
+
+    @pytest.mark.parametrize(
+        "url, expected_reason_fragment",
+        [
+            ("https://www.amazon.com/dp/B0EXAMPLE", "fetchaller"),
+            ("https://www.ebay.com/itm/12345", "fetchaller"),
+            ("https://stackoverflow.com/questions/12345", "fetchaller"),
+            ("https://news.ycombinator.com/item?id=12345", "fetchaller"),
+            ("https://medium.com/@someuser/some-article", "fetchaller"),
+            ("https://www.aliexpress.com/item/12345.html", "fetchaller"),
+            ("https://www.alibaba.com/product-detail/example_12345.html", "fetchaller"),
+            ("https://www.facebook.com/marketplace/item/12345", "fetchaller"),
+            ("https://www.realtor.com/realestateandhomes-detail/123-Main-St", "fetchaller"),
+        ],
+        ids=[
+            "amazon-ask",
+            "ebay-ask",
+            "stackoverflow-ask",
+            "hackernews-ask",
+            "medium-ask",
+            "aliexpress-ask",
+            "alibaba-ask",
+            "facebook-marketplace-ask",
+            "realtor-ask",
+        ],
+    )
+    def test_webfetch_inferred_domains_ask(self, url, expected_reason_fragment):
+        result = run_webfetch(url)
+        assert_ask_decision(result, expected_reason_fragment)
+
+    def test_webfetch_inferred_domains_false_positive_regression(self):
+        result = run_webfetch("https://getmedium.com/unrelated")
+        assert_guard(result, 0, None)
+
+    def test_webfetch_inferred_domains_unrelated_regression(self):
+        result = run_webfetch("https://example.com")
+        assert_guard(result, 0, None)
+
+
+class TestWebSearchGuard:
+    """WebSearch tool calls: allowed_domains filter matched against BLOCKED_URL_RULES."""
+
+    def test_general_search_untouched(self):
+        result = run_websearch("python asyncio tutorial")
+        assert_guard(result, 0, None)
+
+    def test_unrelated_general_search_regression(self):
+        result = run_websearch("best practices for REST APIs")
+        assert_guard(result, 0, None)
+
+    def test_allowed_domains_reddit_blocked(self):
+        result = run_websearch("claude code tips", allowed_domains=["reddit.com"])
+        assert_guard(result, 2, "fetchaller")
+
+    def test_free_text_domain_mention_not_caught(self):
+        """Known limitation, not a bug: a domain named inside the free-text
+        query string (rather than passed structurally via allowed_domains)
+        isn't reconstructed into a URL and checked -- only allowed_domains is
+        inspected. This test documents that so a future change to this
+        behavior is a deliberate, visible diff rather than a silent
+        regression."""
+        result = run_websearch("site:reddit.com claude code")
+        assert_guard(result, 0, None)
+
+    def test_allowed_domains_unrelated_regression(self):
+        result = run_websearch("some query", allowed_domains=["example.com"])
+        assert_guard(result, 0, None)
+
+    def test_blocked_domains_reddit_not_triggered(self):
+        """blocked_domains means the caller is already excluding Reddit from
+        results -- that's the safe behavior this guard encourages, not a
+        call to redirect."""
+        result = run_websearch("python tips", blocked_domains=["reddit.com"])
+        assert_guard(result, 0, None)
+
+    def test_allowed_domains_ask_tier_domain(self):
+        """An ask-tier domain (action='ask' in BLOCKED_URL_RULES, e.g.
+        amazon-blocked) should surface as a permissionDecision: ask, not a
+        hard block -- mirroring TestWebFetchGuard.test_webfetch_inferred_domains_ask."""
+        result = run_websearch("best laptop deals", allowed_domains=["amazon.com"])
+        assert_ask_decision(result, "fetchaller")
+
+    def test_allowed_domains_mixed_case_still_blocked(self):
+        """_check_url_rules lowercases before matching -- a mixed-case
+        domain filter must not bypass the block."""
+        result = run_websearch("claude code tips", allowed_domains=["Reddit.COM"])
+        assert_guard(result, 2, "fetchaller")
+
+    def test_allowed_domains_multiple_one_blocked(self):
+        """_handle_websearch checks each domain in the list and exits on the
+        first match -- a blocked domain later in the list must still trigger."""
+        result = run_websearch("claude code tips", allowed_domains=["example.com", "reddit.com"])
+        assert_guard(result, 2, "fetchaller")
+
+    def test_allowed_domains_auth_only_domain_not_fetchaller(self):
+        """Pre-existing auth-only rules (github-api, google-sheets, jira-server,
+        slack-api) are domain-only patterns that also match _handle_websearch's
+        synthetic domain fragment, but fetchaller can't bypass their
+        authentication -- guidance must point to the rule's own tool, not the
+        generic fetchaller default."""
+        result = run_websearch("test query", allowed_domains=["api.github.com"])
+        assert_guard(result, 2, "mcp__github__")
+        assert "fetchaller" not in (result.stderr + result.stdout)
+
+    @pytest.mark.parametrize(
+        "domain",
+        ["linkedin.com", "quora.com", "twitter.com"],
+        ids=[
+            "linkedin-login-gated",
+            "quora-login-gated",
+            "twitter-x-login-gated",
+        ],
+    )
+    def test_allowed_domains_login_gated_domain_blocked(self, domain):
+        """Login-gated domains (LinkedIn/Quora/Twitter-X) have no public fetch
+        path, so their BLOCKED_URL_RULES entries omit `action=` and default to
+        URLRule's 'block' (see _exit_with_decision) -- a WebSearch domain
+        filter targeting them must hard-block (exit 2) with the login-gated
+        hint text (_login_gated_search_hint's shared suffix), not the generic
+        fetchaller redirect used for reddit/amazon/etc."""
+        result = run_websearch("some query", allowed_domains=[domain])
+        assert_guard(result, 2, "restricting a search to this domain")
+        assert "fetchaller" not in (result.stderr + result.stdout)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -5983,6 +6198,26 @@ class TestMCPReadOnlyFrozenset:
         assert key == "evil-server__find_symbol"
         assert key not in MCP_READ_ONLY
 
+    def test_fetchaller_fetch_tool_absent(self):
+        """fetchaller's `fetch` tool must never join the blanket allow-list --
+        it's a generic HTTP client and stays call-time gated in
+        _handle_mcp_tool() instead (see TestFetchallerFetchGate). This guards
+        against a future accidental re-addition alongside fetchaller's other
+        read-only tools."""
+        from mcp_constants import MCP_READ_ONLY, mcp_key
+
+        assert mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__fetch") not in MCP_READ_ONLY
+
+    def test_fetchaller_search_tool_present(self):
+        """fetchaller's generic `search` tool -- distinct from `fetch` (see
+        test_fetchaller_fetch_tool_absent above) -- must stay in the
+        allow-list. This was a deliberate pr-review keep decision, so an
+        accidental future removal of `search` (or of the whole fetchaller
+        entry) must fail this test, not just the fetch-absence guard."""
+        from mcp_constants import MCP_READ_ONLY, mcp_key
+
+        assert mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__search") in MCP_READ_ONLY
+
 
 class TestMCPGuardIntegration:
     """Integration tests: run the guard with MCP tool names and verify output."""
@@ -6055,3 +6290,93 @@ class TestMCPGuardIntegration:
         assert result.returncode == 0
         # Should NOT get permissionDecision: allow (server not recognized)
         assert '"allow"' not in result.stdout
+
+
+class TestFetchallerFetchGate:
+    """fetchaller's `fetch` tool is call-time gated, not name-allow-listed:
+    a plain GET is auto-approved, anything with a POST method or
+    caller-supplied headers/body asks for confirmation.
+    """
+
+    FETCH_TOOL = "mcp__plugin_fetchaller-mcp_fetchaller__fetch"
+
+    def test_no_method_key_is_allowed(self, session_db):
+        """Omitting `method` entirely defaults to GET — auto-approved."""
+        env, _ = session_db
+        result = run_guard(self.FETCH_TOOL, {"url": "https://example.com"}, env=env)
+        assert_allow_decision(result, test_id="fetchaller-no-method")
+
+    def test_explicit_get_is_allowed(self, session_db):
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "method": "get"},
+            env=env,
+        )
+        assert_allow_decision(result, test_id="fetchaller-explicit-get")
+
+    def test_post_asks(self, session_db):
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "method": "POST", "body": '{"a": 1}'},
+            env=env,
+        )
+        assert_ask_decision(result, "fetchaller-fetch-mutating-call", test_id="fetchaller-post")
+
+    def test_get_with_headers_asks(self, session_db):
+        """A GET carrying caller-supplied headers still asks — the gate keys off
+        headers/body presence regardless of method."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {
+                "url": "https://example.com",
+                "method": "GET",
+                "headers": {"Authorization": "Bearer x"},
+            },
+            env=env,
+        )
+        assert_ask_decision(
+            result, "fetchaller-fetch-mutating-call", test_id="fetchaller-get-headers"
+        )
+
+    def test_get_with_body_asks(self, session_db):
+        """A GET carrying a body still asks — same reasoning as headers above."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "method": "GET", "body": "payload"},
+            env=env,
+        )
+        assert_ask_decision(result, "fetchaller-fetch-mutating-call", test_id="fetchaller-get-body")
+
+    def test_unrecognized_body_param_name_fails_open(self, session_db):
+        """Known limitation, not a bug (see the SECURITY comment above
+        _FETCHALLER_FETCH_KEY in tool-selection-guard.py): the gate only
+        recognizes the exact keys 'method'/'headers'/'body'. A caller-supplied
+        key the gate doesn't know about -- e.g. 'payload' instead of 'body' --
+        is invisible to it, so a default-method GET with an unrecognized
+        payload-shaped key is still auto-approved. This pins that behavior so
+        a future fetchaller-mcp schema change (or a gate fix that recognizes
+        more parameter names) shows up as a deliberate, visible diff here
+        rather than a silent regression."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com", "payload": "some data"},
+            env=env,
+        )
+        assert_allow_decision(result, test_id="fetchaller-unrecognized-body-param")
+
+    def test_post_ask_reason_includes_destination_url(self, session_db):
+        """The ask decision's Matched: line must show the actual destination URL,
+        not the constant tool name -- otherwise `/dev-guard trust add --match`
+        can never scope trust to a specific URL/domain for this rule."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com/webhook", "method": "POST", "body": "data"},
+            env=env,
+        )
+        assert_ask_decision(result, "example.com/webhook", test_id="fetchaller-post-url-in-reason")

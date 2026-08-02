@@ -10,7 +10,7 @@ Development environment policy enforcement: tool selection guard, commit validat
 - **Native tool redirections** — Redirects `grep`/`find`/`cat`/`sed` to Grep/Glob/Read/Edit tools
 - **Python tooling** — Enforces `uv run`/`uvx` over bare `python`/`pip`
 - **Git safety** — Blocks force pushes, branch deletions, commits to main, and other destructive operations
-- **URL fetch guard** — Blocks WebFetch/curl/wget for authenticated services (extensible via `URL_GUARD_EXTRA_RULES`)
+- **URL fetch guard** — Blocks or redirects WebFetch, WebSearch domain filters, and curl/wget for authenticated services and bot-blocked public sites (extensible via `URL_GUARD_EXTRA_RULES`)
 - **Command guard** — User-defined command blocking rules (via `COMMAND_GUARD_EXTRA_RULES`)
 - **Interactive command blocking** — Prevents `git rebase -i`, `git add -p`, and other interactive commands
 - **Plan mode redirect** — Redirects `EnterPlanMode` to incremental-planning skill
@@ -85,9 +85,9 @@ claude plugin install dev-guard@personal-claude-marketplace
 
 ## Built-in Rules
 
-The guard includes approximately 70 built-in rules across several categories:
-- **Command rules** (~37): Native tool redirections, Python tooling, git safety, interactive commands, project conventions
-- **URL rules** (~10): GitHub, GitLab, Google, Atlassian, Slack authenticated URLs
+The guard includes approximately 90 built-in rules across several categories:
+- **Command rules** (~33): Native tool redirections, Python tooling, git safety, interactive commands, project conventions
+- **URL rules** (~26): GitHub, GitLab, Google, Atlassian, Slack authenticated URLs, plus bot-blocked and login-gated public sites (Reddit, Wikipedia, npm, Amazon, LinkedIn, and more) redirected to fetchaller-mcp — see `references/fetchaller-domain-rules.md`
 - **Git deny rules** (19): Reset --hard, force push, branch deletion, filter-branch, unsafe operations (always enforced)
 - **Git ask rules** (8): Stash drop, filter-repo, reflog delete/expire, remote removal, config modifications (can be trusted)
 - **oc/kubectl introspection** (~4): Critical, high, medium, low risk assessments (dynamic)
@@ -102,7 +102,7 @@ Both URL and command guard rules can be extended with user-defined rules via env
 
 ### Custom URL Guard Rules
 
-Block additional authenticated URLs beyond the built-in rules (GitHub, GitLab, Google, Atlassian, Slack).
+Block additional URLs beyond the built-in authenticated-service and bot-blocked-site rules.
 
 Set `URL_GUARD_EXTRA_RULES` to a JSON file path:
 
@@ -286,7 +286,7 @@ stdin JSON → parse → session state → hook dispatch (PreToolUse or PostTool
 2. **Session state:** Persists session ID to database for trust scope validation
 3. **Early exits:** Non-Bash tools pass through; EnterPlanMode redirects to skill
 4. **GUARD_BYPASS check:** If prefix present, enforce only GIT_DENY_RULES
-5. **Fetch command check:** curl/wget commands checked against AUTH_URL_RULES
+5. **Fetch command check:** curl/wget commands checked against BLOCKED_URL_RULES
 6. **Split commands:** Break on command delimiters (&&, ||, ;, newline)
 7. **Per-subcommand analysis:**
    - Extract bash -c inner commands
