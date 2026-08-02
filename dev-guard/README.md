@@ -102,7 +102,7 @@ Both URL and command guard rules can be extended with user-defined rules via env
 
 ### Custom URL Guard Rules
 
-Block additional authenticated URLs beyond the built-in rules (GitHub, GitLab, Google, Atlassian, Slack).
+Block additional URLs beyond the built-in authenticated-service and bot-blocked-site rules.
 
 Set `URL_GUARD_EXTRA_RULES` to a JSON file path:
 
