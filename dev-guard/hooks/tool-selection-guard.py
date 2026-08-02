@@ -3969,15 +3969,21 @@ def _handle_mcp_tool(tool_name: str, tool_input: dict) -> NoReturn:
             _log_event("guard", "mcp-allow", rule="mcp-read-only", command=tool_name)
             print(_hook_output("allow", "MCP read-only tool — auto-approved by guard"))
             sys.exit(0)
+        url = tool_input.get("url")
         _exit_with_decision(
             "fetchaller's fetch tool can send data to arbitrary public URLs via a POST "
             "method and/or caller-supplied headers/body — this is not a plain read/fetch. "
             "Confirm this call is intended.",
             "ask",
             rule_name="fetchaller-fetch-mutating-call",
-            matched_segment=tool_name,
+            matched_segment=url or tool_name,
             category="mcp",
-            detail={"method": method, "has_headers": has_headers, "has_body": has_body},
+            detail={
+                "method": method,
+                "has_headers": has_headers,
+                "has_body": has_body,
+                "url": url or "",
+            },
         )
 
     if key in _MCP_READ_ONLY or key.startswith(_MCP_THINK_PREFIX):

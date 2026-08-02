@@ -6328,3 +6328,15 @@ class TestFetchallerFetchGate:
             env=env,
         )
         assert_allow_decision(result, test_id="fetchaller-unrecognized-body-param")
+
+    def test_post_ask_reason_includes_destination_url(self, session_db):
+        """The ask decision's Matched: line must show the actual destination URL,
+        not the constant tool name -- otherwise `/dev-guard trust add --match`
+        can never scope trust to a specific URL/domain for this rule."""
+        env, _ = session_db
+        result = run_guard(
+            self.FETCH_TOOL,
+            {"url": "https://example.com/webhook", "method": "POST", "body": "data"},
+            env=env,
+        )
+        assert_ask_decision(result, "example.com/webhook", test_id="fetchaller-post-url-in-reason")
