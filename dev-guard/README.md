@@ -85,9 +85,9 @@ claude plugin install dev-guard@personal-claude-marketplace
 
 ## Built-in Rules
 
-The guard includes approximately 70 built-in rules across several categories:
+The guard includes approximately 86 built-in rules across several categories:
 - **Command rules** (~37): Native tool redirections, Python tooling, git safety, interactive commands, project conventions
-- **URL rules** (~10): GitHub, GitLab, Google, Atlassian, Slack authenticated URLs
+- **URL rules** (~26): GitHub, GitLab, Google, Atlassian, Slack authenticated URLs, plus bot-blocked and login-gated public sites (Reddit, Wikipedia, npm, Amazon, LinkedIn, and more) redirected to fetchaller-mcp — see `references/fetchaller-domain-rules.md`
 - **Git deny rules** (19): Reset --hard, force push, branch deletion, filter-branch, unsafe operations (always enforced)
 - **Git ask rules** (8): Stash drop, filter-repo, reflog delete/expire, remote removal, config modifications (can be trusted)
 - **oc/kubectl introspection** (~4): Critical, high, medium, low risk assessments (dynamic)

@@ -138,7 +138,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ### For All Non-LSP Plugins
 
-- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), code-quality (test-runner, uv-python), and git-tools (hook installation)
+- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), code-quality (test-runner, uv-python), git-tools (hook installation), and fetchaller-mcp (`uvx --from git+`)
 
 ### For GitHub MCP
 
@@ -147,6 +147,10 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 ### For Jira (Atlassian Rovo MCP)
 
 - **OAuth setup**: Run `/mcp` in Claude Code, authenticate the `mcp-atlassian-prod` server via Atlassian Rovo OAuth, and complete the OAuth flow in your browser. See [jira/README.md](jira/README.md) for details.
+
+### For Fetchaller MCP
+
+- **A dedicated, logged-out Chrome install**: Set `BROWSER_EXECUTABLE_PATH` in `~/.claude/settings.json`'s `env` block. See [fetchaller-mcp/README.md](fetchaller-mcp/README.md) for setup and the profile-isolation security warning.
 
 ### For LSP Plugins
 
