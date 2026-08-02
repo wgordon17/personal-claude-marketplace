@@ -20,8 +20,12 @@ version drift between plugin manifests.
 """
 
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 JIRA_SKILL = REPO_ROOT / "jira" / "skills" / "jira" / "SKILL.md"
@@ -504,6 +508,104 @@ class TestFetchallerMcpConfigSecurity:
         assert args[with_index + 1] == "wafer-py[browser]==0.4.4", (
             "fetchaller-mcp/.mcp.json must pin 'wafer-py[browser]==0.4.4' via --with, "
             f"got: {args[with_index + 1]!r}"
+        )
+
+    @pytest.mark.slow
+    @pytest.mark.skipif(
+        not os.environ.get("RUN_LIVE_TESTS"),
+        reason="network-dependent live smoke test, opt-in only (set RUN_LIVE_TESTS=1)",
+    )
+    def test_live_uvx_invocation_resolves_and_starts(self):
+        """Live smoke test: the exact uvx args from .mcp.json must resolve the
+        pinned commit + wafer-py[browser] extra and successfully invoke the
+        fetchaller-mcp entry point.
+
+        Network-dependent and slow (package resolution + install) -- not run
+        by default. Opt in with `make test-live` (RUN_LIVE_TESTS=1, -m slow).
+
+        Uses --help rather than a full stdio MCP handshake: fetchaller-mcp's
+        argparse only defines -h/--help and --http, so --help is a fast,
+        deterministic way to prove the pinned commit + dependency pin combo
+        installs cleanly and the entry point runs, without driving the
+        JSON-RPC stdio protocol.
+        """
+        args = self._load_args()
+        try:
+            result = subprocess.run(
+                ["uvx", *args, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise AssertionError(
+                "fetchaller-mcp did not resolve/start within 60s via the exact "
+                f".mcp.json args. Pinned commit or wafer-py[browser] extra may be "
+                f"broken or unreachable.\npartial stdout:\n{exc.stdout}"
+            ) from exc
+
+        assert result.returncode == 0, (
+            "fetchaller-mcp failed to resolve/start via the exact .mcp.json args. "
+            f"Pinned commit or wafer-py[browser] extra may be broken.\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        assert "fetchaller-mcp" in result.stdout, (
+            "fetchaller-mcp --help did not print expected usage text -- "
+            f"entry point may have changed.\nstdout:\n{result.stdout}"
+        )
+
+
+FETCHALLER_DOMAIN_RULES_DOC = REPO_ROOT / "dev-guard" / "references" / "fetchaller-domain-rules.md"
+TOOL_SELECTION_GUARD = REPO_ROOT / "dev-guard" / "hooks" / "tool-selection-guard.py"
+
+
+class TestFetchallerDomainRulesDocSync:
+    """fetchaller-domain-rules.md documents a subset of BLOCKED_URL_RULES --
+    verify the domain table's Rule name column stays in sync with the code,
+    in both directions. Catches the exact drift the doc itself warns about:
+    'a domain added there without a matching _WEBSEARCH_TOOL_HINTS entry
+    silently falls back to the generic _DEFAULT_WEBSEARCH_HINT' starts with a
+    BLOCKED_URL_RULES addition that isn't documented here at all.
+
+    Fetchaller-related rules are identified structurally by their
+    `-blocked`/`-gated` name suffix (matching every current entry) rather
+    than a hardcoded exclusion list of pre-existing auth-only rule names --
+    a hardcoded list would need updating every time an unrelated auth rule
+    is added, coupling this file to changes that have nothing to do with
+    fetchaller-mcp.
+    """
+
+    def _doc_rule_names(self) -> set[str]:
+        content = FETCHALLER_DOMAIN_RULES_DOC.read_text()
+        return set(re.findall(r"`([a-z0-9-]+-(?:blocked|gated))`", content))
+
+    def _guard_rule_names(self) -> set[str]:
+        content = TOOL_SELECTION_GUARD.read_text()
+        names = re.findall(r'URLRule\(\s*\n\s*"([a-z0-9-]+)"', content)
+        return {name for name in names if name.endswith(("-blocked", "-gated"))}
+
+    def test_doc_rule_names_exist_in_blocked_url_rules(self):
+        """Every rule name documented in fetchaller-domain-rules.md must
+        exist in BLOCKED_URL_RULES -- catches stale/renamed doc entries."""
+        doc_names = self._doc_rule_names()
+        guard_names = self._guard_rule_names()
+        stale = doc_names - guard_names
+        assert not stale, (
+            f"fetchaller-domain-rules.md documents rule name(s) not present in "
+            f"BLOCKED_URL_RULES: {sorted(stale)}. Update the doc or the rule name."
+        )
+
+    def test_blocked_url_rules_fetchaller_subset_documented(self):
+        """Every fetchaller-related BLOCKED_URL_RULES entry must be documented
+        in fetchaller-domain-rules.md's domain table -- catches undocumented
+        new rules (the drift the doc itself warns about)."""
+        doc_names = self._doc_rule_names()
+        guard_names = self._guard_rule_names()
+        undocumented = guard_names - doc_names
+        assert not undocumented, (
+            f"BLOCKED_URL_RULES contains fetchaller-related rule name(s) missing from "
+            f"fetchaller-domain-rules.md's domain table: {sorted(undocumented)}. "
+            "Add a row to the table and check whether _WEBSEARCH_TOOL_HINTS needs an entry too."
         )
 
 

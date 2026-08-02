@@ -933,6 +933,26 @@ class TestWebSearchGuard:
         assert_guard(result, 2, "mcp__github__")
         assert "fetchaller" not in (result.stderr + result.stdout)
 
+    @pytest.mark.parametrize(
+        "domain",
+        ["linkedin.com", "quora.com", "twitter.com"],
+        ids=[
+            "linkedin-login-gated",
+            "quora-login-gated",
+            "twitter-x-login-gated",
+        ],
+    )
+    def test_allowed_domains_login_gated_domain_blocked(self, domain):
+        """Login-gated domains (LinkedIn/Quora/Twitter-X) have no public fetch
+        path, so their BLOCKED_URL_RULES entries omit `action=` and default to
+        URLRule's 'block' (see _exit_with_decision) -- a WebSearch domain
+        filter targeting them must hard-block (exit 2) with the login-gated
+        hint text (_login_gated_search_hint's shared suffix), not the generic
+        fetchaller redirect used for reddit/amazon/etc."""
+        result = run_websearch("some query", allowed_domains=[domain])
+        assert_guard(result, 2, "restricting a search to this domain")
+        assert "fetchaller" not in (result.stderr + result.stdout)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Chained command splitting
@@ -6187,6 +6207,16 @@ class TestMCPReadOnlyFrozenset:
         from mcp_constants import MCP_READ_ONLY, mcp_key
 
         assert mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__fetch") not in MCP_READ_ONLY
+
+    def test_fetchaller_search_tool_present(self):
+        """fetchaller's generic `search` tool -- distinct from `fetch` (see
+        test_fetchaller_fetch_tool_absent above) -- must stay in the
+        allow-list. This was a deliberate pr-review keep decision, so an
+        accidental future removal of `search` (or of the whole fetchaller
+        entry) must fail this test, not just the fetch-absence guard."""
+        from mcp_constants import MCP_READ_ONLY, mcp_key
+
+        assert mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__search") in MCP_READ_ONLY
 
 
 class TestMCPGuardIntegration:
