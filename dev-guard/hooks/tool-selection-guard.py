@@ -495,7 +495,7 @@ def _rtk_rewrite(cmd: str) -> str | None:
             [_RTK_BINARY, "rewrite", cmd],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=_SUBPROCESS_TIMEOUT_SEC,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -3636,7 +3636,9 @@ def _ensure_rtk_config() -> str | None:
         return None
     try:
         # Get config path from `rtk config`
-        result = subprocess.run([_RTK_BINARY, "config"], capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            [_RTK_BINARY, "config"], capture_output=True, text=True, timeout=_SUBPROCESS_TIMEOUT_SEC
+        )
         first_line = result.stdout.strip().split("\n")[0]
         if not first_line.startswith("Config: "):
             return None
@@ -3647,7 +3649,7 @@ def _ensure_rtk_config() -> str | None:
             subprocess.run(
                 [_RTK_BINARY, "config", "--create"],
                 capture_output=True,
-                timeout=5,
+                timeout=_SUBPROCESS_TIMEOUT_SEC,
             )
         if not config_path.exists():
             return None
