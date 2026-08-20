@@ -1798,6 +1798,21 @@ class TestCommentNarrationGuard:
         )
         assert result.returncode == 0
 
+    def test_edit_large_old_content_still_blocks_new_narration(self):
+        # When old_content exceeds the size cap, the guard can't check for
+        # pre-existing phrases, so it treats new_content as if no old exists
+        # (fails safe toward blocking, not toward silently skipping the guard).
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "x" * 110_000,
+                "new_string": "# This supersedes the old validation logic\npass",
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration-supersede" in result.stderr
+
     @pytest.mark.parametrize(
         "new_string, expected_label",
         [

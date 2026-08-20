@@ -2046,8 +2046,9 @@ _COMMENT_NARRATION_SKIP_EXTENSIONS: frozenset[str] = frozenset(
 # Guards against O(n^2) regex blowup in the cross-delimiter span patterns below
 # (distinct open/close markers re-scan from every unmatched opener) — applies to
 # both new and old content independently, so a huge unrelated old_string can't
-# be used to stall the guard either.
-_COMMENT_NARRATION_MAX_SCAN_BYTES = 100_000
+# be used to stall the guard either. Character count, not byte count — regex
+# engine work scales with characters scanned, not UTF-8 encoded size.
+_COMMENT_NARRATION_MAX_SCAN_CHARS = 100_000
 
 _COMMENT_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r'"""(.*?)"""', re.DOTALL),  # Python docstrings
@@ -2111,9 +2112,9 @@ def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
     if tool_name == "NotebookEdit" and tool_input.get("cell_type") == "markdown":
         return
 
-    if not new_content or len(new_content) > _COMMENT_NARRATION_MAX_SCAN_BYTES:
+    if not new_content or len(new_content) > _COMMENT_NARRATION_MAX_SCAN_CHARS:
         return
-    if old_content and len(old_content) > _COMMENT_NARRATION_MAX_SCAN_BYTES:
+    if old_content and len(old_content) > _COMMENT_NARRATION_MAX_SCAN_CHARS:
         old_content = None
 
     new_comment_text = _extract_comment_spans(new_content)
