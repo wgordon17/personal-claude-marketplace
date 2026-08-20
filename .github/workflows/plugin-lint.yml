@@ -11,7 +11,7 @@ on:
       - '**/plugin.json'
       - '**/SKILL.md'
       - '.claudelint.yaml'
-      - '.github/workflows/plugin-lint.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,17 @@ jobs:
             echo "$files"
             exit 1
           fi
+
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+      - uses: reviewdog/action-actionlint@dbe5299849118fd6f099ba563d263d770955a64a  # v1.73.2
+        with:
+          reporter: local
+          fail_level: error
 
   eval-coverage-check:
     name: Skill Eval Coverage Check

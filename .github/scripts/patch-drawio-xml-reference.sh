@@ -19,6 +19,11 @@ fi
 
 FILE="$1"
 
+if [[ ! -f "$FILE" ]]; then
+  echo "::error::patch-drawio-xml-reference.sh requires a path to an existing file as its only argument"
+  exit 1
+fi
+
 perl -0777 -i -pe 's|fetch and follow the instructions at:\nhttps://raw\.githubusercontent\.com/jgraph/drawio-mcp/main/shared/xml-reference\.md|read and follow the instructions in the vendored sibling file `xml-reference.md` located in the same directory as this skill file.|s' "$FILE"
 
 if grep -q 'raw.githubusercontent.com.*xml-reference' "$FILE"; then

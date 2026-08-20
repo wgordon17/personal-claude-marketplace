@@ -9,6 +9,9 @@ on:
       - 'Makefile'
       - '.pre-commit-config.yaml'
       - '.github/workflows/ci.yml'
+      - '.github/scripts/**'
+      - 'dev-guard/hooks/**'
+      - 'dev-guard/references/**'
   workflow_dispatch:
 
 permissions:

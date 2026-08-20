@@ -644,6 +644,57 @@ class TestFetchallerDomainRulesDocSync:
         )
 
 
+TOKEN_EFFICIENCY_DOC = REPO_ROOT / "dev-guard" / "references" / "token-efficiency.md"
+
+
+class TestTokenEfficiencyDocSafety:
+    """token-efficiency.md's Rules 1-3 examples are locally patched (by
+    .github/scripts/patch-token-efficiency.sh) on every upstream sync to avoid
+    recommending shell tools this repo's own tool-selection-guard.py blocks
+    (head, tail, cat, sed, awk, bare python3) in favor of the Read tool / uv
+    run. Those three safety assertions only run in the weekly
+    sync-token-efficiency.yml workflow, so a manual edit to this doc that
+    reintroduces a blocked-tool recommendation would pass PR-gating CI. Re-run
+    the same three invariants here so `make test` catches it too.
+    """
+
+    def test_no_blocked_tool_words_outside_attribution_line(self):
+        """Line 1 is the attribution comment and legitimately names the
+        blocked tools in prose; every other line must not mention them."""
+        blocked_pattern = re.compile(r"\b(head|tail|cat|sed|awk)\b")
+        lines = TOKEN_EFFICIENCY_DOC.read_text().splitlines()
+        hits = [
+            f"{i}: {line}"
+            for i, line in enumerate(lines[1:], start=2)
+            if blocked_pattern.search(line)
+        ]
+        assert not hits, (
+            "blocked-tool mention(s) found outside line 1 attribution comment "
+            f"in token-efficiency.md: {hits}"
+        )
+
+    def test_python3_mentions_are_all_uv_run_prefixed(self):
+        """Every 'python3' mention must be prefixed by 'uv run ' -- a bare
+        python3 reference slipping through would fail this parity check."""
+        content = TOKEN_EFFICIENCY_DOC.read_text()
+        python3_count = len(re.findall(r"python3", content))
+        uv_python3_count = len(re.findall(r"uv run python3", content))
+        assert python3_count == uv_python3_count, (
+            f"'python3' mention count ({python3_count}) does not match "
+            f"'uv run python3' count ({uv_python3_count}) in token-efficiency.md "
+            "-- a bare python3 reference may have slipped through unpatched"
+        )
+
+    def test_read_tool_replacement_text_present(self):
+        """Confirms Rule 2's 'Read tool with' replacement text actually
+        landed, rather than the substitution being a silent no-op."""
+        content = TOKEN_EFFICIENCY_DOC.read_text()
+        assert "Read tool with" in content, (
+            "expected replacement text 'Read tool with' not found in "
+            "token-efficiency.md -- Rule 2 patch may not have applied"
+        )
+
+
 BUG_INVESTIGATION_SKILL = REPO_ROOT / "code-quality" / "skills" / "bug-investigation" / "SKILL.md"
 QUALITY_GATE_SKILL = REPO_ROOT / "code-quality" / "skills" / "quality-gate" / "SKILL.md"
 ARTIFACT_FORMATS = (

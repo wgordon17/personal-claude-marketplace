@@ -2889,6 +2889,41 @@ class TestHooksJsonConfiguration:
                         f"at {script_path}"
                     )
 
+    def test_inject_reference_arguments_resolve_to_existing_files(self):
+        """inject-reference.sh's filename argument must resolve to a real file.
+
+        inject-reference.sh silently no-ops when its referenced file is
+        missing (by design, so a typo never blocks session start — see
+        dev-guard/hooks/inject-reference.sh's final if-block: cat only runs
+        if -f passes, otherwise it falls through to `exit 0` with no output
+        and no error). test_all_hook_commands_reference_existing_scripts
+        above only validates the SCRIPT path — it strips arguments via
+        .split()[0] — so a typo'd or renamed filename argument in hooks.json
+        (or a deleted file in references/) produces no test failure and no
+        runtime signal. This test closes that gap by resolving every
+        inject-reference.sh argument in hooks.json against the references/
+        directory.
+        """
+        references_dir = os.path.join(os.path.dirname(__file__), os.pardir, "references")
+        with open(HOOKS_FILE) as f:
+            data = json.load(f)
+        checked_files = []
+        for event_name, event_hooks in data["hooks"].items():
+            for hook_group in event_hooks:
+                for hook in hook_group.get("hooks", []):
+                    cmd = hook.get("command", "")
+                    match = re.search(r"inject-reference\.sh\s+(\S+)", cmd)
+                    if not match:
+                        continue
+                    filename = match.group(1)
+                    reference_path = os.path.join(references_dir, filename)
+                    assert os.path.exists(reference_path), (
+                        f"inject-reference.sh argument '{filename}' referenced "
+                        f"in {event_name} does not exist at {reference_path}"
+                    )
+                    checked_files.append(filename)
+        assert checked_files, "Expected at least one inject-reference.sh invocation in hooks.json"
+
 
 class TestShellControlStructures:
     """Integration tests: commands inside for/while/if blocks are caught."""

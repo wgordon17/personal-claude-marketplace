@@ -1,0 +1,146 @@
+"""Black-box subprocess tests for .github/scripts/patch-*.sh — the shared
+patch logic invoked by sync-token-efficiency.yml's and sync-drawio-skill.yml's
+diff-check and write steps.
+
+Mirrors the subprocess-testing pattern used for inject-reference.sh in
+test_stop_hook.py's TestInjectReferenceHook: each script takes a file path
+argument, mutates it in place, and exits 0/1.
+"""
+
+import subprocess
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).parent.parent.parent
+PATCH_TOKEN_EFFICIENCY_SCRIPT = REPO_ROOT / ".github" / "scripts" / "patch-token-efficiency.sh"
+PATCH_DRAWIO_XML_REFERENCE_SCRIPT = (
+    REPO_ROOT / ".github" / "scripts" / "patch-drawio-xml-reference.sh"
+)
+
+
+def _run_script(script: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(script), *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+class TestPatchTokenEfficiencyScript:
+    """Black-box subprocess tests for patch-token-efficiency.sh."""
+
+    _ATTRIBUTION_LINE = "<!-- attribution comment naming head, tail, cat, sed, awk, python -->\n"
+
+    def _fixture_content(self) -> str:
+        return self._ATTRIBUTION_LINE + (
+            "\n"
+            "chain probes with `;` and label the sections\n"
+            "(`echo == layout ==; ls -la; echo == deps ==; head -30 requirements.txt`),\n"
+            "or issue several tool calls in one message. A second lookup round is for\n"
+            "questions the first round's answers created. Copying a convention (a DSL,\n"
+            "schema, or file format)? Sample two existing examples of the exact construct\n"
+            "you will write, not one.\n"
+            "\n"
+            "A command that only inspects ends with a limiter: `| head -50`, `| tail -20`,\n"
+            "`grep -m 20`, `wc -l` before contents, Read with offset/limit. Size unknown?\n"
+            "Measure first, then read the slice you need. Read a file whole only when you\n"
+            "are about to edit it or copy from it verbatim — truncating data you will\n"
+            "transform corrupts output, so keyhole rules apply to inspection, never to\n"
+            "ingestion. If a peek was too narrow, take exactly one wider look.\n"
+            "\n"
+            "Before running code with several dependencies, test them in one probe\n"
+            '(`python3 -c "import x, y, z"`; `command -v tool1 tool2`), and install\n'
+            "everything missing in one command — not one traceback at a time.\n"
+        )
+
+    def test_applies_all_three_substitutions(self, tmp_path):
+        fixture = tmp_path / "injected-instruction.md"
+        fixture.write_text(self._fixture_content())
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT, str(fixture))
+        assert result.returncode == 0, result.stderr
+        patched = fixture.read_text()
+        assert "ls -la; wc -l" in patched
+        assert "Read tool with" in patched
+        assert "uv run python3 -c" in patched
+        assert "head -30 requirements.txt" not in patched
+        assert "| head -50" not in patched
+
+    def test_missing_argument_exits_1(self):
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT)
+        assert result.returncode == 1
+        assert "requires a path to an existing file" in result.stderr
+
+    def test_nonexistent_file_exits_1(self, tmp_path):
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT, str(tmp_path / "missing.md"))
+        assert result.returncode == 1
+        assert "requires a path to an existing file" in result.stderr
+
+    def test_safety_assertion_rejects_surviving_blocked_word(self, tmp_path):
+        """If a substitution silently no-ops (e.g. upstream reworded the
+        surrounding text so \\Q...\\E no longer matches), a blocked word
+        surviving outside line 1 must be caught."""
+        fixture = tmp_path / "injected-instruction.md"
+        fixture.write_text(self._ATTRIBUTION_LINE + "some unrelated text mentioning head here\n")
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT, str(fixture))
+        assert result.returncode == 1
+        assert "blocked-tool mention(s) found outside line 1" in result.stderr
+
+    def test_safety_assertion_rejects_bare_python3(self, tmp_path):
+        """A bare python3 mention not prefixed by 'uv run ' must fail the
+        python3-count parity check."""
+        fixture = tmp_path / "injected-instruction.md"
+        fixture.write_text(self._ATTRIBUTION_LINE + 'run python3 -c "import x" directly\n')
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT, str(fixture))
+        assert result.returncode == 1
+        assert "'python3' mention count" in result.stderr
+
+    def test_safety_assertion_rejects_missing_read_tool_text(self, tmp_path):
+        """If Rule 2's OLD text isn't present in the fixture, the
+        substitution no-ops and the positive 'Read tool with' check must
+        fail."""
+        fixture = tmp_path / "injected-instruction.md"
+        fixture.write_text(self._ATTRIBUTION_LINE + "no keyhole rule text here at all\n")
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT, str(fixture))
+        assert result.returncode == 1
+        assert "expected replacement text 'Read tool with' not found" in result.stderr
+
+
+class TestPatchDrawioXmlReferenceScript:
+    """Black-box subprocess tests for patch-drawio-xml-reference.sh."""
+
+    _OLD_TEXT = (
+        "fetch and follow the instructions at:\n"
+        "https://raw.githubusercontent.com/jgraph/drawio-mcp/main/shared/xml-reference.md\n"
+    )
+    _SURROUNDING = "Before drawing anything, {}Then proceed.\n"
+
+    def test_rewrites_upstream_url_reference(self, tmp_path):
+        fixture = tmp_path / "SKILL.md"
+        fixture.write_text(self._SURROUNDING.format(self._OLD_TEXT))
+        result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
+        assert result.returncode == 0, result.stdout
+        patched = fixture.read_text()
+        assert "raw.githubusercontent.com" not in patched
+        assert "vendored sibling file `xml-reference.md`" in patched
+
+    def test_missing_argument_exits_1(self):
+        result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT)
+        assert result.returncode == 1
+        assert "Usage: patch-drawio-xml-reference.sh" in result.stdout
+
+    def test_nonexistent_file_exits_1(self, tmp_path):
+        result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(tmp_path / "missing.md"))
+        assert result.returncode == 1
+        assert "requires a path to an existing file" in result.stdout
+
+    def test_safety_assertion_rejects_surviving_url(self, tmp_path):
+        """If the surrounding text doesn't match the substitution pattern
+        (e.g. upstream reworded it), the old URL survives and the safety
+        assertion must catch it."""
+        fixture = tmp_path / "SKILL.md"
+        fixture.write_text(
+            "no matching text here, so the URL below survives untouched:\n"
+            "https://raw.githubusercontent.com/jgraph/drawio-mcp/main/shared/xml-reference.md\n"
+        )
+        result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
+        assert result.returncode == 1
+        assert "still contains upstream xml-reference URL after patching" in result.stdout
