@@ -1985,28 +1985,6 @@ _CLAIRE_PATH_RE = re.compile(
     r"(?<=[\s/])\.claire(?=[^a-zA-Z0-9_-]|$)|^\.claire(?=[^a-zA-Z0-9_-]|$)"
 )
 
-_COMMENT_NARRATION_SKIP_EXTENSIONS: frozenset[str] = frozenset(
-    {".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc"}
-)
-
-_COMMENT_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r'"""(.*?)"""', re.DOTALL),  # Python docstrings
-    re.compile(r"'''(.*?)'''", re.DOTALL),  # Python docstrings, alt quote
-    re.compile(r"/\*(.*?)\*/", re.DOTALL),  # C-style block comments
-    re.compile(r"<!--(.*?)-->", re.DOTALL),  # HTML/XML comments
-    re.compile(r"(?:#|//)[^\n]*"),  # line comments
-)
-
-_NARRATIVE_COMMENT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("supersede", re.compile(r"\bsupersede[sd]?\b", re.IGNORECASE)),
-    ("replaces-old", re.compile(r"\breplaces?\s+the\s+old\b", re.IGNORECASE)),
-    ("previously", re.compile(r"\bpreviously\s+(?:was|did|implemented)\b", re.IGNORECASE)),
-    ("removed-because", re.compile(r"\bremoved\s+(?:\S+\s+){0,6}because\b", re.IGNORECASE)),
-    ("phase-reference", re.compile(r"\bphase\s+\d+\b", re.IGNORECASE)),
-    ("as-discussed", re.compile(r"\bas\s+(?:we\s+)?discussed\b", re.IGNORECASE)),
-    ("per-conversation", re.compile(r"\bper\s+our\s+conversation\b", re.IGNORECASE)),
-]
-
 
 def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
     """Correct .claire → .claude hallucinations (anthropics/claude-code#17893).
@@ -2056,6 +2034,46 @@ def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
         )
 
 
+class NarrativePattern(NamedTuple):
+    name: str
+    pattern: re.Pattern[str]
+
+
+_COMMENT_NARRATION_SKIP_EXTENSIONS: frozenset[str] = frozenset(
+    {".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc"}
+)
+
+# Guards against O(n^2) regex blowup in the cross-delimiter span patterns below
+# (distinct open/close markers re-scan from every unmatched opener) — applies to
+# both new and old content independently, so a huge unrelated old_string can't
+# be used to stall the guard either.
+_COMMENT_NARRATION_MAX_SCAN_BYTES = 100_000
+
+_COMMENT_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r'"""(.*?)"""', re.DOTALL),  # Python docstrings
+    re.compile(r"'''(.*?)'''", re.DOTALL),  # Python docstrings, alt quote
+    re.compile(r"/\*(.{0,2000}?)\*/", re.DOTALL),  # C-style block comments
+    re.compile(r"<!--(.{0,2000}?)-->", re.DOTALL),  # HTML/XML comments
+    re.compile(r"(?:#|//)[^\n]*"),  # line comments
+)
+
+_NARRATIVE_COMMENT_PATTERNS: tuple[NarrativePattern, ...] = (
+    NarrativePattern("supersede", re.compile(r"\bsupersede[sd]?\b", re.IGNORECASE)),
+    NarrativePattern("replaces-old", re.compile(r"\breplaces?\s+the\s+old\b", re.IGNORECASE)),
+    NarrativePattern(
+        "previously", re.compile(r"\bpreviously\s+(?:was|did|implemented)\b", re.IGNORECASE)
+    ),
+    NarrativePattern(
+        "removed-because", re.compile(r"\bremoved\s+(?:\S+\s+){0,6}because\b", re.IGNORECASE)
+    ),
+    NarrativePattern("phase-reference", re.compile(r"\bphase\s+\d+\b", re.IGNORECASE)),
+    NarrativePattern("as-discussed", re.compile(r"\bas\s+(?:we\s+)?discussed\b", re.IGNORECASE)),
+    NarrativePattern(
+        "per-conversation", re.compile(r"\bper\s+our\s+conversation\b", re.IGNORECASE)
+    ),
+)
+
+
 def _extract_comment_spans(text: str) -> str:
     """Extract comment/docstring spans from source text, joined by newlines."""
     spans = []
@@ -2077,36 +2095,40 @@ def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
     if tool_name == "Edit":
         new_content = tool_input.get("new_string", "")
         old_content = tool_input.get("old_string", "")
-        path = tool_input.get("file_path", "")
     elif tool_name == "Write":
         new_content = tool_input.get("content", "")
         old_content = None
-        path = tool_input.get("file_path", "")
     elif tool_name == "NotebookEdit":
         new_content = tool_input.get("new_source", "")
         old_content = None
-        path = tool_input.get("notebook_path", "")
     else:
         return
 
+    path_key = "notebook_path" if tool_name == "NotebookEdit" else "file_path"
+    path = tool_input.get(path_key, "")
     if path and Path(path).suffix.lower() in _COMMENT_NARRATION_SKIP_EXTENSIONS:
         return
     if tool_name == "NotebookEdit" and tool_input.get("cell_type") == "markdown":
         return
 
-    if not new_content:
+    if not new_content or len(new_content) > _COMMENT_NARRATION_MAX_SCAN_BYTES:
         return
+    if old_content and len(old_content) > _COMMENT_NARRATION_MAX_SCAN_BYTES:
+        old_content = None
 
-    new_spans = _extract_comment_spans(new_content)
-    old_spans = _extract_comment_spans(old_content) if old_content else ""
+    new_comment_text = _extract_comment_spans(new_content)
+    old_comment_text = None
 
-    for label, pattern in _NARRATIVE_COMMENT_PATTERNS:
-        m = pattern.search(new_spans)
+    for name, pattern in _NARRATIVE_COMMENT_PATTERNS:
+        m = pattern.search(new_comment_text)
         if not m:
             continue
         matched_text = m.group(0)
-        if old_spans and matched_text in old_spans:
-            continue
+        if old_content:
+            if old_comment_text is None:
+                old_comment_text = _extract_comment_spans(old_content)
+            if matched_text in old_comment_text:
+                continue
         _exit_with_decision(
             "Comments must describe only the current, committed state of the "
             "code — not prior versions, this editing session, or plan phases. "
@@ -2114,7 +2136,7 @@ def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
             "message or PR description, not a code comment. Rewrite or remove "
             "the flagged comment and retry.",
             "block",
-            rule_name=f"comment-narration:{label}",
+            rule_name=f"comment-narration-{name}",
             matched_segment=matched_text[:80],
         )
 

@@ -1624,7 +1624,7 @@ class TestCommentNarrationGuard:
             },
         )
         assert result.returncode == 2
-        assert "comment-narration" in result.stderr
+        assert "comment-narration-supersede" in result.stderr
 
     def test_write_phase_reference_blocked(self):
         result = run_guard(
@@ -1635,7 +1635,7 @@ class TestCommentNarrationGuard:
             },
         )
         assert result.returncode == 2
-        assert "comment-narration" in result.stderr
+        assert "comment-narration-phase-reference" in result.stderr
 
     def test_edit_preexisting_narration_not_reblocked(self):
         result = run_guard(
@@ -1678,7 +1678,7 @@ class TestCommentNarrationGuard:
             },
         )
         assert result.returncode == 2
-        assert "comment-narration" in result.stderr
+        assert "comment-narration-removed-because" in result.stderr
 
     def test_notebook_zero_word_removed_because_blocked(self):
         result = run_guard(
@@ -1690,7 +1690,22 @@ class TestCommentNarrationGuard:
             },
         )
         assert result.returncode == 2
-        assert "comment-narration" in result.stderr
+        assert "comment-narration-removed-because" in result.stderr
+
+    def test_removed_because_upper_bound_not_blocked(self):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "pass",
+                "new_string": (
+                    "# removed the old synchronous validation helper that nobody "
+                    "calls anymore because it was replaced\npass"
+                ),
+            },
+        )
+        assert result.returncode == 0
+        assert "comment-narration" not in (result.stdout + result.stderr)
 
     def test_notebook_markdown_cell_not_blocked(self):
         result = run_guard(
@@ -1703,6 +1718,17 @@ class TestCommentNarrationGuard:
         )
         assert result.returncode == 0
         assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_notebook_omitted_cell_type_scanned_as_code(self):
+        result = run_guard(
+            "NotebookEdit",
+            {
+                "notebook_path": "nb.ipynb",
+                "new_source": "# This supersedes the old retry logic",
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration-supersede" in result.stderr
 
     def test_edit_markdown_file_not_blocked(self):
         result = run_guard(
@@ -1726,19 +1752,63 @@ class TestCommentNarrationGuard:
             },
         )
         assert result.returncode == 2
-        assert "comment-narration" in result.stderr
+        assert "comment-narration-supersede" in result.stderr
+
+    def test_write_empty_content_not_blocked(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "x.py",
+                "content": "",
+            },
+        )
+        assert result.returncode == 0
+        assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_edit_same_phrase_new_location_not_reblocked(self):
+        # Documents a known heuristic limitation (plan Round-3 decision): the
+        # pre-existing check is a whole-content substring match, not scoped to
+        # the edited location. A phrase already present anywhere in old_string
+        # is treated as pre-existing even when reintroduced at a new location.
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "def a():\n    # This supersedes the old logger\n    pass",
+                "new_string": (
+                    "def a():\n    # This supersedes the old logger\n    pass\n\n"
+                    "def b():\n    # This supersedes the old logger\n    pass"
+                ),
+            },
+        )
+        assert result.returncode == 0
+        assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_large_unclosed_html_comment_does_not_hang(self):
+        # Regression test for the O(n^2) blowup in the <!-- --> span pattern:
+        # many unclosed openers used to take 7+ seconds at 100KB before the
+        # bounded quantifier + size-cap fix. Content exceeds the scan cap, so
+        # this must exit 0 (fail-safe) and return quickly.
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "x.html",
+                "content": "<!--x" * 30_000,
+            },
+        )
+        assert result.returncode == 0
 
     @pytest.mark.parametrize(
-        "new_string",
+        "new_string, expected_label",
         [
-            "# This replaces the old retry logic",
-            "# Previously implemented as a synchronous call",
-            "# As discussed, this uses a shorter timeout",
-            "# Per our conversation, defaulting to 30s",
+            ("# This replaces the old retry logic", "replaces-old"),
+            ("# Previously implemented as a synchronous call", "previously"),
+            ("# As discussed, this uses a shorter timeout", "as-discussed"),
+            ("# Per our conversation, defaulting to 30s", "per-conversation"),
         ],
         ids=["replaces-old", "previously", "as-discussed", "per-conversation"],
     )
-    def test_edit_remaining_narrative_patterns_blocked(self, new_string):
+    def test_edit_remaining_narrative_patterns_blocked(self, new_string, expected_label):
         result = run_guard(
             "Edit",
             {
@@ -1748,7 +1818,28 @@ class TestCommentNarrationGuard:
             },
         )
         assert result.returncode == 2
-        assert "comment-narration" in result.stderr
+        assert f"comment-narration-{expected_label}" in result.stderr
+
+    @pytest.mark.parametrize(
+        "file_path, new_string",
+        [
+            ("x.js", "// This replaces the old retry logic"),
+            ("x.go", "/* This replaces the old retry logic */"),
+            ("x.vue", "<!-- This replaces the old retry logic -->"),
+        ],
+        ids=["slash-comment", "block-comment", "html-comment"],
+    )
+    def test_edit_cross_language_comment_syntax_blocked(self, file_path, new_string):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": file_path,
+                "old_string": "pass",
+                "new_string": new_string,
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration-replaces-old" in result.stderr
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
