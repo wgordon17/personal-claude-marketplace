@@ -37,8 +37,7 @@ jobs:
       - name: Check for changes
         id: diff
         run: |
-          # Patch the upstream URL to match our local vendored reference (same regex as "Update vendored files" step)
-          perl -0777 -i -pe 's|fetch and follow the instructions at:\nhttps://raw\.githubusercontent\.com/jgraph/drawio-mcp/main/shared/xml-reference\.md|read and follow the instructions in the vendored sibling file `xml-reference.md` located in the same directory as this skill file.|s' "$RUNNER_TEMP/upstream-skill.md"
+          .github/scripts/patch-drawio-xml-reference.sh "$RUNNER_TEMP/upstream-skill.md"
           changed=false
           diff -q "$RUNNER_TEMP/upstream-skill.md" drawio/skills/drawio/SKILL.md > /dev/null 2>&1 || changed=true
           diff -q "$RUNNER_TEMP/upstream-xml-reference.md" drawio/skills/drawio/xml-reference.md > /dev/null 2>&1 || changed=true
@@ -67,12 +66,7 @@ jobs:
             -o drawio/skills/drawio/xml-reference.md
           test -s drawio/skills/drawio/xml-reference.md || { echo "::error::SHA-pinned xml-reference.md fetch failed"; exit 1; }
 
-          # Patch upstream URL to local vendored reference (same regex as "Check for changes" step)
-          perl -0777 -i -pe 's|fetch and follow the instructions at:\nhttps://raw\.githubusercontent\.com/jgraph/drawio-mcp/main/shared/xml-reference\.md|read and follow the instructions in the vendored sibling file `xml-reference.md` located in the same directory as this skill file.|s' drawio/skills/drawio/SKILL.md
-          if grep -q 'raw.githubusercontent.com.*xml-reference' drawio/skills/drawio/SKILL.md; then
-            echo "::error::SKILL.md still contains upstream xml-reference URL after patching — upstream may have changed the surrounding text"
-            exit 1
-          fi
+          .github/scripts/patch-drawio-xml-reference.sh drawio/skills/drawio/SKILL.md
 
           TODAY=$(date -u +%Y-%m-%d)
 
