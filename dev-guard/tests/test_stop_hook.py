@@ -2441,22 +2441,24 @@ class TestDeferralIntegration:
         assert "Deferral" in output["reason"]
 
 
-# ── shared-feedback.sh hook ───────────────────────────────────────────────────
+# ── inject-reference.sh hook ──────────────────────────────────────────────────
 
 
-SHARED_FEEDBACK_SCRIPT = Path(__file__).parent.parent / "hooks" / "shared-feedback.sh"
+INJECT_REFERENCE_SCRIPT = Path(__file__).parent.parent / "hooks" / "inject-reference.sh"
 
 
-class TestSharedFeedbackHook:
-    """Black-box subprocess tests for shared-feedback.sh SessionStart hook.
+class TestInjectReferenceHook:
+    """Black-box subprocess tests for inject-reference.sh SessionStart hook.
 
-    Tests invoke the shell script directly via subprocess.run. No stdin is needed
-    — the hook takes no input, only reads an environment variable.
+    Tests invoke the shell script directly via subprocess.run, passing the
+    target reference filename as $1 (e.g. "shared-feedback.md"). No stdin is
+    needed — the hook takes no input beyond the positional argument, only
+    reads an environment variable.
     """
 
     def _run_hook(self, env: dict) -> subprocess.CompletedProcess:
         return subprocess.run(
-            ["bash", str(SHARED_FEEDBACK_SCRIPT)],
+            ["bash", str(INJECT_REFERENCE_SCRIPT), "shared-feedback.md"],
             capture_output=True,
             text=True,
             env=env,
@@ -2485,5 +2487,17 @@ class TestSharedFeedbackHook:
         """CLAUDE_PLUGIN_ROOT set but shared-feedback.md absent → exit 0, no output."""
         env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(tmp_path)}
         result = self._run_hook(env)
+        assert result.returncode == 0
+        assert result.stdout == ""
+
+    def test_missing_argument_exits_0_with_empty_stdout(self, tmp_path):
+        """$1 empty/missing → graceful degradation: exit 0, no output."""
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(tmp_path)}
+        result = subprocess.run(
+            ["bash", str(INJECT_REFERENCE_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
         assert result.returncode == 0
         assert result.stdout == ""

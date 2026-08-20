@@ -42,7 +42,11 @@ Development environment policy enforcement: tool selection guard, commit validat
 
 ### SessionStart: Shared Behavioral Feedback
 
-**shared-feedback.sh** — Injects cross-project behavioral rules from `references/shared-feedback.md` into every session. Rules include anti-deferral guidance (no v1/v2 self-scoping, no fabricated user deferral, scope decisions belong to user).
+**inject-reference.sh shared-feedback.md** — Injects cross-project behavioral rules from `references/shared-feedback.md` into every session. Rules include anti-deferral guidance (no v1/v2 self-scoping, no fabricated user deferral, scope decisions belong to user).
+
+### SessionStart: Token Efficiency
+
+**inject-reference.sh token-efficiency.md** — Injects a vendored, locally-patched copy of [JetBrains/benjamin-plus-skill](https://github.com/JetBrains/benjamin-plus-skill)'s token-efficiency ruleset from `references/token-efficiency.md` into every session. Rules cover recon batching, keyhole reads, dependency probing, treating the task's own check as the green signal, and pacing polling intervals.
 
 ## How Hooks Work
 
