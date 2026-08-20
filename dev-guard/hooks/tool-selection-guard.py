@@ -1985,6 +1985,28 @@ _CLAIRE_PATH_RE = re.compile(
     r"(?<=[\s/])\.claire(?=[^a-zA-Z0-9_-]|$)|^\.claire(?=[^a-zA-Z0-9_-]|$)"
 )
 
+_COMMENT_NARRATION_SKIP_EXTENSIONS: frozenset[str] = frozenset(
+    {".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc"}
+)
+
+_COMMENT_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r'"""(.*?)"""', re.DOTALL),  # Python docstrings
+    re.compile(r"'''(.*?)'''", re.DOTALL),  # Python docstrings, alt quote
+    re.compile(r"/\*(.*?)\*/", re.DOTALL),  # C-style block comments
+    re.compile(r"<!--(.*?)-->", re.DOTALL),  # HTML/XML comments
+    re.compile(r"(?:#|//)[^\n]*"),  # line comments
+)
+
+_NARRATIVE_COMMENT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("supersede", re.compile(r"\bsupersede[sd]?\b", re.IGNORECASE)),
+    ("replaces-old", re.compile(r"\breplaces?\s+the\s+old\b", re.IGNORECASE)),
+    ("previously", re.compile(r"\bpreviously\s+(?:was|did|implemented)\b", re.IGNORECASE)),
+    ("removed-because", re.compile(r"\bremoved\s+(?:\S+\s+){0,6}because\b", re.IGNORECASE)),
+    ("phase-reference", re.compile(r"\bphase\s+\d+\b", re.IGNORECASE)),
+    ("as-discussed", re.compile(r"\bas\s+(?:we\s+)?discussed\b", re.IGNORECASE)),
+    ("per-conversation", re.compile(r"\bper\s+our\s+conversation\b", re.IGNORECASE)),
+]
+
 
 def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
     """Correct .claire → .claude hallucinations (anthropics/claude-code#17893).
@@ -2031,6 +2053,69 @@ def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
             "block",
             rule_name="claire-typo-bash",
             matched_segment=command[:80],
+        )
+
+
+def _extract_comment_spans(text: str) -> str:
+    """Extract comment/docstring spans from source text, joined by newlines."""
+    spans = []
+    for pattern in _COMMENT_SPAN_PATTERNS:
+        for m in pattern.finditer(text):
+            spans.append(m.group(0))
+    return "\n".join(spans)
+
+
+def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
+    """Block newly-introduced session-narrative/supersession comment patterns.
+
+    Comments must describe only the current, committed code state — not prior
+    versions, this editing session, or plan phases. Only fires on source code
+    (doc/prose extensions and markdown notebook cells are skipped) and only on
+    narrative text that is newly introduced (not already present verbatim in
+    old_string for Edit calls).
+    """
+    if tool_name == "Edit":
+        new_content = tool_input.get("new_string", "")
+        old_content = tool_input.get("old_string", "")
+        path = tool_input.get("file_path", "")
+    elif tool_name == "Write":
+        new_content = tool_input.get("content", "")
+        old_content = None
+        path = tool_input.get("file_path", "")
+    elif tool_name == "NotebookEdit":
+        new_content = tool_input.get("new_source", "")
+        old_content = None
+        path = tool_input.get("notebook_path", "")
+    else:
+        return
+
+    if path and Path(path).suffix.lower() in _COMMENT_NARRATION_SKIP_EXTENSIONS:
+        return
+    if tool_name == "NotebookEdit" and tool_input.get("cell_type") == "markdown":
+        return
+
+    if not new_content:
+        return
+
+    new_spans = _extract_comment_spans(new_content)
+    old_spans = _extract_comment_spans(old_content) if old_content else ""
+
+    for _label, pattern in _NARRATIVE_COMMENT_PATTERNS:
+        m = pattern.search(new_spans)
+        if not m:
+            continue
+        matched_text = m.group(0)
+        if old_spans and matched_text in old_spans:
+            continue
+        _exit_with_decision(
+            "Comments must describe only the current, committed state of the "
+            "code — not prior versions, this editing session, or plan phases. "
+            "If something is genuinely being replaced, say so in the commit "
+            "message or PR description, not a code comment. Rewrite or remove "
+            "the flagged comment and retry.",
+            "block",
+            rule_name="comment-narration",
+            matched_segment=matched_text[:80],
         )
 
 
@@ -4080,6 +4165,7 @@ def main() -> None:
     _guard_tmp_path(tool_name, tool_input)
     _guard_plan_mode(tool_name)
     _guard_claire_typo(tool_name, tool_input)
+    _guard_comment_narration(tool_name, tool_input)
 
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
