@@ -2100,7 +2100,7 @@ def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
     new_spans = _extract_comment_spans(new_content)
     old_spans = _extract_comment_spans(old_content) if old_content else ""
 
-    for _label, pattern in _NARRATIVE_COMMENT_PATTERNS:
+    for label, pattern in _NARRATIVE_COMMENT_PATTERNS:
         m = pattern.search(new_spans)
         if not m:
             continue
@@ -2114,7 +2114,7 @@ def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
             "message or PR description, not a code comment. Rewrite or remove "
             "the flagged comment and retry.",
             "block",
-            rule_name="comment-narration",
+            rule_name=f"comment-narration:{label}",
             matched_segment=matched_text[:80],
         )
 
