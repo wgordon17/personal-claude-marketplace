@@ -102,11 +102,13 @@ Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| dev-guard | Tool selection policies, commit validation, and subagent completion verification | 4 hooks | [README](dev-guard/README.md) |
+| dev-guard | Tool selection policies, commit validation, and subagent completion verification | 6 hooks | [README](dev-guard/README.md) |
 
 > **⚠️ Important:** Dev-guard's `"ask"` action uses Claude Code's JSON `hookSpecificOutput` protocol. This correctly overrides `permissions.allow` auto-approve rules in the CLI but is [not supported in VS Code](https://github.com/anthropics/claude-code/issues/13339). See the [dev-guard README](dev-guard/README.md#action-field) for details.
 
 **Hooks:**
+- **SessionStart: Shared Behavioral Feedback** - Injects cross-project behavioral rules (anti-deferral guidance, scope ownership) into every session
+- **SessionStart: Token Efficiency** - Injects a vendored token-efficiency ruleset (recon batching, keyhole reads, dependency pacing) into every session
 - **PreToolUse: Tool Selection Guard** - Enforces native tool usage, Python/Rust tooling, git safety, URL fetch guard
 - **PostToolUse: Commit Validation** - Conventional Commits format enforcement
 - **Stop:** Quality stop gate - Deterministic triage + LLM evaluation for completion claims and write activity
