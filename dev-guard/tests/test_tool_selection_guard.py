@@ -1611,6 +1611,146 @@ class TestClaireTypoGuard:
         assert "claire-typo" not in (result.stdout + result.stderr)
 
 
+class TestCommentNarrationGuard:
+    """Blocks newly-introduced session-narrative/supersession comment patterns."""
+
+    def test_edit_supersede_blocked(self):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "pass",
+                "new_string": "# This supersedes the old validation logic\npass",
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration" in result.stderr
+
+    def test_write_phase_reference_blocked(self):
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "x.py",
+                "content": "# Phase 2 of the plan: add retries\npass",
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration" in result.stderr
+
+    def test_edit_preexisting_narration_not_reblocked(self):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "# This supersedes the old validation logic\npass",
+                "new_string": (
+                    "# This supersedes the old validation logic\npass  # trailing no-op"
+                ),
+            },
+        )
+        assert result.returncode == 0
+        assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_edit_ordinary_why_comment_not_blocked(self):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "pass",
+                "new_string": (
+                    "# ALB idle timeout must exceed the upstream read timeout "
+                    "or connections drop mid-response\npass"
+                ),
+            },
+        )
+        assert result.returncode == 0
+        assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_notebook_code_cell_narration_blocked(self):
+        result = run_guard(
+            "NotebookEdit",
+            {
+                "notebook_path": "nb.ipynb",
+                "cell_type": "code",
+                "new_source": (
+                    "# removed the retry loop because it duplicated the caller's own retry"
+                ),
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration" in result.stderr
+
+    def test_notebook_zero_word_removed_because_blocked(self):
+        result = run_guard(
+            "NotebookEdit",
+            {
+                "notebook_path": "nb.ipynb",
+                "cell_type": "code",
+                "new_source": "# removed because it was outdated",
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration" in result.stderr
+
+    def test_notebook_markdown_cell_not_blocked(self):
+        result = run_guard(
+            "NotebookEdit",
+            {
+                "notebook_path": "nb.ipynb",
+                "cell_type": "markdown",
+                "new_source": "## Phase 2 Rollout\n\nThis supersedes the beta build.",
+            },
+        )
+        assert result.returncode == 0
+        assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_edit_markdown_file_not_blocked(self):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "ROADMAP.md",
+                "old_string": "x",
+                "new_string": "## Phase 2 Rollout\n\nThis supersedes the beta build.",
+            },
+        )
+        assert result.returncode == 0
+        assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_edit_multiline_docstring_narration_blocked(self):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "pass",
+                "new_string": "'''\nThis supersedes the old retry logic.\n'''\npass",
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration" in result.stderr
+
+    @pytest.mark.parametrize(
+        "new_string",
+        [
+            "# This replaces the old retry logic",
+            "# Previously implemented as a synchronous call",
+            "# As discussed, this uses a shorter timeout",
+            "# Per our conversation, defaulting to 30s",
+        ],
+        ids=["replaces-old", "previously", "as-discussed", "per-conversation"],
+    )
+    def test_edit_remaining_narrative_patterns_blocked(self, new_string):
+        result = run_guard(
+            "Edit",
+            {
+                "file_path": "x.py",
+                "old_string": "pass",
+                "new_string": new_string,
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration" in result.stderr
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Whitespace edge cases
 # ═══════════════════════════════════════════════════════════════════════════════
