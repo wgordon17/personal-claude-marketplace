@@ -21,6 +21,12 @@ if [[ -z "${1:-}" ]]; then
     exit 0
 fi
 
+# Guard: reject any path separator to prevent traversal (../) or absolute-path
+# injection. Legitimate reference filenames are always flat, in references/.
+if [[ "$1" == */* ]]; then
+    exit 0
+fi
+
 REFERENCE_FILE="${CLAUDE_PLUGIN_ROOT}/references/$1"
 
 if [[ -f "$REFERENCE_FILE" ]]; then

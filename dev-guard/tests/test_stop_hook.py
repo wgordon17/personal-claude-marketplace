@@ -2501,3 +2501,18 @@ class TestInjectReferenceHook:
         )
         assert result.returncode == 0
         assert result.stdout == ""
+
+    def test_path_traversal_argument_exits_0_with_empty_stdout(self, tmp_path):
+        """$1 containing '/' (e.g. path traversal) → rejected: exit 0, no output."""
+        (tmp_path / "references").mkdir()
+        secret = tmp_path.parent / "secret.md"
+        secret.write_text("should never be printed\n")
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(tmp_path)}
+        result = subprocess.run(
+            ["bash", str(INJECT_REFERENCE_SCRIPT), "../../secret.md"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert result.stdout == ""

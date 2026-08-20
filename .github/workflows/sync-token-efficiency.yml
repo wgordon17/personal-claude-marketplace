@@ -85,7 +85,7 @@ jobs:
         run: |
           {
             cat <<EOF
-          <!-- Vendored from https://github.com/JetBrains/benjamin-plus-skill (MIT) at commit ${UPSTREAM_SHA}. See UPSTREAM.md in this directory's parent, and token-efficiency.LICENSE alongside this file, for attribution and sync details. Rules 1-3's examples are locally patched on every sync to avoid recommending shell tools this repo's own dev-guard/hooks/tool-selection-guard.py blocks (head, tail, cat, bare python) in favor of the Read tool / uv run -- see .github/scripts/patch-token-efficiency.sh. -->
+          <!-- Vendored from https://github.com/JetBrains/benjamin-plus-skill (MIT) at commit ${UPSTREAM_SHA}. See UPSTREAM.md in this directory's parent, and token-efficiency.LICENSE alongside this file, for attribution and sync details. Rules 1-3's examples are locally patched on every sync to avoid recommending shell tools this repo's own dev-guard/hooks/tool-selection-guard.py blocks (head, tail, cat, bare python) in favor of the Read tool / uv run — see .github/scripts/patch-token-efficiency.sh. -->
 
           EOF
             cat "$RUNNER_TEMP/upstream-stripped.md"
