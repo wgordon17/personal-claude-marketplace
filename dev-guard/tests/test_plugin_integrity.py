@@ -31,6 +31,8 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 JIRA_SKILL = REPO_ROOT / "jira" / "skills" / "jira" / "SKILL.md"
 JIRA_AGENT = REPO_ROOT / "jira" / "agents" / "jira-agent.md"
 MARKETPLACE_JSON = REPO_ROOT / ".claude-plugin" / "marketplace.json"
+DEV_GUARD_HOOKS_JSON = REPO_ROOT / "dev-guard" / "hooks" / "hooks.json"
+DEV_GUARD_PLUGIN_JSON = REPO_ROOT / "dev-guard" / ".claude-plugin" / "plugin.json"
 
 URL_DIRECTIVE = "redhat.atlassian.net/browse"
 OLD_PHRASE = "After every create or update operation"
@@ -476,6 +478,39 @@ class TestPluginVersionParity:
         )
 
 
+class TestDevGuardDescriptionSync:
+    """Structural test that dev-guard's description stays in sync across its three
+    surfaces: hooks.json, plugin.json, and marketplace.json. All three must share the
+    same trailing capability phrase, per CLAUDE.md's 'bump plugin versions in both
+    files' rule extended to descriptions — a substring-presence grep only confirms a
+    phrase exists somewhere, not that the surfaces agree with each other."""
+
+    def _trailing_phrase(self, description: str) -> str:
+        return description.rsplit(",", 1)[-1].strip()
+
+    def test_description_suffix_matches_across_surfaces(self):
+        hooks_description = json.loads(DEV_GUARD_HOOKS_JSON.read_text())["description"]
+        plugin_description = json.loads(DEV_GUARD_PLUGIN_JSON.read_text())["description"]
+
+        marketplace = json.loads(MARKETPLACE_JSON.read_text())
+        dev_guard_entry = next(
+            entry for entry in marketplace["plugins"] if entry["name"] == "dev-guard"
+        )
+        marketplace_description = dev_guard_entry["description"]
+
+        hooks_suffix = self._trailing_phrase(hooks_description)
+        plugin_suffix = self._trailing_phrase(plugin_description)
+        marketplace_suffix = self._trailing_phrase(marketplace_description)
+
+        assert hooks_suffix == plugin_suffix == marketplace_suffix, (
+            "dev-guard's description trailing phrase must match across "
+            "hooks.json, plugin.json, and marketplace.json.\n"
+            f"  hooks.json:       {hooks_suffix!r}\n"
+            f"  plugin.json:      {plugin_suffix!r}\n"
+            f"  marketplace.json: {marketplace_suffix!r}"
+        )
+
+
 FETCHALLER_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / ".mcp.json"
 
 
@@ -606,6 +641,57 @@ class TestFetchallerDomainRulesDocSync:
             f"BLOCKED_URL_RULES contains fetchaller-related rule name(s) missing from "
             f"fetchaller-domain-rules.md's domain table: {sorted(undocumented)}. "
             "Add a row to the table and check whether _WEBSEARCH_TOOL_HINTS needs an entry too."
+        )
+
+
+TOKEN_EFFICIENCY_DOC = REPO_ROOT / "dev-guard" / "references" / "token-efficiency.md"
+
+
+class TestTokenEfficiencyDocSafety:
+    """token-efficiency.md's Rules 1-3 examples are locally patched (by
+    .github/scripts/patch-token-efficiency.sh) on every upstream sync to avoid
+    recommending shell tools this repo's own tool-selection-guard.py blocks
+    (head, tail, cat, sed, awk, bare python3) in favor of the Read tool / uv
+    run. Those three safety assertions only run in the weekly
+    sync-token-efficiency.yml workflow, so a manual edit to this doc that
+    reintroduces a blocked-tool recommendation would pass PR-gating CI. Re-run
+    the same three invariants here so `make test` catches it too.
+    """
+
+    def test_no_blocked_tool_words_outside_attribution_line(self):
+        """Line 1 is the attribution comment and legitimately names the
+        blocked tools in prose; every other line must not mention them."""
+        blocked_pattern = re.compile(r"\b(head|tail|cat|sed|awk)\b")
+        lines = TOKEN_EFFICIENCY_DOC.read_text().splitlines()
+        hits = [
+            f"{i}: {line}"
+            for i, line in enumerate(lines[1:], start=2)
+            if blocked_pattern.search(line)
+        ]
+        assert not hits, (
+            "blocked-tool mention(s) found outside line 1 attribution comment "
+            f"in token-efficiency.md: {hits}"
+        )
+
+    def test_python3_mentions_are_all_uv_run_prefixed(self):
+        """Every 'python3' mention must be prefixed by 'uv run ' -- a bare
+        python3 reference slipping through would fail this parity check."""
+        content = TOKEN_EFFICIENCY_DOC.read_text()
+        python3_count = len(re.findall(r"python3", content))
+        uv_python3_count = len(re.findall(r"uv run python3", content))
+        assert python3_count == uv_python3_count, (
+            f"'python3' mention count ({python3_count}) does not match "
+            f"'uv run python3' count ({uv_python3_count}) in token-efficiency.md "
+            "-- a bare python3 reference may have slipped through unpatched"
+        )
+
+    def test_read_tool_replacement_text_present(self):
+        """Confirms Rule 2's 'Read tool with' replacement text actually
+        landed, rather than the substitution being a silent no-op."""
+        content = TOKEN_EFFICIENCY_DOC.read_text()
+        assert "Read tool with" in content, (
+            "expected replacement text 'Read tool with' not found in "
+            "token-efficiency.md -- Rule 2 patch may not have applied"
         )
 
 
