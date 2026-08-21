@@ -36,3 +36,12 @@ PRs. Follow-up work is a separate concern addressed after the current PR merges.
 ## Model Selection
 
 Use Sonnet over Haiku for judgment-heavy tasks (accuracy over speed for infrequent operations).
+
+## Code Comments
+
+**Comments describe only the current, committed state of the code.** Do not reference prior
+versions, this editing session, chat history, or plan/phase numbers in a comment — a reader
+encountering the code later has no access to that context, and referencing it produces
+claims like "this supersedes the old approach" inside a PR that never had an old approach to
+supersede. If something is genuinely being replaced or migrated, say so in the commit message
+or PR description, not in a code comment.

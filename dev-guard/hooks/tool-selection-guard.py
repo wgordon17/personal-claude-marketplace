@@ -2034,6 +2034,114 @@ def _guard_claire_typo(tool_name: str, tool_input: dict) -> None:
         )
 
 
+class NarrativePattern(NamedTuple):
+    name: str
+    pattern: re.Pattern[str]
+
+
+_COMMENT_NARRATION_SKIP_EXTENSIONS: frozenset[str] = frozenset(
+    {".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc"}
+)
+
+# Guards against O(n^2) regex blowup in the cross-delimiter span patterns below
+# (distinct open/close markers re-scan from every unmatched opener) — applies to
+# both new and old content independently, so a huge unrelated old_string can't
+# be used to stall the guard either. Character count, not byte count — regex
+# engine work scales with characters scanned, not UTF-8 encoded size.
+_COMMENT_NARRATION_MAX_SCAN_CHARS = 100_000
+
+_COMMENT_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r'"""(.*?)"""', re.DOTALL),  # Python docstrings
+    re.compile(r"'''(.*?)'''", re.DOTALL),  # Python docstrings, alt quote
+    re.compile(r"/\*(.{0,2000}?)\*/", re.DOTALL),  # C-style block comments
+    re.compile(r"<!--(.{0,2000}?)-->", re.DOTALL),  # HTML/XML comments
+    re.compile(r"(?:#|//)[^\n]*"),  # line comments
+)
+
+_NARRATIVE_COMMENT_PATTERNS: tuple[NarrativePattern, ...] = (
+    NarrativePattern("supersede", re.compile(r"\bsupersede[sd]?\b", re.IGNORECASE)),
+    NarrativePattern("replaces-old", re.compile(r"\breplaces?\s+the\s+old\b", re.IGNORECASE)),
+    NarrativePattern(
+        "previously", re.compile(r"\bpreviously\s+(?:was|did|implemented)\b", re.IGNORECASE)
+    ),
+    NarrativePattern(
+        "removed-because", re.compile(r"\bremoved\s+(?:\S+\s+){0,6}because\b", re.IGNORECASE)
+    ),
+    NarrativePattern("phase-reference", re.compile(r"\bphase\s+\d+\b", re.IGNORECASE)),
+    NarrativePattern("as-discussed", re.compile(r"\bas\s+(?:we\s+)?discussed\b", re.IGNORECASE)),
+    NarrativePattern(
+        "per-conversation", re.compile(r"\bper\s+our\s+conversation\b", re.IGNORECASE)
+    ),
+)
+
+
+def _extract_comment_spans(text: str) -> str:
+    """Extract comment/docstring spans from source text, joined by newlines."""
+    spans = []
+    for pattern in _COMMENT_SPAN_PATTERNS:
+        for m in pattern.finditer(text):
+            spans.append(m.group(0))
+    return "\n".join(spans)
+
+
+def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
+    """Block newly-introduced session-narrative/supersession comment patterns.
+
+    Comments must describe only the current, committed code state — not prior
+    versions, this editing session, or plan phases. Only fires on source code
+    (doc/prose extensions and markdown notebook cells are skipped) and only on
+    narrative text that is newly introduced (not already present verbatim in
+    old_string for Edit calls).
+    """
+    if tool_name == "Edit":
+        new_content = tool_input.get("new_string", "")
+        old_content = tool_input.get("old_string", "")
+    elif tool_name == "Write":
+        new_content = tool_input.get("content", "")
+        old_content = None
+    elif tool_name == "NotebookEdit":
+        new_content = tool_input.get("new_source", "")
+        old_content = None
+    else:
+        return
+
+    path_key = "notebook_path" if tool_name == "NotebookEdit" else "file_path"
+    path = tool_input.get(path_key, "")
+    if path and Path(path).suffix.lower() in _COMMENT_NARRATION_SKIP_EXTENSIONS:
+        return
+    if tool_name == "NotebookEdit" and tool_input.get("cell_type") == "markdown":
+        return
+
+    if not new_content or len(new_content) > _COMMENT_NARRATION_MAX_SCAN_CHARS:
+        return
+    if old_content and len(old_content) > _COMMENT_NARRATION_MAX_SCAN_CHARS:
+        old_content = None
+
+    new_comment_text = _extract_comment_spans(new_content)
+    old_comment_text = None
+
+    for name, pattern in _NARRATIVE_COMMENT_PATTERNS:
+        m = pattern.search(new_comment_text)
+        if not m:
+            continue
+        matched_text = m.group(0)
+        if old_content:
+            if old_comment_text is None:
+                old_comment_text = _extract_comment_spans(old_content)
+            if matched_text in old_comment_text:
+                continue
+        _exit_with_decision(
+            "Comments must describe only the current, committed state of the "
+            "code — not prior versions, this editing session, or plan phases. "
+            "If something is genuinely being replaced, say so in the commit "
+            "message or PR description, not a code comment. Rewrite or remove "
+            "the flagged comment and retry.",
+            "block",
+            rule_name=f"comment-narration-{name}",
+            matched_segment=matched_text[:80],
+        )
+
+
 _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
 
 
@@ -4080,6 +4188,7 @@ def main() -> None:
     _guard_tmp_path(tool_name, tool_input)
     _guard_plan_mode(tool_name)
     _guard_claire_typo(tool_name, tool_input)
+    _guard_comment_narration(tool_name, tool_input)
 
     if tool_name == "WebFetch":
         _handle_webfetch(tool_input)
