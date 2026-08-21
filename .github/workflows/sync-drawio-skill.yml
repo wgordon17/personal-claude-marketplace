@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
@@ -116,3 +117,27 @@ jobs:
             --body "## Summary
           - Syncs vendored skill files from [jgraph/drawio-mcp](https://github.com/jgraph/drawio-mcp) main
           - Auto-bumps drawio plugin version to ${NEW_VERSION}"
+
+      - name: Open or update failure issue
+        # "Check for changes" and "Update vendored files" both run
+        # patch-drawio-xml-reference.sh with no continue-on-error, so a
+        # tripped safety assertion (upstream reworded the matched URL-
+        # instruction text) or an earlier fetch failure skips straight to
+        # here -- no PR gets created in either case, so there is no PR check
+        # to fail. This is the only durable, notification-triggering signal.
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Drawio skill sync failed"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EXISTING=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
+          if [[ -n "$EXISTING" ]]; then
+            gh issue comment "$EXISTING" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "The weekly drawio skill sync workflow failed before it could open a PR -- no PR check exists to catch this. Likely causes: upstream reworded the xml-reference.md URL-instruction text that .github/scripts/patch-drawio-xml-reference.sh expects, or a SKILL.md/xml-reference.md fetch failed.
+
+          Failed run: $RUN_URL
+
+          Compare the current upstream SKILL.md against the expected fetch-instructions text: https://github.com/jgraph/drawio-mcp/blob/main/skill-cli/drawio/SKILL.md"
+          fi
