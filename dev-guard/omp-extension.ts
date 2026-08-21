@@ -1,0 +1,676 @@
+/**
+ * dev-guard OMP bridge.
+ *
+ * Translates OMP's `pi.on(...)` event shapes into the Claude-Code-shaped
+ * stdin JSON the existing Python/shell scripts in hooks/ already expect, and
+ * translates their stdout-JSON/exit-code responses back into OMP's return
+ * shapes. Zero reimplementation of guard logic in TypeScript — every
+ * decision is made by shelling out to the unchanged scripts.
+ *
+ * Ground truth for every design decision below comes from a live OMP v17.4.2
+ * verification spike: hack/research/omp-spike-findings.md (gitignored,
+ * local-only — read it for the full evidence trail behind each comment
+ * here).
+ */
+import type {
+	ExtensionAPI,
+	ExtensionAskDialogQuestion,
+	ExtensionAskDialogResultItem,
+	ExtensionContext,
+	ToolCallEvent,
+	ToolCallEventResult,
+	ToolResultEvent,
+	ToolResultEventResult,
+} from "@oh-my-pi/pi-coding-agent";
+
+// ─────────────────────────────────────────────────────────────────────────
+// Plugin root resolution
+//
+// OMP has no CLAUDE_PLUGIN_ROOT equivalent (confirmed null, no `ctx` field
+// either — Task 1 spike Step 6.5). inject-reference.sh, stop-hook.py, and
+// subagent-stop-hook.py all read it directly and silently no-op (not error)
+// if unset — a total, invisible failure if this bridge didn't inject it.
+// This file lives at the plugin root next to package.json (same placement
+// rationale as the plan's File Design Notes), so its own directory IS the
+// plugin root.
+// ─────────────────────────────────────────────────────────────────────────
+const PLUGIN_ROOT = new URL(".", import.meta.url).pathname.replace(/\/$/, "");
+const HOOKS_DIR = `${PLUGIN_ROOT}/hooks`;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Fail-open / fail-closed matcher classification — explicit typed constants,
+// not inferred from tool-call content (security constraint: an implicit
+// classification risks misclassifying a new matcher and silently changing
+// security posture). The Bash and MCP matchers dispatch to guard functions
+// that can hard-block (GIT_DENY_RULES, fetchaller mutating-call gate); the
+// Write/Edit matchers dispatch only to advisory-only checks (comment
+// narration, tmp-path, Claire-typo guards).
+// ─────────────────────────────────────────────────────────────────────────
+type FailPolicy = "fail-closed" | "fail-open";
+
+const FAIL_CLOSED_TOOL_NAMES: ReadonlySet<string> = new Set(["bash"]);
+const FAIL_OPEN_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit"]);
+// No OMP tool-call event exists for a NotebookEdit or EnterPlanMode
+// equivalent: OMP's plan mode is a slash-command modality (docs/extensions.md's
+// plan-mode.ts example), not a gated tool call, and no separate
+// notebook-editing entry appears in the live ToolCallEvent union (Task 1
+// spike). These two Claude Code matchers have no OMP dispatch path at all —
+// a documented gap, not a silent misclassification. See OMP-COMPAT.md.
+
+function isMcpTool(toolName: string): boolean {
+	return toolName.startsWith("mcp__");
+}
+
+function getFailPolicy(toolName: string): FailPolicy | undefined {
+	if (FAIL_CLOSED_TOOL_NAMES.has(toolName) || isMcpTool(toolName)) return "fail-closed";
+	if (FAIL_OPEN_TOOL_NAMES.has(toolName)) return "fail-open";
+	return undefined;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MCP server re-encoding
+//
+// tool-selection-guard.py's mcp_key() (mcp_constants.py) expects the
+// Claude-Code-shaped `mcp__<server>__<tool>` identity (double underscore
+// both places). OMP's live convention is `mcp__<sanitized_server>_<tool>`
+// (single underscore before the tool name, "plugin_" prefix dropped) — but
+// this is NOT a pure mechanical formula: live-verified against a real OMP
+// install, `context7` sanitizes to `context` (the trailing digit is
+// dropped), not `context7`. A bridge that assumes a fixed hyphen->underscore
+// transform gets this one wrong, and OMP's own tool metadata
+// (`pi.getAllTools()`'s `sourceInfo.path`) only echoes the already-sanitized
+// OMP name back — it does not expose the original un-sanitized identity — so
+// there is no way to recover the exact original from OMP's own runtime
+// introspection. Instead: hard-code the OMP-sanitized form for every server
+// dev-guard's own MCP_READ_ONLY allowlist (mcp_constants.py) actually cares
+// about, since those are the only servers whose exact key matters — unknown
+// servers already pass through to settings.json in
+// tool-selection-guard.py's _handle_mcp_tool() regardless of key accuracy.
+//
+// Live-verified against a real OMP v17.4.2 install (Task 1 spike):
+//   github, claude-mem, serena, sequential-thinking, fetchaller, context7
+// NOT live-verified — derived by applying the same "plugin_ prefix stripped,
+// hyphens -> underscores" pattern the verified servers all followed. If
+// wrong, the effect is that this dev-guard installation's own allowlist
+// entries for the affected server won't auto-approve under OMP (falls
+// through to settings.json passthrough) — degraded convenience, not a
+// security hole, since it's the strictly narrower outcome vs. mis-approving
+// something. Re-verify against a live install before relying on these:
+//   playwright, plugin_jira_mcp-atlassian-prod, metadata-service
+// ─────────────────────────────────────────────────────────────────────────
+const OMP_TO_CLAUDE_CODE_MCP_SERVER: Readonly<Record<string, string>> = {
+	github_mcp_github: "plugin_github-mcp_github",
+	claude_mem_mcp_search: "plugin_claude-mem_mcp-search",
+	serena: "serena",
+	sequential_thinking: "sequential-thinking",
+	fetchaller_mcp_fetchaller: "plugin_fetchaller-mcp_fetchaller",
+	context: "context7", // NOT a formula match — OMP drops the trailing digit.
+	// Best-effort, unverified against a live install — see comment above.
+	playwright: "playwright",
+	jira_mcp_atlassian_prod: "plugin_jira_mcp-atlassian-prod",
+	metadata_service: "metadata-service",
+};
+
+const KNOWN_OMP_MCP_SERVER_PREFIXES = Object.keys(OMP_TO_CLAUDE_CODE_MCP_SERVER).sort(
+	(a, b) => b.length - a.length,
+);
+
+/** Re-encode an OMP MCP tool name into the mcp__<server>__<tool> shape mcp_key() expects. */
+function reencodeMcpToolName(ompToolName: string): string {
+	const rest = ompToolName.slice("mcp__".length);
+	for (const ompServer of KNOWN_OMP_MCP_SERVER_PREFIXES) {
+		if (rest === ompServer || rest.startsWith(`${ompServer}_`)) {
+			const tool = rest.slice(ompServer.length + 1);
+			return `mcp__${OMP_TO_CLAUDE_CODE_MCP_SERVER[ompServer]}__${tool}`;
+		}
+	}
+	// Unknown server: best-effort single->double underscore at the first
+	// boundary. May be wrong for multi-segment server names, but unknown
+	// servers pass through to settings.json regardless of exact key.
+	const firstUnderscore = rest.indexOf("_");
+	if (firstUnderscore === -1) return ompToolName;
+	return `mcp__${rest.slice(0, firstUnderscore)}__${rest.slice(firstUnderscore + 1)}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Shared subprocess helper
+//
+// Uses Bun.spawn() directly, NOT pi.exec(). Confirmed empirically (Task 1
+// spike, Step 2): pi.exec()'s ExecOptions has no stdin field at all — both a
+// `stdin` and an `input` option name silently no-op (child sees immediate
+// EOF, not the payload). Extensions run in-process in the same Bun runtime
+// (docs/extensions.md: "Extensions run in-process with no isolation"), so
+// Bun.spawn is reachable as a Bun global and correctly pipes stdin — verified
+// live with a marker round-tripped through `cat`.
+//
+// Every call injects CLAUDE_PLUGIN_ROOT (see above) and sets the child's cwd
+// explicitly, since tool-selection-guard.py's git-safety checks operate on
+// the process's actual working directory, not a JSON field.
+// ─────────────────────────────────────────────────────────────────────────
+interface RunScriptResult {
+	code: number;
+	stdout: string;
+	stderr: string;
+	timedOut: boolean;
+	/** True when the subprocess itself could not be spawned/run at all (distinct from a normal non-zero exit). */
+	spawnFailed: boolean;
+}
+
+async function runScript(
+	command: string,
+	args: string[],
+	opts: { stdin?: string; cwd: string; timeoutMs?: number } = { cwd: PLUGIN_ROOT },
+): Promise<RunScriptResult> {
+	let proc: ReturnType<typeof Bun.spawn>;
+	try {
+		proc = Bun.spawn([command, ...args], {
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+			cwd: opts.cwd,
+			env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT },
+		});
+	} catch {
+		return { code: -1, stdout: "", stderr: "", timedOut: false, spawnFailed: true };
+	}
+
+	if (opts.stdin !== undefined) {
+		proc.stdin.write(opts.stdin);
+	}
+	proc.stdin.end();
+
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		proc.kill();
+	}, opts.timeoutMs ?? 10_000);
+
+	try {
+		const [stdout, stderr, code] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+			proc.exited,
+		]);
+		return { code, stdout, stderr, timedOut, spawnFailed: false };
+	} catch {
+		return { code: -1, stdout: "", stderr: "", timedOut, spawnFailed: true };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+function runGuard(
+	extraArgs: string[],
+	stdinPayload: unknown,
+	cwd: string,
+	timeoutMs?: number,
+): Promise<RunScriptResult> {
+	return runScript("uv", ["run", `${HOOKS_DIR}/tool-selection-guard.py`, ...extraArgs], {
+		stdin: JSON.stringify(stdinPayload),
+		cwd,
+		timeoutMs,
+	});
+}
+
+function runDecisionPersistence(stdinPayload: unknown, cwd: string): Promise<RunScriptResult> {
+	return runScript("uv", ["run", `${HOOKS_DIR}/decision-persistence.py`], {
+		stdin: JSON.stringify(stdinPayload),
+		cwd,
+	});
+}
+
+/** Parse tool-selection-guard.py's hookSpecificOutput JSON from stdout, if present. */
+function parseHookOutput(stdout: string): { permissionDecision?: string; permissionDecisionReason?: string; updatedInput?: Record<string, unknown>; additionalContext?: string } | undefined {
+	const trimmed = stdout.trim();
+	if (!trimmed) return undefined;
+	try {
+		const parsed = JSON.parse(trimmed);
+		return parsed?.hookSpecificOutput;
+	} catch {
+		return undefined;
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Session identity — sourced ONLY from ctx, never from event.input
+//
+// Security constraint: event.input is LLM-controlled for custom tools
+// (AskUserQuestion). _check_trust (tool-selection-guard.py) compares
+// session_id against stored trust grants — a spoofed session_id would
+// inherit another session's trust rules, bypassing ask-type guards.
+// ─────────────────────────────────────────────────────────────────────────
+function getSessionId(ctx: ExtensionContext): string {
+	const mgr = ctx.sessionManager as unknown as { getSessionId?: () => string | undefined };
+	return mgr.getSessionId?.() ?? "";
+}
+
+export default function (pi: ExtensionAPI) {
+	const z = pi.zod;
+
+	// ─── Session lifecycle ──────────────────────────────────────────────
+	pi.on("session_start", async (_event, ctx) => {
+		const sessionId = getSessionId(ctx);
+		const validatePayload = { session_id: sessionId, cwd: ctx.cwd };
+
+		const validateResult = await runGuard(["--validate"], validatePayload, ctx.cwd);
+		if (validateResult.code !== 0 || validateResult.spawnFailed) {
+			// Persistent (not one-shot) warning — Task 1 spike confirmed
+			// ctx.ui.setStatus(key, text) is the persistent-surface method
+			// (interactive mode wires it to the footer/status bar; a log
+			// line alone would be silent in the common case of no one
+			// watching stderr).
+			ctx.ui.setStatus(
+				"dev-guard-validate",
+				"dev-guard: guard config validation failed — see stderr for details",
+			);
+			ctx.ui.notify(
+				`dev-guard --validate failed (exit ${validateResult.code}): ${validateResult.stderr.slice(0, 400)}`,
+				"error",
+			);
+		}
+
+		// NOT live-verified against real OMP session behavior (out of scope
+		// for the Task 1 spike, which confirmed session_start fires and
+		// confirmed sendMessage's documented deliverAs semantics from
+		// source, but did not confirm this exact "persistent context
+		// visible from the first turn onward" injection pattern end-to-end
+		// in a live session). `deliverAs: "nextTurn"` is chosen because the
+		// SDK docs describe it as "stored and injected on the next user
+		// prompt" — the closest documented analog to Claude Code's
+		// SessionStart hook, which injects once, before the first
+		// assistant turn, and the content then persists in the transcript
+		// for the rest of the session. Re-verify manually before relying on
+		// this for anything security-relevant (it currently isn't — both
+		// injected files are informational/behavioral guidance, not guard
+		// decisions).
+		for (const referenceFile of ["shared-feedback.md", "token-efficiency.md"]) {
+			const result = await runScript(`${HOOKS_DIR}/inject-reference.sh`, [referenceFile], {
+				cwd: ctx.cwd,
+			});
+			if (result.stdout.trim()) {
+				pi.sendMessage(
+					{ type: "text", text: result.stdout },
+					{ deliverAs: "nextTurn" },
+				);
+			}
+		}
+	});
+
+	// ─── AskUserQuestion custom tool ────────────────────────────────────
+	// Literal name "AskUserQuestion" confirmed permitted with no collision
+	// against the built-in "ask" tool (Task 1 spike, Step 9) — so
+	// decision-persistence.py's hardcoded tool_name == "AskUserQuestion"
+	// string-equality check is satisfied without any name translation.
+	const askQuestionSchema = z.object({
+		questions: z.array(
+			z.object({
+				question: z.string(),
+				header: z.string().optional(),
+				options: z.array(
+					z.object({
+						label: z.string(),
+						description: z.string().optional(),
+					}),
+				),
+				multiSelect: z.boolean().optional(),
+			}),
+		),
+	});
+
+	pi.registerTool({
+		name: "AskUserQuestion",
+		label: "Ask User Question",
+		description: "Ask the user one or more multiple-choice questions and wait for their answer.",
+		approval: "read",
+		parameters: askQuestionSchema,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const questions = params.questions;
+
+			// decision-persistence.py PreToolUse: check for a prior stored
+			// decision before bothering the user at all.
+			const sessionId = getSessionId(ctx);
+			const preResult = await runDecisionPersistence(
+				{
+					session_id: sessionId,
+					hook_event_name: "PreToolUse",
+					tool_name: "AskUserQuestion",
+					tool_input: { questions },
+				},
+				ctx.cwd,
+			);
+			const preOutput = parseHookOutput(preResult.stdout);
+			let answers: Record<string, string> | undefined;
+			if (preOutput?.permissionDecision === "allow" && preOutput.updatedInput?.answers) {
+				answers = preOutput.updatedInput.answers as Record<string, string>;
+			}
+
+			if (!answers) {
+				answers = await collectAnswers(ctx, questions);
+			}
+
+			// decision-persistence.py PostToolUse: capture new decisions.
+			await runDecisionPersistence(
+				{
+					session_id: sessionId,
+					hook_event_name: "PostToolUse",
+					tool_name: "AskUserQuestion",
+					tool_input: { questions },
+					tool_response: { answers },
+				},
+				ctx.cwd,
+			);
+
+			return {
+				content: [{ type: "text", text: JSON.stringify(answers) }],
+				details: { answers },
+			};
+		},
+	});
+
+	/**
+	 * Collect answers via ctx.ui.askDialog() when reachable, falling back to
+	 * ctx.ui.select() per question when it isn't (print/RPC/subagent modes —
+	 * confirmed live in Task 1 spike: askDialog is undefined outside TUI
+	 * mode). The select() fallback is single-answer-only even for
+	 * multiSelect questions — a documented degradation, not a bug: there is
+	 * no clean multi-select equivalent among the always-available UI
+	 * primitives.
+	 *
+	 * Matches by question TEXT, not array position (a two-question batch
+	 * answered in reverse order must still map correctly).
+	 */
+	async function collectAnswers(
+		ctx: ExtensionContext,
+		questions: { question: string; header?: string; options: { label: string; description?: string }[]; multiSelect?: boolean }[],
+	): Promise<Record<string, string>> {
+		const answers: Record<string, string> = {};
+
+		if (typeof ctx.ui.askDialog === "function") {
+			const dialogQuestions: ExtensionAskDialogQuestion[] = questions.map((q, i) => ({
+				id: `q${i}`,
+				question: q.question,
+				header: q.header,
+				options: q.options,
+				multi: q.multiSelect,
+			}));
+			const result = await ctx.ui.askDialog(dialogQuestions);
+			if (result && result.kind === "submit") {
+				for (const item of result.results as ExtensionAskDialogResultItem[]) {
+					const matched = questions.find((q) => q.question === item.question);
+					if (!matched) continue;
+					answers[matched.question] = item.customInput || item.selectedOptions.join(", ");
+				}
+			}
+			return answers;
+		}
+
+		for (const q of questions) {
+			const label = await ctx.ui.select(
+				q.question,
+				q.options.map((o) => ({ label: o.label, description: o.description })),
+			);
+			if (label !== undefined) {
+				answers[q.question] = label;
+			}
+		}
+		return answers;
+	}
+
+	// ─── tool_call dispatch (PreToolUse) ────────────────────────────────
+	pi.on("tool_call", async (event: ToolCallEvent, ctx): Promise<ToolCallEventResult | void> => {
+		if (event.toolName === "AskUserQuestion") return; // handled by the custom tool itself
+
+		const sessionId = getSessionId(ctx);
+		const claudeCodeToolName = translateToolNameForGuard(event.toolName);
+		if (!claudeCodeToolName) return; // no guard-relevant equivalent for this tool
+
+		const toolInput = translateToolInputForGuard(event.toolName, event.input as Record<string, unknown>);
+		const failPolicy = getFailPolicy(event.toolName);
+
+		const result = await runGuard(
+			[],
+			{
+				session_id: sessionId,
+				tool_use_id: event.toolCallId,
+				hook_event_name: "PreToolUse",
+				tool_name: claudeCodeToolName,
+				tool_input: toolInput,
+			},
+			ctx.cwd,
+		);
+
+		// Dual block-signal handling: exit code 2 is an independent hard
+		// block, checked BEFORE stdout JSON — a bridge that only reads
+		// stdout JSON silently turns every hard git-deny block into
+		// passthrough allow (security constraint).
+		if (result.code === 2) {
+			return { block: true, reason: result.stderr.trim() || "Blocked by dev-guard." };
+		}
+
+		if (result.spawnFailed || result.timedOut) {
+			if (failPolicy === "fail-closed") {
+				return { block: true, reason: "dev-guard bridge subprocess failed — failing closed for this matcher." };
+			}
+			return; // fail-open: no opinion, let the call proceed
+		}
+
+		const output = parseHookOutput(result.stdout);
+		if (output?.permissionDecision === "ask" || output?.permissionDecision === "deny") {
+			return { block: true, reason: output.permissionDecisionReason ?? "Blocked by dev-guard." };
+		}
+		return; // allow / no opinion
+	});
+
+	// ─── tool_result dispatch (PostToolUse) ─────────────────────────────
+	pi.on("tool_result", async (event: ToolResultEvent, ctx): Promise<ToolResultEventResult | void> => {
+		if (event.toolName === "AskUserQuestion") return; // handled by the custom tool itself
+
+		const sessionId = getSessionId(ctx);
+
+		if (event.toolName === "bash") {
+			// Explicit sequence, one handler, first-block-wins — matches
+			// hooks.json's PostToolUse array order for the Bash matcher.
+			const commitResult = await runScript(`${HOOKS_DIR}/validate-commit-message.sh`, [], {
+				stdin: JSON.stringify({ tool_input: event.input }),
+				cwd: ctx.cwd,
+			});
+			if (commitResult.code === 2) {
+				return { isError: true, content: [{ type: "text", text: commitResult.stderr.trim() }] };
+			}
+
+			const bashResponse = bashToolResponseForGuard(event);
+			await runGuard(
+				[],
+				{
+					session_id: sessionId,
+					tool_use_id: event.toolCallId,
+					hook_event_name: "PostToolUse",
+					tool_name: "Bash",
+					tool_input: event.input,
+					tool_response: bashResponse,
+				},
+				ctx.cwd,
+			);
+			return;
+		}
+
+		// "read" doubles as Claude Code's Read AND WebFetch (OMP has no
+		// standalone URL-fetch tool — `omp read <url>` handles URLs
+		// directly through the same "read" tool; Task 1 spike, Step 4).
+		// Translate to whichever Claude Code tool name the guard's
+		// PostToolUse dispatch actually branches on for this input shape,
+		// so the URL/auth-guard checks (WebFetch) and rtk-tee tracking
+		// (Read) both still fire.
+		if (event.toolName === "read") {
+			const path = String((event.input as Record<string, unknown>).path ?? "");
+			const isUrl = /^https?:\/\//i.test(path);
+			await runGuard(
+				[],
+				{
+					session_id: sessionId,
+					tool_use_id: event.toolCallId,
+					hook_event_name: "PostToolUse",
+					tool_name: isUrl ? "WebFetch" : "Read",
+					tool_input: isUrl ? { url: path } : { file_path: path },
+					tool_response: readToolResponseForGuard(event),
+				},
+				ctx.cwd,
+			);
+			return;
+		}
+	});
+
+	/** Best-effort Bash tool_response shape for _extract_response_text's stdout/stderr concat. */
+	function bashToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
+		const text = event.content
+			.filter((c): c is { type: "text"; text: string } => c.type === "text")
+			.map((c) => c.text)
+			.join("\n");
+		return { stdout: text, stderr: "" };
+	}
+
+	function readToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
+		const text = event.content
+			.filter((c): c is { type: "text"; text: string } => c.type === "text")
+			.map((c) => c.text)
+			.join("\n");
+		return { content: text };
+	}
+
+	/**
+	 * Map an OMP tool name to the Claude Code tool name tool-selection-guard.py
+	 * branches on, or undefined if there's no guard-relevant equivalent.
+	 * mcp__ tools pass through their OMP name (re-encoded separately in
+	 * translateToolInputForGuard's caller path via reencodeMcpToolName).
+	 */
+	function translateToolNameForGuard(ompToolName: string): string | undefined {
+		if (isMcpTool(ompToolName)) return reencodeMcpToolName(ompToolName);
+		switch (ompToolName) {
+			case "bash":
+				return "Bash";
+			case "write":
+				return "Write";
+			case "edit":
+				return "Edit";
+			case "web_search":
+				return "WebSearch";
+			default:
+				return undefined;
+		}
+	}
+
+	/**
+	 * Translate OMP's tool_call input field names into the Claude-Code-shaped
+	 * fields tool-selection-guard.py reads. Field names confirmed in Task 1
+	 * spike, Step 4, EXCEPT web_search's fields (query/allowed_domains),
+	 * which were not live-verified and are a best-effort guess based on the
+	 * OMP CLI's own flag naming.
+	 */
+	function translateToolInputForGuard(ompToolName: string, input: Record<string, unknown>): Record<string, unknown> {
+		if (isMcpTool(ompToolName)) return input;
+		switch (ompToolName) {
+			case "bash":
+				return { command: input.command };
+			case "write":
+			case "edit":
+				return input; // edit's OMP input is untyped/hashline-based — pass through unchanged, no known field rename
+			case "web_search":
+				return { query: input.query, allowed_domains: input.allowed_domains, blocked_domains: input.blocked_domains };
+			default:
+				return input;
+		}
+	}
+
+	// ─── Stop / SubagentStop mapping ────────────────────────────────────
+	// agent_end is OMP's closest analog to both Claude Code's Stop and
+	// SubagentStop events — there is no confirmed OMP event that
+	// distinguishes a subagent's agent_end from the main session's (Task 1
+	// spike; docs/extensions.md's full event-surface list has no such
+	// event). Both scripts are dispatched on every agent_end as a
+	// documented best-effort approximation. This mirrors the plan's own
+	// accepted trade-off for this exact gap: a quality/completeness
+	// control, not a security gate, so a wrong or silent guess degrades
+	// usefulness, not safety.
+	//
+	// Separately: stop-hook.py's _parse_transcript() expects a Claude Code
+	// JSONL transcript shape (`{"type": "user"|"assistant"|"tool_use",
+	// "message": {...}}` per line). OMP's own session file
+	// (ctx.sessionManager.getSessionFile()) is not guaranteed to match that
+	// format — this was not verified in the Task 1 spike and is out of
+	// scope for this bridge to reconcile (would require synthesizing a
+	// translated transcript file, which edges toward reimplementing
+	// transcript-parsing logic the plan explicitly declines to duplicate).
+	// The real session file path is passed through as the best available,
+	// trusted (ctx-sourced) value; _parse_transcript() already fails safe
+	// (returns empty results, not a crash) on an unparseable file, so the
+	// degraded case is "no signals detected" — the same safe-by-default
+	// direction as every other best-effort path here. See OMP-COMPAT.md.
+	let agentEndWithSubagentSignal = 0;
+	let agentEndWithoutSubagentSignal = 0;
+
+	pi.on("agent_end", async (event, ctx) => {
+		const sessionId = getSessionId(ctx);
+		const transcriptPath = ctx.sessionManager.getSessionFile?.() ?? "";
+		const lastMessage = lastAssistantText(event.messages);
+
+		// Telemetry only — not a gate. Best-effort "subagent-context signal"
+		// proxy: a transcript path segment pattern distinct from a top-level
+		// session file naming convention isn't independently confirmed, so
+		// this currently only distinguishes "transcript path present" vs
+		// not, pending a clearer live-confirmed signal.
+		if (transcriptPath) {
+			agentEndWithSubagentSignal++;
+		} else {
+			agentEndWithoutSubagentSignal++;
+		}
+
+		const stopResult = await runScript("uv", ["run", `${HOOKS_DIR}/stop-hook.py`], {
+			stdin: JSON.stringify({
+				session_id: sessionId,
+				transcript_path: transcriptPath,
+				cwd: ctx.cwd,
+				last_assistant_message: lastMessage,
+				stop_hook_active: false,
+			}),
+			cwd: ctx.cwd,
+			timeoutMs: 60_000,
+		});
+		if (stopResult.code === 2) {
+			ctx.ui.notify(stopResult.stderr.trim() || "dev-guard stop-hook: incomplete work detected.", "warning");
+		}
+
+		const subagentResult = await runScript("uv", ["run", `${HOOKS_DIR}/subagent-stop-hook.py`], {
+			stdin: JSON.stringify({ session_id: sessionId, transcript_path: transcriptPath }),
+			cwd: ctx.cwd,
+			timeoutMs: 30_000,
+		});
+		if (subagentResult.code === 2) {
+			ctx.ui.notify(subagentResult.stderr.trim() || "dev-guard subagent-stop-hook: FixSummary validation failed.", "warning");
+		}
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		const sessionId = getSessionId(ctx);
+		await runGuard(["--session-end"], { session_id: sessionId }, ctx.cwd);
+		pi.logger.debug("dev-guard agent_end telemetry", {
+			withSubagentSignal: agentEndWithSubagentSignal,
+			withoutSubagentSignal: agentEndWithoutSubagentSignal,
+		});
+	});
+
+	function lastAssistantText(messages: { role?: string; content?: unknown }[]): string {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const msg = messages[i] as { role?: string; content?: unknown };
+			if (msg.role !== "assistant") continue;
+			const content = msg.content;
+			if (typeof content === "string") return content;
+			if (Array.isArray(content)) {
+				return content
+					.filter((c): c is { type: "text"; text: string } => c && c.type === "text")
+					.map((c) => c.text)
+					.join("\n");
+			}
+		}
+		return "";
+	}
+}
