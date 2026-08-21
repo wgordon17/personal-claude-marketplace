@@ -64,6 +64,40 @@ class TestPatchTokenEfficiencyScript:
         assert "head -30 requirements.txt" not in patched
         assert "| head -50" not in patched
 
+    def test_substitution_survives_unrelated_prose_rewording(self, tmp_path):
+        """Each rule's OLD/NEW span is narrowed to just the substring that
+        actually changes (the backtick-quoted example, or the reordered
+        tool-list clause) rather than the whole surrounding paragraph, so
+        upstream rewording an unrelated sentence sharing the same paragraph
+        must not stop the substitution from firing. A broad paragraph-wide
+        match would silently no-op here instead."""
+        fixture = tmp_path / "injected-instruction.md"
+        fixture.write_text(
+            self._ATTRIBUTION_LINE + "\n"
+            "chain probes with `;` and label the sections\n"
+            "(`echo == layout ==; ls -la; echo == deps ==; head -30 requirements.txt`),\n"
+            "or batch several tool calls into a single message instead. Additional\n"
+            "lookups happen only once the first round raises new questions worth\n"
+            "checking. When copying a convention, sample two real examples first.\n"
+            "\n"
+            "A command that only inspects ends with a limiter: `| head -50`, `| tail -20`,\n"
+            "`grep -m 20`, `wc -l` before contents, Read with offset/limit. Unsure of the\n"
+            "size? Measure it, then read only the slice you actually need.\n"
+            "\n"
+            "Before running code with several dependencies, test them in one probe\n"
+            '(`python3 -c "import x, y, z"`; `command -v tool1 tool2`), and install\n'
+            "everything missing in one command — not one traceback at a time.\n"
+        )
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT, str(fixture))
+        assert result.returncode == 0, result.stderr
+        patched = fixture.read_text()
+        assert "ls -la; wc -l" in patched
+        assert "Read tool with" in patched
+        assert "uv run python3 -c" in patched
+        assert "head -30 requirements.txt" not in patched
+        assert "| head -50" not in patched
+        assert "batch several tool calls into a single message instead" in patched
+
     def test_missing_argument_exits_1(self):
         result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT)
         assert result.returncode == 1

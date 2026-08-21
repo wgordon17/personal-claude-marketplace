@@ -24,55 +24,39 @@ if [[ -z "$FILE" || ! -f "$FILE" ]]; then
 fi
 
 # --- Rule 1: echo/head recon example -> ls -la; wc -l requirements.txt ---
+# Matches only the backtick-quoted example, not the surrounding sentences --
+# everything outside it is untouched pass-through, so unrelated upstream
+# rewording elsewhere in the paragraph can't silently break this rule.
 PTE_R1_OLD=$(cat <<'RULE1_OLD_EOF'
-chain probes with `;` and label the sections
-(`echo == layout ==; ls -la; echo == deps ==; head -30 requirements.txt`),
-or issue several tool calls in one message. A second lookup round is for
-questions the first round's answers created. Copying a convention (a DSL,
-schema, or file format)? Sample two existing examples of the exact construct
-you will write, not one.
+`echo == layout ==; ls -la; echo == deps ==; head -30 requirements.txt`
 RULE1_OLD_EOF
 )
 PTE_R1_NEW=$(cat <<'RULE1_NEW_EOF'
-chain probes with `;` and label the sections (e.g., `ls -la; wc -l
-requirements.txt`), or issue several tool calls in one message. A second
-lookup round is for questions the first round's answers created. Copying a
-convention (a DSL, schema, or file format)? Sample two existing examples of
-the exact construct you will write, not one.
+e.g., `ls -la; wc -l requirements.txt`
 RULE1_NEW_EOF
 )
 
 # --- Rule 2: head/tail keyhole examples -> Read tool with offset/limit ---
+# Matches only the tool-list clause (including its embedded upstream line
+# break, preserved literally). Same narrow-match rationale as Rule 1.
 PTE_R2_OLD=$(cat <<'RULE2_OLD_EOF'
-A command that only inspects ends with a limiter: `| head -50`, `| tail -20`,
-`grep -m 20`, `wc -l` before contents, Read with offset/limit. Size unknown?
-Measure first, then read the slice you need. Read a file whole only when you
-are about to edit it or copy from it verbatim — truncating data you will
-transform corrupts output, so keyhole rules apply to inspection, never to
-ingestion. If a peek was too narrow, take exactly one wider look.
+`| head -50`, `| tail -20`,
+`grep -m 20`, `wc -l` before contents, Read with offset/limit.
 RULE2_OLD_EOF
 )
 PTE_R2_NEW=$(cat <<'RULE2_NEW_EOF'
-A command that only inspects ends with a limiter: Read tool with
-offset/limit, `grep -m 20`, or `wc -l` before contents. Size unknown?
-Measure first, then read the slice you need. Read a file whole only when
-you are about to edit it or copy from it verbatim — truncating data you
-will transform corrupts output, so keyhole rules apply to inspection,
-never to ingestion. If a peek was too narrow, take exactly one wider look.
+Read tool with offset/limit, `grep -m 20`, or `wc -l` before contents.
 RULE2_NEW_EOF
 )
 
 # --- Rule 3: bare python3 -> uv run python3 ---
+# Matches only the backtick-quoted example. Same narrow-match rationale.
 PTE_R3_OLD=$(cat <<'RULE3_OLD_EOF'
-Before running code with several dependencies, test them in one probe
-(`python3 -c "import x, y, z"`; `command -v tool1 tool2`), and install
-everything missing in one command — not one traceback at a time.
+`python3 -c "import x, y, z"`
 RULE3_OLD_EOF
 )
 PTE_R3_NEW=$(cat <<'RULE3_NEW_EOF'
-Before running code with several dependencies, test them in one probe
-(`uv run python3 -c "import x, y, z"`; `command -v tool1 tool2`), and
-install everything missing in one command — not one traceback at a time.
+`uv run python3 -c "import x, y, z"`
 RULE3_NEW_EOF
 )
 
