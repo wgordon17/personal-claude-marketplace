@@ -129,15 +129,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TITLE="Drawio skill sync failed"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          EXISTING=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
-          if [[ -n "$EXISTING" ]]; then
-            gh issue comment "$EXISTING" --body "Failed again: $RUN_URL"
-          else
-            gh issue create --title "$TITLE" --body "The weekly drawio skill sync workflow failed before it could open a PR -- no PR check exists to catch this. Likely causes: upstream reworded the xml-reference.md URL-instruction text that .github/scripts/patch-drawio-xml-reference.sh expects, or a SKILL.md/xml-reference.md fetch failed.
+          BODY="The weekly drawio skill sync workflow failed before it could open a PR -- no PR check exists to catch this. Likely causes: upstream reworded the xml-reference.md URL-instruction text that .github/scripts/patch-drawio-xml-reference.sh expects, or a SKILL.md/xml-reference.md fetch failed.
 
           Failed run: $RUN_URL
 
           Compare the current upstream SKILL.md against the expected fetch-instructions text: https://github.com/jgraph/drawio-mcp/blob/main/skill-cli/drawio/SKILL.md"
-          fi
+          .github/scripts/notify-sync-failure.sh "Drawio skill sync failed" "$BODY"

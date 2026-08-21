@@ -63,10 +63,13 @@ RULE3_NEW_EOF
 export PTE_R1_OLD PTE_R1_NEW PTE_R2_OLD PTE_R2_NEW PTE_R3_OLD PTE_R3_NEW
 
 # Literal (\Q...\E) substitutions via ENV to sidestep shell-quoting pitfalls
-# with the backticks/apostrophes/em-dashes embedded in the rule text.
-perl -0777 -i -pe 's/\Q$ENV{PTE_R1_OLD}\E/$ENV{PTE_R1_NEW}/s' "$FILE"
-perl -0777 -i -pe 's/\Q$ENV{PTE_R2_OLD}\E/$ENV{PTE_R2_NEW}/s' "$FILE"
-perl -0777 -i -pe 's/\Q$ENV{PTE_R3_OLD}\E/$ENV{PTE_R3_NEW}/s' "$FILE"
+# with the backticks/apostrophes/em-dashes embedded in the rule text. /g
+# replaces every occurrence, not just the first -- the narrower a match
+# span, the more plausible it is to legitimately recur elsewhere in the
+# document (e.g. a generic illustrative example repeated verbatim).
+perl -0777 -i -pe 's/\Q$ENV{PTE_R1_OLD}\E/$ENV{PTE_R1_NEW}/gs' "$FILE"
+perl -0777 -i -pe 's/\Q$ENV{PTE_R2_OLD}\E/$ENV{PTE_R2_NEW}/gs' "$FILE"
+perl -0777 -i -pe 's/\Q$ENV{PTE_R3_OLD}\E/$ENV{PTE_R3_NEW}/gs' "$FILE"
 
 # --- Safety assertions (fail loudly rather than ship unpatched/mangled content) ---
 

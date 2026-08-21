@@ -98,6 +98,28 @@ class TestPatchTokenEfficiencyScript:
         assert "| head -50" not in patched
         assert "batch several tool calls into a single message instead" in patched
 
+    def test_substitution_replaces_all_occurrences_on_same_line(self, tmp_path):
+        """perl's s/// without /g replaces only the first match per
+        invocation. A second same-line occurrence of a narrow OLD pattern
+        would otherwise survive unpatched -- and assertion 2's grep -c
+        count (line-based, not occurrence-based) wouldn't catch a bare
+        mention sharing a line with an already-patched one, since both
+        counts would still read 1. Narrower matches make legitimate
+        recurrence (e.g. a generic example reused verbatim) more plausible
+        than the old broad paragraph-wide spans ever were."""
+        fixture = tmp_path / "injected-instruction.md"
+        fixture.write_text(
+            self._ATTRIBUTION_LINE + "`| head -50`, `| tail -20`,\n"
+            "`grep -m 20`, `wc -l` before contents, Read with offset/limit.\n"
+            'Example A: `python3 -c "import x, y, z"`.\n'
+            'Example B: `python3 -c "import x, y, z"`.\n'
+        )
+        result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT, str(fixture))
+        assert result.returncode == 0, result.stderr
+        patched = fixture.read_text()
+        assert patched.count("`uv run python3 -c") == 2
+        assert "`python3 -c" not in patched
+
     def test_missing_argument_exits_1(self):
         result = _run_script(PATCH_TOKEN_EFFICIENCY_SCRIPT)
         assert result.returncode == 1
@@ -155,6 +177,22 @@ class TestPatchDrawioXmlReferenceScript:
         patched = fixture.read_text()
         assert "raw.githubusercontent.com" not in patched
         assert "vendored sibling file `xml-reference.md`" in patched
+
+    def test_replaces_all_occurrences_on_same_line(self, tmp_path):
+        """perl's s/// without /g replaces only the first match. A doc that
+        repeats the OLD URL-instruction text twice (e.g. once in a body
+        section, once in an FAQ) would otherwise leave the second occurrence
+        unpatched -- locks in the /g flag added alongside the same fix in
+        patch-token-efficiency.sh."""
+        fixture = tmp_path / "SKILL.md"
+        fixture.write_text(
+            self._SURROUNDING.format(self._OLD_TEXT) + self._SURROUNDING.format(self._OLD_TEXT)
+        )
+        result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
+        assert result.returncode == 0, result.stdout
+        patched = fixture.read_text()
+        assert "raw.githubusercontent.com" not in patched
+        assert patched.count("vendored sibling file `xml-reference.md`") == 2
 
     def test_missing_argument_exits_1(self):
         result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT)

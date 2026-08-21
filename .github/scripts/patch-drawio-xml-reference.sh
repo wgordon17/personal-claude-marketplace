@@ -24,7 +24,9 @@ if [[ ! -f "$FILE" ]]; then
   exit 1
 fi
 
-perl -0777 -i -pe 's|fetch and follow the instructions at:\nhttps://raw\.githubusercontent\.com/jgraph/drawio-mcp/main/shared/xml-reference\.md|read and follow the instructions in the vendored sibling file `xml-reference.md` located in the same directory as this skill file.|s' "$FILE"
+# /g guards against the same same-line-duplicate bug patch-token-efficiency.sh's
+# /g flags fix -- see that script's comment for the full rationale.
+perl -0777 -i -pe 's|fetch and follow the instructions at:\nhttps://raw\.githubusercontent\.com/jgraph/drawio-mcp/main/shared/xml-reference\.md|read and follow the instructions in the vendored sibling file `xml-reference.md` located in the same directory as this skill file.|gs' "$FILE"
 
 if grep -q 'raw.githubusercontent.com.*xml-reference' "$FILE"; then
   echo "::error::$FILE still contains upstream xml-reference URL after patching — upstream may have changed the surrounding text"
