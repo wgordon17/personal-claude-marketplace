@@ -269,29 +269,26 @@ export default function (pi: ExtensionAPI) {
 			);
 		}
 
-		// NOT live-verified against real OMP session behavior (out of scope
-		// for the Task 1 spike, which confirmed session_start fires and
-		// confirmed sendMessage's documented deliverAs semantics from
-		// source, but did not confirm this exact "persistent context
-		// visible from the first turn onward" injection pattern end-to-end
-		// in a live session). `deliverAs: "nextTurn"` is chosen because the
-		// SDK docs describe it as "stored and injected on the next user
-		// prompt" — the closest documented analog to Claude Code's
-		// SessionStart hook, which injects once, before the first
-		// assistant turn, and the content then persists in the transcript
-		// for the rest of the session. Re-verify manually before relying on
-		// this for anything security-relevant (it currently isn't — both
-		// injected files are informational/behavioral guidance, not guard
-		// decisions).
+		// sendMessage's payload type is `string | Partial<CustomMessage>`
+		// (dist/types/session/messages.d.ts) — a plain string is the valid
+		// form, NOT a `{type, text}` object (caught during live testing of
+		// the simple-bridges component; fixed identically in all three
+		// bridges this marketplace ships).
+		//
+		// `deliverAs: "nextTurn"` is chosen because the SDK docs describe
+		// it as "stored and injected on the next user prompt" — the
+		// closest documented analog to Claude Code's SessionStart hook,
+		// which injects once, before the first assistant turn, and the
+		// content then persists in the transcript for the rest of the
+		// session. Live-confirmed end-to-end: the model correctly quoted
+		// both shared-feedback.md's and token-efficiency.md's content back
+		// from its own context after this fix.
 		for (const referenceFile of ["shared-feedback.md", "token-efficiency.md"]) {
 			const result = await runScript(`${HOOKS_DIR}/inject-reference.sh`, [referenceFile], {
 				cwd: ctx.cwd,
 			});
 			if (result.stdout.trim()) {
-				pi.sendMessage(
-					{ type: "text", text: result.stdout },
-					{ deliverAs: "nextTurn" },
-				);
+				pi.sendMessage(result.stdout, { deliverAs: "nextTurn" });
 			}
 		}
 	});
