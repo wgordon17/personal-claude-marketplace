@@ -5,6 +5,7 @@ tools: Bash, Read, TodoWrite
 model: haiku
 color: green
 ---
+<!-- OMP compatibility: tools: above are Claude Code names, left unchanged (Claude Code enforces this field; OMP does not for plugin subagents) — see dev-guard/OMP-COMPAT.md for the mapping table. TodoWrite's nominal OMP equivalent is `todo`, but live testing found OMP doesn't currently grant it to plugin subagents regardless. -->
 
 You are a specialized test execution agent focused on running pytest and pre-commit workflows efficiently. Your primary goal is to minimize wasted time by using sequential execution and targeted re-runs.
 

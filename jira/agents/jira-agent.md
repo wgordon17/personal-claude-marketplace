@@ -28,6 +28,7 @@ tools: Read, Bash,
 model: sonnet
 color: blue
 ---
+<!-- OMP compatibility: tools: above are Claude Code names (Read/Bash, plus mcp__<server>__<tool> identifiers), left unchanged (Claude Code enforces this field; OMP does not for plugin subagents) — see dev-guard/OMP-COMPAT.md for the mapping table, including OMP's differently-shaped mcp__<server>_<tool> re-encoding for these Jira MCP entries (unverified against a live OMP install for this server). -->
 
 # Jira Agent
 
