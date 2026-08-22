@@ -42,9 +42,11 @@ the docs task — keep both copies in sync if this list changes.)
          Separately, confirm a `permissionDecision: ask` response (e.g. from
          a git-ask-rule like `git stash drop`) is correctly folded into a
          hard block, not passed through as an allow.
-       - write, edit: an allowed case succeeds; a case that would trigger
-         an advisory-only guard check still succeeds if the subprocess call
-         itself is broken (fail-open).
+       - write, edit: an allowed case succeeds. Separately, a case that WOULD
+         hit one of _guard_tmp_path/_guard_comment_narration's real
+         hard-block paths still succeeds if the bridge's own subprocess call
+         is broken (fail-open on subprocess failure, not because these
+         checks are advisory).
        - read: both a plain file path (Read-shaped) and a
          "https://..." path (WebFetch-shaped) route to the correct Claude
          Code tool_name in the guard's stdin payload. Confirm a
@@ -293,10 +295,14 @@ class TestAskDecisionSignal:
 
 
 class TestWriteEditPreToolUsePayloadShape:
-    def test_write_advisory_only_no_hard_block(self, tmp_path):
+    def test_write_no_hard_block_for_benign_input(self, tmp_path):
         """Write's OMP input is passed through unchanged (translateToolInputForGuard
-        does not rename fields for write/edit). A plain write must never exit 2 —
-        the Write matcher only dispatches to advisory-only checks."""
+        does not rename fields for write/edit). This benign write must not exit 2 —
+        it doesn't trip _guard_tmp_path (not a /tmp/ path) or _guard_comment_narration
+        (no narrative comment text). The Write matcher DOES have real hard-block
+        paths of its own (see the "Fail-open / fail-closed policy" section of
+        OMP-COMPAT.md) — this test only pins that a plain, non-triggering write
+        passes through."""
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-3",
@@ -307,7 +313,7 @@ class TestWriteEditPreToolUsePayloadShape:
         result = run_guard(payload, cwd=tmp_path)
         assert result.returncode != 2
 
-    def test_edit_advisory_only_no_hard_block(self, tmp_path):
+    def test_edit_no_hard_block_for_benign_input(self, tmp_path):
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-4",

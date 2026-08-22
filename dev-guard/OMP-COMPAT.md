@@ -278,14 +278,24 @@ prompts get a 3-level `<plugin>:<mcp-server>:<command>` form (e.g.
 The bridge's dispatch table classifies matchers by whole matcher **type**, not by inspecting
 individual command content (there is no way to classify a single Bash command as
 "git-deny-relevant" versus "advisory" without reimplementing `GIT_DENY_RULES` matching in
-TypeScript, which this design explicitly declines to do):
+TypeScript, which this design explicitly declines to do). This classification governs ONLY
+what happens when the bridge's own guard subprocess call itself fails or times out
+(`spawnFailed`/`timedOut`) — the exit-code-2 hard-block check always runs first, before this
+policy is ever consulted, so normal-operation blocking is unaffected either way:
 
 - **Fail closed** (block on subprocess failure): the entire `Bash` tool-call matcher and the
   entire MCP tool-call matcher — these dispatch to guard functions that can hard-block
   (`GIT_DENY_RULES`, the fetchaller mutating-call gate).
 - **Fail open** (allow on subprocess failure): the entire `Write`/`Edit`/`Read`/`WebSearch`
-  tool-call matchers — these only ever dispatch to advisory-only checks (comment narration,
-  tmp-path, Claire-typo guards, WebFetch/WebSearch URL-rule "ask"-or-allow outcomes).
+  tool-call matchers — NOT because these only reach advisory-only checks. `Write`/`Edit`/
+  `NotebookEdit` all have live hard-block paths of their own (`_guard_tmp_path`,
+  `_guard_comment_narration`), and WebFetch/WebSearch/read-as-URL route through
+  `_check_url_rules`, whose `BLOCKED_URL_RULES` entries default to a `"block"` action (~17 of
+  26; the rest override to `"ask"`) — a real hard block is reachable here during normal
+  operation too. Only a plain Read of a file path is genuinely advisory-only (its one guard,
+  `_guard_claire_typo`, only ever corrects the path or allows, never blocks). Fail-open is
+  accepted specifically for the subprocess-failure/timeout window on these four matchers, not
+  a claim about what they do the rest of the time.
 
 No native TypeScript fallback exists for `GIT_DENY_RULES` — fail-closed-on-subprocess-failure
 alone is the accepted mitigation, to avoid a second, unsandboxed source of truth for
@@ -343,8 +353,10 @@ OMP install before each dev-guard release that touches `omp-extension.ts`.
      `ls`) succeeds. Separately, confirm a `permissionDecision: ask` response (e.g. from a
      git-ask-rule like `git stash drop`) is correctly folded into a hard block, not passed
      through as an allow.
-   - `write`, `edit`: an allowed case succeeds; a case that would trigger an advisory-only guard
-     check still succeeds if the subprocess call itself is broken (fail-open).
+   - `write`, `edit`: an allowed case succeeds. Separately, a case that WOULD hit one of
+     `_guard_tmp_path`/`_guard_comment_narration`'s real hard-block paths still succeeds if the
+     bridge's own subprocess call is broken (fail-open on subprocess failure, not because these
+     checks are advisory).
    - `read`: both a plain file path (Read-shaped) and a `https://...` path (WebFetch-shaped)
      route to the correct Claude Code `tool_name` in the guard's stdin payload. Confirm a
      `.claire/...` path is rewritten to `.claude/...` and the corrected path is what the tool

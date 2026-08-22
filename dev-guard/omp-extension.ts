@@ -41,13 +41,26 @@ const HOOKS_DIR = `${PLUGIN_ROOT}/hooks`;
 // Fail-open / fail-closed matcher classification — explicit typed constants,
 // not inferred from tool-call content (security constraint: an implicit
 // classification risks misclassifying a new matcher and silently changing
-// security posture). The Bash and MCP matchers dispatch to guard functions
-// that can hard-block (GIT_DENY_RULES, fetchaller mutating-call gate); the
-// Write/Edit/Read/WebSearch matchers dispatch only to advisory-only checks
-// (comment narration, tmp-path, Claire-typo guards, WebFetch/WebSearch
-// URL-rule "ask"-or-allow outcomes) — none of Claude Code's hooks.json
-// PreToolUse matchers for Read/WebFetch/WebSearch are paired with a
-// GIT_DENY_RULES-style hard block.
+// security posture). This governs ONLY the narrow window where the bridge's
+// own guard subprocess call itself fails or times out (spawnFailed /
+// timedOut) — the `result.code === 2` hard-block check always runs first,
+// before FailPolicy is ever consulted, so normal-operation blocking is
+// unaffected either way.
+//
+// Fail closed: Bash and MCP — these dispatch to guard functions that can
+// hard-block (GIT_DENY_RULES, the fetchaller mutating-call gate).
+//
+// Fail open: Write, Edit, Read, WebSearch — NOT because these only reach
+// advisory-only checks. Write/Edit/NotebookEdit both have live hard-block
+// paths of their own (_guard_tmp_path, _guard_comment_narration), and
+// WebFetch/WebSearch/read-as-URL route through _check_url_rules, whose
+// BLOCKED_URL_RULES entries default to a "block" action (~17 of 26; the
+// rest override to "ask") — a real hard block is reachable here during
+// normal operation too. Only a plain Read of a file path is genuinely
+// advisory-only (its one guard, _guard_claire_typo, only ever corrects the
+// path or allows, never blocks). Fail-open is accepted specifically for the
+// subprocess-failure/timeout window on these four matchers, not a claim
+// about what they do the rest of the time.
 // ─────────────────────────────────────────────────────────────────────────
 type FailPolicy = "fail-closed" | "fail-open";
 
