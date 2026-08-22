@@ -43,13 +43,16 @@ const HOOKS_DIR = `${PLUGIN_ROOT}/hooks`;
 // classification risks misclassifying a new matcher and silently changing
 // security posture). The Bash and MCP matchers dispatch to guard functions
 // that can hard-block (GIT_DENY_RULES, fetchaller mutating-call gate); the
-// Write/Edit matchers dispatch only to advisory-only checks (comment
-// narration, tmp-path, Claire-typo guards).
+// Write/Edit/Read matchers dispatch only to advisory-only checks (comment
+// narration, tmp-path, Claire-typo guards, WebFetch/WebSearch URL-rule
+// "ask"-or-allow outcomes) — none of Claude Code's hooks.json PreToolUse
+// matchers for Read/WebFetch/WebSearch are paired with a GIT_DENY_RULES-style
+// hard block.
 // ─────────────────────────────────────────────────────────────────────────
 type FailPolicy = "fail-closed" | "fail-open";
 
 const FAIL_CLOSED_TOOL_NAMES: ReadonlySet<string> = new Set(["bash"]);
-const FAIL_OPEN_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit"]);
+const FAIL_OPEN_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit", "read"]);
 // No OMP tool-call event exists for a NotebookEdit or EnterPlanMode
 // equivalent: OMP's plan mode is a slash-command modality (docs/extensions.md's
 // plan-mode.ts example), not a gated tool call, and no separate
@@ -115,13 +118,34 @@ const KNOWN_OMP_MCP_SERVER_PREFIXES = Object.keys(OMP_TO_CLAUDE_CODE_MCP_SERVER)
 	(a, b) => b.length - a.length,
 );
 
+// OMP's tool-name sanitization (hyphens -> underscores, same as server
+// names) is lossy in the same way: "resolve_library_id" could originally
+// have been "resolve-library-id" or always underscored — there is no way to
+// tell from the OMP side alone. Scanning mcp_constants.py's full
+// MCP_READ_ONLY allowlist, every server's tool names are already
+// underscore-native (Python-style) or camelCase (Jira) EXCEPT context7,
+// whose tool names use npm-idiomatic hyphens (`resolve-library-id`,
+// `query-docs`) — matched here as a small per-server override table rather
+// than mirroring all ~150 allowlist entries into TypeScript. A tool not
+// listed here is passed through with its OMP underscore form unchanged
+// (correct for every non-context7 server verified so far).
+const OMP_TO_CLAUDE_CODE_MCP_TOOL: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+	context7: {
+		resolve_library_id: "resolve-library-id",
+		query_docs: "query-docs",
+	},
+};
+
 /** Re-encode an OMP MCP tool name into the mcp__<server>__<tool> shape mcp_key() expects. */
 function reencodeMcpToolName(ompToolName: string): string {
 	const rest = ompToolName.slice("mcp__".length);
 	for (const ompServer of KNOWN_OMP_MCP_SERVER_PREFIXES) {
 		if (rest === ompServer || rest.startsWith(`${ompServer}_`)) {
-			const tool = rest.slice(ompServer.length + 1);
-			return `mcp__${OMP_TO_CLAUDE_CODE_MCP_SERVER[ompServer]}__${tool}`;
+			const claudeCodeServer = OMP_TO_CLAUDE_CODE_MCP_SERVER[ompServer];
+			const ompTool = rest.slice(ompServer.length + 1);
+			const toolOverrides = OMP_TO_CLAUDE_CODE_MCP_TOOL[claudeCodeServer];
+			const claudeCodeTool = toolOverrides?.[ompTool] ?? ompTool;
+			return `mcp__${claudeCodeServer}__${claudeCodeTool}`;
 		}
 	}
 	// Unknown server: best-effort single->double underscore at the first
@@ -418,10 +442,27 @@ export default function (pi: ExtensionAPI) {
 		if (event.toolName === "AskUserQuestion") return; // handled by the custom tool itself
 
 		const sessionId = getSessionId(ctx);
-		const claudeCodeToolName = translateToolNameForGuard(event.toolName);
+
+		// "read" doubles as Claude Code's Read AND WebFetch under OMP (no
+		// standalone URL-fetch tool — Task 1 spike, Step 4) — the Claude
+		// Code tool name itself depends on the input content (URL vs file
+		// path), so it can't go through the generic name/input translation
+		// functions below (which assume the name is a pure function of the
+		// OMP tool name alone). Mirrors the same detection already used in
+		// the tool_result handler for this tool.
+		let claudeCodeToolName: string | undefined;
+		let toolInput: Record<string, unknown>;
+		if (event.toolName === "read") {
+			const path = String((event.input as Record<string, unknown>).path ?? "");
+			const isUrl = /^https?:\/\//i.test(path);
+			claudeCodeToolName = isUrl ? "WebFetch" : "Read";
+			toolInput = isUrl ? { url: path } : { file_path: path };
+		} else {
+			claudeCodeToolName = translateToolNameForGuard(event.toolName);
+			toolInput = translateToolInputForGuard(event.toolName, event.input as Record<string, unknown>);
+		}
 		if (!claudeCodeToolName) return; // no guard-relevant equivalent for this tool
 
-		const toolInput = translateToolInputForGuard(event.toolName, event.input as Record<string, unknown>);
 		const failPolicy = getFailPolicy(event.toolName);
 
 		const result = await runGuard(
@@ -454,6 +495,24 @@ export default function (pi: ExtensionAPI) {
 		const output = parseHookOutput(result.stdout);
 		if (output?.permissionDecision === "ask" || output?.permissionDecision === "deny") {
 			return { block: true, reason: output.permissionDecisionReason ?? "Blocked by dev-guard." };
+		}
+
+		// Auto-correction forwarding (e.g. _guard_claire_typo's .claire ->
+		// .claude rewrite): tool-selection-guard.py signals this as an
+		// "allow" decision with `updatedInput` carrying the corrected
+		// Claude-Code-shaped fields. ToolCallEventResult.input is OMP's
+		// equivalent replacement-input mechanism. Only translated for
+		// "read" here, where the OMP field name (`path`) is confirmed —
+		// Write/Edit's exact OMP field names were not verified in the
+		// Task 1 spike (translateToolInputForGuard passes their input
+		// through unchanged rather than guessing), so a correction to
+		// those tools' file_path is not forwarded and is a known,
+		// documented gap rather than a guessed-and-possibly-wrong mapping.
+		if (output?.permissionDecision === "allow" && output.updatedInput && claudeCodeToolName === "Read") {
+			const correctedPath = output.updatedInput.file_path;
+			if (typeof correctedPath === "string") {
+				return { input: { path: correctedPath } };
+			}
 		}
 		return; // allow / no opinion
 	});
