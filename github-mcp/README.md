@@ -43,3 +43,7 @@ Claude Code will automatically connect to the MCP server at SessionStart. MCP to
 Prefer MCP tools over `gh` CLI for all GitHub operations. Use `gh` CLI only for operations the MCP server does not support (e.g., `gh pr checks --watch`, `gh pr merge`).
 
 For file contents from `raw.githubusercontent.com`, use `mcp__github__get_file_contents` instead of WebFetch.
+
+## OMP Compatibility
+
+Also ships an `omp-extension.ts` bridge (`package.json` declares it via `omp.extensions`) so the SessionStart hint works under [OMP](https://omp.sh) too. The Claude Code hook is a hardcoded string with no backing script, so the bridge injects the identical content directly (no subprocess). See `dev-guard/OMP-COMPAT.md` for the marketplace's full OMP compatibility reference.
