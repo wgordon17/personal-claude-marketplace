@@ -143,6 +143,14 @@ dialog rendering, blocking behavior) was not tested in an interactive TUI sessio
 spike (no real terminal was available). Re-verify manually before relying on it — see the
 checklist below.
 
+**Abort/timeout handling**: neither `ctx.ui.askDialog()` nor `ctx.ui.select()` (OMP's shipped
+UI primitives) expose a cancellation parameter of their own. `collectAnswers()` races the UI
+call against the tool call's own `AbortSignal` instead — if the signal fires first (the tool
+call is cancelled, times out, or the session ends while a question is pending), it resolves to
+an empty answer set rather than leaving the tool call hung on a UI response that will never
+arrive. An empty answer set flows through `decision-persistence.py`'s normal PostToolUse path
+like any other unanswered batch (no decisions recorded, no crash).
+
 ## CLAUDE_PLUGIN_ROOT
 
 OMP has **no equivalent** of Claude Code's `CLAUDE_PLUGIN_ROOT` environment variable — confirmed
@@ -150,9 +158,10 @@ absent both as an env var (`process.env.CLAUDE_PLUGIN_ROOT` reads `null`) and as
 field. `inject-reference.sh`, `stop-hook.py`, and `subagent-stop-hook.py` all read this variable
 directly and silently no-op (not error) if unset, which would otherwise be an invisible, total
 failure of the bridge's `SessionStart`/`Stop` handling. `omp-extension.ts` resolves its own
-plugin root once (`import.meta.dir`, since the extension file lives at the plugin root next to
-`package.json`) and injects `CLAUDE_PLUGIN_ROOT` manually into **every** subprocess call's
-environment via a shared `runScript()` helper.
+plugin root once (`new URL(".", import.meta.url).pathname.replace(/\/$/, "")`, since the
+extension file lives at the plugin root next to `package.json`) and injects
+`CLAUDE_PLUGIN_ROOT` manually into **every** subprocess call's environment via a shared
+`runScript()` helper.
 
 ## Subprocess execution: `Bun.spawn()`, not `pi.exec()`
 
@@ -274,13 +283,41 @@ TypeScript, which this design explicitly declines to do):
 - **Fail closed** (block on subprocess failure): the entire `Bash` tool-call matcher and the
   entire MCP tool-call matcher — these dispatch to guard functions that can hard-block
   (`GIT_DENY_RULES`, the fetchaller mutating-call gate).
-- **Fail open** (allow on subprocess failure): the entire `Write`/`Edit`/`Read` tool-call
-  matchers — these only ever dispatch to advisory-only checks (comment narration, tmp-path,
-  Claire-typo guards).
+- **Fail open** (allow on subprocess failure): the entire `Write`/`Edit`/`Read`/`WebSearch`
+  tool-call matchers — these only ever dispatch to advisory-only checks (comment narration,
+  tmp-path, Claire-typo guards, WebFetch/WebSearch URL-rule "ask"-or-allow outcomes).
 
 No native TypeScript fallback exists for `GIT_DENY_RULES` — fail-closed-on-subprocess-failure
 alone is the accepted mitigation, to avoid a second, unsandboxed source of truth for
 security-relevant logic that could drift from the Python original.
+
+## `ask`-type decisions have no interactive path under OMP
+
+Claude Code's `PreToolUse` `hookSpecificOutput` protocol has three permission decisions:
+`allow`, `ask`, and `deny`. `ask` normally pauses the tool call and shows the user an
+interactive confirmation prompt they can approve in the moment — `tool-selection-guard.py`'s
+own `_exit_with_decision()` `ask` branch is built around that round trip, including its trust
+hint ("To trust: `/dev-guard trust add <rule>`...") shown alongside the prompt.
+
+OMP's `ToolCallEventResult` (the bridge's `tool_call` return type) has no field for "pause and
+show an interactive confirmation" — only `block` (with a `reason`), `input` (an in-place
+correction), or no-op (allow). `omp-extension.ts`'s `tool_call` handler therefore folds `ask`
+into the same branch as `deny`:
+
+```ts
+if (output?.permissionDecision === "ask" || output?.permissionDecision === "deny") {
+    return { block: true, reason: output.permissionDecisionReason ?? "Blocked by dev-guard." };
+}
+```
+
+This is intentional and security-conservative — fail-closed rather than silently downgrading
+`ask` to `allow` — but it changes the remediation path. Under Claude Code, an `ask`-type rule
+firing mid-session can be approved on the spot. **Under OMP it cannot**: the only way to
+unblock an `ask`-type rule is to pre-establish trust *before* the call, via `/dev-guard trust
+add <rule-name> [--match <pattern>] [--scope session|--scope always]` — the same trust store
+`_check_trust()` reads for `ask` decisions under both harnesses. OMP users who hit a hard block
+from what was designed as an interactive confirmation should reach for that command rather
+than expect a retry-and-approve prompt.
 
 ## Manual verification checklist
 
