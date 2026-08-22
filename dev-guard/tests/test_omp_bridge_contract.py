@@ -78,6 +78,8 @@ import os
 import sqlite3
 import subprocess
 import sys
+import textwrap
+import time
 import uuid
 from pathlib import Path
 
@@ -162,13 +164,17 @@ def run_validate_commit_message(payload: dict, *, cwd: Path) -> subprocess.Compl
     )
 
 
-def run_stop_hook(payload: dict, *, cwd: Path, state_path: Path) -> subprocess.CompletedProcess:
+def run_stop_hook(
+    payload: dict, *, cwd: Path, state_path: Path, plugin_root: str | None = None
+) -> subprocess.CompletedProcess:
     """Invoke stop-hook.py with the bridge's agent_end-derived payload shape."""
     import os
 
     env = os.environ.copy()
     env["STOP_HOOK_STATE_PATH"] = str(state_path)
     env["GUARD_DB_PATH"] = str(state_path.parent / "test-guard.db")
+    if plugin_root is not None:
+        env["CLAUDE_PLUGIN_ROOT"] = plugin_root
     return subprocess.run(
         ["uv", "run", str(STOP_HOOK)],
         input=json.dumps(payload),
@@ -216,6 +222,47 @@ def git_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
     return tmp_path
+
+
+def seed_stop_hook_state(state_path: Path, session_id: str) -> None:
+    """Seed stop-hook.py's state file so a payload is treated as a second fire,
+    not the first-fire fast-exit that only initializes state (see test_stop_hook.py's
+    identically-shaped seed_state() helper — duplicated here rather than imported
+    since this file intentionally stays import-independent from the hook-logic
+    test modules it complements, per this file's module docstring)."""
+    state = {
+        session_id: {
+            "last_diff_hash": "",
+            "last_fire_timestamp": time.time(),
+            "evaluated_tool_count": 0,
+            "last_file_size": 0,
+        }
+    }
+    state_path.write_text(json.dumps(state))
+
+
+def write_mock_stop_hook_llm(plugin_root: Path, *, decision: str, findings: list[str]) -> None:
+    """Write a stub stop-hook-llm.py to plugin_root/hooks/ so stop-hook.py's LLM
+    delegation is deterministic (no live LLM call, matching this repo's default
+    test suite excluding llm-marked tests) — same stub pattern as test_stop_hook.py's
+    write_mock_llm(), duplicated here for the same import-independence reason as
+    seed_stop_hook_state() above."""
+    hooks_dir = plugin_root / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    result_json = json.dumps({"decision": decision, "reasoning": "mock", "findings": findings})
+    stub = textwrap.dedent(f"""\
+        #!/usr/bin/env -S uv run
+        # /// script
+        # requires-python = ">=3.13"
+        # ///
+        import json, sys
+        result = json.loads({result_json!r})
+        print(json.dumps(result))
+        sys.exit(2 if result["decision"] == "fail" else 0)
+    """)
+    llm_script = hooks_dir / "stop-hook-llm.py"
+    llm_script.write_text(stub)
+    llm_script.chmod(0o755)
 
 
 # ── Bash: PreToolUse translation (omp-extension.ts translateToolNameForGuard/
@@ -741,6 +788,50 @@ class TestStopHookPayloadShape:
         assert result.returncode == 0
         assert result.stdout.strip() == ""
 
+    def test_llm_fail_blocks_via_stdout_json_not_exit_code(self, tmp_path):
+        """Regression contract for the bug fixed in 0e81cdc: omp-extension.ts's
+        agent_end handler used to check `code === 2` for a Stop block, but
+        stop-hook.py always exits 0 and signals a block only via stdout JSON
+        {"decision": "block", "reason": "..."} — the exact shape
+        parseStopDecision() now reads. Seeds state as a second fire (skipping
+        the first-fire init fast-exit) with a transcript containing a write
+        tool call and a completion claim, so trigger_reasons is non-empty and
+        the LLM path (mocked deterministically, no live call) is actually
+        invoked rather than fast-exited."""
+        repo = git_repo(tmp_path)
+        session_id = str(uuid.uuid4())
+        transcript = tmp_path / "session.jsonl"
+        completion_msg = "I've completed the fix. The changes are ready."
+        entries = [
+            {"role": "user", "content": "Fix the bug."},
+            {"type": "tool_use", "name": "Edit", "id": "t1"},
+            {"role": "assistant", "content": completion_msg},
+        ]
+        transcript.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+        seed_stop_hook_state(tmp_path / "state.json", session_id)
+        write_mock_stop_hook_llm(
+            tmp_path / "plugin", decision="fail", findings=["Tests were not run."]
+        )
+
+        payload = {
+            "session_id": session_id,
+            "transcript_path": str(transcript),
+            "cwd": str(repo),
+            "last_assistant_message": completion_msg,
+            "stop_hook_active": False,
+        }
+        result = run_stop_hook(
+            payload,
+            cwd=repo,
+            state_path=tmp_path / "state.json",
+            plugin_root=str(tmp_path / "plugin"),
+        )
+        assert result.returncode == 0, f"stderr: {result.stderr!r}"
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert output["reason"]
+        assert "Tests were not run" in output["reason"]
+
 
 class TestSubagentStopHookPayloadShape:
     def test_empty_transcript_path_approves(self, tmp_path):
@@ -774,6 +865,36 @@ class TestSubagentStopHookPayloadShape:
         result = run_subagent_stop_hook(payload, state_path=tmp_path / "state.json")
         assert result.returncode == 0
         assert result.stdout.strip() == ""
+
+    def test_invalid_fix_summary_blocks_via_stdout_json_not_exit_code(self, tmp_path):
+        """Regression contract for the bug fixed in 0e81cdc (see
+        TestStopHookPayloadShape.test_llm_fail_blocks_via_stdout_json_not_exit_code
+        above for the full bug description — the same fix applies to both
+        Stop and SubagentStop). subagent-stop-hook.py always exits 0 and
+        signals a block only via stdout JSON {"decision": "block", "reason":
+        "..."}. Unlike stop-hook.py's LLM-gated block, this one is fully
+        deterministic: a FixSummary with all three arrays empty fails
+        _validate_fix_summary's structural check ("all arrays empty — no
+        findings accounted for") with no LLM call involved."""
+        transcript = tmp_path / "transcript.jsonl"
+        fix_summary = {
+            "schema": "FixSummary",
+            "findings_fixed": [],
+            "needs_input_items": [],
+            "user_deferred": [],
+        }
+        entry = {
+            "role": "assistant",
+            "content": [{"type": "text", "text": json.dumps(fix_summary)}],
+        }
+        transcript.write_text(json.dumps(entry) + "\n")
+
+        payload = {"session_id": str(uuid.uuid4()), "transcript_path": str(transcript)}
+        result = run_subagent_stop_hook(payload, state_path=tmp_path / "state.json")
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        assert output["decision"] == "block"
+        assert output["reason"]
 
 
 # ── Regression: dual block-signal handling (security constraint) ───────────
