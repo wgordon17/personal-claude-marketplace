@@ -67,6 +67,7 @@ gitignored/local-only, for the full live-verification evidence trail).
 
 import json
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -75,6 +76,12 @@ DECISION_PERSISTENCE = Path(__file__).parent.parent / "hooks" / "decision-persis
 VALIDATE_COMMIT_MESSAGE = Path(__file__).parent.parent / "hooks" / "validate-commit-message.sh"
 STOP_HOOK = Path(__file__).parent.parent / "hooks" / "stop-hook.py"
 SUBAGENT_STOP_HOOK = Path(__file__).parent.parent / "hooks" / "subagent-stop-hook.py"
+
+# Needed so `from mcp_constants import MCP_READ_ONLY` resolves when this file
+# is run standalone (not just as a side effect of test_tool_selection_guard.py's
+# module-level importlib load of tool-selection-guard.py, which happens to
+# insert this same path but only when that file is also collected).
+sys.path.insert(0, str(TOOL_SELECTION_GUARD.parent))
 
 METADATA_PREFIX = "▸dp:"
 
@@ -457,6 +464,45 @@ class TestBashPostToolUseSequencing:
         assert result.returncode == 0
 
 
+# ── PostToolUse: `read` branch URL-vs-file dispatch (tool_result handler,
+#    omp-extension.ts ~lines 560-576 — both Read and WebFetch route through
+#    this one branch, using readToolResponseForGuard()'s {content} shape for
+#    tool_response) ────────────────────────────────────────────────────────
+
+
+class TestReadPostToolUseDispatch:
+    def test_file_path_read_posttooluse_accepted(self, tmp_path):
+        """The bridge's exact Read PostToolUse payload: tool_name 'Read',
+        tool_input {file_path}, tool_response built by readToolResponseForGuard()
+        as {content: <joined text content>}."""
+        payload = {
+            "session_id": str(uuid.uuid4()),
+            "tool_use_id": "tc-16",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": str(tmp_path / "some.txt")},
+            "tool_response": {"content": "file contents here"},
+        }
+        result = run_guard(payload, cwd=tmp_path)
+        assert result.returncode == 0
+
+    def test_url_webfetch_posttooluse_accepted(self, tmp_path):
+        """The bridge's exact WebFetch PostToolUse payload: tool_name 'WebFetch',
+        tool_input {url}, tool_response {content: <joined text content>} —
+        same readToolResponseForGuard() shape as the file-path case above,
+        since both branch through the same handler."""
+        payload = {
+            "session_id": str(uuid.uuid4()),
+            "tool_use_id": "tc-17",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "WebFetch",
+            "tool_input": {"url": "https://example.com/page"},
+            "tool_response": {"content": "<html>fetched page</html>"},
+        }
+        result = run_guard(payload, cwd=tmp_path)
+        assert result.returncode == 0
+
+
 # ── Session lifecycle: --validate and --session-end payload shapes ─────────
 
 
@@ -660,3 +706,61 @@ class TestDualBlockSignalRegression:
         result = run_guard(payload, cwd=tmp_path)
         assert result.returncode == 2
         assert result.stdout.strip() == ""
+
+
+# ── Regression: MCP server table sync between mcp_constants.py and
+#    omp-extension.ts's OMP_TO_CLAUDE_CODE_MCP_SERVER (no shared schema
+#    between the Python allowlist and the hand-written TS re-encoding table,
+#    so a server added to one side alone goes undetected until a live OMP
+#    session silently stops auto-approving it) ──────────────────────────────
+
+
+class TestMcpServerSyncContract:
+    """Tripwire: every server backing an mcp_constants.py MCP_READ_ONLY entry
+    must have a corresponding value in omp-extension.ts's
+    OMP_TO_CLAUDE_CODE_MCP_SERVER table (the Claude-Code-shaped server
+    identity reencodeMcpToolName() re-encodes into, which mcp_key() then
+    matches against MCP_READ_ONLY). If a new server is added to
+    mcp_constants.py without a matching bridge-table entry, that server's
+    tools silently stop auto-approving under OMP — they fall through to
+    reencodeMcpToolName()'s best-effort unknown-server branch and then to
+    settings.json passthrough (not a security hole, since unknown servers
+    were already excluded from auto-approval, but a silent UX regression
+    with no test failure and no visible cause today.
+
+    EXPECTED_BRIDGE_SERVERS is transcribed verbatim from the *values* of
+    OMP_TO_CLAUDE_CODE_MCP_SERVER in dev-guard/omp-extension.ts (~lines
+    104-115) — re-read the actual .ts file when this needs updating, don't
+    reconstruct it from memory or from this comment.
+    """
+
+    EXPECTED_BRIDGE_SERVERS = frozenset(
+        {
+            "plugin_github-mcp_github",
+            "plugin_claude-mem_mcp-search",
+            "serena",
+            "sequential-thinking",
+            "plugin_fetchaller-mcp_fetchaller",
+            "context7",
+            "playwright",
+            "plugin_jira_mcp-atlassian-prod",
+            "metadata-service",
+        }
+    )
+
+    def test_mcp_read_only_servers_are_all_mapped_in_omp_bridge_table(self):
+        from mcp_constants import MCP_READ_ONLY
+
+        # Server-qualified keys are "server__func" (mcp_constants.py's
+        # _qualify()); no server name in the allowlist contains "__" itself,
+        # so splitting on the first "__" cleanly isolates the server ID.
+        servers_in_read_only = {key.split("__", 1)[0] for key in MCP_READ_ONLY}
+        unmapped = servers_in_read_only - self.EXPECTED_BRIDGE_SERVERS
+        assert not unmapped, (
+            f"mcp_constants.py's MCP_READ_ONLY now covers server(s) {sorted(unmapped)} "
+            "with no entry in omp-extension.ts's OMP_TO_CLAUDE_CODE_MCP_SERVER "
+            "table. Add a mapping there (and update "
+            "TestMcpServerSyncContract.EXPECTED_BRIDGE_SERVERS above) so these "
+            "tools keep auto-approving under OMP instead of silently falling "
+            "back to settings.json passthrough."
+        )
