@@ -329,9 +329,12 @@ side, transcribed verbatim from that test file's module docstring — re-run it 
 OMP install before each dev-guard release that touches `omp-extension.ts`.
 
 1. **Session lifecycle**: start a session under OMP with dev-guard installed. Confirm
-   `session_start` fires `--validate`, then `inject-reference.sh(shared-feedback.md)`, then
-   `inject-reference.sh(token-efficiency.md)` — verify all three deliver content into the
-   model's context (ask it to quote injected text back verbatim). Confirm session end fires
+   `session_start` dispatches `--validate` and both `inject-reference.sh` calls
+   (`shared-feedback.md`, `token-efficiency.md`) concurrently via `Promise.all` — verify all
+   three deliver content into the model's context (ask it to quote injected text back
+   verbatim), and that `shared-feedback.md`'s content still lands before
+   `token-efficiency.md`'s (message order is preserved by `Promise.all`'s result-array
+   ordering, not by which subprocess resolves first). Confirm session end fires
    `session_shutdown` → `--session-end` with no crash, and the `session_state` DB row is
    updated.
 2. **tool_call/tool_result dispatch**, one round-trip per tool type:
