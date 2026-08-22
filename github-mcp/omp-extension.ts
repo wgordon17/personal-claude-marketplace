@@ -30,11 +30,8 @@ const GITHUB_MCP_HINT =
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async () => {
 		// sendMessage's payload type is `string | Partial<CustomMessage>`
-		// (dist/types/session/messages.d.ts) — a plain string is the valid
-		// form, NOT a `{type, text}` object (that shape matches neither
-		// branch of the type and was a bug caught during live testing of
-		// this task's bridges — see dev-guard's and git-tools' bridges,
-		// fixed identically).
+		// (dist/types/session/messages.d.ts) — pass a plain string, not a
+		// `{type, text}` object.
 		pi.sendMessage(GITHUB_MCP_HINT, { deliverAs: "nextTurn" });
 	});
 }

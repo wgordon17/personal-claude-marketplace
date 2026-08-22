@@ -43,16 +43,16 @@ const HOOKS_DIR = `${PLUGIN_ROOT}/hooks`;
 // classification risks misclassifying a new matcher and silently changing
 // security posture). The Bash and MCP matchers dispatch to guard functions
 // that can hard-block (GIT_DENY_RULES, fetchaller mutating-call gate); the
-// Write/Edit/Read matchers dispatch only to advisory-only checks (comment
-// narration, tmp-path, Claire-typo guards, WebFetch/WebSearch URL-rule
-// "ask"-or-allow outcomes) — none of Claude Code's hooks.json PreToolUse
-// matchers for Read/WebFetch/WebSearch are paired with a GIT_DENY_RULES-style
-// hard block.
+// Write/Edit/Read/WebSearch matchers dispatch only to advisory-only checks
+// (comment narration, tmp-path, Claire-typo guards, WebFetch/WebSearch
+// URL-rule "ask"-or-allow outcomes) — none of Claude Code's hooks.json
+// PreToolUse matchers for Read/WebFetch/WebSearch are paired with a
+// GIT_DENY_RULES-style hard block.
 // ─────────────────────────────────────────────────────────────────────────
 type FailPolicy = "fail-closed" | "fail-open";
 
 const FAIL_CLOSED_TOOL_NAMES: ReadonlySet<string> = new Set(["bash"]);
-const FAIL_OPEN_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit", "read"]);
+const FAIL_OPEN_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit", "read", "web_search"]);
 // No OMP tool-call event exists for a NotebookEdit or EnterPlanMode
 // equivalent: OMP's plan mode is a slash-command modality (docs/extensions.md's
 // plan-mode.ts example), not a gated tool call, and no separate
@@ -199,7 +199,12 @@ async function runScript(
 	}
 
 	if (opts.stdin !== undefined) {
-		proc.stdin.write(opts.stdin);
+		try {
+			await proc.stdin.write(opts.stdin);
+		} catch {
+			proc.kill();
+			return { code: -1, stdout: "", stderr: "", timedOut: false, spawnFailed: true };
+		}
 	}
 	proc.stdin.end();
 
@@ -275,8 +280,19 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		const sessionId = getSessionId(ctx);
 		const validatePayload = { session_id: sessionId, cwd: ctx.cwd };
+		const referenceFiles = ["shared-feedback.md", "token-efficiency.md"];
 
-		const validateResult = await runGuard(["--validate"], validatePayload, ctx.cwd);
+		// hooks.json's SessionStart matcher runs --validate and both
+		// inject-reference.sh calls as independent, parallel-executing
+		// hooks — mirrored here via Promise.all rather than sequential
+		// awaits.
+		const [validateResult, ...referenceResults] = await Promise.all([
+			runGuard(["--validate"], validatePayload, ctx.cwd),
+			...referenceFiles.map((referenceFile) =>
+				runScript(`${HOOKS_DIR}/inject-reference.sh`, [referenceFile], { cwd: ctx.cwd }),
+			),
+		]);
+
 		if (validateResult.code !== 0 || validateResult.spawnFailed) {
 			// Persistent (not one-shot) warning — Task 1 spike confirmed
 			// ctx.ui.setStatus(key, text) is the persistent-surface method
@@ -294,23 +310,20 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// sendMessage's payload type is `string | Partial<CustomMessage>`
-		// (dist/types/session/messages.d.ts) — a plain string is the valid
-		// form, NOT a `{type, text}` object (caught during live testing of
-		// the simple-bridges component; fixed identically in all three
-		// bridges this marketplace ships).
+		// (dist/types/session/messages.d.ts) — pass a plain string, not a
+		// `{type, text}` object.
 		//
 		// `deliverAs: "nextTurn"` is chosen because the SDK docs describe
 		// it as "stored and injected on the next user prompt" — the
 		// closest documented analog to Claude Code's SessionStart hook,
 		// which injects once, before the first assistant turn, and the
 		// content then persists in the transcript for the rest of the
-		// session. Live-confirmed end-to-end: the model correctly quoted
+		// session. Live-confirmed end-to-end: the model correctly quotes
 		// both shared-feedback.md's and token-efficiency.md's content back
-		// from its own context after this fix.
-		for (const referenceFile of ["shared-feedback.md", "token-efficiency.md"]) {
-			const result = await runScript(`${HOOKS_DIR}/inject-reference.sh`, [referenceFile], {
-				cwd: ctx.cwd,
-			});
+		// from its own context. Results stay in `referenceFiles` order
+		// (Promise.all preserves input order regardless of completion
+		// order), so messages are still delivered shared-feedback-first.
+		for (const result of referenceResults) {
 			if (result.stdout.trim()) {
 				pi.sendMessage(result.stdout, { deliverAs: "nextTurn" });
 			}
@@ -344,7 +357,7 @@ export default function (pi: ExtensionAPI) {
 		description: "Ask the user one or more multiple-choice questions and wait for their answer.",
 		approval: "read",
 		parameters: askQuestionSchema,
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const questions = params.questions;
 
 			// decision-persistence.py PreToolUse: check for a prior stored
@@ -366,7 +379,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (!answers) {
-				answers = await collectAnswers(ctx, questions);
+				answers = await collectAnswers(ctx, questions, signal);
 			}
 
 			// decision-persistence.py PostToolUse: capture new decisions.
@@ -389,6 +402,28 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	/**
+	 * Races collectAnswersFromUi() against `signal`: neither askDialog() nor
+	 * select() (OMP's shipped UI primitives, per the Task 1 spike) expose a
+	 * cancellation parameter, so an aborted tool call resolves to an empty
+	 * answer set here instead of leaving the tool call hung on a UI response
+	 * that will never come.
+	 */
+	async function collectAnswers(
+		ctx: ExtensionContext,
+		questions: { question: string; header?: string; options: { label: string; description?: string }[]; multiSelect?: boolean }[],
+		signal: AbortSignal,
+	): Promise<Record<string, string>> {
+		const aborted = new Promise<Record<string, string>>((resolve) => {
+			if (signal.aborted) {
+				resolve({});
+				return;
+			}
+			signal.addEventListener("abort", () => resolve({}), { once: true });
+		});
+		return Promise.race([collectAnswersFromUi(ctx, questions), aborted]);
+	}
+
+	/**
 	 * Collect answers via ctx.ui.askDialog() when reachable, falling back to
 	 * ctx.ui.select() per question when it isn't (print/RPC/subagent modes —
 	 * confirmed live in Task 1 spike: askDialog is undefined outside TUI
@@ -400,7 +435,7 @@ export default function (pi: ExtensionAPI) {
 	 * Matches by question TEXT, not array position (a two-question batch
 	 * answered in reverse order must still map correctly).
 	 */
-	async function collectAnswers(
+	async function collectAnswersFromUi(
 		ctx: ExtensionContext,
 		questions: { question: string; header?: string; options: { label: string; description?: string }[]; multiSelect?: boolean }[],
 	): Promise<Record<string, string>> {
@@ -524,29 +559,47 @@ export default function (pi: ExtensionAPI) {
 		const sessionId = getSessionId(ctx);
 
 		if (event.toolName === "bash") {
-			// Explicit sequence, one handler, first-block-wins — matches
-			// hooks.json's PostToolUse array order for the Bash matcher.
-			const commitResult = await runScript(`${HOOKS_DIR}/validate-commit-message.sh`, [], {
-				stdin: JSON.stringify({ tool_input: event.input }),
-				cwd: ctx.cwd,
-			});
+			// hooks.json's PostToolUse Bash matcher runs both hooks
+			// unconditionally — validate-commit-message.sh's exit code never
+			// gates whether tool-selection-guard.py also runs, and vice
+			// versa. Mirrored here via Promise.all instead of a sequential
+			// await-then-early-return, which previously skipped the guard
+			// call entirely whenever commit validation blocked.
+			const bashResponse = bashToolResponseForGuard(event);
+			const [commitResult, guardResult] = await Promise.all([
+				runScript(`${HOOKS_DIR}/validate-commit-message.sh`, [], {
+					stdin: JSON.stringify({ tool_input: event.input }),
+					cwd: ctx.cwd,
+				}),
+				runGuard(
+					[],
+					{
+						session_id: sessionId,
+						tool_use_id: event.toolCallId,
+						hook_event_name: "PostToolUse",
+						tool_name: "Bash",
+						tool_input: event.input,
+						tool_response: bashResponse,
+					},
+					ctx.cwd,
+				),
+			]);
+
 			if (commitResult.code === 2) {
 				return { isError: true, content: [{ type: "text", text: commitResult.stderr.trim() }] };
 			}
-
-			const bashResponse = bashToolResponseForGuard(event);
-			await runGuard(
-				[],
-				{
-					session_id: sessionId,
-					tool_use_id: event.toolCallId,
-					hook_event_name: "PostToolUse",
-					tool_name: "Bash",
-					tool_input: event.input,
-					tool_response: bashResponse,
-				},
-				ctx.cwd,
-			);
+			if (guardResult.code === 2) {
+				const output = parseHookOutput(guardResult.stdout);
+				return {
+					isError: true,
+					content: [
+						{
+							type: "text",
+							text: guardResult.stderr.trim() || output?.permissionDecisionReason || "Blocked by dev-guard.",
+						},
+					],
+				};
+			}
 			return;
 		}
 
@@ -680,26 +733,31 @@ export default function (pi: ExtensionAPI) {
 			agentEndWithoutSubagentSignal++;
 		}
 
-		const stopResult = await runScript("uv", ["run", `${HOOKS_DIR}/stop-hook.py`], {
-			stdin: JSON.stringify({
-				session_id: sessionId,
-				transcript_path: transcriptPath,
+		// Neither script depends on the other's result — hooks.json's Stop
+		// and SubagentStop are separate matchers with no ordering
+		// relationship, so both fire together here via Promise.all.
+		const [stopResult, subagentResult] = await Promise.all([
+			runScript("uv", ["run", `${HOOKS_DIR}/stop-hook.py`], {
+				stdin: JSON.stringify({
+					session_id: sessionId,
+					transcript_path: transcriptPath,
+					cwd: ctx.cwd,
+					last_assistant_message: lastMessage,
+					stop_hook_active: false,
+				}),
 				cwd: ctx.cwd,
-				last_assistant_message: lastMessage,
-				stop_hook_active: false,
+				timeoutMs: 60_000,
 			}),
-			cwd: ctx.cwd,
-			timeoutMs: 60_000,
-		});
+			runScript("uv", ["run", `${HOOKS_DIR}/subagent-stop-hook.py`], {
+				stdin: JSON.stringify({ session_id: sessionId, transcript_path: transcriptPath }),
+				cwd: ctx.cwd,
+				timeoutMs: 30_000,
+			}),
+		]);
+
 		if (stopResult.code === 2) {
 			ctx.ui.notify(stopResult.stderr.trim() || "dev-guard stop-hook: incomplete work detected.", "warning");
 		}
-
-		const subagentResult = await runScript("uv", ["run", `${HOOKS_DIR}/subagent-stop-hook.py`], {
-			stdin: JSON.stringify({ session_id: sessionId, transcript_path: transcriptPath }),
-			cwd: ctx.cwd,
-			timeoutMs: 30_000,
-		});
 		if (subagentResult.code === 2) {
 			ctx.ui.notify(subagentResult.stderr.trim() || "dev-guard subagent-stop-hook: FixSummary validation failed.", "warning");
 		}

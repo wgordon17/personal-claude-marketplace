@@ -38,8 +38,8 @@ export default function (pi: ExtensionAPI) {
 		const [stdout] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
 
 		// sendMessage's payload type is `string | Partial<CustomMessage>`
-		// (dist/types/session/messages.d.ts) — a plain string is the valid
-		// form, NOT a `{type, text}` object (caught during live testing).
+		// (dist/types/session/messages.d.ts) — pass a plain string, not a
+		// `{type, text}` object.
 		//
 		// `deliverAs: "nextTurn"` is the closest documented analog to
 		// Claude Code's SessionStart hook, which injects once, before the
