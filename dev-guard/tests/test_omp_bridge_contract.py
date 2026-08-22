@@ -385,12 +385,18 @@ class TestReadPreToolUsePayloadShape:
 
 class TestMcpReencodingPayloadShape:
     def test_context7_resolve_library_id_reencoded_correctly(self, tmp_path):
-        """OMP's live form (mcp__context_resolve_library_id, per the Task 1 spike)
-        re-encodes to mcp__context7__resolve-library-id — BOTH the server
-        portion (context -> context7, not a formula match, OMP drops the
-        trailing digit) AND the tool-name portion (underscore -> hyphen,
-        context7-specific override) must be corrected for mcp_key() to match
-        mcp_constants.py's allowlist entry."""
+        """Python-side contract check, NOT a test of the bridge's TypeScript
+        reencodeMcpToolName() itself: this payload already carries the
+        Claude-Code-shaped name (mcp__context7__resolve-library-id) that the
+        bridge is expected to *produce* from OMP's live form
+        (mcp__context_resolve_library_id, per the Task 1 spike — server
+        portion context -> context7, OMP drops the trailing digit; tool-name
+        portion underscore -> hyphen, a context7-specific override) and sends
+        it directly to tool-selection-guard.py, bypassing the bridge
+        entirely. It verifies mcp_key() matches mcp_constants.py's allowlist
+        entry for the correctly re-encoded form — it does not exercise or
+        verify the TypeScript re-encoding logic, which has no test coverage
+        of its own (a known, accepted trade-off for this branch)."""
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-8",
@@ -403,6 +409,11 @@ class TestMcpReencodingPayloadShape:
         assert '"allow"' in result.stdout
 
     def test_context7_query_docs_reencoded_correctly(self, tmp_path):
+        """Same Python-side contract check as
+        test_context7_resolve_library_id_reencoded_correctly above, for the
+        query-docs tool: sends the already-correctly-re-encoded
+        Claude-Code-shaped name directly to the guard, not through the
+        bridge's re-encoding logic."""
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-9",
@@ -415,9 +426,14 @@ class TestMcpReencodingPayloadShape:
         assert '"allow"' in result.stdout
 
     def test_github_server_reencoded_correctly(self, tmp_path):
-        """github_mcp_github (OMP form) -> plugin_github-mcp_github (Claude Code form),
-        the general "plugin_ prefix restored, hyphens preserved" case with no
-        tool-name hyphen quirk (github's tool names are already underscore-native)."""
+        """Python-side contract check, not a TypeScript re-encoding test (see
+        test_context7_resolve_library_id_reencoded_correctly above for the
+        full caveat): sends the already-correctly-re-encoded Claude-Code
+        form (mcp__plugin_github-mcp_github__get_me) directly to the guard.
+        This is the target of the general "plugin_ prefix restored, hyphens
+        preserved" re-encoding OMP's github_mcp_github form is expected to
+        produce, with no tool-name hyphen quirk (github's tool names are
+        already underscore-native)."""
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-10",
@@ -430,9 +446,14 @@ class TestMcpReencodingPayloadShape:
         assert '"allow"' in result.stdout
 
     def test_unknown_server_passthrough_no_crash(self, tmp_path):
-        """A server not in OMP_TO_CLAUDE_CODE_MCP_SERVER falls through to the
-        best-effort single->double underscore split — must not crash, and must
-        NOT get permissionDecision: allow (matches the existing evil-server
+        """Python-side contract check, not a TypeScript re-encoding test (see
+        test_context7_resolve_library_id_reencoded_correctly above for the
+        full caveat): sends an already double-underscore Claude-Code-shaped
+        name directly to the guard — representing the output of the
+        bridge's best-effort single->double underscore split for a server
+        not in OMP_TO_CLAUDE_CODE_MCP_SERVER, not the split logic itself.
+        Verifies the guard must not crash on it, and must NOT return
+        permissionDecision: allow (matches the existing evil-server
         anti-spoofing guarantee in test_tool_selection_guard.py)."""
         payload = {
             "session_id": str(uuid.uuid4()),

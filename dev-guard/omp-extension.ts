@@ -273,6 +273,24 @@ function parseHookOutput(stdout: string): { permissionDecision?: string; permiss
 	}
 }
 
+/**
+ * Parse stop-hook.py / subagent-stop-hook.py's top-level
+ * `{"decision": "block", "reason": "..."}` JSON from stdout, if present.
+ *
+ * Distinct shape from parseHookOutput() above: those two scripts' block
+ * signal is NOT nested under a `hookSpecificOutput` key (that convention
+ * belongs to tool-selection-guard.py's PreToolUse/PostToolUse output).
+ */
+function parseStopDecision(stdout: string): { decision?: string; reason?: string } | undefined {
+	const trimmed = stdout.trim();
+	if (!trimmed) return undefined;
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return undefined;
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Session identity — sourced ONLY from ctx, never from event.input
 //
@@ -776,11 +794,34 @@ export default function (pi: ExtensionAPI) {
 			}),
 		]);
 
-		if (stopResult.code === 2) {
-			ctx.ui.notify(stopResult.stderr.trim() || "dev-guard stop-hook: incomplete work detected.", "warning");
+		// stop-hook.py and subagent-stop-hook.py never signal block/warning
+		// via exit code — both scripts' own docstrings state "Exit codes: 0
+		// -- always" and their _exit_block() helpers deliberately always
+		// `sys.exit(0)`, encoding the decision as `{"decision": "block",
+		// "reason": "..."}` JSON on stdout instead. This is specifically to
+		// avoid a misleading "Stop hook error" label in Claude Code's own UI
+		// (anthropics/claude-code#34600, cited in stop-hook.py's
+		// _exit_block() docstring) — a workaround for a Claude-Code-specific
+		// display quirk that has nothing to do with OMP, but the resulting
+		// contract (exit 0 always, decision on stdout) is what this bridge
+		// must honor regardless of which host is asking. A `code === 2`
+		// check here — as used elsewhere in this file for
+		// tool-selection-guard.py, which DOES use exit code 2 as a real
+		// hard-block signal (see the PreToolUse dispatch above) — would
+		// never fire for these two scripts and silently drop every
+		// block/warning. No defensive fallback on the exit code is kept:
+		// unlike a timeout or spawn failure, a future change to these two
+		// scripts' documented contract is not a runtime condition this
+		// bridge needs to degrade gracefully under, and a dead check would
+		// only mislead future maintainers into thinking exit 2 is reachable
+		// here.
+		const stopOutput = parseStopDecision(stopResult.stdout);
+		if (stopOutput?.decision === "block") {
+			ctx.ui.notify(stopOutput.reason?.trim() || "dev-guard stop-hook: incomplete work detected.", "warning");
 		}
-		if (subagentResult.code === 2) {
-			ctx.ui.notify(subagentResult.stderr.trim() || "dev-guard subagent-stop-hook: FixSummary validation failed.", "warning");
+		const subagentOutput = parseStopDecision(subagentResult.stdout);
+		if (subagentOutput?.decision === "block") {
+			ctx.ui.notify(subagentOutput.reason?.trim() || "dev-guard subagent-stop-hook: FixSummary validation failed.", "warning");
 		}
 	});
 
