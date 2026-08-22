@@ -340,7 +340,9 @@ OMP install before each dev-guard release that touches `omp-extension.ts`.
 2. **tool_call/tool_result dispatch**, one round-trip per tool type:
    - `bash`: a blocked case (a `printf`/`echo-noop`-style rule) fires with exit code 2, and the
      block reason reaches the model as a tool error, not a passthrough. An allowed case (e.g.
-     `ls`) succeeds.
+     `ls`) succeeds. Separately, confirm a `permissionDecision: ask` response (e.g. from a
+     git-ask-rule like `git stash drop`) is correctly folded into a hard block, not passed
+     through as an allow.
    - `write`, `edit`: an allowed case succeeds; a case that would trigger an advisory-only guard
      check still succeeds if the subprocess call itself is broken (fail-open).
    - `read`: both a plain file path (Read-shaped) and a `https://...` path (WebFetch-shaped)

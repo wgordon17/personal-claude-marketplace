@@ -39,6 +39,9 @@ the docs task — keep both copies in sync if this list changes.)
        - bash: a blocked case (a printf/echo-noop-style rule) fires with
          exit code 2, and the block reason reaches the model as a tool
          error, not a passthrough. An allowed case (e.g. `ls`) succeeds.
+         Separately, confirm a `permissionDecision: ask` response (e.g. from
+         a git-ask-rule like `git stash drop`) is correctly folded into a
+         hard block, not passed through as an allow.
        - write, edit: an allowed case succeeds; a case that would trigger
          an advisory-only guard check still succeeds if the subprocess call
          itself is broken (fail-open).
@@ -69,6 +72,8 @@ gitignored/local-only, for the full live-verification evidence trail).
 """
 
 import json
+import os
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -243,6 +248,45 @@ class TestBashPreToolUsePayloadShape:
         }
         result = run_guard(payload, cwd=tmp_path)
         assert result.returncode == 0
+
+
+# ── Regression: `ask` permissionDecision must fold into a hard block, not a
+#    silent passthrough (omp-extension.ts's tool_call handler, ~lines
+#    531-533 — OMP's ToolCallEventResult has no "pause and prompt" outcome,
+#    so the bridge treats "ask" the same as "deny") ─────────────────────────
+
+
+class TestAskDecisionSignal:
+    """`ask` decisions are live-reachable (e.g. a git-ask-rule like `git
+    stash drop`, or an MCP fetchaller POST call) and exit 0 with a
+    hookSpecificOutput JSON payload — a third block signal alongside exit
+    code 2 (TestDualBlockSignalRegression) and the "block"/"deny" JSON. A
+    bridge that doesn't check for `permissionDecision === "ask"` would treat
+    a dev-guard "confirm this is intentional" prompt as a silent allow. This
+    pins the exact stdout shape omp-extension.ts's tool_call handler reads
+    to make that fold decision."""
+
+    def test_git_stash_drop_signals_ask_not_block_or_allow(self, tmp_path):
+        # Isolate from the real ~/.claude/dev-guard.json: a local git_trusted_dirs
+        # allowlist would otherwise make _check_git_trusted_dirs hard-block this
+        # command (tmp_path is untrusted) before the ASK rule ever runs, same
+        # isolation pattern test_tool_selection_guard.py uses throughout.
+        env = {**os.environ, "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json")}
+        payload = {
+            "session_id": str(uuid.uuid4()),
+            "tool_use_id": "tc-18",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git stash drop"},
+        }
+        result = run_guard(payload, cwd=tmp_path, env=env)
+        # Exits 0, unlike the exit-code-2 hard block signal — "ask" is only
+        # distinguishable from "allow" by parsing this stdout JSON.
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook = output["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "ask"
+        assert hook["permissionDecisionReason"]
 
 
 # ── Write/Edit: PreToolUse translation (input passed through unchanged) ─────
@@ -477,33 +521,69 @@ class TestReadPostToolUseDispatch:
     def test_file_path_read_posttooluse_accepted(self, tmp_path):
         """The bridge's exact Read PostToolUse payload: tool_name 'Read',
         tool_input {file_path}, tool_response built by readToolResponseForGuard()
-        as {content: <joined text content>}."""
+        as {content: <joined text content>}. Points file_path at the RTK tee
+        dir and asserts an rtk_events row was actually created — mirrors
+        TestRTKEventLogging.test_rtk_full_read_event_logged in
+        test_tool_selection_guard.py — rather than only asserting exit 0,
+        which also passes for a deliberately wrong-shaped payload."""
+        if sys.platform == "darwin":
+            tee_dir = Path.home() / "Library" / "Application Support" / "rtk" / "tee"
+        else:
+            xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+            tee_dir = Path(xdg) / "rtk" / "tee"
+        tee_path = str(tee_dir / "somefile.txt")
+
+        db_path = tmp_path / "test-guard.db"
+        env = {**os.environ, "GUARD_DB_PATH": str(db_path)}
+        env.pop("RTK_DISABLED", None)
+
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-16",
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
-            "tool_input": {"file_path": str(tmp_path / "some.txt")},
+            "tool_input": {"file_path": tee_path},
             "tool_response": {"content": "file contents here"},
         }
-        result = run_guard(payload, cwd=tmp_path)
+        result = run_guard(payload, cwd=tmp_path, env=env)
         assert result.returncode == 0
+
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute("SELECT event_type FROM rtk_events").fetchall()
+        conn.close()
+        assert len(rows) == 1, f"expected 1 rtk_events row, got {rows}"
+        assert rows[0][0] == "full_read"
 
     def test_url_webfetch_posttooluse_accepted(self, tmp_path):
         """The bridge's exact WebFetch PostToolUse payload: tool_name 'WebFetch',
         tool_input {url}, tool_response {content: <joined text content>} —
         same readToolResponseForGuard() shape as the file-path case above,
-        since both branch through the same handler."""
+        since both branch through the same handler. Gives the response body
+        an auth-failure phrase and asserts a url_events row with
+        auth_failed: True was created — mirrors
+        TestPostToolUseResponseLogging.test_webfetch_auth_failed in
+        test_tool_selection_guard.py — rather than only asserting exit 0."""
+        db_path = tmp_path / "test.db"
+        env = {**os.environ, "GUARD_DB_PATH": str(db_path), "GUARD_LOG_LEVEL": "all"}
+
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-17",
             "hook_event_name": "PostToolUse",
             "tool_name": "WebFetch",
             "tool_input": {"url": "https://example.com/page"},
-            "tool_response": {"content": "<html>fetched page</html>"},
+            "tool_response": {"content": "Login Required - Please sign in to continue"},
         }
-        result = run_guard(payload, cwd=tmp_path)
+        result = run_guard(payload, cwd=tmp_path, env=env)
         assert result.returncode == 0
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM events WHERE category='url' ORDER BY id").fetchall()
+        conn.close()
+        assert len(rows) == 1, f"expected 1 url event, got {rows}"
+        detail = json.loads(rows[0]["detail"])
+        assert detail["auth_failed"] is True
 
 
 # ── Session lifecycle: --validate and --session-end payload shapes ─────────
@@ -728,7 +808,7 @@ class TestMcpServerSyncContract:
     tools silently stop auto-approving under OMP — they fall through to
     reencodeMcpToolName()'s best-effort unknown-server branch and then to
     settings.json passthrough (not a security hole, since unknown servers
-    were already excluded from auto-approval, but a silent UX regression
+    were already excluded from auto-approval) — a silent UX regression
     with no test failure and no visible cause today.
 
     EXPECTED_BRIDGE_SERVERS is transcribed verbatim from the *values* of

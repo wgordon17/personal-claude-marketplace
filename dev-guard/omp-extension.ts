@@ -413,14 +413,22 @@ export default function (pi: ExtensionAPI) {
 		questions: { question: string; header?: string; options: { label: string; description?: string }[]; multiSelect?: boolean }[],
 		signal: AbortSignal,
 	): Promise<Record<string, string>> {
+		if (signal.aborted) return {};
+
+		let onAbort: (() => void) | undefined;
 		const aborted = new Promise<Record<string, string>>((resolve) => {
-			if (signal.aborted) {
-				resolve({});
-				return;
-			}
-			signal.addEventListener("abort", () => resolve({}), { once: true });
+			onAbort = () => resolve({});
+			signal.addEventListener("abort", onAbort, { once: true });
 		});
-		return Promise.race([collectAnswersFromUi(ctx, questions), aborted]);
+		try {
+			return await Promise.race([collectAnswersFromUi(ctx, questions), aborted]);
+		} finally {
+			// Removes the listener when collectAnswersFromUi() wins the race —
+			// { once: true } only detaches it after it FIRES, not after the
+			// race resolves the other way, so without this the listener lingers
+			// on `signal` for the lifetime of the underlying AbortController.
+			if (onAbort) signal.removeEventListener("abort", onAbort);
+		}
 	}
 
 	/**
