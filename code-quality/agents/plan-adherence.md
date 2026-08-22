@@ -5,7 +5,6 @@ model: opus
 color: orange
 tools: Read, Bash, LSP, AskUserQuestion, SendMessage
 ---
-<!-- OMP compatibility: tools: above are Claude Code names, left unchanged (Claude Code enforces this field; OMP does not for plugin subagents) — see dev-guard/OMP-COMPAT.md for the mapping table. AskUserQuestion has no OMP built-in (only reachable if dev-guard's own OMP bridge registers it); SendMessage has no OMP equivalent at all. -->
 
 # code-quality:plan-adherence — Plan Adherence Verification Agent
 

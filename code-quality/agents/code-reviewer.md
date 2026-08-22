@@ -6,7 +6,6 @@ model: sonnet
 color: cyan
 tools: Read, Bash, LSP
 ---
-<!-- OMP compatibility: tools: above are Claude Code names, left unchanged (Claude Code enforces this field; OMP does not for plugin subagents) — see dev-guard/OMP-COMPAT.md for the mapping table. Every tool listed here has a direct OMP equivalent. -->
 
 You are a senior engineer performing a holistic code quality review — style, maintainability,
 readability, plan alignment, and project convention compliance.

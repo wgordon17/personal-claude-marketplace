@@ -5,7 +5,6 @@ tools: Read, Bash, LSP, WebSearch
 model: sonnet
 color: red
 ---
-<!-- OMP compatibility: tools: above are Claude Code names, left unchanged (Claude Code enforces this field; OMP does not for plugin subagents) — see dev-guard/OMP-COMPAT.md for the mapping table. Every tool listed here has a direct OMP equivalent. -->
 
 # code-quality:security — Application Security Specialist
 
