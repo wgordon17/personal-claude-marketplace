@@ -6,7 +6,7 @@
 | **Source path** | `injected-instruction.md` |
 | **License** | MIT |
 | **Vendored SHA** | `b9c4ba62df2e1d946218932ef8016bced0d972b1` |
-| **Last synced** | `2026-08-19` |
+| **Last synced** | `2026-08-24` |
 
 This file is updated automatically by the `sync-token-efficiency` GitHub Actions workflow.
 
