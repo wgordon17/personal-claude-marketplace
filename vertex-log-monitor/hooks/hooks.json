@@ -1,0 +1,16 @@
+{
+  "description": "Refreshes the Vertex AI logging-state cache on session start/resume (non-blocking, throttled).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nohup ${CLAUDE_PLUGIN_ROOT}/hooks/refresh.sh >/dev/null 2>&1 &"
+          }
+        ]
+      }
+    ]
+  }
+}

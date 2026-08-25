@@ -1,0 +1,6 @@
+{
+  "name": "vertex-log-monitor",
+  "description": "Surfaces whether Vertex AI request/response (prompt+output) logging or Data Access audit logging is enabled for the Claude Code project. Refreshes a small cache on SessionStart and exposes a status reader for a shell prompt (Starship) or on-demand slash command. Zero-config: derives project, region, and models from the ANTHROPIC_* / CLOUD_ML_REGION env vars Claude Code already sets.",
+  "version": "0.1.0",
+  "author": { "name": "wgordon17" }
+}
