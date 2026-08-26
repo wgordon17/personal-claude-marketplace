@@ -40,11 +40,18 @@ command -v "$GCLOUD" >/dev/null 2>&1 || GCLOUD="/opt/homebrew/share/google-cloud
 now=$(date +%s)
 
 # Atomic write: build in a temp file on the same filesystem, then rename, so a
-# concurrent reader never sees a half-written cache.
+# concurrent reader never sees a half-written cache. Clean up the temp on failure.
 write_cache() {
   local tmp="${CACHE_FILE}.tmp.$$"
-  printf '%s\n' "$1" > "$tmp" && mv -f "$tmp" "$CACHE_FILE"
+  printf '%s\n' "$1" > "$tmp" && mv -f "$tmp" "$CACHE_FILE" || rm -f "$tmp"
 }
+
+# jq is required for all parsing/assembly below. Fall back to a clean error cache
+# if it is missing ($now is digits, so this static write needs no escaping).
+if ! command -v jq >/dev/null 2>&1; then
+  printf '{"updated":%s,"error":"no_jq","models":{}}\n' "$now" > "$CACHE_FILE"
+  exit 0
+fi
 
 if [ -z "$PROJECT" ]; then
   write_cache "$(jq -nc --argjson updated "$now" '{updated:$updated, error:"no_project", models:{}}')"
@@ -72,18 +79,22 @@ else
 fi
 trap '[ "$LOCK_OWNED" = "1" ] && rmdir "$LOCK" 2>/dev/null' EXIT
 
-# Derive models from ANTHROPIC_DEFAULT_*_MODEL, stripping @version and [..] tags.
+# Model sources: explicit override (space-separated) or the ANTHROPIC_DEFAULT_*
+# env vars. Both are normalized identically below so cache keys always match
+# status.sh's stripped lookup.
 strip_model() { local m="$1"; m="${m%%@*}"; m="${m%%\[*}"; printf '%s' "$m"; }
 if [ -n "${VERTEX_LOG_MODELS:-}" ]; then
-  MODELS="$VERTEX_LOG_MODELS"
+  raw_models="$VERTEX_LOG_MODELS"
 else
-  MODELS=""
-  for v in "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" "${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"; do
-    [ -z "$v" ] && continue
-    s="$(strip_model "$v")"
-    case " $MODELS " in *" $s "*) : ;; *) MODELS="${MODELS:+$MODELS }$s" ;; esac
-  done
+  raw_models="${ANTHROPIC_DEFAULT_OPUS_MODEL:-} ${ANTHROPIC_DEFAULT_SONNET_MODEL:-} ${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"
 fi
+MODELS=""
+# shellcheck disable=SC2086 # intentional word-split on the space-separated list
+for v in $raw_models; do
+  [ -z "$v" ] && continue
+  s="$(strip_model "$v")"
+  case " $MODELS " in *" $s "*) : ;; *) MODELS="${MODELS:+$MODELS }$s" ;; esac
+done
 MODELS="${MODELS:-claude-sonnet-5}"
 
 if [ "$LOCATION" = "global" ]; then
