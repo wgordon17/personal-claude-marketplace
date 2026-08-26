@@ -345,17 +345,18 @@ class TestWriteEditPreToolUsePayloadShape:
     def test_write_no_hard_block_for_benign_input(self, tmp_path):
         """Write's OMP input is passed through unchanged (translateToolInputForGuard
         does not rename fields for write/edit). This benign write must not exit 2 —
-        it doesn't trip _guard_tmp_path (not a /tmp/ path) or _guard_comment_narration
-        (no narrative comment text). The Write matcher DOES have real hard-block
-        paths of its own (see the "Fail-open / fail-closed policy" section of
-        OMP-COMPAT.md) — this test only pins that a plain, non-triggering write
-        passes through."""
+        it doesn't trip _guard_tmp_path (a bare relative filename, not a /tmp/ path —
+        tmp_path itself is unsafe here since pytest resolves it under /tmp/ on Linux
+        CI) or _guard_comment_narration (no narrative comment text). The Write
+        matcher DOES have real hard-block paths of its own (see the "Fail-open /
+        fail-closed policy" section of OMP-COMPAT.md) — this test only pins that a
+        plain, non-triggering write passes through."""
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-3",
             "hook_event_name": "PreToolUse",
             "tool_name": "Write",
-            "tool_input": {"file_path": str(tmp_path / "out.txt"), "content": "hello"},
+            "tool_input": {"file_path": "out.txt", "content": "hello"},
         }
         result = run_guard(payload, cwd=tmp_path)
         assert result.returncode != 2
@@ -367,7 +368,7 @@ class TestWriteEditPreToolUsePayloadShape:
             "hook_event_name": "PreToolUse",
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": str(tmp_path / "out.txt"),
+                "file_path": "out.txt",
                 "old_string": "a",
                 "new_string": "b",
             },
