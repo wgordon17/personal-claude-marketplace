@@ -39,10 +39,15 @@ command -v "$GCLOUD" >/dev/null 2>&1 || GCLOUD="/opt/homebrew/share/google-cloud
 
 now=$(date +%s)
 
-write_cache() { printf '%s\n' "$1" > "$CACHE_FILE"; }
+# Atomic write: build in a temp file on the same filesystem, then rename, so a
+# concurrent reader never sees a half-written cache.
+write_cache() {
+  local tmp="${CACHE_FILE}.tmp.$$"
+  printf '%s\n' "$1" > "$tmp" && mv -f "$tmp" "$CACHE_FILE"
+}
 
 if [ -z "$PROJECT" ]; then
-  write_cache "$(printf '{"updated":%s,"error":"no_project","models":{}}' "$now")"
+  write_cache "$(jq -nc --argjson updated "$now" '{updated:$updated, error:"no_project", models:{}}')"
   exit 0
 fi
 
@@ -53,14 +58,19 @@ if [ -z "${VERTEX_LOG_FORCE:-}" ] && [ -f "$CACHE_FILE" ]; then
   if [ -n "$m" ] && [ $((now - m)) -lt "$THROTTLE" ]; then exit 0; fi
 fi
 
-# Single-run lock (atomic mkdir); reclaim if stale (>120s).
+# Single-run lock (atomic mkdir); reclaim if stale (>120s). Only the process
+# that actually creates the lock removes it on exit.
 LOCK="${CACHE_DIR}/.vertex-log-monitor.lock"
-if ! mkdir "$LOCK" 2>/dev/null; then
+LOCK_OWNED=0
+if mkdir "$LOCK" 2>/dev/null; then
+  LOCK_OWNED=1
+else
   lm=$(stat -c %Y "$LOCK" 2>/dev/null || stat -f %m "$LOCK" 2>/dev/null)
   if [ -n "$lm" ] && [ $((now - lm)) -lt 120 ]; then exit 0; fi
-  rmdir "$LOCK" 2>/dev/null; mkdir "$LOCK" 2>/dev/null || exit 0
+  rmdir "$LOCK" 2>/dev/null
+  if mkdir "$LOCK" 2>/dev/null; then LOCK_OWNED=1; else exit 0; fi
 fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+trap '[ "$LOCK_OWNED" = "1" ] && rmdir "$LOCK" 2>/dev/null' EXIT
 
 # Derive models from ANTHROPIC_DEFAULT_*_MODEL, stripping @version and [..] tags.
 strip_model() { local m="$1"; m="${m%%@*}"; m="${m%%\[*}"; printf '%s' "$m"; }
@@ -84,11 +94,13 @@ fi
 
 TOKEN=$("$GCLOUD" auth print-access-token 2>/dev/null)
 if [ -z "$TOKEN" ]; then
-  write_cache "$(printf '{"updated":%s,"project":"%s","error":"no_gcloud_token","models":{}}' "$now" "$PROJECT")"
+  write_cache "$(jq -nc --argjson updated "$now" --arg project "$PROJECT" '{updated:$updated, project:$project, error:"no_gcloud_token", models:{}}')"
   exit 0
 fi
 
-models_json=""
+# Collect model -> state as TAB-separated lines; assembled into JSON via jq below
+# (jq handles escaping, so model names never corrupt the cache).
+models_tsv=""
 for M in $MODELS; do
   resp=$(curl -s -m 8 -w $'\n%{http_code}' \
     "${HOST}/v1beta1/projects/${PROJECT}/locations/${LOCATION}/publishers/${PUBLISHER}/models/${M}:fetchPublisherModelConfig" \
@@ -105,18 +117,30 @@ for M in $MODELS; do
       ;;
     404) state="unlogged" ;;
     403) state="denied" ;;
-    *)   state="error:${code}" ;;
+    *)   state="error:${code:-nocurl}" ;;
   esac
-  models_json="${models_json}$(printf '"%s":"%s",' "$M" "$state")"
+  models_tsv="${models_tsv}${M}"$'\t'"${state}"$'\n'
 done
-models_json="{${models_json%,}}"
+models_json=$(printf '%s' "$models_tsv" | jq -Rn '[inputs | select(length > 0) | split("\t") | {(.[0]): .[1]}] | add // {}')
 
+# Data Access audit logging: "on" only if a DATA_READ/DATA_WRITE logType is
+# actually enabled for aiplatform (or allServices) -- not merely that an
+# auditConfigs entry exists.
 audit="unknown"
 pol=$("$GCLOUD" projects get-iam-policy "$PROJECT" --format=json 2>/dev/null)
 if [ -n "$pol" ]; then
-  has=$(printf '%s' "$pol" | jq -r '(.auditConfigs // []) | map(select(.service=="aiplatform.googleapis.com" or .service=="allServices")) | length' 2>/dev/null)
-  if [ "$has" = "0" ] || [ -z "$has" ]; then audit="off"; else audit="on"; fi
+  has=$(printf '%s' "$pol" | jq -r '
+    [ .auditConfigs[]?
+      | select(.service == "aiplatform.googleapis.com" or .service == "allServices")
+      | .auditLogConfigs[]?
+      | select(.logType == "DATA_READ" or .logType == "DATA_WRITE") ] | length' 2>/dev/null)
+  if [ -z "$has" ] || [ "$has" = "0" ]; then audit="off"; else audit="on"; fi
 fi
 
-write_cache "$(printf '{"updated":%s,"project":"%s","location":"%s","audit_data_access":"%s","models":%s}' \
-  "$now" "$PROJECT" "$LOCATION" "$audit" "$models_json")"
+write_cache "$(jq -nc \
+  --argjson updated "$now" \
+  --arg project "$PROJECT" \
+  --arg location "$LOCATION" \
+  --arg audit "$audit" \
+  --argjson models "$models_json" \
+  '{updated:$updated, project:$project, location:$location, audit_data_access:$audit, models:$models}')"

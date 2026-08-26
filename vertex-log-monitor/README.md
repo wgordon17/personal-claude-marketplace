@@ -61,12 +61,13 @@ After the plugin has run once (any Claude session), a stable reader exists at
 
 ```toml
 [custom.vertexlog]
-command = '/opt/homebrew/bin/bash ~/.claude/cache/vertex-log-monitor-status.sh --plain'
-shell = '/opt/homebrew/bin/bash'
+command = '~/.claude/cache/vertex-log-monitor-status.sh --plain'
 when = true
 format = '[$output ]($style)'
 style = 'bold'
 ```
 
-The stable symlink is re-pointed on every session start, so plugin updates never
+The reader symlink is executable (its target has an `env bash` shebang), so no
+interpreter path is hardcoded — Starship runs it via the default shell. The
+stable symlink is re-pointed on every session start, so plugin updates never
 break the prompt.

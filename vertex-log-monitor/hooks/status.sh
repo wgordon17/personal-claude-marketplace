@@ -30,8 +30,10 @@ command -v jq >/dev/null 2>&1 || unknown "no jq"
 mtime=$(stat -c %Y "$CACHE" 2>/dev/null || stat -f %m "$CACHE" 2>/dev/null)
 now=$(date +%s)
 if [ -n "$mtime" ] && [ $((now - mtime)) -gt "$MAX_AGE" ]; then
-  if [ "${VERTEX_LOG_SELFHEAL:-1}" != "0" ] && [ -e "$REFRESH_LINK" ]; then
-    nohup /opt/homebrew/bin/bash "$REFRESH_LINK" >/dev/null 2>&1 &
+  if [ "${VERTEX_LOG_SELFHEAL:-1}" != "0" ] && [ -x "$REFRESH_LINK" ]; then
+    # Invoke the symlink directly (its target has an `env bash` shebang and is
+    # executable) — no hardcoded interpreter path, so this works off-platform.
+    nohup "$REFRESH_LINK" >/dev/null 2>&1 &
   fi
   unknown "stale"
 fi
@@ -42,7 +44,12 @@ err=$(jq -r '.error // empty' "$CACHE")
 model=""
 if [ ! -t 0 ]; then
   stdin=$(cat 2>/dev/null || true)
-  [ -n "$stdin" ] && model=$(printf '%s' "$stdin" | jq -r '.model.id // empty' 2>/dev/null)
+  if [ -n "$stdin" ]; then
+    model=$(printf '%s' "$stdin" | jq -r '.model.id // empty' 2>/dev/null)
+    # Normalize to match refresh.sh cache keys (strip @version and [..] tags),
+    # else a tagged id like claude-opus-4-8[1m] misses the claude-opus-4-8 key.
+    model="${model%%@*}"; model="${model%%\[*}"
+  fi
 fi
 
 audit=$(jq -r '.audit_data_access // "unknown"' "$CACHE")
