@@ -1,0 +1,7 @@
+{
+  "name": "git-tools-omp-extension",
+  "private": true,
+  "omp": {
+    "extensions": ["./omp-extension.ts"]
+  }
+}

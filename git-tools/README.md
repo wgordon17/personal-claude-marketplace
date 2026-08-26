@@ -32,3 +32,7 @@ Defense-in-depth hook scripts for use with pre-commit framework:
 ```bash
 claude plugin install git-tools@personal-claude-marketplace
 ```
+
+## OMP Compatibility
+
+Also ships an `omp-extension.ts` bridge (`package.json` declares it via `omp.extensions`) so the SessionStart hook works under [OMP](https://omp.sh) too: it shells out to the same `scripts/git-instructions.sh`, unchanged, and injects its output into context. No mapping table needed — see `dev-guard/OMP-COMPAT.md` for the marketplace's full OMP compatibility reference.

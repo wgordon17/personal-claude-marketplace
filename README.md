@@ -2,6 +2,17 @@
 
 Personal Claude Code plugins: LSP servers, code quality agents, development utilities, git tools, GitHub MCP integration, and Jira issue tracking.
 
+## Dual-Harness Support (Claude Code + OMP)
+
+Three plugins — **dev-guard**, **git-tools**, and **github-mcp** — ship an additional
+`omp-extension.ts` bridge so their `hooks/hooks.json`-based functionality also works under
+[OMP](https://omp.sh) (`@oh-my-pi/pi-coding-agent`), without changing anything about how they
+behave under Claude Code. Each bridge shells out to the plugin's existing, unchanged
+Python/shell scripts — no enforcement or session logic is reimplemented in TypeScript. See
+[`dev-guard/OMP-COMPAT.md`](dev-guard/OMP-COMPAT.md) for the full compatibility reference
+(tool-name/field-name mapping, MCP re-encoding, event mapping, and known limitations); git-tools
+and github-mcp cover their own much simpler single-hook bridges directly in their own READMEs.
+
 ## Plugins
 
 ### LSP Plugins
@@ -111,6 +122,7 @@ Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project
 - **SessionStart: Token Efficiency** - Injects a vendored token-efficiency ruleset (recon batching, keyhole reads, dependency pacing) into every session
 - **PreToolUse: Tool Selection Guard** - Enforces native tool usage, Python/Rust tooling, git safety, URL fetch guard
 - **PostToolUse: Commit Validation** - Conventional Commits format enforcement
+- **PreToolUse/PostToolUse: AskUserQuestion Decision Persistence** - Auto-answers and records Fix/Defer review decisions across sessions
 - **Stop:** Quality stop gate - Deterministic triage + LLM evaluation for completion claims and write activity
 - **SubagentStop:** FixSummary validation - Structural completeness check for Fixer subagent outputs
 

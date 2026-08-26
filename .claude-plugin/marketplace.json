@@ -66,7 +66,7 @@
     },
     {
       "name": "dev-guard",
-      "version": "1.66.0",
+      "version": "1.67.0",
       "source": "./dev-guard",
       "description": "Development environment policy enforcement: tool selection guard, commit validation, URL fetch guard, trust management, oc/kubectl introspection, subagent completion verification, decision persistence, anti-deferral enforcement, shared behavioral feedback, path hallucination guard, narrative comment guard, token efficiency guidance",
       "category": "quality",
@@ -88,7 +88,7 @@
     },
     {
       "name": "git-tools",
-      "version": "2.5.0",
+      "version": "2.6.0",
       "source": "./git-tools",
       "description": "Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation",
       "category": "productivity",
@@ -99,7 +99,7 @@
     },
     {
       "name": "github-mcp",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "./github-mcp",
       "description": "GitHub MCP server with full toolsets for repository management, code security, and workflow automation",
       "category": "productivity",

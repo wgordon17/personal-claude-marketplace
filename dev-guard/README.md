@@ -24,6 +24,14 @@ Development environment policy enforcement: tool selection guard, commit validat
 - Blocks emoji and meta-commentary
 - **Exit 2** shows errors but commit already completed (PostToolUse limitation)
 
+### PreToolUse/PostToolUse: AskUserQuestion Decision Persistence
+
+**decision-persistence.py** — Remembers Fix/Defer review decisions across sessions:
+- **PreToolUse** — Checks stored decisions for `AskUserQuestion` calls tagged with `▸dp:` metadata and auto-answers via `updatedInput` when every question in the batch has a prior, non-stale decision
+- **PostToolUse** — Captures new Fix/Defer (or multi-option) decisions from the user's actual answers, fingerprinted by file + category + line + skill
+- **Staleness detection** — A code-hash window around the finding location invalidates a stored decision if the surrounding code has changed since it was made
+- **Partial-batch limitation** — Auto-answering requires every question in a batch to have a prior decision; a mixed batch passes through entirely (no partial auto-answer, since `updatedInput` requires `permissionDecision` to take effect for the whole call)
+
 ### Stop: Quality Stop Gate
 
 **stop-hook.py** — Fires on every Stop event, performing deterministic triage (loop guard, transcript parsing, git diff, signal detection, question classification) and delegating to an LLM evaluator when quality checks are warranted.
@@ -416,6 +424,20 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 |--------|-------|----------|
 | `GUARD_BYPASS=1` | All Bash rules except GIT_DENY_RULES | Override tool selection and command guard rules; GIT_DENY_RULES (reset --hard, force push, branch -D, etc.) is always enforced — GIT_ASK_RULES (e.g. stash-drop) is bypassed like everything else |
 | `ALLOW_FETCH=1` | URL rules (curl/wget only) | Fetch an authenticated URL after confirming alternatives |
+
+## OMP Compatibility
+
+Also ships an `omp-extension.ts` bridge (`package.json` declares it via `omp.extensions`) so
+this plugin's hooks work under [OMP](https://omp.sh) too, by shelling out to the same
+Python/shell scripts documented above, unchanged — no guard logic is reimplemented in
+TypeScript. See [`OMP-COMPAT.md`](OMP-COMPAT.md) for the full tool-name/field-name mapping
+table, MCP re-encoding details, and event mapping.
+
+**Known limitation**: `SubagentStop` has no confirmed OMP event of its own — it's dispatched as
+a best-effort approximation on every `agent_end` firing (the same event used for `Stop`), since
+no OMP event distinguishes a subagent's completion from the main session's. This is a
+quality/completeness control, not a security gate, so the approximation degrades usefulness in
+the worst case, not safety.
 
 ## Author
 
