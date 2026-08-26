@@ -24,8 +24,13 @@ plugin checks on every session and caches the result for a shell prompt.
   and inspects the project IAM policy's `auditConfigs`, writing a small cache at
   `~/.claude/cache/vertex-logging-state.json`.
 - `hooks/status.sh` reads that cache instantly (no network) and prints a compact
-  indicator. It self-heals: if the cache is stale it fires a throttled
-  background refresh via a stable symlink, so it survives plugin updates.
+  indicator. With no stdin it prints an **aggregate** across all monitored models;
+  when the Claude session JSON is piped on stdin (a ccstatusline custom-command
+  widget or a Claude Code `statusLine`), it shows the state for the **active
+  model**, normalizing `@version`/`[..]` tags so a tagged id like
+  `claude-opus-4-8[1m]` matches its cache key. It self-heals: if the cache is
+  stale it fires a throttled background refresh via a stable symlink, so it
+  survives plugin updates.
 
 Indicator states:
 
@@ -71,3 +76,21 @@ The reader symlink is executable (its target has an `env bash` shebang), so no
 interpreter path is hardcoded — Starship runs it via the default shell. The
 stable symlink is re-pointed on every session start, so plugin updates never
 break the prompt.
+
+## Claude Code statusline (ccstatusline)
+
+Add a Custom Command widget to `~/.config/ccstatusline/settings.json` (append to a
+`lines[]` entry):
+
+```json
+{
+  "id": "vertexlog",
+  "type": "custom-command",
+  "commandPath": "~/.claude/cache/vertex-log-monitor-status.sh --plain",
+  "timeout": 2000
+}
+```
+
+ccstatusline pipes the Claude session JSON on stdin, so the widget shows the state
+for the model you're currently using (not just the aggregate). `--plain` emits the
+emoji indicator without ANSI so ccstatusline applies its own styling.
