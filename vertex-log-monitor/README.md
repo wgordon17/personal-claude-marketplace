@@ -29,8 +29,8 @@ plugin checks on every session and caches the result for a shell prompt.
   widget or a Claude Code `statusLine`), it shows the state for the **active
   model**, normalizing `@version`/`[..]` tags so a tagged id like
   `claude-opus-4-8[1m]` matches its cache key. It self-heals: if the cache is
-  stale it fires a throttled background refresh via a stable symlink, so it
-  survives plugin updates.
+  stale or missing it fires a throttled background refresh via a stable symlink,
+  so it survives plugin updates.
 
 Indicator states:
 
@@ -48,12 +48,18 @@ Indicator states:
 `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`, and the
 `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL` vars (stripping `@version` and
 `[..]` tags). Overrides: `VERTEX_LOG_PROJECT`, `VERTEX_LOG_LOCATION`,
-`VERTEX_LOG_MODELS`, `VERTEX_LOG_PUBLISHER`, `VERTEX_LOG_THROTTLE`,
-`VERTEX_LOG_MAX_AGE`, `VERTEX_LOG_SELFHEAL=0`.
+`VERTEX_LOG_MODELS`, `VERTEX_LOG_PUBLISHER`, `VERTEX_LOG_CACHE_DIR` (cache
+directory, default `~/.claude/cache`, shared by `refresh.sh` and `status.sh`),
+`VERTEX_LOG_THROTTLE`, `VERTEX_LOG_FORCE` (skip the throttle and force a fresh
+check — set by `/vertex-log-monitor:vertex-log-status`), `VERTEX_LOG_MAX_AGE`,
+`VERTEX_LOG_GCLOUD_TIMEOUT` (per-`gcloud`-call timeout in seconds, default 10,
+applied when `timeout`/`gtimeout` is available), and `VERTEX_LOG_SELFHEAL=0`.
 
-Requires `gcloud` (authenticated), `jq`, and `curl`. The config check calls
-`fetchPublisherModelConfig` on the project (available to any `roles/aiplatform.user`);
-the audit-config check reads the project IAM policy (`getIamPolicy`).
+Requires `gcloud` (authenticated), `jq`, and `curl`. `GCLOUD_BIN` overrides the
+`gcloud` binary `refresh.sh` invokes (default: `gcloud` on `PATH`, else a search
+of common install locations). The config check calls `fetchPublisherModelConfig`
+on the project (available to any `roles/aiplatform.user`); the audit-config check
+reads the project IAM policy (`getIamPolicy`).
 
 ## On-demand check
 

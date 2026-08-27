@@ -6,6 +6,7 @@ on:
     paths:
       - '**.json'
       - '**.md'
+      - '**.sh'
       - '**/.mcp.json'
       - '**/hooks.json'
       - '**/plugin.json'
@@ -39,6 +40,21 @@ jobs:
             echo "$files"
             exit 1
           fi
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+      - name: Run ShellCheck on repository shell scripts
+        run: |
+          mapfile -t files < <(find . -type f -name '*.sh' -not -path './.git/*')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No shell scripts found."
+            exit 0
+          fi
+          shellcheck "${files[@]}"
 
   actionlint:
     name: Actionlint
