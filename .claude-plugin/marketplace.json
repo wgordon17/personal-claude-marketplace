@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "3.4.0"
+    "version": "3.5.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -137,6 +137,15 @@
       "description": "Pinned MCP fetch/search server for domains that block Claude's built-in WebFetch/WebSearch (Reddit and 15 other sites)",
       "category": "productivity",
       "tags": ["mcp", "fetch", "web-search", "reddit"],
+      "author": { "name": "wgordon17" }
+    },
+    {
+      "name": "chai-bot",
+      "version": "1.0.0",
+      "source": "./chai-bot",
+      "description": "Advisory nudge and explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server",
+      "category": "productivity",
+      "tags": ["mcp", "osac", "advisory", "ship-help"],
       "author": { "name": "wgordon17" }
     }
   ]
