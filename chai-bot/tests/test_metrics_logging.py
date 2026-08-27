@@ -19,6 +19,7 @@ from conftest import METRICS_SCRIPT, _events, run_metrics
 
 ASK_PERSONA_TOOL = "mcp__plugin_chai-bot_ship-help__ask_persona"
 SUBMIT_FEEDBACK_TOOL = "mcp__plugin_chai-bot_ship-help__submit_feedback"
+COMMAND_FILE = METRICS_SCRIPT.parent.parent / "commands" / "chai-bot.md"
 
 
 def run_log_explicit_invoke(db_path: Path) -> subprocess.CompletedProcess:
@@ -27,7 +28,7 @@ def run_log_explicit_invoke(db_path: Path) -> subprocess.CompletedProcess:
     `uv run --no-project metrics.py --log-explicit-invoke`."""
     env = {**os.environ, "GUARD_DB_PATH": str(db_path)}
     return subprocess.run(
-        ["uv", "run", str(METRICS_SCRIPT), "--log-explicit-invoke"],
+        ["uv", "run", "--no-project", str(METRICS_SCRIPT), "--log-explicit-invoke"],
         capture_output=True,
         text=True,
         env=env,
@@ -282,6 +283,44 @@ class TestPostToolUseLogging:
         assert detail["latency_ms"] is None
         assert detail["response_size"] == len("hi")
 
+    def test_content_list_with_no_text_blocks_records_zero_not_whole_payload(self, tmp_path):
+        """QA-D: a `content` list with only non-text blocks (e.g. an image
+        block) must record response_size == 0 -- it must NOT fall through to
+        serializing the whole tool_response payload, which could leak
+        non-text content (e.g. base64 image data) into the detail column."""
+        db_path = tmp_path / "dev-guard.db"
+        secret_payload_marker = "UNIQUE_IMAGE_DATA_MARKER_should_never_leak_98765"
+        run_metrics(
+            {
+                "hook_event_name": "PreToolUse",
+                "session_id": "sess-1",
+                "tool_use_id": "tu-image-only",
+                "tool_name": ASK_PERSONA_TOOL,
+                "tool_input": {},
+            },
+            db_path,
+        )
+        result = run_metrics(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "sess-1",
+                "tool_use_id": "tu-image-only",
+                "tool_name": ASK_PERSONA_TOOL,
+                "tool_input": {},
+                "tool_response": {"content": [{"type": "image", "data": secret_payload_marker}]},
+            },
+            db_path,
+        )
+        assert result.returncode == 0, result.stderr
+        rows = _events(db_path)
+        assert len(rows) == 2
+        post_row = rows[-1]
+        detail = json.loads(post_row[7])
+        assert detail["response_size"] == 0
+        for row in rows:
+            for value in row:
+                assert secret_payload_marker not in str(value)
+
     def test_post_with_differently_keyed_pre_row_still_degrades_gracefully(self, tmp_path):
         """QA-3: a 'pre' row DOES exist in the DB, but under a DIFFERENT
         tool_use_id than this post payload references -- the
@@ -384,6 +423,21 @@ class TestLogExplicitInvokeCliMode:
         rows = _events(db_path)
         assert len(rows) == 2
         assert all(row[5] == "explicit-invoke" and row[6] == "ask_persona" for row in rows)
+
+
+class TestCommandFileInvokesNoProject:
+    """QA-B: the `uv run --no-project metrics.py --log-explicit-invoke` form
+    must actually be present in the command file's real explicit-invoke call --
+    pins against a future edit silently dropping the `--no-project` flag. The
+    flag is defensive-in-depth: metrics.py carries a PEP 723 inline-metadata
+    block so `uv run` already isolates it from the invoking repo's project, but
+    `--no-project` keeps that isolation explicit and correct even if the inline
+    metadata is ever removed."""
+
+    def test_no_project_flag_present_in_explicit_invoke_call(self):
+        assert COMMAND_FILE.exists(), f"expected command file at {COMMAND_FILE}"
+        content = COMMAND_FILE.read_text()
+        assert "uv run --no-project" in content
 
 
 class TestCrossWriterAggregateIdentity:

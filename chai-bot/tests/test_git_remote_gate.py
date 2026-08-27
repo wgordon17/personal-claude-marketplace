@@ -115,6 +115,41 @@ class TestGitRemoteGateMatches:
         result = _run_script(bin_dir)
         assert result.returncode == 2, result.stderr
 
+    @pytest.mark.parametrize(
+        "remote_url",
+        [
+            "git@github.com:OSAC-Project/x.git",
+            "https://github.com/OSAC-Project/x.git",
+        ],
+    )
+    def test_differently_cased_org_still_matches(self, tmp_path, remote_url):
+        """SEC-1: the real osac-project org, but differently cased -- must
+        still be treated as eligible (proceed past the gate to exit 2, not
+        wrongly rejected with exit 1) now that the match is case-insensitive."""
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        _make_git_shim(bin_dir, origin=remote_url)
+        result = _run_script(bin_dir)
+        assert result.returncode == 2, result.stderr
+
+    @pytest.mark.parametrize(
+        "remote_url",
+        [
+            "ssh://git@github.com/osac-project/x.git",
+            "https://user@github.com/osac-project/x.git",
+            "https://x-access-token:TOKEN@github.com/osac-project/x.git",
+        ],
+    )
+    def test_scheme_and_userinfo_forms_match(self, tmp_path, remote_url):
+        """ADV-1: legitimate osac-project remotes using the ssh:// scheme or an
+        embedded userinfo/token must still be treated as eligible (exit 2, not a
+        wrong exit-1 rejection). The SEC-1 anchoring must not over-tighten past the
+        real forms git accepts, while the host stays boundary-anchored (see the
+        lookalike/path-injection rejects below, which still fail)."""
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        _make_git_shim(bin_dir, origin=remote_url)
+        result = _run_script(bin_dir)
+        assert result.returncode == 2, result.stderr
+
 
 class TestGitRemoteGateRejects:
     """Lookalikes and non-matches exit 1 -- no network call reachable."""
@@ -128,6 +163,15 @@ class TestGitRemoteGateRejects:
             "https://github.com/not-osac-project/x.git",
             "git@github.com:some-org/osac-project.git",
             "https://gitlab.com/osac-project/x.git",
+            # SEC-1: lookalike host -- "github.com" is only a substring of the
+            # actual host, which must not satisfy the anchored scheme/host match.
+            "https://faux-github.com/osac-project/x.git",
+            # SEC-1: "github.com/osac-project/" appears, but only as a path
+            # segment on a completely different host -- must not match.
+            "https://evil.example.com/github.com/osac-project/x",
+            # ADV-1: "github.com" as userinfo of a different host (the real host
+            # is evil.com) -- the userinfo group [^/@]*@ must not let this match.
+            "https://github.com@evil.com/osac-project/x.git",
         ],
     )
     def test_lookalike_rejected(self, tmp_path, remote_url):

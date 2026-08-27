@@ -25,9 +25,28 @@ if [[ -z "$REMOTE_URL" ]]; then
     exit 1
 fi
 
-# Step 3: match against the osac-project GitHub org (SSH and HTTPS forms).
-# github.com:osac-project/  (SSH)   or   github.com/osac-project/  (HTTPS)
-if ! [[ "$REMOTE_URL" =~ github\.com[:/]osac-project/ ]]; then
+# Step 3: match against the osac-project GitHub org. Accepts the real remote
+# forms git produces/accepts:
+#   scp-style SSH   git@github.com:osac-project/x.git
+#   ssh:// SSH       ssh://git@github.com/osac-project/x.git
+#   HTTPS           https://github.com/osac-project/x.git
+#   HTTPS + userinfo/token   https://user@github.com/osac-project/x.git
+#                            https://x-access-token:TOKEN@github.com/osac-project/x.git
+# The github.com host stays ANCHORED (optional scheme + optional userinfo may
+# precede it, but nothing else), so a lookalike host (faux-github.com) or a
+# "github.com/osac-project/" substring buried in the path/query of another host
+# can never match (host-boundary bypass — SEC-1). `[^/@]*@` for HTTPS userinfo
+# stops at the first / or @, so it can't swallow a different host. Case-insensitive
+# (nocasematch) so a differently cased real remote (OSAC-Project) still matches --
+# bash 3.2 compatible (shopt -s nocasematch since bash 3.1; no ${VAR,,}).
+shopt -s nocasematch
+MATCH=0
+if [[ "$REMOTE_URL" =~ ^((ssh://)?(git@)?github\.com[:/]|https?://([^/@]*@)?github\.com/)osac-project/ ]]; then
+    MATCH=1
+fi
+shopt -u nocasematch
+
+if [[ "$MATCH" -ne 1 ]]; then
     exit 1
 fi
 

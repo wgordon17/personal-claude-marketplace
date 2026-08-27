@@ -224,8 +224,12 @@ def _extract_response_size(tool_response: object) -> int:
     readToolResponseForGuard) already assume for other tools. This function
     degrades gracefully across three cases rather than assuming one exact
     shape:
-      1. dict with a "content" list of blocks -> sum of text-block lengths.
-      2. any other dict/list -> length of its JSON serialization.
+      1. dict with a "content" list of blocks -> sum of text-block lengths,
+         0 if the list contains no text blocks at all (e.g. only image
+         blocks) -- this case never falls through to serializing the whole
+         payload, since that payload could itself carry response content.
+      2. any other dict/list (no "content" list) -> length of its JSON
+         serialization.
       3. plain string -> its length.
     Returns 0 if tool_response is missing or unrecognized.
     """
@@ -237,13 +241,10 @@ def _extract_response_size(tool_response: object) -> int:
         content = tool_response.get("content")
         if isinstance(content, list):
             total = 0
-            saw_text_block = False
             for block in content:
                 if isinstance(block, dict) and block.get("type") == "text":
-                    saw_text_block = True
                     total += len(str(block.get("text", "")))
-            if saw_text_block:
-                return total
+            return total
     try:
         return len(json.dumps(tool_response))
     except (TypeError, ValueError):
