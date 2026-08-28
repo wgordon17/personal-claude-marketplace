@@ -1115,3 +1115,4 @@ agent that does the job right over multiple sonnet agents that require rework.
 | `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
 | `references/cynefin-reference.md` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |
+| `references/warm-bundle-handoff.md` | Warm-bundle handoff — the four optional per-component fields (files_examined, ruled_out, change_sites, proposed_first_change), the consumer contract, KV-cache/verification caveats, and the anti-injection note |

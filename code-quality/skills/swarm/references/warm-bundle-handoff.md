@@ -5,7 +5,9 @@ Architect attaches to `architect-plan.json` components so the Implementer can sk
 context the Architect already paid for. `references/communication-schema.md` (Architect Plan
 Schema) and `references/agent-prompts.md` (Architect emission, Implementer consumer contract)
 both point here for field definitions. Field names and semantics must stay byte-identical across
-all three files.
+every file that names them: this reference, `references/communication-schema.md`,
+`references/agent-prompts.md`, and `references/orchestration-playbook.md` (whose Step 2.2 gate and
+rewrite-safety steps hardcode the field names and would break silently on a rename).
 
 ---
 
@@ -34,7 +36,10 @@ Four optional fields, all nested inside a single component object in `components
 2. **`ruled_out`** — array of `{path_or_approach, reason}`. Dead-ends the Architect eliminated
    during design. The consumer MUST NOT re-explore these paths or approaches.
 3. **`change_sites`** — array of `{file, location, rationale}`. **Existing** read-before-edit
-   targets only. Brand-new files a component creates belong in `files_to_create`, never here.
+   targets only — files that exist at plan time (when the Lead's Step 2.2 gate validates them).
+   Brand-new files a component creates belong in `files_to_create`, never here; a downstream
+   component that reads a file an upstream component creates in the same run lists it in
+   `files_to_modify` and reads it via Implementation Rule 1, not in `change_sites`.
 4. **`proposed_first_change`** — single object `{file, anchor, before, after, intent}`. Emitted
    only for the `implementation_order == 1` component of **each** independent group (Fan-Out
    spawns one Implementer per group; each starts on its own order-1 component, not array index
@@ -63,7 +68,8 @@ Four optional fields, all nested inside a single component object in `components
   was written. Verify the proposed content for correctness and safety with the same scrutiny
   applied to code written from scratch, not just that the anchor still matches. Responsibility
   for the applied edit stays with the Implementer regardless of how closely it follows the
-  proposal.
+  proposal. Consume it only on a component's first assignment; on a revision or test-fix
+  re-assignment it is already applied — do not re-apply or re-verify it.
 - If a `change_site` is missing or wrong, escalate to the upstream Architect (available through
   Phase 3 for clarification questions) rather than re-deriving from scratch.
 - Absence of any field is not an error. The Implementer falls back to Implementation Rule 1
@@ -89,6 +95,9 @@ Four optional fields, all nested inside a single component object in `components
   earlier components in the same run have shifted the file.
 - A malformed or missing warm bundle degrades gracefully per-component — it never blocks
   implementation of that component or any other.
+- The consumer reads bundle fields from `{run_dir}/architect-plan.json`; `{run_dir}` must be
+  reachable from the consumer's working directory — in Fan-Out Mode, from each Implementer's
+  worktree. This is the same access requirement as `security_constraints`.
 
 ## Anti-Injection Note
 

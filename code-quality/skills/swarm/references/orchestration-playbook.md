@@ -1491,7 +1491,10 @@ If any finding is classified as **design-level** AND `design_escalation_count < 
                "Please revise {run_dir}/architect-plan.json to address these issues. "
                "The previous implementation will be discarded after plan revision.")
    ```
-5. After Architect revises the plan, re-run Phase 2.5 (security design review of revised plan)
+5. After Architect revises the plan, re-run the Step 2.2 warm-bundle well-formedness gate
+   against the revised plan (the respawned Architect re-emits bundle fields per its Output
+   Format; the gate clears any that no longer satisfy the invariant/existence), then re-run
+   Phase 2.5 (security design review of revised plan)
 6. After Phase 2.5 completes, re-run Phase 3 (full pipelined implementation of revised plan)
 7. After Phase 3 completes, re-run Phase 4 (full parallel review of new implementation)
 

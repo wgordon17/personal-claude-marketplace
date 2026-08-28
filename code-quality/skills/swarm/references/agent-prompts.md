@@ -213,9 +213,10 @@ Optionally, per component, include the warm bundle — `files_examined`, `ruled_
 `change_sites`, `proposed_first_change` — per `references/warm-bundle-handoff.md`. Emit
 `proposed_first_change` only for the `implementation_order == 1` component of each independent
 group, and only when its `.file` is one of that component's `change_sites`. Omit any field you
-have nothing substantive for — do not pad with empty arrays. On a Phase 2.5 `revise` rewrite,
-re-emit each revised component's warm-bundle fields to match the revised design — do not leave
-stale values from the prior iteration.
+have nothing substantive for — do not pad with empty arrays. On any plan revision — a Phase 2.5
+`revise` rewrite OR a Phase 4 design-escalation respawn — re-emit each revised component's
+warm-bundle fields to match the revised design; do not leave stale values from the prior
+iteration.
 
 If `questions` is non-empty, the lead will present these to the user before implementation begins.
 If `speculative_fork_recommended` is true, the lead will run Phase 2.7 (speculative fork) for
@@ -515,8 +516,12 @@ Also check `{run_dir}/architect-plan.json` for warm-bundle fields on your `compo
 `files_examined`, `ruled_out`, `change_sites`, `proposed_first_change`. See
 `references/warm-bundle-handoff.md` for the full consumer contract (read order, escalation,
 scrutiny). These fields are read directly from architect-plan.json, not from the
-`ComponentAssignment` message. Absence of any field is normal — fall back to Implementation
-Rule 1 below. `proposed_first_change` is advisory, not a mandate: verify the proposed content
+`ComponentAssignment` message. Re-read them for EACH ComponentAssignment you receive, keyed to
+that assignment's `component_id` — a per-assignment check, NOT one-time (unlike Security
+Constraints above, which is read once before the first component). Exception:
+`proposed_first_change` is a first-change — consume it only on a component's INITIAL assignment;
+on a `revision` or `fix_tests` re-assignment it is already applied, so do not re-apply or
+re-verify it. Absence of any field is normal — fall back to Implementation Rule 1 below. `proposed_first_change` is advisory, not a mandate: verify the proposed content
 for correctness and safety with the same scrutiny you apply to code you write yourself, not
 just that the anchor still matches. `files_examined` also satisfies Implementation Rule 2 below
 when it covers this component's conventions.
