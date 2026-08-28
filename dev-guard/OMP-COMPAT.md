@@ -12,7 +12,8 @@ All findings below come from a live verification spike against a real, unpinned 
 ground-truth reads of OMP's shipped TypeScript type definitions and embedded docs. No OMP
 version pinning is used anywhere in this design — results may shift as OMP evolves; re-run the
 manual verification checklist at the bottom of this file before each dev-guard release that
-touches `omp-extension.ts`.
+touches `omp-extension.ts`. See "OMP version follow-up" below for a 2026-08-28 partial
+re-verification against OMP v18.0.4/v18.0.6.
 
 ## Tool name and field name mapping
 
@@ -329,14 +330,58 @@ add <rule-name> [--match <pattern>] [--scope session|--scope always]` — the sa
 from what was designed as an interactive confirmation should reach for that command rather
 than expect a retry-and-approve prompt.
 
+## OMP version follow-up (v18.0.4 / v18.0.6, 2026-08-28)
+
+The verification spike above was run against OMP v17.4.2. OMP has since had a major version
+bump (18.x); this is a follow-up re-verification, not a full re-run of the original spike.
+
+**Changelog review**: every OMP changelog entry from v17.4.2 through v18.0.6 was reviewed
+(v18.0.0, v18.0.1, v18.0.3, v18.0.4, v18.0.5, v18.0.6 — v18.0.2 was never published). No
+changes were found to `pi.on`, `pi.exec`/subprocess execution, `ctx.ui.*`, MCP tool-naming
+conventions, or `package.json#omp.extensions` loading — the surfaces this bridge actually
+depends on. Two "Breaking Changes" entries fall in this range (v18.0.0 in `pi-tui`, v18.0.5 in
+`pi-ai`/`pi-tui`), both scoped to internal TUI/provider-retry APIs, not the extension surface
+these bridges touch.
+
+**Adjacent, not confirmed relevant**: v18.0.5's changelog also lists a fix for
+"marketplace-installed plugins failing to discover their `rules/` directories" — the same
+general subsystem (marketplace plugin discovery) as this bridge's `package.json#omp.extensions`
+loading path, though a different specific feature. None of the three bridges here use a
+`rules/` directory, so this fix is not expected to affect them; noted because it's the closest
+adjacent finding in the reviewed range, not because it's known to matter.
+
+**Live re-verification performed**: `omp --plugin-dir` against the actual bridge code, run
+under OMP v18.0.4, confirmed `session_start` dispatch fires correctly and injects the expected
+content for all three plugins — verified by inspecting the constructed API request body
+directly. Each plugin's expected session-start text (dev-guard's `shared-feedback.md`/
+`token-efficiency.md` content, git-tools' Git Workflow Instructions, github-mcp's
+`GITHUB_MCP_HINT` string) appeared in the request.
+
+**Not re-verified**: `tool_call`/`tool_result` dispatch (Bash/Write/Edit/MCP handling) remains
+unverified against v18.0.4 specifically. Reaching that requires an actual completed model turn,
+which was blocked in this environment by a Vertex AI organization policy
+(`constraints/vertexai.allowedPartnerModelFeatures`) unrelated to OMP itself. This is a real,
+unresolved gap, not a formality — the manual verification checklist's items 2-4 below still
+need re-running against live OMP when unblocked model access is available. This follow-up
+closes only the session-lifecycle item, not the rest of the checklist.
+
 ## Manual verification checklist
 
-No automated TypeScript test coverage exists for `omp-extension.ts` itself (this repo has zero
-pre-existing TS test/CI infrastructure, and standing one up for a single thin adapter file is
-disproportionate). `dev-guard/tests/test_omp_bridge_contract.py` covers the Python side of
-every payload shape the bridge constructs; this checklist is the mitigation for the TypeScript
-side, transcribed verbatim from that test file's module docstring — re-run it against a live
-OMP install before each dev-guard release that touches `omp-extension.ts`.
+As of 2026-08-28, `dev-guard/tests/omp-extension.test.ts` (plus
+`git-tools/tests/omp-extension.test.ts` and `github-mcp/tests/omp-extension.test.ts`) provides
+real `bun test` coverage for the bridge's own pure translation/parsing logic —
+`translateToolNameForGuard`, `translateToolInputForGuard`, `classifyReadTool`,
+`reencodeMcpToolName`, `getFailPolicy`, `parseHookOutput`, and `parseStopDecision` are exercised
+directly, plus an internal-consistency check between `mcp_constants.py`'s `MCP_READ_ONLY`
+server set and this file's `OMP_TO_CLAUDE_CODE_MCP_SERVER` table. This closes the specific gap
+that previously let a Stop/SubagentStop block-decision parsing bug slip through review
+undetected: nothing exercised the TypeScript translation logic itself, only the Python guard
+scripts' tolerance of already-correct payloads (`dev-guard/tests/test_omp_bridge_contract.py`).
+What `bun test` still cannot do, with no live OMP install in CI, is exercise the actual
+`pi.on(...)` dispatch wiring, `ctx.ui.*` calls, or subprocess round-trips end to end — that
+requires a real OMP runtime. The checklist below remains the mitigation for that remaining gap,
+transcribed verbatim from `test_omp_bridge_contract.py`'s module docstring — re-run it against
+a live OMP install before each dev-guard release that touches `omp-extension.ts`.
 
 1. **Session lifecycle**: start a session under OMP with dev-guard installed. Confirm
    `session_start` dispatches `--validate` and both `inject-reference.sh` calls
@@ -346,7 +391,9 @@ OMP install before each dev-guard release that touches `omp-extension.ts`.
    `token-efficiency.md`'s (message order is preserved by `Promise.all`'s result-array
    ordering, not by which subprocess resolves first). Confirm session end fires
    `session_shutdown` → `--session-end` with no crash, and the `session_state` DB row is
-   updated.
+   updated. **Double-confirmed**: re-verified against OMP v18.0.4 on 2026-08-28 (see "OMP
+   version follow-up" above). Every other item in this checklist is still single-verified from
+   the original v17.4.2 spike only.
 2. **tool_call/tool_result dispatch**, one round-trip per tool type:
    - `bash`: a blocked case (a `printf`/`echo-noop`-style rule) fires with exit code 2, and the
      block reason reaches the model as a tool error, not a passthrough. An allowed case (e.g.
@@ -374,5 +421,8 @@ OMP install before each dev-guard release that touches `omp-extension.ts`.
    `subagent-stop-hook.py` without crashing, and that the `agent_end` telemetry counters (logged
    via `pi.logger.debug` on `session_shutdown`) increment as expected.
 
-Last run against: OMP v17.4.2 (see `hack/research/omp-spike-findings.md`, gitignored/local-only,
-for the full live-verification evidence trail this document summarizes).
+Last run in full against: OMP v17.4.2 (see `hack/research/omp-spike-findings.md`,
+gitignored/local-only, for the full live-verification evidence trail this document
+summarizes). Item 1 (session lifecycle) only was additionally re-verified against OMP v18.0.4
+on 2026-08-28 — see "OMP version follow-up" above. Items 2-4 remain single-verified from the
+original v17.4.2 spike and still need re-running against current OMP.
