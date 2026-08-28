@@ -60,7 +60,11 @@ reads the file and uses `components` to drive Phase 3 pipeline routing.
       "implementation_order": "integer — 1-based sequence within independent groups",
       "testing_strategy": "string — what to test and how (unit/integration/e2e)",
       "risks": ["string — risks specific to this component"],
-      "estimated_complexity": "low | medium | high"
+      "estimated_complexity": "low | medium | high",
+      "files_examined": [{"path": "string", "note": "string"}],
+      "ruled_out": [{"path_or_approach": "string", "reason": "string"}],
+      "change_sites": [{"file": "string", "location": "string", "rationale": "string"}],
+      "proposed_first_change": {"file": "string", "anchor": "string", "before": "string", "after": "string", "intent": "string"}
     }
   ],
   "component_dependency_graph": {
@@ -107,6 +111,16 @@ same agents and protocol — just no parallelism. See `references/pipeline-model
 
 **Note:** If `questions` is non-empty, the Lead MUST present every question to the user via
 `AskUserQuestion` before proceeding to Phase 3. Do NOT start implementation with unresolved questions.
+
+**Note:** `files_examined`, `ruled_out`, `change_sites`, and `proposed_first_change` are the
+**warm bundle** — all four are optional per component. See
+`references/warm-bundle-handoff.md` for field definitions, the `proposed_first_change` invariant,
+and the consumer contract. The Implementer file-reads these fields from `architect-plan.json` —
+like `security_constraints` (not message-carried, unlike `component_spec`, which the Lead
+interpolates into `ComponentAssignment`) — but unlike `security_constraints` (a flat top-level
+array read once and filtered by `applies_to`), the bundle fields are nested inside each
+`components[]` entry: the Implementer matches `component_id` to `components[].id` on **every**
+`ComponentAssignment` it receives, not just once.
 
 ---
 
