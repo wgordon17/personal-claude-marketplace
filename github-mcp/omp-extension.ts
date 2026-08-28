@@ -24,7 +24,7 @@
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
-const GITHUB_MCP_HINT =
+export const GITHUB_MCP_HINT =
 	"You have access to a read-only GitHub MCP server (mcp__github__*). Use MCP tools for reading GitHub data (PRs, issues, actions, code security, notifications, discussions). Use the gh CLI for write operations (creating PRs, merging, creating issues). For raw.githubusercontent.com URLs, use the mcp__github__get_file_contents tool instead of WebFetch.";
 
 export default function (pi: ExtensionAPI) {

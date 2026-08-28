@@ -110,7 +110,7 @@
     },
     {
       "name": "github-mcp",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "source": "./github-mcp",
       "description": "GitHub MCP server with full toolsets for repository management, code security, and workflow automation",
       "category": "productivity",
