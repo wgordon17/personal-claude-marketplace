@@ -1,6 +1,6 @@
 {
   "name": "dev-guard",
   "description": "Development environment policy enforcement: tool selection guard, commit validation, URL fetch guard, trust management, oc/kubectl introspection, subagent completion verification, decision persistence, anti-deferral enforcement, shared behavioral feedback, path hallucination guard, narrative comment guard, token efficiency guidance",
-  "version": "1.67.0",
+  "version": "1.68.0",
   "author": { "name": "wgordon17" }
 }

@@ -230,13 +230,17 @@ RULES: list[CommandRule] = [
     CommandRule(
         "bash-script",
         re.compile(r"^\s*(bash|sh)\s+\S+\.sh\b"),
-        re.compile(r"^\s*(bash|sh)\s+-"),
+        # Allow flag forms (bash -c/-e ...) and installed plugin hooks, which are
+        # invoked by their own commands/hooks and have no make target.
+        re.compile(r"^\s*(bash|sh)\s+-|\.claude/plugins/"),
         "Check for a `make` target that wraps this script. If none exists, consider creating one.",
     ),
     CommandRule(
         "direct-script",
         re.compile(r"^\s*[\w.~/-]+\.sh\b"),
-        None,
+        # Installed plugin hooks (under ~/.claude/plugins/) are invoked directly
+        # by their own commands/hooks and have no make target -- exempt them.
+        re.compile(r"\.claude/plugins/"),
         "Check for a `make` target that wraps this script. If none exists, consider creating one.",
     ),
     CommandRule(
