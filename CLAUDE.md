@@ -6,6 +6,7 @@
 make all          # Lint + test (CI runs this)
 make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
 make test         # uv run pytest (runs dev-guard/tests/)
+make test-ts      # bun test for the OMP extension bridges (requires bun; not part of `make all`)
 ```
 
 Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-guard/tests/`.
@@ -26,7 +27,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 
 1. **Develop and test locally** — Run `make all` before committing.
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits. Show the PR link to the user.
-3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `**/*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, plugin files, `.github/workflows/**`). If no checks appear, merge after local `make all` passes.
+3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `**/*.py`, `**/*.ts`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`, `github-mcp/hooks/**`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, plugin files, `.github/workflows/**`). If no checks appear, merge after local `make all` passes.
 4. **Wait for user to merge** — Do NOT merge automatically. Tell the user the PR is ready for review and wait for them to confirm the merge. Only proceed to step 5 after the user says it's merged.
 5. **Update local plugin** — After merge, run these commands (do not hand them to the user).
    Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:
@@ -42,7 +43,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 Personal Claude Code plugin marketplace with 11 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
-- **dev-guard/** — Tool selection guard, commit validation, subagent completion verification (only plugin with tests)
+- **dev-guard/** — Tool selection guard, commit validation, subagent completion verification (only plugin with a Python test suite)
 - **code-quality/** — Agents (architect, security, QA, performance, test-runner, code-reviewer, code-simplifier), skills (21), commands (4), and orchestration
 - **git-tools/** — Git history, hooks, commit review, contributing guide; SessionStart git instructions
 - **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
@@ -53,4 +54,4 @@ Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.jso
 
 ## CI
 
-GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx claudelint --strict`, plus `actionlint` for workflow YAML validation).
+GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`; bun/TypeScript OMP-bridge checks via `make test-ts`, `oven-sh/setup-bun`) and `plugin-lint.yml` (plugin structure via `uvx claudelint --strict`, plus `actionlint` for workflow YAML validation). `make test-ts` covers dev-guard, git-tools, and github-mcp's `omp-extension.ts` OMP bridges — each plugin has its own `bun test` suite for this.

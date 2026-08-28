@@ -1,4 +1,4 @@
-.PHONY: all lint format test test-llm test-live typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
+.PHONY: all lint format test test-llm test-live test-ts typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
@@ -18,6 +18,9 @@ test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 
 test-live:  ## Run live/network-dependent smoke tests (requires network access)
 	RUN_LIVE_TESTS=1 uv run pytest -m slow -v
+
+test-ts:  ## Run bun test for the OMP extension bridges (requires bun; not part of `make all`)
+	bun test dev-guard/tests git-tools/tests github-mcp/tests
 
 typecheck:  ## Pyright type checking (dev-guard/hooks)
 	uv run pyright

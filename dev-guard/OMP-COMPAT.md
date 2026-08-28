@@ -371,7 +371,8 @@ As of 2026-08-28, `dev-guard/tests/omp-extension.test.ts` (plus
 `git-tools/tests/omp-extension.test.ts` and `github-mcp/tests/omp-extension.test.ts`) provides
 real `bun test` coverage for the bridge's own pure translation/parsing logic —
 `translateToolNameForGuard`, `translateToolInputForGuard`, `classifyReadTool`,
-`reencodeMcpToolName`, `getFailPolicy`, `parseHookOutput`, and `parseStopDecision` are exercised
+`reencodeMcpToolName`, `isMcpTool`, `getFailPolicy`, `parseHookOutput`, `parseStopDecision`,
+`bashToolResponseForGuard`, `readToolResponseForGuard`, and `lastAssistantText` are exercised
 directly, plus an internal-consistency check between `mcp_constants.py`'s `MCP_READ_ONLY`
 server set and this file's `OMP_TO_CLAUDE_CODE_MCP_SERVER` table. This closes the specific gap
 that previously let a Stop/SubagentStop block-decision parsing bug slip through review

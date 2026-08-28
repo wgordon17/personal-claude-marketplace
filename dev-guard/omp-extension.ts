@@ -227,6 +227,24 @@ export function classifyReadTool(input: Record<string, unknown>): { toolName: "R
 	return isUrl ? { toolName: "WebFetch", toolInput: { url: path } } : { toolName: "Read", toolInput: { file_path: path } };
 }
 
+/** Best-effort Bash tool_response shape for _extract_response_text's stdout/stderr concat. */
+export function bashToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
+	const text = event.content
+		.filter((c): c is { type: "text"; text: string } => c.type === "text")
+		.map((c) => c.text)
+		.join("\n");
+	return { stdout: text, stderr: "" };
+}
+
+/** Best-effort Read tool_response shape for _extract_response_text's content field. */
+export function readToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
+	const text = event.content
+		.filter((c): c is { type: "text"; text: string } => c.type === "text")
+		.map((c) => c.text)
+		.join("\n");
+	return { content: text };
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Shared subprocess helper
 //
@@ -347,6 +365,23 @@ export function parseStopDecision(stdout: string): { decision?: string; reason?:
 	} catch {
 		return undefined;
 	}
+}
+
+/** Find the most recent assistant message's text content, walking backward through `messages` (string or content-block-array shapes); "" if none. */
+export function lastAssistantText(messages: { role?: string; content?: unknown }[]): string {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i] as { role?: string; content?: unknown };
+		if (msg.role !== "assistant") continue;
+		const content = msg.content;
+		if (typeof content === "string") return content;
+		if (Array.isArray(content)) {
+			return content
+				.filter((c): c is { type: "text"; text: string } => c && c.type === "text")
+				.map((c) => c.text)
+				.join("\n");
+		}
+	}
+	return "";
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -724,23 +759,6 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	/** Best-effort Bash tool_response shape for _extract_response_text's stdout/stderr concat. */
-	function bashToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
-		const text = event.content
-			.filter((c): c is { type: "text"; text: string } => c.type === "text")
-			.map((c) => c.text)
-			.join("\n");
-		return { stdout: text, stderr: "" };
-	}
-
-	function readToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
-		const text = event.content
-			.filter((c): c is { type: "text"; text: string } => c.type === "text")
-			.map((c) => c.text)
-			.join("\n");
-		return { content: text };
-	}
-
 	// ─── Stop / SubagentStop mapping ────────────────────────────────────
 	// agent_end is OMP's closest analog to both Claude Code's Stop and
 	// SubagentStop events — there is no confirmed OMP event that
@@ -845,20 +863,4 @@ export default function (pi: ExtensionAPI) {
 			withoutSubagentSignal: agentEndWithoutSubagentSignal,
 		});
 	});
-
-	function lastAssistantText(messages: { role?: string; content?: unknown }[]): string {
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const msg = messages[i] as { role?: string; content?: unknown };
-			if (msg.role !== "assistant") continue;
-			const content = msg.content;
-			if (typeof content === "string") return content;
-			if (Array.isArray(content)) {
-				return content
-					.filter((c): c is { type: "text"; text: string } => c && c.type === "text")
-					.map((c) => c.text)
-					.join("\n");
-			}
-		}
-		return "";
-	}
 }

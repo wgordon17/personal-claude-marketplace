@@ -15,12 +15,15 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
+	bashToolResponseForGuard,
 	classifyReadTool,
 	getFailPolicy,
 	isMcpTool,
+	lastAssistantText,
 	OMP_TO_CLAUDE_CODE_MCP_SERVER,
 	parseHookOutput,
 	parseStopDecision,
+	readToolResponseForGuard,
 	reencodeMcpToolName,
 	translateToolInputForGuard,
 	translateToolNameForGuard,
@@ -103,6 +106,60 @@ describe("classifyReadTool (Read-vs-WebFetch URL-detection branch)", () => {
 	});
 });
 
+describe("bashToolResponseForGuard", () => {
+	test("text content blocks are joined into stdout, stderr always empty", () => {
+		const event = {
+			content: [
+				{ type: "text", text: "line one" },
+				{ type: "text", text: "line two" },
+			],
+		} as unknown as Parameters<typeof bashToolResponseForGuard>[0];
+		expect(bashToolResponseForGuard(event)).toEqual({ stdout: "line one\nline two", stderr: "" });
+	});
+
+	test("non-text content blocks are filtered out", () => {
+		const event = {
+			content: [
+				{ type: "text", text: "kept" },
+				{ type: "image", data: "..." },
+			],
+		} as unknown as Parameters<typeof bashToolResponseForGuard>[0];
+		expect(bashToolResponseForGuard(event)).toEqual({ stdout: "kept", stderr: "" });
+	});
+
+	test("empty content array produces an empty stdout", () => {
+		const event = { content: [] } as unknown as Parameters<typeof bashToolResponseForGuard>[0];
+		expect(bashToolResponseForGuard(event)).toEqual({ stdout: "", stderr: "" });
+	});
+});
+
+describe("readToolResponseForGuard", () => {
+	test("text content blocks are joined into content", () => {
+		const event = {
+			content: [
+				{ type: "text", text: "line one" },
+				{ type: "text", text: "line two" },
+			],
+		} as unknown as Parameters<typeof readToolResponseForGuard>[0];
+		expect(readToolResponseForGuard(event)).toEqual({ content: "line one\nline two" });
+	});
+
+	test("non-text content blocks are filtered out", () => {
+		const event = {
+			content: [
+				{ type: "text", text: "kept" },
+				{ type: "image", data: "..." },
+			],
+		} as unknown as Parameters<typeof readToolResponseForGuard>[0];
+		expect(readToolResponseForGuard(event)).toEqual({ content: "kept" });
+	});
+
+	test("empty content array produces empty content", () => {
+		const event = { content: [] } as unknown as Parameters<typeof readToolResponseForGuard>[0];
+		expect(readToolResponseForGuard(event)).toEqual({ content: "" });
+	});
+});
+
 describe("reencodeMcpToolName", () => {
 	test("context7: trailing digit is dropped and hyphenated tool names are restored", () => {
 		expect(reencodeMcpToolName("mcp__context_resolve_library_id")).toBe(
@@ -152,8 +209,8 @@ describe("getFailPolicy", () => {
 		expect(getFailPolicy("write")).toBe("fail-open");
 		expect(getFailPolicy("edit")).toBe("fail-open");
 		expect(getFailPolicy("read")).toBe("fail-open");
-		// Regression test for STRUCT-101: web_search was found missing from
-		// the fail-open set during review and fixed before merge.
+		// web_search is explicitly fail-open, matching OMP-COMPAT.md's
+		// "Fail-open / fail-closed policy" section.
 		expect(getFailPolicy("web_search")).toBe("fail-open");
 	});
 
@@ -200,6 +257,57 @@ describe("parseStopDecision", () => {
 
 	test("malformed JSON returns undefined without throwing, not null", () => {
 		expect(parseStopDecision("{decision: block")).toBeUndefined();
+	});
+});
+
+describe("lastAssistantText", () => {
+	test("walks backward to find the most recent assistant message", () => {
+		const messages = [
+			{ role: "assistant", content: "first" },
+			{ role: "user", content: "question" },
+			{ role: "assistant", content: "second" },
+		];
+		expect(lastAssistantText(messages)).toBe("second");
+	});
+
+	test("skips trailing non-assistant messages to find an earlier assistant message", () => {
+		const messages = [
+			{ role: "user", content: "question" },
+			{ role: "assistant", content: "answer" },
+			{ role: "tool_result", content: "tool output" },
+			{ role: "user", content: "follow-up" },
+		];
+		expect(lastAssistantText(messages)).toBe("answer");
+	});
+
+	test("string content is returned as-is", () => {
+		expect(lastAssistantText([{ role: "assistant", content: "plain string" }])).toBe(
+			"plain string",
+		);
+	});
+
+	test("array content with mixed block types joins only text blocks", () => {
+		const messages = [
+			{
+				role: "assistant",
+				content: [
+					{ type: "text", text: "part one" },
+					{ type: "tool_use", id: "x" },
+					{ type: "text", text: "part two" },
+				],
+			},
+		];
+		expect(lastAssistantText(messages)).toBe("part one\npart two");
+	});
+
+	test("assistant message with no text blocks returns an empty string", () => {
+		const messages = [{ role: "assistant", content: [{ type: "tool_use", id: "x" }] }];
+		expect(lastAssistantText(messages)).toBe("");
+	});
+
+	test("no assistant message returns an empty string, not a throw", () => {
+		expect(lastAssistantText([{ role: "user", content: "hi" }])).toBe("");
+		expect(lastAssistantText([])).toBe("");
 	});
 });
 
