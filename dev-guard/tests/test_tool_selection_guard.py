@@ -409,6 +409,11 @@ class TestProjectConventions:
             ("uv run hack/tmp/test.py", 0, None),
             ("mkdir -p hack/tmp", 0, None),
             ("uv run test.py", 0, None),
+            # Installed plugin hooks are invoked directly by their own
+            # commands/hooks and have no make target -- exempt them.
+            ("VERTEX_LOG_FORCE=1 /home/u/.claude/plugins/cache/p/0.1.0/hooks/refresh.sh", 0, None),
+            ("/root/.claude/plugins/cache/p/hooks/status.sh --plain", 0, None),
+            ("bash /home/u/.claude/plugins/cache/p/hooks/refresh.sh", 0, None),
         ],
         ids=[
             "bash-script",
@@ -430,6 +435,9 @@ class TestProjectConventions:
             "hack-tmp-allow",
             "mkdir-hack-tmp-allow",
             "no-tmp-allow",
+            "plugin-hook-env-prefix-allow",
+            "plugin-hook-direct-allow",
+            "plugin-hook-bash-allow",
         ],
     )
     def test_conventions(self, command, expected_exit, expected_msg):
