@@ -1,6 +1,6 @@
 """Tests for chai-bot/hooks/session-start.sh's SessionStart hook.
 
-QA-A: session-start.sh previously had no test coverage. Black-box subprocess
+Black-box subprocess
 tests against the REAL session-start.sh -- CLAUDE_PLUGIN_ROOT points at a
 temp plugin-root directory containing a shimmed hooks/check-availability.sh
 (so the outcome is deterministic with zero git/network I/O) and a
@@ -81,3 +81,12 @@ class TestAvailable:
         result = _run_script(plugin_root=plugin_root)
         assert result.returncode == 0, result.stderr
         assert result.stdout == REAL_GUIDANCE_FILE.read_text()
+
+    def test_available_with_missing_guidance_file_exits_zero_no_stdout(self, tmp_path):
+        """check-availability.sh exits 0 but references/chai-guidance.md is
+        missing -- the -f GUIDANCE_FILE guard skips cat, and the script still
+        exits 0 with no stdout."""
+        plugin_root = _make_plugin_root(tmp_path, availability_exit_code=0, with_guidance=False)
+        result = _run_script(plugin_root=plugin_root)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == ""

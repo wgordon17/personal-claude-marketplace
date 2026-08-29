@@ -1,4 +1,4 @@
-"""QA-8: contract-level tests for chai-bot's OMP bridge (chai-bot/omp-extension.ts).
+"""Contract-level tests for chai-bot's OMP bridge (chai-bot/omp-extension.ts).
 
 Mirrors dev-guard/tests/test_omp_bridge_contract.py's approach: pins the
 exact JSON payload SHAPES omp-extension.ts's `tool_call`/`tool_result`
@@ -48,7 +48,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import REPO_ROOT, _events, run_metrics
+from _helpers import REPO_ROOT, _events, run_metrics
 
 OMP_EXTENSION = REPO_ROOT / "chai-bot" / "omp-extension.ts"
 
@@ -226,3 +226,54 @@ class TestReencodeMcpToolNameRoundTrip:
         assert result.returncode == 0, result.stderr
         output = json.loads(result.stdout)["hookSpecificOutput"]
         assert output["permissionDecision"] == "allow"
+
+    def _run_is_chai_bot_mcp_tool(self, tmp_path: Path, omp_tool_name: str) -> bool:
+        """Execute the ACTUAL isChaiBotMcpTool() source (extracted verbatim from
+        omp-extension.ts alongside reencodeMcpToolName, via the same
+        _extract_reencode_source() used above) under bun, returning its boolean
+        verdict for one OMP tool name. This is the bridge's real chai-bot-tool
+        boundary gate -- the check that decides whether metrics/advisory dispatch
+        fires at all -- which the reencode round-trip tests above never exercise.
+        """
+        snippet = self._extract_reencode_source()
+        runner = tmp_path / "is_chai_bot_runner.ts"
+        runner.write_text(snippet + "\nconsole.log(isChaiBotMcpTool(process.argv[2]));\n")
+        result = subprocess.run(
+            ["bun", "run", str(runner), omp_tool_name],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr
+        return result.stdout.strip() == "true"
+
+    @pytest.mark.parametrize(
+        ("omp_tool_name", "expected"),
+        [
+            # Exact server key, no tool suffix -> `rest === CHAI_BOT_OMP_SERVER` branch.
+            ("mcp__chai_bot_ship_help", True),
+            # Server key + tool suffix -> the `startsWith(`${server}_`)` branch.
+            ("mcp__chai_bot_ship_help_ask_persona", True),
+            ("mcp__chai_bot_ship_help_submit_feedback", True),
+            # A DIFFERENT MCP server must not match.
+            ("mcp__github_mcp_github_list_issues", False),
+            # Non-mcp__ tool names are never chai-bot's.
+            ("ask_persona", False),
+            ("bash", False),
+            # Prefix near-miss: shares chai_bot_ship_help's leading chars but has
+            # no `_` boundary -> must NOT match (guards against a hypothetical
+            # sibling server whose sanitized name starts with this prefix).
+            ("mcp__chai_bot_ship_helpX", False),
+            # Shorter than the server key.
+            ("mcp__chai_bot_ship_hel", False),
+        ],
+    )
+    def test_is_chai_bot_mcp_tool_boundary_cases(self, tmp_path, omp_tool_name, expected):
+        """Exercises the bridge's isChaiBotMcpTool() gate directly under bun --
+        the one piece of real, OMP-runtime-independent bridge logic the existing
+        reencode round-trip never runs. The Bun.spawn/pi.on dispatch handlers,
+        runScript, parseHookOutput, and toolResponseForMetrics need a live OMP
+        runtime and remain covered only by the manual checklist (same accepted
+        trade-off dev-guard documents in OMP-COMPAT.md's 'Manual verification
+        checklist' section)."""
+        assert self._run_is_chai_bot_mcp_tool(tmp_path, omp_tool_name) is expected

@@ -46,7 +46,13 @@ this repository and is never committed):
 - `CHAI_BOT_BASE_URL` — the internal ship-help-mcp host. This value is kept
   out of `.mcp.json` and `hooks/check-availability.sh` (both committed,
   public files) specifically so the internal Red Hat hostname never lands in
-  git history.
+  git history. **Must use the `https://` scheme** (loopback `http://` is
+  allowed only for local testing) — `CHAI_TOKEN` is sent as a bearer header
+  on every chai-bot MCP call, so if `CHAI_BOT_BASE_URL` is set to a non-https
+  value, the chai-bot metrics hook denies the call at call time
+  (`hooks/metrics.py` returns `permissionDecision: "deny"`), and `hooks/check-availability.sh`
+  also reports unavailable (exit 2), suppressing the advisory nudge and the
+  `/chai-bot` command.
 - The `permissions.allow` entry documents intent and avoids a manual
   permission prompt on the very first `ask_persona` call in a session,
   before the chai-bot metrics hook has had a chance to fire. It is **not**
@@ -82,9 +88,15 @@ action-shaped one.
 **Control surface — read this before assuming `settings.json` alone controls
 approval.** The actual auto-approval mechanism is the chai-bot metrics HOOK
 itself: `hooks/metrics.py`'s `PreToolUse` handler emits
-`permissionDecision: "allow"` for every `ask_persona` call it sees (scoped
-to `ask_persona` only — `submit_feedback`/`submit_lesson` get no permission
-decision from this hook at all, so they stay on manual/default permission).
+`permissionDecision: "allow"` for every `ask_persona` call it sees when
+`CHAI_BOT_BASE_URL` is https/loopback-safe (scoped to `ask_persona` only —
+`submit_feedback`/`submit_lesson` get no permission decision from this hook
+on a safe base URL, so they stay on manual/default permission).
+Transport safety overrides this for EVERY chai-bot MCP tool: if
+`CHAI_BOT_BASE_URL` is not `https://` (nor an `http://` loopback host), the
+handler emits `permissionDecision: "deny"` for the call — blocking
+`ask_persona`, `submit_feedback`, `submit_lesson`, or any other chai-bot MCP
+tool — so the Bearer `CHAI_TOKEN` is never sent over cleartext.
 The `~/.claude/settings.json` `permissions.allow` entry described in Setup,
 above, is redundant with this — belt-and-suspenders whose only real value is
 avoiding a manual prompt on the very first `ask_persona` call of a session

@@ -6,10 +6,9 @@
 
 Logs ask_persona (and any other chai-bot MCP tool) usage into dev-guard's
 shared SQLite audit database (~/.claude/logs/dev-guard.db, or GUARD_DB_PATH),
-under category="chai-bot". This is a SIMPLIFIED design relative to the
-original plan's session_state explicit/autonomous handshake: this script
-creates and touches ONLY the `events` table (+ its three indexes) -- no
-`session_state` table, no invocation-source tagging in this hook at all.
+under category="chai-bot". This script creates and touches ONLY the
+`events` table (+ its three indexes) -- no `session_state` table, no
+invocation-source tagging in this hook at all.
 
 Two entry points, both funneled through main():
   - Default (no args): reads a Claude-Code-shaped hook JSON payload from
@@ -17,11 +16,11 @@ Two entry points, both funneled through main():
   - `--log-explicit-invoke`: CLI mode with no stdin payload at all -- writes
     a single explicit-invoke events row (see _log_explicit_invoke()).
     Called directly by commands/chai-bot.md's /chai-bot command via
-    `uv run --no-project .../metrics.py --log-explicit-invoke`, replacing an
-    earlier design that embedded the equivalent INSERT as inline SQL in a
-    `python -c "..."` one-liner inside the command markdown itself. Both
-    entry points share the exact same _init_db() and the exact same
-    fail-silent, always-exit-0 contract.
+    `uv run --no-project .../metrics.py --log-explicit-invoke`, rather than
+    embedding the equivalent INSERT as inline SQL in a `python -c "..."`
+    one-liner inside the command markdown itself. Both entry points share
+    the exact same _init_db() and the exact same fail-silent, always-exit-0
+    contract.
 
 Metrics interpretation:
   - explicit ask_persona invocations = count(category="chai-bot",
@@ -52,15 +51,21 @@ this script's category="chai-bot" rows. Any query for chai-bot usage must
 filter category="chai-bot"; dev-guard's mcp-unknown passthrough rows are not
 duplicate chai-bot events.
 
-Security constraints (non-negotiable, see hack/plans/... and
-hack/swarm/.../architect-plan.json):
+Security constraints (non-negotiable):
   - NEVER write question/answer text content into any column here -- only
     counts, sizes, timestamps, and tool/session identifiers.
-  - The permissionDecision:"allow" + advisory reminder below is gated on
-    tool_name being ask_persona ONLY. For submit_feedback, submit_lesson, or
-    any other chai-bot MCP tool caught by the mcp__plugin_chai-bot_.*
-    matcher, this script emits NO permission decision (metrics row still
-    logged), so those tools stay on manual/default permission.
+  - Transport safety (applies to EVERY chai-bot MCP tool, since .mcp.json
+    sets the Bearer CHAI_TOKEN at the server level): when CHAI_BOT_BASE_URL
+    is not https:// (nor an http:// loopback host for local testing), this
+    hook emits "deny" for the call -- keeping the token off cleartext
+    transport, since Claude Code's MCP client connects to CHAI_BOT_BASE_URL
+    (from .mcp.json) directly, independent of check-availability.sh (which
+    only gates the SessionStart nudge and the /chai-bot command).
+  - When the base URL IS safe: only ask_persona is auto-approved via "allow"
+    + the advisory reminder. submit_feedback, submit_lesson, or any other
+    chai-bot MCP tool caught by the mcp__plugin_chai-bot_.* matcher get NO
+    permission decision (metrics row still logged), so they stay on
+    manual/default permission.
   - ask_persona itself is NEVER added to dev-guard's mcp_constants.py
     MCP_READ_ONLY frozenset -- see dev-guard/tests/test_tool_selection_guard.py
     TestMCPReadOnlyFrozenset for the regression test enforcing this.
@@ -87,6 +92,15 @@ _ASK_PERSONA_TOOL = "ask_persona"
 _LOG_EXPLICIT_INVOKE_FLAG = "--log-explicit-invoke"
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _MAX_INPUT_BYTES = 10 * 1024 * 1024
+# CHAI_TOKEN is sent as a Bearer header on every ask_persona MCP call (Claude
+# Code's MCP transport connects to CHAI_BOT_BASE_URL from .mcp.json directly),
+# so a non-https base URL would leak it in cleartext. Allow https, or http ONLY
+# to a genuine loopback host (localhost / 127.0.0.1 / ::1) anchored to a full
+# host boundary -- optional numeric port, then only /path or end, never
+# userinfo. Mirrors chai-bot/hooks/check-availability.sh's scheme gate.
+_SAFE_BASE_URL_RE = re.compile(
+    r"^https://|^http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/.*)?$"
+)
 
 _ADVISORY_REMINDER = (
     "chai-bot reminder: never phrase an ask_persona call in imperative/action "
@@ -194,8 +208,7 @@ def _valid_session_id(session_id: object) -> str | None:
 
     Always bound as a SQL parameter regardless (never interpolated), but a
     non-conforming value is treated as absent rather than logged verbatim --
-    cheap belt-and-suspenders consistent with the plan's sanitize-before-use
-    principle.
+    cheap belt-and-suspenders sanitize-before-use hardening.
     """
     if isinstance(session_id, str) and _SESSION_ID_RE.match(session_id):
         return session_id
@@ -208,6 +221,24 @@ def _tool_func_name(tool_name: str) -> str:
     'mcp__plugin_chai-bot_ship-help__ask_persona' -> 'ask_persona'
     """
     return tool_name.split("__")[-1]
+
+
+def _base_url_is_safe(base_url: str | None) -> bool:
+    """True if CHAI_BOT_BASE_URL is safe to carry the CHAI_TOKEN bearer header.
+
+    https is always safe; http is safe only to a genuine loopback host (local
+    testing). An unset value is treated as safe: with no base URL the .mcp.json
+    server URL cannot resolve to a real remote host, so there is no cleartext
+    exposure to guard against. See _SAFE_BASE_URL_RE.
+    """
+    if not base_url:
+        return True
+    # A CR/LF is never a legitimate URL and would make this Python regex and
+    # check-availability.sh's bash ERE diverge on newline handling (the `.`/`$`
+    # semantics differ across engines) -- reject outright so both gates agree.
+    if "\n" in base_url or "\r" in base_url:
+        return False
+    return _SAFE_BASE_URL_RE.match(base_url) is not None
 
 
 def _extract_response_size(tool_response: object) -> int:
@@ -285,7 +316,26 @@ def _handle_pre_tool_use(data: dict) -> None:
             conn, session_id=session_id, tool_use_id=tool_use_id, action="pre", command=tool_name
         )
 
-    # Scoping constraint: only ask_persona gets the allow + advisory. Every
+    # Hard call-time control (applies to ANY chai-bot MCP tool -- every tool
+    # reaching this hook matches mcp__plugin_chai-bot_.* and .mcp.json sets the
+    # Bearer CHAI_TOKEN at the server level, so every such call carries the
+    # token): if CHAI_BOT_BASE_URL is not https/loopback-safe, DENY the call so
+    # the token is never sent in cleartext. This is the only hook firing before
+    # every chai-bot MCP call, so it is the real enforcement point
+    # (check-availability.sh gates only the nudge and the /chai-bot command).
+    if not _base_url_is_safe(os.environ.get("CHAI_BOT_BASE_URL")):
+        with contextlib.suppress(Exception):
+            print(
+                _hook_output(
+                    "deny",
+                    "chai-bot: CHAI_BOT_BASE_URL is not https:// -- refusing the "
+                    "call so CHAI_TOKEN is not sent over cleartext. Set "
+                    "CHAI_BOT_BASE_URL to an https:// URL in ~/.claude/settings.json.",
+                )
+            )
+        return
+
+    # Safe base URL: only ask_persona is auto-approved (+ advisory). Every
     # other chai-bot MCP tool (submit_feedback, submit_lesson, ...) gets no
     # stdout at all here, so it stays on manual/default permission.
     if _tool_func_name(tool_name) == _ASK_PERSONA_TOOL:
@@ -345,11 +395,11 @@ def _log_explicit_invoke() -> None:
 
     CLI-mode entry point (see main()'s --log-explicit-invoke dispatch),
     called directly by commands/chai-bot.md via
-    `uv run --no-project .../metrics.py --log-explicit-invoke` instead of
-    the inline-SQL `python -c "..."` the command used to embed. Reuses
-    _init_db() (same WAL/busy_timeout/index/chmod hardening as every other
-    write path in this file) and writes exactly the one row the plan
-    specifies: category="chai-bot", action="explicit-invoke",
+    `uv run --no-project .../metrics.py --log-explicit-invoke`, rather than
+    embedding the INSERT as inline SQL in a `python -c "..."` one-liner in
+    the command markdown. Reuses _init_db() (same WAL/busy_timeout/index/
+    chmod hardening as every other write path in this file) and writes
+    exactly one row: category="chai-bot", action="explicit-invoke",
     command="ask_persona", session_id/tool_use_id/rule/detail all NULL.
     Never receives or logs the question text itself.
     """

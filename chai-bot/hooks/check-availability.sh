@@ -7,7 +7,8 @@
 # Exit code contract:
 #   0 = available (osac-project repo, Chai Bot reachable)
 #   1 = not an eligible (osac-project) repo — no network call made
-#   2 = eligible repo, but Chai Bot is unreachable (likely VPN down)
+#   2 = eligible repo, but Chai Bot is unusable (unreachable — likely VPN
+#       down — missing CHAI_BOT_BASE_URL, or CHAI_BOT_BASE_URL not https://)
 
 set -u
 
@@ -35,7 +36,7 @@ fi
 # The github.com host stays ANCHORED (optional scheme + optional userinfo may
 # precede it, but nothing else), so a lookalike host (faux-github.com) or a
 # "github.com/osac-project/" substring buried in the path/query of another host
-# can never match (host-boundary bypass — SEC-1). `[^/@]*@` for HTTPS userinfo
+# can never match (host-boundary bypass). `[^/@]*@` for HTTPS userinfo
 # stops at the first / or @, so it can't swallow a different host. Case-insensitive
 # (nocasematch) so a differently cased real remote (OSAC-Project) still matches --
 # bash 3.2 compatible (shopt -s nocasematch since bash 3.1; no ${VAR,,}).
@@ -54,6 +55,26 @@ fi
 # ~/.claude/settings.json env block — never hardcode the internal Red Hat
 # hostname here (this file is committed to a public repo).
 if [[ -z "${CHAI_BOT_BASE_URL:-}" ]]; then
+    exit 2
+fi
+
+# Reject a non-https CHAI_BOT_BASE_URL before ever attempting the curl --
+# CHAI_TOKEN travels as a bearer header on every MCP call (see .mcp.json),
+# and a http:// misconfiguration would send it in cleartext to a remote
+# host. A loopback host (localhost / 127.0.0.1 / ::1) never transits a
+# network, so http:// is allowed there (used by the test suite's local
+# probe server); every real, remote CHAI_BOT_BASE_URL must be https://.
+# The loopback pattern is anchored to a FULL host: optional numeric port,
+# then only a "/path" or end-of-string -- never "@", so a userinfo trick
+# like http://localhost:1234@remote-host/ (whose real host is remote-host)
+# cannot masquerade as loopback.
+# A CR/LF is never a legitimate URL and would make bash ERE and metrics.py's
+# Python regex diverge on newline handling -- reject outright so both agree.
+if [[ "$CHAI_BOT_BASE_URL" == *$'\n'* || "$CHAI_BOT_BASE_URL" == *$'\r'* ]]; then
+    exit 2
+fi
+if [[ ! "$CHAI_BOT_BASE_URL" =~ ^https:// ]] &&
+    [[ ! "$CHAI_BOT_BASE_URL" =~ ^http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/.*)?$ ]]; then
     exit 2
 fi
 

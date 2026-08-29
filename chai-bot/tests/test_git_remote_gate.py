@@ -56,7 +56,7 @@ def _make_git_shim(
 
 
 def _make_curl_call_counting_shim(bin_dir: Path, call_log: Path) -> None:
-    """QA-7: a curl shim that only records that it was called -- used to pin
+    """A curl shim that only records that it was called -- used to pin
     "exit 1 with zero network" for the gate's early-exit branches, matching
     test_availability_probe.py's _make_curl_shim pattern."""
     shim = f"""#!/usr/bin/env bash
@@ -123,7 +123,7 @@ class TestGitRemoteGateMatches:
         ],
     )
     def test_differently_cased_org_still_matches(self, tmp_path, remote_url):
-        """SEC-1: the real osac-project org, but differently cased -- must
+        """The real osac-project org, but differently cased -- must
         still be treated as eligible (proceed past the gate to exit 2, not
         wrongly rejected with exit 1) now that the match is case-insensitive."""
         bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
@@ -140,9 +140,9 @@ class TestGitRemoteGateMatches:
         ],
     )
     def test_scheme_and_userinfo_forms_match(self, tmp_path, remote_url):
-        """ADV-1: legitimate osac-project remotes using the ssh:// scheme or an
+        """Legitimate osac-project remotes using the ssh:// scheme or an
         embedded userinfo/token must still be treated as eligible (exit 2, not a
-        wrong exit-1 rejection). The SEC-1 anchoring must not over-tighten past the
+        wrong exit-1 rejection). The anchoring must not over-tighten past the
         real forms git accepts, while the host stays boundary-anchored (see the
         lookalike/path-injection rejects below, which still fail)."""
         bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
@@ -163,13 +163,13 @@ class TestGitRemoteGateRejects:
             "https://github.com/not-osac-project/x.git",
             "git@github.com:some-org/osac-project.git",
             "https://gitlab.com/osac-project/x.git",
-            # SEC-1: lookalike host -- "github.com" is only a substring of the
+            # Lookalike host -- "github.com" is only a substring of the
             # actual host, which must not satisfy the anchored scheme/host match.
             "https://faux-github.com/osac-project/x.git",
-            # SEC-1: "github.com/osac-project/" appears, but only as a path
+            # "github.com/osac-project/" appears, but only as a path
             # segment on a completely different host -- must not match.
             "https://evil.example.com/github.com/osac-project/x",
-            # ADV-1: "github.com" as userinfo of a different host (the real host
+            # "github.com" as userinfo of a different host (the real host
             # is evil.com) -- the userinfo group [^/@]*@ must not let this match.
             "https://github.com@evil.com/osac-project/x.git",
         ],
@@ -193,7 +193,7 @@ class TestGitRemoteGateRejects:
         assert result.returncode == 1, result.stderr
 
     def test_not_a_git_repo_makes_zero_curl_calls(self, tmp_path):
-        """QA-7: pins 'exit 1 with zero network' for the not-a-repo branch --
+        """Pins 'exit 1 with zero network' for the not-a-repo branch --
         Step 1's `git rev-parse` failure must short-circuit before any curl
         invocation is even reachable."""
         bin_dir = _bin_dir_with_real(tmp_path, "bash")
@@ -211,7 +211,7 @@ class TestGitRemoteGateRejects:
         assert result.returncode == 1, result.stderr
 
     def test_git_not_installed_makes_zero_curl_calls(self, tmp_path):
-        """QA-7: pins 'exit 1 with zero network' when git itself is missing --
+        """Pins 'exit 1 with zero network' when git itself is missing --
         curl is present on PATH but must never be invoked."""
         bin_dir = _bin_dir_with_real(tmp_path, "bash")
         call_log = tmp_path / "curl-calls.log"
@@ -229,7 +229,7 @@ class TestGitRemoteGateRejects:
         assert result.returncode == 1, result.stderr
 
     def test_real_non_git_directory_makes_zero_curl_calls(self, tmp_path):
-        """QA-7: pins 'exit 1 with zero network' using the REAL git binary
+        """Pins 'exit 1 with zero network' using the REAL git binary
         against a genuine non-repo directory -- curl (shimmed only to count
         calls, not to fake success/failure) must never be invoked."""
         bin_dir = _bin_dir_with_real(tmp_path, "bash", "git")

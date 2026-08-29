@@ -1,16 +1,14 @@
 # Chai Bot (`ask_persona`) advisory guidance
 
 This session is in an `osac-project` repo and Chai Bot (reachable via the
-`ship-help` MCP server's `ask_persona` tool) is reachable. Figures cited
-below are sourced from the prior live research investigation recorded at
-`hack/research/feat-omp-dual-harness-support-1787592769-chai-bot-mcp-capabilities.md`.
+`ship-help` MCP server's `ask_persona` tool) is reachable.
 
 ## What it is
 
 `ask_persona` reaches a Red Hat-internal "Chai Bot" persona with access to
-Slack, Jira, GitHub, and docs for the OSAC org (per the research report's
-Server Identity & Architecture section). It is a single natural-language
-question/answer tool, not a set of narrow read-only queries.
+Slack, Jira, GitHub, and docs for the OSAC org. It is a single
+natural-language question/answer tool, not a set of narrow read-only
+queries.
 
 ## When to prefer it
 
@@ -20,15 +18,14 @@ the status of ticket X across Jira and its PRs."
 
 ## Latency caveat
 
-Calls take 30 seconds to 4+ minutes (per the research report's Performance
-section). Do not use for iterative, tight-loop, or latency-sensitive work.
+Calls take 30 seconds to 4+ minutes. Do not use for iterative, tight-loop,
+or latency-sensitive work.
 
 ## No conversational memory
 
 Every question must be fully self-contained. `ask_persona` cannot recall
 prior questions in the same or a different call, even within the same
-session (confirmed empirically in the research report). Never phrase a
-question assuming it remembers earlier context.
+session. Never phrase a question assuming it remembers earlier context.
 
 ## Auth-failure handling
 

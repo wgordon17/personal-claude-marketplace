@@ -11,9 +11,11 @@
  *
  * See dev-guard/OMP-COMPAT.md for the confirmed OMP behaviors this bridge
  * relies on (stdin via Bun.spawn, MCP tool-name re-encoding, event mapping).
- * metrics.py always exits 0 and never signals a block via exit code or
- * hookSpecificOutput deny/ask, so this bridge needs no block-signal handling
- * for it (unlike dev-guard's guard, which can hard-block).
+ * metrics.py always exits 0, but on PreToolUse it can emit a hookSpecificOutput
+ * `permissionDecision: "deny"` (when CHAI_BOT_BASE_URL is not https/loopback-safe,
+ * to keep the Bearer CHAI_TOKEN off cleartext transport) -- the tool_call handler
+ * below translates that into an OMP block, mirroring dev-guard's
+ * deny -> { block: true } handling (and failing closed if metrics.py can't run).
  */
 import type {
 	ExtensionAPI,
@@ -44,14 +46,19 @@ const HOOKS_DIR = `${PLUGIN_ROOT}/hooks`;
 // underscore before the tool name, "plugin_" prefix dropped, hyphens
 // replaced with underscores. chai-bot's server key is "ship-help" registered
 // as plugin "chai-bot", so applying that same mechanical transform to
-// "plugin_chai-bot_ship-help" gives "chai_bot_ship_help". THIS IS NOT
-// LIVE-VERIFIED against a real OMP install (chai-bot is a new server, not
-// one of the 6 dev-guard's spike covered) -- if wrong, the effect is
-// degraded convenience only: this bridge's dispatch for chai-bot's MCP
-// tools simply never fires under OMP, falling through to no metrics/no
-// advisory under that harness specifically (Claude Code is unaffected).
-// This mirrors the same accepted risk dev-guard's own bridge documents for
-// its own unverified servers (playwright, jira, metadata-service).
+// "plugin_chai-bot_ship-help" gives "chai_bot_ship_help". The Claude-Code
+// target form below IS repo-verified (hooks.json's mcp__plugin_chai-bot_.*
+// matcher + metrics.py parsing); only OMP's live emission of the input form
+// is unconfirmed. The one documented deviation from the mechanical rule --
+// context7's dropped trailing digit -- provably cannot apply here (neither
+// "chai-bot" nor "ship-help" contains a digit). STILL NOT LIVE-VERIFIED
+// against a real OMP install (chai-bot is a new server, not one of the 6
+// dev-guard's spike covered) -- if wrong, the effect is degraded convenience
+// only: this bridge's dispatch for chai-bot's MCP tools simply never fires
+// under OMP, falling through to no metrics/no advisory under that harness
+// specifically (Claude Code is unaffected). This mirrors the same accepted
+// risk dev-guard's own bridge documents for its own unverified servers
+// (playwright, jira, metadata-service).
 // ─────────────────────────────────────────────────────────────────────────
 const CHAI_BOT_OMP_SERVER = "chai_bot_ship_help";
 const CHAI_BOT_CLAUDE_CODE_SERVER = "plugin_chai-bot_ship-help";
@@ -148,7 +155,7 @@ function runMetrics(stdinPayload: unknown, cwd: string): Promise<RunScriptResult
 /** Parse metrics.py's hookSpecificOutput JSON from stdout, if present. */
 function parseHookOutput(
 	stdout: string,
-): { permissionDecision?: string; additionalContext?: string } | undefined {
+): { permissionDecision?: string; permissionDecisionReason?: string; additionalContext?: string } | undefined {
 	const trimmed = stdout.trim();
 	if (!trimmed) return undefined;
 	try {
@@ -197,17 +204,42 @@ export default function (pi: ExtensionAPI) {
 				ctx.cwd,
 			);
 
-			// metrics.py always exits 0 -- no block-signal handling needed. Only
-			// action here is forwarding the ask_persona advisory reminder, if
-			// present, into the model's context. Claude Code delivers this via
-			// hookSpecificOutput.additionalContext bundled with the tool's own
-			// PreToolUse response; OMP's ToolCallEventResult has no equivalent
-			// per-call context field (dev-guard/OMP-COMPAT.md documents this
-			// gap for other advisory content too), so pi.sendMessage(...,
-			// {deliverAs: "nextTurn"}) is the closest available mechanism.
-			// This is a best-effort translation, not live-verified under OMP.
-			if (result.spawnFailed || result.timedOut) return;
+			// Fail CLOSED if metrics.py can't run: we then cannot confirm
+			// CHAI_BOT_BASE_URL is https/loopback-safe, so block the chai-bot tool
+			// rather than risk a cleartext CHAI_TOKEN leak. Mirrors dev-guard's
+			// fail-closed policy for its security matchers (this call is always a
+			// chai-bot MCP tool -- isChaiBotMcpTool gated it above).
+			if (result.spawnFailed || result.timedOut) {
+				return {
+					block: true,
+					reason:
+						"chai-bot bridge subprocess failed -- failing closed (cannot confirm CHAI_BOT_BASE_URL is https://).",
+				};
+			}
 			const output = parseHookOutput(result.stdout);
+
+			// metrics.py exits 0 always; its one block signal is a PreToolUse
+			// "deny", emitted when CHAI_BOT_BASE_URL is not https/loopback-safe
+			// (the Bearer CHAI_TOKEN would otherwise go cleartext). Honor it under
+			// OMP by blocking the tool call -- mirrors dev-guard/omp-extension.ts's
+			// deny -> { block: true } translation.
+			if (output?.permissionDecision === "deny") {
+				return {
+					block: true,
+					reason:
+						output.permissionDecisionReason ??
+						"chai-bot: blocked (CHAI_BOT_BASE_URL is not https://).",
+				};
+			}
+
+			// Otherwise the only action is forwarding the ask_persona advisory
+			// reminder, if present, into the model's context. Claude Code delivers
+			// this via hookSpecificOutput.additionalContext bundled with the tool's
+			// own PreToolUse response; OMP's ToolCallEventResult has no equivalent
+			// per-call context field (dev-guard/OMP-COMPAT.md documents this gap for
+			// other advisory content too), so pi.sendMessage(..., {deliverAs:
+			// "nextTurn"}) is the closest available mechanism. Best-effort
+			// translation, not live-verified under OMP.
 			if (output?.permissionDecision === "allow" && output.additionalContext) {
 				pi.sendMessage(output.additionalContext, { deliverAs: "nextTurn" });
 			}
