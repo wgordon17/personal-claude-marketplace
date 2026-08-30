@@ -5432,19 +5432,24 @@ class TestGitTrustedDirsValidation:
         assert "file not found" in result.stderr
 
     def test_validate_nonexistent_dir(self, tmp_path):
-        """Trusted dirs file with nonexistent directory fails validation."""
+        """A configured trusted dir that doesn't exist warns but does NOT fail
+        validation: it may live on an unmounted volume or be created later, and
+        the runtime containment check already tolerates a missing dir (it simply
+        never matches). DEV_GUARD_CONFIG points at a nonexistent file so the
+        result depends only on the GIT_TRUSTED_DIRS entry under test."""
         dirs_file = tmp_path / "trusted.json"
         dirs_file.write_text(json.dumps(["/this/dir/does/not/exist"]))
         env = os.environ.copy()
         env["GIT_TRUSTED_DIRS"] = str(dirs_file)
+        env["DEV_GUARD_CONFIG"] = str(tmp_path / "no-unified.json")
         result = subprocess.run(
             ["uv", "run", SCRIPT, "--validate"],
             capture_output=True,
             text=True,
             env=env,
         )
-        assert result.returncode == 2
-        assert "does not exist" in result.stderr
+        assert result.returncode == 0
+        assert "does not exist" in result.stdout
 
     def test_validate_non_string_entry(self, tmp_path):
         """Trusted dirs file with non-string entry fails validation."""
@@ -5643,6 +5648,30 @@ class TestUnifiedConfigValidation:
             env=env,
         )
         assert result.returncode == 2
+
+    def test_validate_nonexistent_trusted_dir_warns_not_fails(self, tmp_path):
+        """A git_trusted_dirs entry pointing at a missing directory is a warning,
+        not an error -- the exact case that broke when a trusted dir lived on an
+        unmounted volume. Validation still passes (exit 0) and loads the config;
+        one absent path must not fail the whole config."""
+        config = {
+            "command_rules": [{"name": "test", "pattern": r"^\s*test\b", "message": "Test rule."}],
+            "git_trusted_dirs": [str(tmp_path / "not-mounted" / "project")],
+        }
+        config_file = tmp_path / "dev-guard.json"
+        config_file.write_text(json.dumps(config))
+        env = os.environ.copy()
+        env["DEV_GUARD_CONFIG"] = str(config_file)
+        env.pop("GIT_TRUSTED_DIRS", None)
+        result = subprocess.run(
+            ["uv", "run", SCRIPT, "--validate"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "does not exist" in result.stdout  # surfaced as a warning
+        assert "Git trusted dirs" in result.stdout  # config still loaded
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
