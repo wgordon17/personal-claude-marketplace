@@ -36,10 +36,19 @@ CACHE_FILE="${CACHE_DIR}/vertex-logging-state.json"
 mkdir -p "$CACHE_DIR"
 chmod 700 "$CACHE_DIR" 2>/dev/null || true
 
-# Stable, version-independent symlinks so the shell prompt never references the
-# versioned plugin cache dir (survives plugin updates; refreshed every run).
-ln -sf "${SELF_DIR}/refresh.sh" "${CACHE_DIR}/vertex-log-monitor-refresh.sh" 2>/dev/null || true
-ln -sf "${SELF_DIR}/status.sh"  "${CACHE_DIR}/vertex-log-monitor-status.sh"  2>/dev/null || true
+# Stable entry point for the shell prompt / statusline. This is a COPY of the
+# version-independent launcher (which resolves the installed status.sh at
+# runtime), not a symlink into the versioned plugin dir: a symlink hardcodes the
+# current version and dangles on the next plugin update until a SessionStart
+# re-points it (surfacing as "Exit 127" in the statusline). rm -f first so the
+# cp replaces any pre-existing symlink instead of writing THROUGH it and
+# clobbering the real status.sh. The old refresh symlink is removed too --
+# status.sh now finds refresh.sh as a sibling via BASH_SOURCE, so it is dead.
+STATUS_ENTRY="${CACHE_DIR}/vertex-log-monitor-status.sh"
+rm -f "$STATUS_ENTRY" "${CACHE_DIR}/vertex-log-monitor-refresh.sh"
+if cp -f "${SELF_DIR}/status-launcher.sh" "$STATUS_ENTRY" 2>/dev/null; then
+  chmod +x "$STATUS_ENTRY" 2>/dev/null || true
+fi
 
 # gcloud binary: honor an explicit GCLOUD_BIN override, else prefer gcloud on
 # PATH, else search common install locations (Apple Silicon and Intel Homebrew,
@@ -129,11 +138,9 @@ trap '[ "$LOCK_OWNED" = "1" ] && rmdir "$LOCK" 2>/dev/null' EXIT
 # status.sh's stripped lookup.
 # CACHE-KEY CONTRACT: this normalization (strip "@version" and "[tags]") is
 # duplicated inline in status.sh -- search that file for "CACHE-KEY CONTRACT".
-# Keep both in sync. Not extracted to a sourced lib.sh: status.sh's normal
-# invocation is through a stable CACHE_DIR symlink, and this script's own
-# SELF_DIR does not resolve back to this hooks/ directory when invoked via its
-# self-heal symlink either -- a shared lib.sh cannot be located reliably from
-# either script.
+# Keep both in sync. Kept inline rather than sourced from a shared lib.sh: the
+# stable status entry point is a copy of the launcher living in CACHE_DIR, which
+# cannot reliably locate a lib.sh back in the versioned plugin dir.
 strip_model() { local m="$1"; m="${m%%@*}"; m="${m%%\[*}"; printf '%s' "$m"; }
 if [ -n "${VERTEX_LOG_MODELS:-}" ]; then
   raw_models="$VERTEX_LOG_MODELS"

@@ -22,15 +22,23 @@ plugin checks on every session and caches the result for a shell prompt.
 - A **SessionStart hook** runs `hooks/refresh.sh` (backgrounded, throttled to
   once per 10 min). It calls `fetchPublisherModelConfig` for each model in use
   and inspects the project IAM policy's `auditConfigs`, writing a small cache at
-  `~/.claude/cache/vertex-logging-state.json`.
+  `~/.claude/cache/vertex-logging-state.json`. It also installs a stable entry
+  point at `~/.claude/cache/vertex-log-monitor-status.sh` (a copy of
+  `hooks/status-launcher.sh`) that the shell prompt / statusline points at.
 - `hooks/status.sh` reads that cache instantly (no network) and prints a compact
   indicator. With no stdin it prints an **aggregate** across all monitored models;
   when the Claude session JSON is piped on stdin (a ccstatusline custom-command
   widget or a Claude Code `statusLine`), it shows the state for the **active
   model**, normalizing `@version`/`[..]` tags so a tagged id like
-  `claude-opus-4-8[1m]` matches its cache key. It self-heals: if the cache is
-  stale or missing it fires a throttled background refresh via a stable symlink,
-  so it survives plugin updates.
+  `claude-opus-4-8[1m]` matches its cache key. It self-heals a stale or missing
+  cache by firing a throttled background refresh (it finds `refresh.sh` as a
+  sibling of its own real path).
+- The stable entry point is a **version-independent launcher**: it resolves the
+  currently-installed `status.sh` at runtime, so a plugin version bump never
+  leaves it dangling. (The earlier symlink hardcoded the version and returned
+  `Exit 127` in the statusline after each update until the next SessionStart.)
+  The one gap it cannot close is the very first render on a machine where no
+  Claude session has ever run — nothing has installed the launcher yet.
 
 Indicator states:
 
@@ -78,10 +86,10 @@ format = '[$output ]($style)'
 style = 'bold'
 ```
 
-The reader symlink is executable (its target has an `env bash` shebang), so no
-interpreter path is hardcoded — Starship runs it via the default shell. The
-stable symlink is re-pointed on every session start, so plugin updates never
-break the prompt.
+The reader is an executable launcher (with an `env bash` shebang), so no
+interpreter path is hardcoded — Starship runs it via the default shell. It
+resolves the installed `status.sh` at runtime, so plugin updates never break the
+prompt (it does not need to be re-pointed on each session start).
 
 ## Claude Code statusline (ccstatusline)
 

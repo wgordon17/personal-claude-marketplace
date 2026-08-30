@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "vertex-log-monitor",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "source": "./vertex-log-monitor",
       "description": "Surfaces whether Vertex AI request/response (prompt+output) logging or Data Access audit logging is enabled for the Claude Code project; refreshes a cache on SessionStart and exposes a status reader for a shell prompt or slash command. Zero-config from ANTHROPIC_*/CLOUD_ML_REGION env.",
       "category": "quality",

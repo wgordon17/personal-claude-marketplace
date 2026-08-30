@@ -30,6 +30,7 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 HOOKS_DIR = REPO_ROOT / "vertex-log-monitor" / "hooks"
 REFRESH_SCRIPT = HOOKS_DIR / "refresh.sh"
 STATUS_SCRIPT = HOOKS_DIR / "status.sh"
+LAUNCHER_SCRIPT = HOOKS_DIR / "status-launcher.sh"
 
 _ENV_VARS_TO_ISOLATE = (
     "ANTHROPIC_VERTEX_PROJECT_ID",
@@ -132,13 +133,21 @@ def _run_refresh(env: dict[str, str], cwd: Path | None = None) -> subprocess.Com
     )
 
 
-def _make_refresh_stub(cache_dir: Path, marker: Path) -> None:
-    """Point status.sh's REFRESH_LINK at a stub that touches `marker`, so
-    self-heal invocation can be observed without running the real refresh.sh."""
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    link = cache_dir / "vertex-log-monitor-refresh.sh"
-    link.write_text(f"#!/usr/bin/env bash\ntouch {marker}\n")
-    link.chmod(0o755)
+def _make_status_with_refresh_stub(tmp_path: Path, marker: Path) -> Path:
+    """Copy status.sh into a temp hooks dir beside a stub refresh.sh that touches
+    `marker`, and return the copy's path. status.sh resolves refresh.sh as a
+    sibling of its own real path (via BASH_SOURCE), so this observes self-heal
+    without running the real refresh.sh -- mirroring how the stable launcher
+    execs status.sh by its real versioned path in production."""
+    hooks = tmp_path / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    status = hooks / "status.sh"
+    shutil.copy2(STATUS_SCRIPT, status)
+    status.chmod(0o755)
+    refresh = hooks / "refresh.sh"
+    refresh.write_text(f"#!/usr/bin/env bash\ntouch {marker}\n")
+    refresh.chmod(0o755)
+    return status
 
 
 def _wait_for(path: Path, timeout: float = 3.0) -> None:
@@ -168,6 +177,7 @@ def _run_status(
     *args: str,
     stdin_json: dict | None = None,
     extra_env: dict[str, str] | None = None,
+    status_script: Path | None = None,
 ) -> subprocess.CompletedProcess:
     env = {**os.environ, "VERTEX_LOG_CACHE_DIR": str(cache_dir), "VERTEX_LOG_SELFHEAL": "0"}
     # Isolate ambient color toggles so color-mode assertions are deterministic
@@ -178,7 +188,7 @@ def _run_status(
         env.update(extra_env)
     stdin_text = json.dumps(stdin_json) if stdin_json is not None else ""
     return subprocess.run(
-        ["bash", str(STATUS_SCRIPT), *args],
+        ["bash", str(status_script or STATUS_SCRIPT), *args],
         input=stdin_text,
         capture_output=True,
         text=True,
@@ -686,8 +696,10 @@ class TestStatusSelfHeal:
     def test_missing_cache_triggers_self_heal(self, tmp_path):
         cache_dir = tmp_path / "cache"
         marker = tmp_path / "healed"
-        _make_refresh_stub(cache_dir, marker)
-        result = _run_status(cache_dir, "--plain", extra_env={"VERTEX_LOG_SELFHEAL": "1"})
+        status = _make_status_with_refresh_stub(tmp_path, marker)
+        result = _run_status(
+            cache_dir, "--plain", extra_env={"VERTEX_LOG_SELFHEAL": "1"}, status_script=status
+        )
         assert result.stdout == "⚪ vtx:? (no cache)"
         _wait_for(marker)
         assert marker.exists()
@@ -695,9 +707,11 @@ class TestStatusSelfHeal:
     def test_self_heal_skipped_when_fresh_lock_held(self, tmp_path):
         cache_dir = tmp_path / "cache"
         marker = tmp_path / "healed"
-        _make_refresh_stub(cache_dir, marker)
+        status = _make_status_with_refresh_stub(tmp_path, marker)
         (cache_dir / ".vertex-log-monitor.lock").mkdir(parents=True)  # fresh mtime
-        result = _run_status(cache_dir, "--plain", extra_env={"VERTEX_LOG_SELFHEAL": "1"})
+        result = _run_status(
+            cache_dir, "--plain", extra_env={"VERTEX_LOG_SELFHEAL": "1"}, status_script=status
+        )
         assert result.stdout == "⚪ vtx:? (no cache)"
         time.sleep(0.3)
         assert not marker.exists()
@@ -705,12 +719,81 @@ class TestStatusSelfHeal:
     def test_self_heal_fires_when_lock_is_stale(self, tmp_path):
         cache_dir = tmp_path / "cache"
         marker = tmp_path / "healed"
-        _make_refresh_stub(cache_dir, marker)
+        status = _make_status_with_refresh_stub(tmp_path, marker)
         lock = cache_dir / ".vertex-log-monitor.lock"
         lock.mkdir(parents=True)
         stale = time.time() - 200  # > 120s reclaim threshold
         os.utime(lock, (stale, stale))
-        result = _run_status(cache_dir, "--plain", extra_env={"VERTEX_LOG_SELFHEAL": "1"})
+        result = _run_status(
+            cache_dir, "--plain", extra_env={"VERTEX_LOG_SELFHEAL": "1"}, status_script=status
+        )
         assert result.stdout == "⚪ vtx:? (no cache)"
         _wait_for(marker)
         assert marker.exists()
+
+
+# ── status-launcher.sh: version-independent entry-point resolution ───────────
+# The stable path a prompt/statusline points at is a COPY of this launcher, not
+# a symlink into the versioned plugin dir. It resolves the installed status.sh
+# at runtime, so a plugin version bump never leaves it dangling (the earlier
+# symlink returned "Exit 127" in the statusline until the next SessionStart).
+
+
+class TestStatusLauncher:
+    def _install_status(self, home: Path, version: str, sentinel: str) -> Path:
+        """Lay out a fake plugin-cache status.sh under $HOME that prints sentinel."""
+        hooks = (
+            home
+            / ".claude"
+            / "plugins"
+            / "cache"
+            / "some-marketplace"
+            / "vertex-log-monitor"
+            / version
+            / "hooks"
+        )
+        hooks.mkdir(parents=True, exist_ok=True)
+        status = hooks / "status.sh"
+        status.write_text(f'#!/usr/bin/env bash\nprintf "%s" "{sentinel}"\n')
+        status.chmod(0o755)
+        return status
+
+    def _run_launcher(self, home: Path) -> subprocess.CompletedProcess:
+        # HOME drives the launcher's glob root; isolate it from the real one.
+        env = {**os.environ, "HOME": str(home)}
+        return subprocess.run(
+            ["bash", str(LAUNCHER_SCRIPT), "--plain"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_resolves_and_execs_installed_status(self, tmp_path):
+        self._install_status(tmp_path, "0.1.1", "SENTINEL-A")
+        result = self._run_launcher(tmp_path)
+        assert result.returncode == 0
+        assert result.stdout == "SENTINEL-A"
+
+    def test_newest_version_wins(self, tmp_path):
+        old = self._install_status(tmp_path, "0.1.0", "OLD")
+        self._install_status(tmp_path, "0.2.0", "NEW")
+        # Launcher picks by mtime; force the older version strictly older so the
+        # choice is deterministic regardless of creation/glob order.
+        past = time.time() - 100
+        os.utime(old, (past, past))
+        result = self._run_launcher(tmp_path)
+        assert result.returncode == 0
+        assert result.stdout == "NEW"
+
+    def test_no_install_exits_zero_without_output(self, tmp_path):
+        # Nothing installed under $HOME: render nothing, exit 0 -- never 127.
+        result = self._run_launcher(tmp_path)
+        assert result.returncode == 0
+        assert result.stdout == ""
+
+    def test_non_executable_status_is_skipped(self, tmp_path):
+        status = self._install_status(tmp_path, "0.1.1", "SENTINEL-A")
+        status.chmod(0o644)  # present but not executable -> no runnable match
+        result = self._run_launcher(tmp_path)
+        assert result.returncode == 0
+        assert result.stdout == ""
