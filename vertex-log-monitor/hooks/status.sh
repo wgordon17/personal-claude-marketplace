@@ -8,7 +8,8 @@
 # With no stdin, prints an aggregate across all monitored models. If Claude
 # Code's session JSON is piped on stdin, prints the state for the active model.
 # When the cache is stale or missing it fires a throttled background refresh
-# (self-heal) via the stable refresh symlink, unless VERTEX_LOG_SELFHEAL=0.
+# (self-heal) via a sibling refresh.sh, located by BASH_SOURCE, unless
+# VERTEX_LOG_SELFHEAL=0.
 set -uo pipefail
 
 CACHE_DIR="${VERTEX_LOG_CACHE_DIR:-${HOME}/.claude/cache}"
@@ -34,7 +35,7 @@ self_heal() {
   local here refresh
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || return
   refresh="${here}/refresh.sh"
-  [ -n "$here" ] && [ -x "$refresh" ] || return
+  [ -x "$refresh" ] || return
   # Skip only if a FRESH refresh lock is held (avoids forking a redundant bash
   # process on every render during an in-flight refresh). A stale/orphaned lock
   # (>120s, matching refresh.sh's own reclaim threshold) must NOT suppress

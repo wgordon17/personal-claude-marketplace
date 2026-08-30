@@ -34,11 +34,18 @@ plugin checks on every session and caches the result for a shell prompt.
   cache by firing a throttled background refresh (it finds `refresh.sh` as a
   sibling of its own real path).
 - The stable entry point is a **version-independent launcher**: it resolves the
-  currently-installed `status.sh` at runtime, so a plugin version bump never
-  leaves it dangling. (The earlier symlink hardcoded the version and returned
-  `Exit 127` in the statusline after each update until the next SessionStart.)
-  The one gap it cannot close is the very first render on a machine where no
-  Claude session has ever run — nothing has installed the launcher yet.
+  installed `status.sh` at runtime, so a plugin version bump never leaves it
+  dangling. (The earlier symlink hardcoded the version and returned `Exit 127`
+  in the statusline after each update until the next SessionStart.) `refresh.sh`
+  pins the installed launcher to *this* plugin instance's marketplace root, so a
+  same-named plugin from another marketplace can't win resolution; among that
+  instance's installed versions it picks the **highest version** (semver, not
+  mtime). Two gaps it cannot close, both one-time and inherent (the statusline
+  points at a file only `refresh.sh` writes): the very first render on a machine
+  where no Claude session has ever run (nothing has installed the launcher yet),
+  and, when upgrading from the old symlink scheme, the first render after that
+  upgrade until the next SessionStart replaces the stale symlink with the
+  launcher. After that first session, updates never dangle it again.
 
 Indicator states:
 

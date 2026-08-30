@@ -733,21 +733,26 @@ class TestStatusSelfHeal:
 
 
 # ── status-launcher.sh: version-independent entry-point resolution ───────────
-# The stable path a prompt/statusline points at is a COPY of this launcher, not
-# a symlink into the versioned plugin dir. It resolves the installed status.sh
-# at runtime, so a plugin version bump never leaves it dangling (the earlier
-# symlink returned "Exit 127" in the statusline until the next SessionStart).
+# The stable path a prompt/statusline points at is the launcher, not a symlink
+# into the versioned plugin dir. It resolves the installed status.sh at runtime
+# (highest version, pinned to the installed marketplace instance), so a plugin
+# version bump never leaves it dangling (the earlier symlink returned "Exit 127"
+# in the statusline until the next SessionStart). These tests run the repo
+# launcher directly (no baked pin), exercising the pinned branch via the
+# VERTEX_LOG_PLUGIN_ROOT env var and the fallback branch via a HOME override.
 
 
 class TestStatusLauncher:
-    def _install_status(self, home: Path, version: str, sentinel: str) -> Path:
+    def _install_status(
+        self, home: Path, version: str, sentinel: str, marketplace: str = "some-marketplace"
+    ) -> Path:
         """Lay out a fake plugin-cache status.sh under $HOME that prints sentinel."""
         hooks = (
             home
             / ".claude"
             / "plugins"
             / "cache"
-            / "some-marketplace"
+            / marketplace
             / "vertex-log-monitor"
             / version
             / "hooks"
@@ -758,11 +763,20 @@ class TestStatusLauncher:
         status.chmod(0o755)
         return status
 
-    def _run_launcher(self, home: Path) -> subprocess.CompletedProcess:
-        # HOME drives the launcher's glob root; isolate it from the real one.
+    def _plugin_root(self, home: Path, marketplace: str = "some-marketplace") -> Path:
+        return home / ".claude" / "plugins" / "cache" / marketplace / "vertex-log-monitor"
+
+    def _run_launcher(
+        self, home: Path, stdin_text: str = "", plugin_root: Path | None = None
+    ) -> subprocess.CompletedProcess:
+        # HOME drives the fallback glob root; VERTEX_LOG_PLUGIN_ROOT exercises the
+        # pinned branch (as the refresh.sh-baked copy sets it).
         env = {**os.environ, "HOME": str(home)}
+        if plugin_root is not None:
+            env["VERTEX_LOG_PLUGIN_ROOT"] = str(plugin_root)
         return subprocess.run(
             ["bash", str(LAUNCHER_SCRIPT), "--plain"],
+            input=stdin_text,
             capture_output=True,
             text=True,
             env=env,
@@ -774,22 +788,80 @@ class TestStatusLauncher:
         assert result.returncode == 0
         assert result.stdout == "SENTINEL-A"
 
-    def test_newest_version_wins(self, tmp_path):
-        old = self._install_status(tmp_path, "0.1.0", "OLD")
-        self._install_status(tmp_path, "0.2.0", "NEW")
-        # Launcher picks by mtime; force the older version strictly older so the
-        # choice is deterministic regardless of creation/glob order.
+    def test_highest_version_wins_not_mtime(self, tmp_path):
+        # Highest SEMVER version wins, even when it has an OLDER mtime than a
+        # lower version -- proves selection is semver, not filesystem timestamp.
+        high = self._install_status(tmp_path, "0.10.0", "TEN")
+        self._install_status(tmp_path, "0.9.0", "NINE")  # newer mtime, lower version
         past = time.time() - 100
-        os.utime(old, (past, past))
+        os.utime(high, (past, past))
         result = self._run_launcher(tmp_path)
+        assert result.returncode == 0
+        assert result.stdout == "TEN"  # 0.10.0 > 0.9.0 numerically (not lexically)
+
+    def test_pins_to_plugin_root_ignoring_other_marketplaces(self, tmp_path):
+        # With a pinned root, a same-named plugin from another marketplace must
+        # NOT win, even at a higher version -- restores the old trust boundary.
+        self._install_status(tmp_path, "0.1.0", "MINE", marketplace="trusted-mkt")
+        self._install_status(tmp_path, "9.9.9", "THEIRS", marketplace="other-mkt")
+        result = self._run_launcher(
+            tmp_path, plugin_root=self._plugin_root(tmp_path, "trusted-mkt")
+        )
+        assert result.returncode == 0
+        assert result.stdout == "MINE"
+
+    def test_pinned_root_picks_highest_version_within(self, tmp_path):
+        self._install_status(tmp_path, "0.1.0", "OLD", marketplace="trusted-mkt")
+        self._install_status(tmp_path, "0.2.0", "NEW", marketplace="trusted-mkt")
+        result = self._run_launcher(
+            tmp_path, plugin_root=self._plugin_root(tmp_path, "trusted-mkt")
+        )
         assert result.returncode == 0
         assert result.stdout == "NEW"
 
     def test_no_install_exits_zero_without_output(self, tmp_path):
-        # Nothing installed under $HOME: render nothing, exit 0 -- never 127.
+        # Nothing installed under $HOME: render nothing, exit 0 -- never 127, and
+        # no error output (guards the empty-array crash below).
         result = self._run_launcher(tmp_path)
         assert result.returncode == 0
         assert result.stdout == ""
+        assert result.stderr == ""
+
+    def test_no_install_exits_zero_under_system_bash(self, tmp_path):
+        # Regression guard for the bash 3.2 empty-array + `set -u` bug: the empty
+        # fallback glob must exit 0 with no error, not "unbound variable". Runs
+        # under /bin/bash explicitly (macOS system bash is 3.2; CI's is 5.x, so
+        # this only reproduces the bug on macOS -- still worth asserting there).
+        if not os.path.exists("/bin/bash"):
+            pytest.skip("no /bin/bash")
+        result = subprocess.run(
+            ["/bin/bash", str(LAUNCHER_SCRIPT), "--plain"],
+            input="",
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(tmp_path)},
+        )
+        assert result.returncode == 0
+        assert result.stdout == ""
+        assert result.stderr == ""
+
+    def test_highest_version_wins_under_system_bash(self, tmp_path):
+        # Lock in the _ver_gt comparator (C-style for-loop + 10# arithmetic, the
+        # most bash-3.2-sensitive new code) under system /bin/bash, not just the
+        # harness's bash 5.x.
+        if not os.path.exists("/bin/bash"):
+            pytest.skip("no /bin/bash")
+        self._install_status(tmp_path, "0.10.0", "TEN")
+        self._install_status(tmp_path, "0.9.0", "NINE")
+        result = subprocess.run(
+            ["/bin/bash", str(LAUNCHER_SCRIPT), "--plain"],
+            input="",
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(tmp_path)},
+        )
+        assert result.returncode == 0
+        assert result.stdout == "TEN"
 
     def test_non_executable_status_is_skipped(self, tmp_path):
         status = self._install_status(tmp_path, "0.1.1", "SENTINEL-A")
@@ -797,3 +869,100 @@ class TestStatusLauncher:
         result = self._run_launcher(tmp_path)
         assert result.returncode == 0
         assert result.stdout == ""
+
+    def test_passes_args_and_stdin_through(self, tmp_path):
+        # The launcher must exec the resolved status.sh with its args AND stdin
+        # (the session JSON) intact -- that is the whole point of `exec "$@"`.
+        hooks = (
+            tmp_path
+            / ".claude"
+            / "plugins"
+            / "cache"
+            / "some-marketplace"
+            / "vertex-log-monitor"
+            / "0.1.1"
+            / "hooks"
+        )
+        hooks.mkdir(parents=True, exist_ok=True)
+        status = hooks / "status.sh"
+        status.write_text('#!/usr/bin/env bash\nprintf "%s|%s" "$1" "$(cat)"\n')
+        status.chmod(0o755)
+        result = self._run_launcher(tmp_path, stdin_text='{"model":{"id":"x"}}')
+        assert result.returncode == 0
+        assert result.stdout == '--plain|{"model":{"id":"x"}}'
+
+
+# ── refresh.sh: stable entry-point install ──────────────────────────────────
+# refresh.sh installs the launcher at $CACHE_DIR/vertex-log-monitor-status.sh
+# atomically (temp file + rename), prepending a shebang and a
+# VERTEX_LOG_PLUGIN_ROOT pin line before the launcher body. This block is the
+# actual fix for the "Exit 127" bug, so it is asserted directly here.
+# project=None makes the run exit early (no network) AFTER the install block,
+# which runs unconditionally near the top of refresh.sh.
+
+# Launcher body (source minus its own shebang) — the installed copy must contain
+# this verbatim after the injected shebang + pin lines.
+_LAUNCHER_BODY = "".join(LAUNCHER_SCRIPT.read_text().splitlines(keepends=True)[1:])
+
+
+class TestRefreshInstallsLauncher:
+    def test_install_writes_executable_pinned_launcher(self, tmp_path):
+        env, cache_dir = _refresh_env(tmp_path, project=None)
+        _run_refresh(env)
+        entry = cache_dir / "vertex-log-monitor-status.sh"
+        assert entry.is_file()
+        assert not entry.is_symlink()
+        assert os.access(entry, os.X_OK)
+        lines = entry.read_text().splitlines(keepends=True)
+        assert lines[0] == "#!/usr/bin/env bash\n"
+        assert lines[1].startswith("VERTEX_LOG_PLUGIN_ROOT=")  # pinned at install time
+        assert "".join(lines[2:]) == _LAUNCHER_BODY  # body copied verbatim
+
+    def test_install_replaces_symlink_without_clobbering_target(self, tmp_path):
+        # Simulates a machine still on the old symlink scheme. A plain `cp -f`
+        # would write THROUGH the symlink onto `target`; the atomic mv must not.
+        env, cache_dir = _refresh_env(tmp_path, project=None)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        target = cache_dir / "old-target.sh"
+        target.write_text("ORIGINAL-TARGET-CONTENT")
+        entry = cache_dir / "vertex-log-monitor-status.sh"
+        entry.symlink_to(target.name)  # relative symlink, as the old scheme used
+        _run_refresh(env)
+        assert not entry.is_symlink()
+        assert _LAUNCHER_BODY in entry.read_text()  # real launcher installed
+        assert target.read_text() == "ORIGINAL-TARGET-CONTENT"  # not clobbered
+
+    def test_install_removes_dead_refresh_symlink(self, tmp_path):
+        # The old scheme also created a vertex-log-monitor-refresh.sh symlink,
+        # now dead. refresh.sh must remove it.
+        env, cache_dir = _refresh_env(tmp_path, project=None)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        dead = cache_dir / "vertex-log-monitor-refresh.sh"
+        dead.write_text("#!/usr/bin/env bash\n")
+        _run_refresh(env)
+        assert not dead.exists()
+
+    def test_baked_plugin_root_is_marketplace_scoped(self, tmp_path):
+        # Faithful layout: refresh.sh in a versioned hooks dir under a marketplace.
+        # The baked pin must be the marketplace-scoped plugin root (grandparent of
+        # hooks) — version-independent, so it survives version bumps.
+        inst_hooks = (
+            tmp_path / "plugins" / "cache" / "mkt" / "vertex-log-monitor" / "0.1.1" / "hooks"
+        )
+        inst_hooks.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REFRESH_SCRIPT, inst_hooks / "refresh.sh")
+        shutil.copy2(LAUNCHER_SCRIPT, inst_hooks / "status-launcher.sh")
+        env, cache_dir = _refresh_env(tmp_path, project=None)
+        subprocess.run(
+            ["bash", str(inst_hooks / "refresh.sh")],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        entry = cache_dir / "vertex-log-monitor-status.sh"
+        pin = [
+            ln for ln in entry.read_text().splitlines() if ln.startswith("VERTEX_LOG_PLUGIN_ROOT=")
+        ]
+        assert pin, "installed launcher was not pinned"
+        expected_root = inst_hooks.parent.parent  # .../mkt/vertex-log-monitor (no version)
+        assert str(expected_root) in pin[0]

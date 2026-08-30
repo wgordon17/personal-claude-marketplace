@@ -36,18 +36,40 @@ CACHE_FILE="${CACHE_DIR}/vertex-logging-state.json"
 mkdir -p "$CACHE_DIR"
 chmod 700 "$CACHE_DIR" 2>/dev/null || true
 
-# Stable entry point for the shell prompt / statusline. This is a COPY of the
-# version-independent launcher (which resolves the installed status.sh at
-# runtime), not a symlink into the versioned plugin dir: a symlink hardcodes the
-# current version and dangles on the next plugin update until a SessionStart
-# re-points it (surfacing as "Exit 127" in the statusline). rm -f first so the
-# cp replaces any pre-existing symlink instead of writing THROUGH it and
-# clobbering the real status.sh. The old refresh symlink is removed too --
-# status.sh now finds refresh.sh as a sibling via BASH_SOURCE, so it is dead.
+# Stable entry point for the shell prompt / statusline: the version-independent
+# launcher (which resolves the installed status.sh at runtime), NOT a symlink
+# into the versioned plugin dir. A symlink hardcodes the current version and
+# dangles on the next plugin update until a SessionStart re-points it (surfacing
+# as "Exit 127" in the statusline).
+#
+# The installed copy is prepended with a `VERTEX_LOG_PLUGIN_ROOT=<...>` line that
+# pins resolution to THIS installed instance -- SELF_DIR is
+# .../cache/<marketplace>/vertex-log-monitor/<version>/hooks, so its grandparent
+# is the marketplace-scoped plugin root. This keeps the launcher version-
+# independent while restoring the old symlink's single-instance trust boundary
+# (a same-named plugin from another marketplace can't win resolution).
+#
+# Install atomically (temp + rename, mirroring write_cache below): the rename
+# replaces any old entry in one step, so a concurrent render never sees a missing
+# entry point, and it replaces an old SYMLINK rather than a plain cp writing
+# THROUGH it onto the real status.sh. The dead refresh symlink from older
+# versions is removed -- status.sh now finds refresh.sh as a sibling via
+# BASH_SOURCE.
 STATUS_ENTRY="${CACHE_DIR}/vertex-log-monitor-status.sh"
-rm -f "$STATUS_ENTRY" "${CACHE_DIR}/vertex-log-monitor-refresh.sh"
-if cp -f "${SELF_DIR}/status-launcher.sh" "$STATUS_ENTRY" 2>/dev/null; then
-  chmod +x "$STATUS_ENTRY" 2>/dev/null || true
+PLUGIN_ROOT="$(cd "${SELF_DIR}/../.." 2>/dev/null && pwd)" || PLUGIN_ROOT=""
+rm -f "${CACHE_DIR}/vertex-log-monitor-refresh.sh"
+tmp_entry="$(mktemp "${STATUS_ENTRY}.XXXXXX" 2>/dev/null)" || tmp_entry=""
+if [ -n "$tmp_entry" ] &&
+  {
+    printf '#!/usr/bin/env bash\n'
+    [ -z "$PLUGIN_ROOT" ] || printf 'VERTEX_LOG_PLUGIN_ROOT=%q\n' "$PLUGIN_ROOT"
+    tail -n +2 "${SELF_DIR}/status-launcher.sh"
+  } >"$tmp_entry" 2>/dev/null &&
+  chmod 0755 "$tmp_entry" 2>/dev/null &&
+  mv -f "$tmp_entry" "$STATUS_ENTRY" 2>/dev/null; then
+  :
+else
+  if [ -n "$tmp_entry" ]; then rm -f "$tmp_entry" 2>/dev/null || true; fi
 fi
 
 # gcloud binary: honor an explicit GCLOUD_BIN override, else prefer gcloud on
