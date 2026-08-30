@@ -59,18 +59,16 @@ STATUS_ENTRY="${CACHE_DIR}/vertex-log-monitor-status.sh"
 PLUGIN_ROOT="$(cd "${SELF_DIR}/../.." 2>/dev/null && pwd)" || PLUGIN_ROOT=""
 rm -f "${CACHE_DIR}/vertex-log-monitor-refresh.sh"
 tmp_entry="$(mktemp "${STATUS_ENTRY}.XXXXXX" 2>/dev/null)" || tmp_entry=""
-if [ -n "$tmp_entry" ] &&
+{
+  [ -n "$tmp_entry" ] &&
   {
     printf '#!/usr/bin/env bash\n'
     [ -z "$PLUGIN_ROOT" ] || printf 'VERTEX_LOG_PLUGIN_ROOT=%q\n' "$PLUGIN_ROOT"
     tail -n +2 "${SELF_DIR}/status-launcher.sh"
   } >"$tmp_entry" 2>/dev/null &&
   chmod 0755 "$tmp_entry" 2>/dev/null &&
-  mv -f "$tmp_entry" "$STATUS_ENTRY" 2>/dev/null; then
-  :
-else
-  if [ -n "$tmp_entry" ]; then rm -f "$tmp_entry" 2>/dev/null || true; fi
-fi
+  mv -f "$tmp_entry" "$STATUS_ENTRY" 2>/dev/null
+} || { [ -n "$tmp_entry" ] && rm -f "$tmp_entry" 2>/dev/null; }
 
 # gcloud binary: honor an explicit GCLOUD_BIN override, else prefer gcloud on
 # PATH, else search common install locations (Apple Silicon and Intel Homebrew,

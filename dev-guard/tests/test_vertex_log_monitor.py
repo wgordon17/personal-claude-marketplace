@@ -799,6 +799,18 @@ class TestStatusLauncher:
         assert result.returncode == 0
         assert result.stdout == "TEN"  # 0.10.0 > 0.9.0 numerically (not lexically)
 
+    def test_unpinned_fallback_tie_break_prefers_first_glob_match(self, tmp_path):
+        # Two marketplaces at the SAME version in the UNPINNED fallback branch:
+        # ver_gt returns false on a tie, so `best` is never overwritten and the
+        # alphabetically-first marketplace (glob order) silently wins. Documents
+        # that implicit tie-break -- the fallback path has none of the pinned
+        # path's trust boundary.
+        self._install_status(tmp_path, "0.1.0", "AAA-SENTINEL", marketplace="aaa-mkt")
+        self._install_status(tmp_path, "0.1.0", "ZZZ-SENTINEL", marketplace="zzz-mkt")
+        result = self._run_launcher(tmp_path)  # no plugin_root -> unpinned fallback glob
+        assert result.returncode == 0
+        assert result.stdout == "AAA-SENTINEL"
+
     def test_pins_to_plugin_root_ignoring_other_marketplaces(self, tmp_path):
         # With a pinned root, a same-named plugin from another marketplace must
         # NOT win, even at a higher version -- restores the old trust boundary.
@@ -846,7 +858,7 @@ class TestStatusLauncher:
         assert result.stderr == ""
 
     def test_highest_version_wins_under_system_bash(self, tmp_path):
-        # Lock in the _ver_gt comparator (C-style for-loop + 10# arithmetic, the
+        # Lock in the ver_gt comparator (C-style for-loop + 10# arithmetic, the
         # most bash-3.2-sensitive new code) under system /bin/bash, not just the
         # harness's bash 5.x.
         if not os.path.exists("/bin/bash"):
@@ -862,6 +874,17 @@ class TestStatusLauncher:
         )
         assert result.returncode == 0
         assert result.stdout == "TEN"
+
+    def test_real_version_wins_over_sibling_non_numeric_dir(self, tmp_path):
+        # A stray non-semver directory (e.g. a manual/dev install) sitting
+        # alongside a real version must never win selection: the semver-format
+        # guard skips it via `continue`. Assert only the observable outcome --
+        # the real version's sentinel wins.
+        self._install_status(tmp_path, "0.1.0", "REAL-SENTINEL")
+        self._install_status(tmp_path, "dev", "DEV-SENTINEL")
+        result = self._run_launcher(tmp_path)
+        assert result.returncode == 0
+        assert result.stdout == "REAL-SENTINEL"
 
     def test_non_executable_status_is_skipped(self, tmp_path):
         status = self._install_status(tmp_path, "0.1.1", "SENTINEL-A")
@@ -934,13 +957,41 @@ class TestRefreshInstallsLauncher:
 
     def test_install_removes_dead_refresh_symlink(self, tmp_path):
         # The old scheme also created a vertex-log-monitor-refresh.sh symlink,
-        # now dead. refresh.sh must remove it.
+        # now dead. refresh.sh must remove it. Uses a genuine dangling symlink
+        # (not a regular file) -- Path.exists() FOLLOWS symlinks and returns
+        # False for a broken link even without removal, so the assertion checks
+        # is_symlink()/lexists() instead of exists() to actually verify the
+        # dangling symlink was removed.
         env, cache_dir = _refresh_env(tmp_path, project=None)
         cache_dir.mkdir(parents=True, exist_ok=True)
         dead = cache_dir / "vertex-log-monitor-refresh.sh"
-        dead.write_text("#!/usr/bin/env bash\n")
+        dead.symlink_to("does-not-exist.sh")  # dangling symlink, mirrors old scheme
         _run_refresh(env)
-        assert not dead.exists()
+        assert not dead.is_symlink()
+        assert not os.path.lexists(dead)
+
+    def test_install_survives_missing_mktemp(self, tmp_path):
+        # mktemp absent from PATH: `tmp_entry="$(mktemp ...)" || tmp_entry=""`
+        # degrades to a no-op -- with tmp_entry empty, the guarded build/chmod/mv
+        # chain is skipped and its `|| { [ -n "$tmp_entry" ] && rm -f ...; }`
+        # cleanup finds nothing to remove. The pre-existing entry must be left
+        # untouched and no leftover mktemp-pattern temp file should appear. Uses
+        # force=False + a fresh pre-seeded cache so the throttle check exits
+        # BEFORE write_cache() ever runs its own (separate) mktemp call,
+        # isolating this test to the install block alone.
+        env, cache_dir = _refresh_env(tmp_path, force=False)
+        _write_cache(cache_dir, {"updated": int(time.time()), "error": "sentinel", "models": {}})
+        entry = cache_dir / "vertex-log-monitor-status.sh"
+        entry.write_text("PRE-EXISTING-ENTRY-CONTENT")
+        env["PATH"] = _isolated_path(
+            tmp_path,
+            "no-mktemp-bin",
+            ["bash", "dirname", "mkdir", "chmod", "rm", "mv", "tail", "stat", "date", "jq"],
+        )
+        result = _run_refresh(env)
+        assert result.returncode == 0, result.stderr
+        assert entry.read_text() == "PRE-EXISTING-ENTRY-CONTENT"  # untouched
+        assert list(cache_dir.glob("vertex-log-monitor-status.sh.*")) == []  # no leftover temp
 
     def test_baked_plugin_root_is_marketplace_scoped(self, tmp_path):
         # Faithful layout: refresh.sh in a versioned hooks dir under a marketplace.
@@ -966,3 +1017,37 @@ class TestRefreshInstallsLauncher:
         assert pin, "installed launcher was not pinned"
         expected_root = inst_hooks.parent.parent  # .../mkt/vertex-log-monitor (no version)
         assert str(expected_root) in pin[0]
+
+    def test_plugin_root_with_space_and_quote_round_trips_through_pinned_entry(self, tmp_path):
+        # printf '%q' is what lets a PLUGIN_ROOT containing shell metacharacters
+        # survive being baked into the installed entry's
+        # `VERTEX_LOG_PLUGIN_ROOT=...` line -- %q's output re-parses back to the
+        # original string when the shell later reads that line as script source.
+        # Exercise a real install path containing both a space and a single quote.
+        hostile_root = tmp_path / "plugin's dir with spaces"
+        inst_hooks = (
+            hostile_root / "plugins" / "cache" / "mkt" / "vertex-log-monitor" / "0.1.1" / "hooks"
+        )
+        inst_hooks.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REFRESH_SCRIPT, inst_hooks / "refresh.sh")
+        shutil.copy2(LAUNCHER_SCRIPT, inst_hooks / "status-launcher.sh")
+        status = inst_hooks / "status.sh"
+        status.write_text('#!/usr/bin/env bash\nprintf "%s" "SPACE-SENTINEL"\n')
+        status.chmod(0o755)
+
+        env, cache_dir = _refresh_env(tmp_path, project=None)
+        install_result = subprocess.run(
+            ["bash", str(inst_hooks / "refresh.sh")], capture_output=True, text=True, env=env
+        )
+        assert install_result.returncode == 0, install_result.stderr
+
+        entry = cache_dir / "vertex-log-monitor-status.sh"
+        run_result = subprocess.run(
+            ["bash", str(entry), "--plain"],
+            input="",
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(tmp_path)},
+        )
+        assert run_result.returncode == 0, run_result.stderr
+        assert run_result.stdout == "SPACE-SENTINEL"

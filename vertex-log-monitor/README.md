@@ -40,12 +40,14 @@ plugin checks on every session and caches the result for a shell prompt.
   pins the installed launcher to *this* plugin instance's marketplace root, so a
   same-named plugin from another marketplace can't win resolution; among that
   instance's installed versions it picks the **highest version** (semver, not
-  mtime). Two gaps it cannot close, both one-time and inherent (the statusline
-  points at a file only `refresh.sh` writes): the very first render on a machine
-  where no Claude session has ever run (nothing has installed the launcher yet),
-  and, when upgrading from the old symlink scheme, the first render after that
-  upgrade until the next SessionStart replaces the stale symlink with the
-  launcher. After that first session, updates never dangle it again.
+  mtime). Two gaps it cannot close, both one-time and inherent — the statusline
+  points at a file only `refresh.sh` writes:
+  - The very first render on a machine where no Claude session has ever run
+    (nothing has installed the launcher yet).
+  - The first render after upgrading from the old symlink scheme, until the
+    next SessionStart replaces the stale symlink with the launcher.
+
+  After that first session, updates never dangle it again.
 
 Indicator states:
 

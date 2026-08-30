@@ -15,10 +15,10 @@
 set -uo pipefail
 shopt -s nullglob
 
-# _ver_gt A B: true if dotted-numeric version A is strictly greater than B.
+# ver_gt A B: true if dotted-numeric version A is strictly greater than B.
 # Portable (stock macOS `sort` has no -V): compare component by component
 # numerically, treating missing or non-numeric components as 0.
-_ver_gt() {
+ver_gt() {
   local a="$1" b="$2" i max x y
   local IFS=.
   # shellcheck disable=SC2206  # intentional split of dotted versions into fields
@@ -57,7 +57,10 @@ for r in "${roots[@]}"; do
   for f in "$r"/*/hooks/status.sh; do
     [ -x "$f" ] || continue
     ver="${f%/hooks/status.sh}"; ver="${ver##*/}"
-    if [ -z "$best" ] || _ver_gt "$ver" "$best_ver"; then
+    # Skip stray/spoofed directory names: only strict X.Y.Z semver dirs compete,
+    # so a name like "dev" or "999" can't out-rank a real installed version.
+    [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+    if [ -z "$best" ] || ver_gt "$ver" "$best_ver"; then
       best="$f"; best_ver="$ver"
     fi
   done
