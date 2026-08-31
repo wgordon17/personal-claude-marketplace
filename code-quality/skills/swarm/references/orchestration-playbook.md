@@ -445,6 +445,28 @@ Validate the plan:
 - Component dependencies form a DAG (no cycles)
 - Each component is implementable independently (or its dependency order is clear)
 - All files mentioned exist in the codebase (or are new files with a defined location)
+- Any warm-bundle fields present (`files_examined`, `ruled_out`, `change_sites`,
+  `proposed_first_change`) are well-formed — see the gate below
+
+**Warm-bundle well-formedness gate:** For each component with warm-bundle fields present, check:
+- **Invariant:** if `proposed_first_change` is present, its `.file` value MUST appear in that
+  component's `change_sites` array (the invariant from `references/warm-bundle-handoff.md`).
+- **Existence:** if `change_sites` is present, every `change_sites[].file` MUST exist in the
+  codebase (these are existing read-before-edit targets, not new files).
+- **Shape:** every present warm-bundle field matches the array/object structure
+  `references/warm-bundle-handoff.md` specifies.
+
+On any violation, clear **all four** bundle fields (`files_examined`, `ruled_out`,
+`change_sites`, `proposed_first_change`) for that component — do not attempt to salvage fields
+that were not themselves malformed — and log to `{run_dir}/errors.log`:
+```
+[BUNDLE-INVALID] <component.id>: <reason>
+```
+This routes through the same per-component clear-and-degrade path regardless of which check
+failed. Do NOT route warm-bundle violations through the whole-plan "request one revision" path
+above — that path is for plan-level defects, not a single component's advisory fields. Clearing
+never blocks Phase 3 and never affects other components. Warm-bundle fields are advisory
+context, not required plan data.
 
 **If architect flagged risks or open questions** (check `plan.risks` and `plan.questions` fields):
 Present to user via AskUserQuestion. This is an allowed interruption.
@@ -560,6 +582,10 @@ Check the `verdict` field:
   ```
 - After Architect revises the plan, increment iteration counter and re-run Phase 2.5.1
 - **Maximum 2 Architect↔Security iterations total**
+- **Warm-bundle rewrite-safety:** The Architect re-emits each revised component's warm-bundle
+  fields as part of its rewrite (per agent-prompts.md Output Format). Re-run the Step 2.2
+  well-formedness gate against the revised plan regardless, as a belt-and-suspenders check — it
+  catches and clears any bundle fields that still fail to satisfy the invariant.
 
 **`escalate`** (unresolvable needs-fix findings after 2 iterations):
 - Present to user via AskUserQuestion before proceeding:
@@ -762,7 +788,11 @@ After receiving the judge's result, read `{speculative_run_dir}/judgment.json`.
 1. Read the winning competitor's `ImplementationResult` (approach, files, design decisions)
 2. Update `architect-plan.json` — replace the contested component's `description` with the
    winner's `approach` field, and update `files_to_create`/`files_to_modify` if they differ
-3. Add a `speculative_fork_resolved` field to `architect-plan.json`:
+3. **Warm-bundle rewrite-safety:** Clear the contested component's `files_examined`,
+   `ruled_out`, `change_sites`, and `proposed_first_change` fields if present. They were
+   computed against the pre-fork design and may point at the losing approach's files — stale
+   warm-bundle data is worse than none.
+4. Add a `speculative_fork_resolved` field to `architect-plan.json`:
    ```json
    {
      "speculative_fork_resolved": {
@@ -837,6 +867,11 @@ After the Reduction Analyst completes:
    reference instead of custom implementation spec
 4. For each rejected recommendation: log the rejection and justification in the audit trail
 5. `abstractions_flagged` items: simplify the component spec in `architect-plan.json`
+6. **Warm-bundle rewrite-safety:** Whenever any of the above steps mutates a component's spec in
+   `architect-plan.json` — even a library swap or abstraction simplification that keeps the same
+   `files_to_create`/`files_to_modify` — clear that component's `files_examined`, `ruled_out`,
+   `change_sites`, and `proposed_first_change` fields if present. They were computed against the
+   pre-reduction design and may no longer be accurate even when the file list is unchanged.
 
 Do NOT AskUserQuestion for Reduction Analyst recommendations unless they fundamentally change
 the scope (e.g., "delete the entire module and use library X instead"). Routine simplification
@@ -922,6 +957,11 @@ Agent(name="test-runner", subagent_type="code-quality:test-runner", model="haiku
 Note: reviewer and test-runner are read-only — no bypassPermissions needed. Only implementer
 and test-writer (which write code/tests) use bypassPermissions.
 
+Note: the Implementer prompt (agent-prompts.md) already instructs it to read warm-bundle
+fields (`files_examined`, `ruled_out`, `change_sites`, `proposed_first_change`) directly from
+`architect-plan.json` by `component_id` — the Lead does not extract or inject them into
+`ComponentAssignment`.
+
 ### Step 3.1.5: Acknowledgment Wait
 
 After sending each ComponentAssignment, the Lead waits for a `ContextAcknowledgment` from the
@@ -940,6 +980,11 @@ the agent begins work. Only then does the agent start implementation.
 3. Spawn a replacement agent with the same assignment
 
 ### Step 3.2: Pipeline Flow
+
+When assigning a group's `implementation_order == 1` component, its `proposed_first_change`
+(if present) is already visible to the Implementer via `architect-plan.json` — the Lead sends
+the standard `ComponentAssignment` with no special-casing. The Implementer still verifies
+against the file's current state before applying it (Implementation Rule 1 in agent-prompts.md).
 
 **In pipeline mode**, the lead assigns components to the implementer. The implementer sends a
 ComponentHandoff when done, which the lead forwards to the reviewer. While the reviewer reviews
@@ -1446,7 +1491,10 @@ If any finding is classified as **design-level** AND `design_escalation_count < 
                "Please revise {run_dir}/architect-plan.json to address these issues. "
                "The previous implementation will be discarded after plan revision.")
    ```
-5. After Architect revises the plan, re-run Phase 2.5 (security design review of revised plan)
+5. After Architect revises the plan, re-run the Step 2.2 warm-bundle well-formedness gate
+   against the revised plan (the respawned Architect re-emits bundle fields per its Output
+   Format; the gate clears any that no longer satisfy the invariant/existence), then re-run
+   Phase 2.5 (security design review of revised plan)
 6. After Phase 2.5 completes, re-run Phase 3 (full pipelined implementation of revised plan)
 7. After Phase 3 completes, re-run Phase 4 (full parallel review of new implementation)
 

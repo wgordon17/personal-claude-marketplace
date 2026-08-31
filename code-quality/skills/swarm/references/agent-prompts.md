@@ -209,6 +209,15 @@ Additionally include these fields for lead routing:
   is true) — list only the component(s) that are genuinely contested. Do NOT include components
   where the approach is clear.
 
+Optionally, per component, include the warm bundle — `files_examined`, `ruled_out`,
+`change_sites`, `proposed_first_change` — per `references/warm-bundle-handoff.md`. Emit
+`proposed_first_change` only for the `implementation_order == 1` component of each independent
+group, and only when its `.file` is one of that component's `change_sites`. Omit any field you
+have nothing substantive for — do not pad with empty arrays. On any plan revision — a Phase 2.5
+`revise` rewrite OR a Phase 4 design-escalation respawn — re-emit each revised component's
+warm-bundle fields to match the revised design; do not leave stale values from the prior
+iteration.
+
 If `questions` is non-empty, the lead will present these to the user before implementation begins.
 If `speculative_fork_recommended` is true, the lead will run Phase 2.7 (speculative fork) for
 the specified components before proceeding to Phase 3.
@@ -501,6 +510,22 @@ Before implementing your first component, read `{run_dir}/architect-plan.json` a
 (Security Design Review) and MUST be respected during implementation. Each constraint includes
 a `rationale` and `applies_to` component list — check whether your assigned component is affected.
 
+## Warm Bundle (optional)
+
+Also check `{run_dir}/architect-plan.json` for warm-bundle fields on your `component_id` —
+`files_examined`, `ruled_out`, `change_sites`, `proposed_first_change`. See
+`references/warm-bundle-handoff.md` for the full consumer contract (read order, escalation,
+scrutiny). These fields are read directly from architect-plan.json, not from the
+`ComponentAssignment` message. Re-read them for EACH ComponentAssignment you receive, keyed to
+that assignment's `component_id` — a per-assignment check, NOT one-time (unlike Security
+Constraints above, which is read once before the first component). Exception:
+`proposed_first_change` is a first-change — consume it only on a component's INITIAL assignment;
+on a `revision` or `fix_tests` re-assignment it is already applied, so do not re-apply or
+re-verify it. Absence of any field is normal — fall back to Implementation Rule 1 below. `proposed_first_change` is advisory, not a mandate: verify the proposed content
+for correctness and safety with the same scrutiny you apply to code you write yourself, not
+just that the anchor still matches. `files_examined` also satisfies Implementation Rule 2 below
+when it covers this component's conventions.
+
 ## Implementation Rules
 
 1. **Read before writing.** Always read the current state of files before editing.
@@ -508,6 +533,9 @@ a `rationale` and `applies_to` component list — check whether your assigned co
 
 2. **Match existing patterns.** Before implementing, read 1-2 similar files in the codebase to
    understand naming conventions, error handling style, import patterns, and code organization.
+   If the assigned component's `files_examined` (see Warm Bundle above) already covers these
+   conventions, skip this separate scan — fall back to it only when `files_examined` has no
+   such coverage for this component.
 
 3. **One component at a time.** Fully complete the assigned component before indicating readiness.
 
