@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '**/*.py'
+      - '**/*.ts'
       - 'pyproject.toml'
       - 'Makefile'
       - '.pre-commit-config.yaml'
@@ -12,6 +13,7 @@ on:
       - '.github/scripts/**'
       - 'dev-guard/hooks/**'
       - 'dev-guard/references/**'
+      - 'github-mcp/hooks/**'
   workflow_dispatch:
 
 permissions:
@@ -32,3 +34,12 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --group dev
       - run: make all
+
+  bun-tests:
+    name: Bun Tests (OMP Bridge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2.2.0
+      - run: make test-ts

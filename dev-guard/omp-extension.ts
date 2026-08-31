@@ -73,11 +73,11 @@ const FAIL_OPEN_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit", "rea
 // spike). These two Claude Code matchers have no OMP dispatch path at all —
 // a documented gap, not a silent misclassification. See OMP-COMPAT.md.
 
-function isMcpTool(toolName: string): boolean {
+export function isMcpTool(toolName: string): boolean {
 	return toolName.startsWith("mcp__");
 }
 
-function getFailPolicy(toolName: string): FailPolicy | undefined {
+export function getFailPolicy(toolName: string): FailPolicy | undefined {
 	if (FAIL_CLOSED_TOOL_NAMES.has(toolName) || isMcpTool(toolName)) return "fail-closed";
 	if (FAIL_OPEN_TOOL_NAMES.has(toolName)) return "fail-open";
 	return undefined;
@@ -114,7 +114,7 @@ function getFailPolicy(toolName: string): FailPolicy | undefined {
 // something. Re-verify against a live install before relying on these:
 //   playwright, plugin_jira_mcp-atlassian-prod, metadata-service
 // ─────────────────────────────────────────────────────────────────────────
-const OMP_TO_CLAUDE_CODE_MCP_SERVER: Readonly<Record<string, string>> = {
+export const OMP_TO_CLAUDE_CODE_MCP_SERVER: Readonly<Record<string, string>> = {
 	github_mcp_github: "plugin_github-mcp_github",
 	claude_mem_mcp_search: "plugin_claude-mem_mcp-search",
 	serena: "serena",
@@ -150,7 +150,7 @@ const OMP_TO_CLAUDE_CODE_MCP_TOOL: Readonly<Record<string, Readonly<Record<strin
 };
 
 /** Re-encode an OMP MCP tool name into the mcp__<server>__<tool> shape mcp_key() expects. */
-function reencodeMcpToolName(ompToolName: string): string {
+export function reencodeMcpToolName(ompToolName: string): string {
 	const rest = ompToolName.slice("mcp__".length);
 	for (const ompServer of KNOWN_OMP_MCP_SERVER_PREFIXES) {
 		if (rest === ompServer || rest.startsWith(`${ompServer}_`)) {
@@ -167,6 +167,82 @@ function reencodeMcpToolName(ompToolName: string): string {
 	const firstUnderscore = rest.indexOf("_");
 	if (firstUnderscore === -1) return ompToolName;
 	return `mcp__${rest.slice(0, firstUnderscore)}__${rest.slice(firstUnderscore + 1)}`;
+}
+
+/**
+ * Map an OMP tool name to the Claude Code tool name tool-selection-guard.py
+ * branches on, or undefined if there's no guard-relevant equivalent.
+ * mcp__ tools pass through their OMP name (re-encoded separately in
+ * translateToolInputForGuard's caller path via reencodeMcpToolName).
+ */
+export function translateToolNameForGuard(ompToolName: string): string | undefined {
+	if (isMcpTool(ompToolName)) return reencodeMcpToolName(ompToolName);
+	switch (ompToolName) {
+		case "bash":
+			return "Bash";
+		case "write":
+			return "Write";
+		case "edit":
+			return "Edit";
+		case "web_search":
+			return "WebSearch";
+		default:
+			return undefined;
+	}
+}
+
+/**
+ * Translate OMP's tool_call input field names into the Claude-Code-shaped
+ * fields tool-selection-guard.py reads. Field names confirmed in Task 1
+ * spike, Step 4, EXCEPT web_search's fields (query/allowed_domains),
+ * which were not live-verified and are a best-effort guess based on the
+ * OMP CLI's own flag naming.
+ */
+export function translateToolInputForGuard(ompToolName: string, input: Record<string, unknown>): Record<string, unknown> {
+	if (isMcpTool(ompToolName)) return input;
+	switch (ompToolName) {
+		case "bash":
+			return { command: input.command };
+		case "write":
+		case "edit":
+			return input; // edit's OMP input is untyped/hashline-based — pass through unchanged, no known field rename
+		case "web_search":
+			return { query: input.query, allowed_domains: input.allowed_domains, blocked_domains: input.blocked_domains };
+		default:
+			return input;
+	}
+}
+
+/**
+ * Classify OMP's single "read" tool as Claude Code's Read or WebFetch based
+ * on input content, since OMP has no standalone URL-fetch tool (Task 1
+ * spike, Step 4) — the Claude Code tool name depends on the input, not a
+ * pure function of the OMP tool name alone, so this can't go through
+ * translateToolNameForGuard above. Shared by both the tool_call and
+ * tool_result dispatchers below (previously duplicated inline in each).
+ */
+export function classifyReadTool(input: Record<string, unknown>): { toolName: "Read" | "WebFetch"; toolInput: Record<string, unknown> } {
+	const path = String(input.path ?? "");
+	const isUrl = /^https?:\/\//i.test(path);
+	return isUrl ? { toolName: "WebFetch", toolInput: { url: path } } : { toolName: "Read", toolInput: { file_path: path } };
+}
+
+/** Best-effort Bash tool_response shape for _extract_response_text's stdout/stderr concat. */
+export function bashToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
+	const text = event.content
+		.filter((c): c is { type: "text"; text: string } => c.type === "text")
+		.map((c) => c.text)
+		.join("\n");
+	return { stdout: text, stderr: "" };
+}
+
+/** Best-effort Read tool_response shape for _extract_response_text's content field. */
+export function readToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
+	const text = event.content
+		.filter((c): c is { type: "text"; text: string } => c.type === "text")
+		.map((c) => c.text)
+		.join("\n");
+	return { content: text };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -262,7 +338,7 @@ function runDecisionPersistence(stdinPayload: unknown, cwd: string): Promise<Run
 }
 
 /** Parse tool-selection-guard.py's hookSpecificOutput JSON from stdout, if present. */
-function parseHookOutput(stdout: string): { permissionDecision?: string; permissionDecisionReason?: string; updatedInput?: Record<string, unknown>; additionalContext?: string } | undefined {
+export function parseHookOutput(stdout: string): { permissionDecision?: string; permissionDecisionReason?: string; updatedInput?: Record<string, unknown>; additionalContext?: string } | undefined {
 	const trimmed = stdout.trim();
 	if (!trimmed) return undefined;
 	try {
@@ -281,7 +357,7 @@ function parseHookOutput(stdout: string): { permissionDecision?: string; permiss
  * signal is NOT nested under a `hookSpecificOutput` key (that convention
  * belongs to tool-selection-guard.py's PreToolUse/PostToolUse output).
  */
-function parseStopDecision(stdout: string): { decision?: string; reason?: string } | undefined {
+export function parseStopDecision(stdout: string): { decision?: string; reason?: string } | undefined {
 	const trimmed = stdout.trim();
 	if (!trimmed) return undefined;
 	try {
@@ -289,6 +365,23 @@ function parseStopDecision(stdout: string): { decision?: string; reason?: string
 	} catch {
 		return undefined;
 	}
+}
+
+/** Find the most recent assistant message's text content, walking backward through `messages` (string or content-block-array shapes); "" if none. */
+export function lastAssistantText(messages: { role?: string; content?: unknown }[]): string {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i] as { role?: string; content?: unknown };
+		if (msg.role !== "assistant") continue;
+		const content = msg.content;
+		if (typeof content === "string") return content;
+		if (Array.isArray(content)) {
+			return content
+				.filter((c): c is { type: "text"; text: string } => c && c.type === "text")
+				.map((c) => c.text)
+				.join("\n");
+		}
+	}
+	return "";
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -527,10 +620,9 @@ export default function (pi: ExtensionAPI) {
 		let claudeCodeToolName: string | undefined;
 		let toolInput: Record<string, unknown>;
 		if (event.toolName === "read") {
-			const path = String((event.input as Record<string, unknown>).path ?? "");
-			const isUrl = /^https?:\/\//i.test(path);
-			claudeCodeToolName = isUrl ? "WebFetch" : "Read";
-			toolInput = isUrl ? { url: path } : { file_path: path };
+			const classified = classifyReadTool(event.input as Record<string, unknown>);
+			claudeCodeToolName = classified.toolName;
+			toolInput = classified.toolInput;
 		} else {
 			claudeCodeToolName = translateToolNameForGuard(event.toolName);
 			toolInput = translateToolInputForGuard(event.toolName, event.input as Record<string, unknown>);
@@ -650,16 +742,15 @@ export default function (pi: ExtensionAPI) {
 		// so the URL/auth-guard checks (WebFetch) and rtk-tee tracking
 		// (Read) both still fire.
 		if (event.toolName === "read") {
-			const path = String((event.input as Record<string, unknown>).path ?? "");
-			const isUrl = /^https?:\/\//i.test(path);
+			const classified = classifyReadTool(event.input as Record<string, unknown>);
 			await runGuard(
 				[],
 				{
 					session_id: sessionId,
 					tool_use_id: event.toolCallId,
 					hook_event_name: "PostToolUse",
-					tool_name: isUrl ? "WebFetch" : "Read",
-					tool_input: isUrl ? { url: path } : { file_path: path },
+					tool_name: classified.toolName,
+					tool_input: classified.toolInput,
 					tool_response: readToolResponseForGuard(event),
 				},
 				ctx.cwd,
@@ -667,67 +758,6 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 	});
-
-	/** Best-effort Bash tool_response shape for _extract_response_text's stdout/stderr concat. */
-	function bashToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
-		const text = event.content
-			.filter((c): c is { type: "text"; text: string } => c.type === "text")
-			.map((c) => c.text)
-			.join("\n");
-		return { stdout: text, stderr: "" };
-	}
-
-	function readToolResponseForGuard(event: ToolResultEvent): Record<string, unknown> {
-		const text = event.content
-			.filter((c): c is { type: "text"; text: string } => c.type === "text")
-			.map((c) => c.text)
-			.join("\n");
-		return { content: text };
-	}
-
-	/**
-	 * Map an OMP tool name to the Claude Code tool name tool-selection-guard.py
-	 * branches on, or undefined if there's no guard-relevant equivalent.
-	 * mcp__ tools pass through their OMP name (re-encoded separately in
-	 * translateToolInputForGuard's caller path via reencodeMcpToolName).
-	 */
-	function translateToolNameForGuard(ompToolName: string): string | undefined {
-		if (isMcpTool(ompToolName)) return reencodeMcpToolName(ompToolName);
-		switch (ompToolName) {
-			case "bash":
-				return "Bash";
-			case "write":
-				return "Write";
-			case "edit":
-				return "Edit";
-			case "web_search":
-				return "WebSearch";
-			default:
-				return undefined;
-		}
-	}
-
-	/**
-	 * Translate OMP's tool_call input field names into the Claude-Code-shaped
-	 * fields tool-selection-guard.py reads. Field names confirmed in Task 1
-	 * spike, Step 4, EXCEPT web_search's fields (query/allowed_domains),
-	 * which were not live-verified and are a best-effort guess based on the
-	 * OMP CLI's own flag naming.
-	 */
-	function translateToolInputForGuard(ompToolName: string, input: Record<string, unknown>): Record<string, unknown> {
-		if (isMcpTool(ompToolName)) return input;
-		switch (ompToolName) {
-			case "bash":
-				return { command: input.command };
-			case "write":
-			case "edit":
-				return input; // edit's OMP input is untyped/hashline-based — pass through unchanged, no known field rename
-			case "web_search":
-				return { query: input.query, allowed_domains: input.allowed_domains, blocked_domains: input.blocked_domains };
-			default:
-				return input;
-		}
-	}
 
 	// ─── Stop / SubagentStop mapping ────────────────────────────────────
 	// agent_end is OMP's closest analog to both Claude Code's Stop and
@@ -833,20 +863,4 @@ export default function (pi: ExtensionAPI) {
 			withoutSubagentSignal: agentEndWithoutSubagentSignal,
 		});
 	});
-
-	function lastAssistantText(messages: { role?: string; content?: unknown }[]): string {
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const msg = messages[i] as { role?: string; content?: unknown };
-			if (msg.role !== "assistant") continue;
-			const content = msg.content;
-			if (typeof content === "string") return content;
-			if (Array.isArray(content)) {
-				return content
-					.filter((c): c is { type: "text"; text: string } => c && c.type === "text")
-					.map((c) => c.text)
-					.join("\n");
-			}
-		}
-		return "";
-	}
 }
