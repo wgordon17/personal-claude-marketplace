@@ -1,0 +1,6 @@
+{
+  "name": "chai-bot",
+  "description": "Advisory nudge and explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server",
+  "version": "1.0.0",
+  "author": { "name": "wgordon17" }
+}

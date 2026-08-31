@@ -6507,6 +6507,19 @@ class TestMCPReadOnlyFrozenset:
 
         assert mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__search") in MCP_READ_ONLY
 
+    def test_chai_bot_ask_persona_absent(self):
+        """chai-bot's ask_persona has confirmed real write capability triggered
+        purely by natural-language phrasing (see chai-bot/README.md's safety
+        note). It must NEVER join MCP_READ_ONLY -- doing so would remove the
+        stop-hook's mcp_write signal detection, the only automatic backstop
+        forcing extra scrutiny on sessions that used this tool. ask_persona is
+        instead auto-approved on a call-time, tool-scoped basis by
+        chai-bot/hooks/metrics.py, not by this blanket allow-list."""
+        from mcp_constants import MCP_READ_ONLY, mcp_key
+
+        assert "plugin_chai-bot_ship-help__ask_persona" not in MCP_READ_ONLY
+        assert mcp_key("mcp__plugin_chai-bot_ship-help__ask_persona") not in MCP_READ_ONLY
+
 
 class TestMCPGuardIntegration:
     """Integration tests: run the guard with MCP tool names and verify output."""

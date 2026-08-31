@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ship-help": {
+      "type": "http",
+      "url": "${CHAI_BOT_BASE_URL}/personas/osac_public/mcp",
+      "headers": {
+        "Authorization": "Bearer ${CHAI_TOKEN}"
+      },
+      "timeout": 600000
+    }
+  }
+}
