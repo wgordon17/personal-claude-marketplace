@@ -15,6 +15,8 @@ import time
 import uuid
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).parent.parent / "hooks" / "stop-hook.py"
 LLM_SCRIPT = Path(__file__).parent.parent / "hooks" / "stop-hook-llm.py"
 
@@ -1983,11 +1985,13 @@ class TestBuildPromptCriteria:
         assert "See </assistant-message> for details." not in prompt
 
 
-# ── Unit tests for _call_vertex region default ────────────────────────────────
+# ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
+
+# ── Unit tests for _call_gemini API fallback and resilience ───────────────────
 
 
-class TestCallVertexRegion:
-    """Unit tests for _call_vertex region parameter — default and env var override."""
+class TestCallGemini:
+    """Unit tests for _call_gemini fallback and API request/response handling."""
 
     @staticmethod
     def _load_llm_module():
@@ -1996,64 +2000,100 @@ class TestCallVertexRegion:
         spec.loader.exec_module(mod)
         return mod
 
-    @staticmethod
-    def _make_mock_client():
-        from unittest.mock import MagicMock
-
-        mock_block = MagicMock()
-        mock_block.text = '{"decision": "pass", "reasoning": "ok", "findings": null}'
-        mock_message = MagicMock()
-        mock_message.content = [mock_block]
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_message
-        return mock_client
-
-    def test_default_region_is_global(self, monkeypatch):
-        """CLOUD_ML_REGION absent → AnthropicVertex constructed with region='global'."""
-        import sys
-        import types
-        from unittest.mock import MagicMock
-
-        monkeypatch.setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-project")
-        monkeypatch.delenv("CLOUD_ML_REGION", raising=False)
-
-        mock_client = self._make_mock_client()
-        mock_cls = MagicMock(return_value=mock_client)
-        fake_anthropic = types.ModuleType("anthropic")
-        fake_anthropic.AnthropicVertex = mock_cls
-        monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
-
+    def test_missing_api_key_fails_open(self, monkeypatch):
+        """GEMINI_API_KEY absent → fail open (sys.exit(0))."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         mod = self._load_llm_module()
-        result = mod._call_vertex("test prompt")
 
-        mock_cls.assert_called_once_with(project_id="test-project", region="global")
-        assert result["decision"] == "pass"
+        with pytest.raises(SystemExit) as exc:
+            mod._call_gemini("test prompt")
+        assert exc.value.code == 0
 
-    def test_region_from_env_var(self, monkeypatch):
-        """CLOUD_ML_REGION='us-central1' → AnthropicVertex constructed with that region."""
-        import sys
-        import types
-        from unittest.mock import MagicMock
-
-        monkeypatch.setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-project")
-        monkeypatch.setenv("CLOUD_ML_REGION", "us-central1")
-
-        mock_client = self._make_mock_client()
-        mock_cls = MagicMock(return_value=mock_client)
-        fake_anthropic = types.ModuleType("anthropic")
-        fake_anthropic.AnthropicVertex = mock_cls
-        monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
-
+    def test_network_failure_fails_open(self, monkeypatch):
+        """urllib.request.urlopen raises exception (e.g. timeout) → fail open (sys.exit(0))."""
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
         mod = self._load_llm_module()
-        result = mod._call_vertex("test prompt")
 
-        mock_cls.assert_called_once_with(project_id="test-project", region="us-central1")
+        import urllib.error
+
+        def mock_urlopen(*args, **kwargs):
+            raise urllib.error.URLError("connection refused")
+
+        monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+        with pytest.raises(SystemExit) as exc:
+            mod._call_gemini("test prompt")
+        assert exc.value.code == 0
+
+    def test_invalid_json_fails_open(self, monkeypatch):
+        """Gemini returns non-JSON → fail open (sys.exit(0))."""
+
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        mod = self._load_llm_module()
+
+        class MockResponse:
+            def read(self):
+                return b"Internal Server Error"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        def mock_urlopen(*args, **kwargs):
+            return MockResponse()
+
+        monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+        with pytest.raises(SystemExit) as exc:
+            mod._call_gemini("test prompt")
+        assert exc.value.code == 0
+
+    def test_valid_response(self, monkeypatch):
+        """Gemini returns valid JSON → parsed and returned."""
+        import json
+
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        mod = self._load_llm_module()
+
+        mock_gemini_payload = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps(
+                                    {"decision": "pass", "reasoning": "all good", "findings": None}
+                                )
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        class MockResponse:
+            def read(self):
+                return json.dumps(mock_gemini_payload).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        def mock_urlopen(*args, **kwargs):
+            return MockResponse()
+
+        monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+        result = mod._call_gemini("test prompt")
         assert result["decision"] == "pass"
+        assert result["reasoning"] == "all good"
 
 
 # ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
-
-
 class TestDetectDeferralPatterns:
     """Unit tests for _detect_deferral_patterns — imported directly via _load_stop_hook_module."""
 
