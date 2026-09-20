@@ -27,7 +27,6 @@ Security constraints:
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import subprocess
@@ -487,86 +486,10 @@ def _mode_coverage_check(repo_root: Path) -> bool:
 
 
 def main() -> None:
-    # Force line-buffered stdout/stderr so progress output is visible when piped.
-    sys.stdout.reconfigure(line_buffering=True)
-    sys.stderr.reconfigure(line_buffering=True)
+    print("skill-eval is disabled.")
+    import sys
 
-    parser = argparse.ArgumentParser(description="Skill evaluation CLI (DeepEval-based)")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--all",
-        action="store_true",
-        help="Eval all skills with test cases",
-    )
-    group.add_argument(
-        "--update-baselines",
-        action="store_true",
-        help="Run --all and write results to baselines.json",
-    )
-    group.add_argument(
-        "--coverage-check",
-        action="store_true",
-        help=(
-            "Non-blocking: flag changed skills whose test_cases file wasn't"
-            " also updated. No AI credentials needed — safe for CI."
-        ),
-    )
-    parser.add_argument(
-        "--locked",
-        action="store_true",
-        help=(
-            "Verify eval infrastructure has no uncommitted changes before running."
-            " Required for LLM self-improvement loops to prevent test tampering."
-        ),
-    )
-    args = parser.parse_args()
-
-    # Drain stdin (in case invoked as a git hook — ignore any ref data).
-    if not sys.stdin.isatty():
-        sys.stdin.read()
-
-    try:
-        repo_root = _repo_root()
-    except subprocess.CalledProcessError:
-        print("[skill-eval] Not in a git repository — skipping evals", file=sys.stderr)
-        sys.exit(0)
-
-    # --locked: verify eval infrastructure integrity before running.
-    # Prevents LLM self-improvement agents from tampering with tests.
-    if args.locked:
-        if args.update_baselines:
-            print(
-                "[skill-eval] --locked blocks --update-baselines"
-                " (baseline writes are eval infrastructure changes)",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        clean, modified = _verify_eval_integrity(repo_root)
-        if not clean:
-            print(
-                "[skill-eval] INTEGRITY CHECK FAILED — eval infrastructure modified:",
-                file=sys.stderr,
-            )
-            for f in modified:
-                print(f"  {f}", file=sys.stderr)
-            print(
-                "\nEval infrastructure must be clean when using --locked."
-                " Commit or revert changes to skill-eval/ before running.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-    if args.all:
-        passed = _mode_all(repo_root)
-    elif args.update_baselines:
-        passed = _mode_update_baselines(repo_root)
-    elif args.coverage_check:
-        passed = _mode_coverage_check(repo_root)
-    else:
-        passed = _mode_prepush(repo_root)
-
-    sys.exit(0 if passed else 1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["anthropic[vertex]>=0.59.0"]
 # ///
 """Stop Hook LLM Evaluator -- Sonnet quality gate via Vertex AI.
 
@@ -34,9 +33,8 @@ Exit codes (internal to subprocess, consumed by stop-hook.py):
 Fails open (exits 0) on any infrastructure error (import, auth, timeout, parse).
 
 Environment variables:
-  ANTHROPIC_VERTEX_PROJECT_ID      -- GCP project ID (required)
-  CLOUD_ML_REGION                  -- Vertex AI region (default: global; requires SDK >=0.59.0)
-  ANTHROPIC_DEFAULT_SONNET_MODEL   -- model override (default: claude-sonnet-4-6)
+  GEMINI_API_KEY                   -- Google Gemini API key (required)
+  ANTHROPIC_DEFAULT_SONNET_MODEL   -- (Legacy/unused, kept for compatibility)
 """
 
 import json
@@ -345,39 +343,43 @@ def _build_prompt(ctx: dict) -> str:
     return "\n".join(lines)
 
 
-def _call_vertex(prompt: str) -> dict:
-    """Call claude-sonnet-4-6 via Vertex AI. Returns parsed response dict."""
+def _call_gemini(prompt: str) -> dict:
+    """Call Gemini via Google API. Returns parsed response dict."""
+    import urllib.error
+    import urllib.request
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        _fail_open("GEMINI_API_KEY env var not set")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.0},
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+
     try:
-        from anthropic import AnthropicVertex  # type: ignore[import-untyped]
-    except ImportError as e:
-        _fail_open(f"anthropic[vertex] not available: {e}")
-
-    project_id = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID", "")
-    region = os.environ.get("CLOUD_ML_REGION", "global")
-
-    if not project_id:
-        _fail_open("ANTHROPIC_VERTEX_PROJECT_ID env var not set")
-
-    try:
-        client = AnthropicVertex(project_id=project_id, region=region)
-        message = client.messages.create(
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
-            timeout=_TIMEOUT,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as response:
+            resp_body = response.read().decode("utf-8")
     except Exception as e:
-        _fail_open(f"Vertex AI call failed: {type(e).__name__}: {e}")
+        _fail_open(f"Gemini API call failed: {type(e).__name__}: {e}")
 
-    # Extract text content
+    try:
+        resp_data = json.loads(resp_body)
+    except json.JSONDecodeError:
+        _fail_open("Gemini returned non-JSON response")
+
     text = ""
-    for block in message.content:
-        if hasattr(block, "text"):
-            text = block.text.strip()  # type: ignore[union-attr]
-            break
+    try:
+        text = resp_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (KeyError, IndexError):
+        _fail_open("empty response from Gemini")
 
     if not text:
-        _fail_open("empty response from Vertex AI")
+        _fail_open("empty response from Gemini")
 
     # Parse JSON — model may occasionally wrap in fences, strip them
     if text.startswith("```"):
@@ -427,7 +429,7 @@ def _validate_response(result: dict) -> tuple[str, str, list[str] | None]:
 def main() -> None:
     ctx = _parse_stdin()
     prompt = _build_prompt(ctx)
-    raw_result = _call_vertex(prompt)
+    raw_result = _call_gemini(prompt)
     decision, reasoning, findings = _validate_response(raw_result)
 
     output = {
