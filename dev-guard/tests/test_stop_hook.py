@@ -15,6 +15,8 @@ import time
 import uuid
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).parent.parent / "hooks" / "stop-hook.py"
 LLM_SCRIPT = Path(__file__).parent.parent / "hooks" / "stop-hook-llm.py"
 
@@ -1985,7 +1987,113 @@ class TestBuildPromptCriteria:
 
 # ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
 
+# ── Unit tests for _call_gemini API fallback and resilience ───────────────────
 
+
+class TestCallGemini:
+    """Unit tests for _call_gemini fallback and API request/response handling."""
+
+    @staticmethod
+    def _load_llm_module():
+        spec = importlib.util.spec_from_file_location("stop_hook_llm", LLM_SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_missing_api_key_fails_open(self, monkeypatch):
+        """GEMINI_API_KEY absent → fail open (sys.exit(0))."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        mod = self._load_llm_module()
+
+        with pytest.raises(SystemExit) as exc:
+            mod._call_gemini("test prompt")
+        assert exc.value.code == 0
+
+    def test_network_failure_fails_open(self, monkeypatch):
+        """urllib.request.urlopen raises exception (e.g. timeout) → fail open (sys.exit(0))."""
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        mod = self._load_llm_module()
+
+        import urllib.error
+
+        def mock_urlopen(*args, **kwargs):
+            raise urllib.error.URLError("connection refused")
+
+        monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+        with pytest.raises(SystemExit) as exc:
+            mod._call_gemini("test prompt")
+        assert exc.value.code == 0
+
+    def test_invalid_json_fails_open(self, monkeypatch):
+        """Gemini returns non-JSON → fail open (sys.exit(0))."""
+
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        mod = self._load_llm_module()
+
+        class MockResponse:
+            def read(self):
+                return b"Internal Server Error"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        def mock_urlopen(*args, **kwargs):
+            return MockResponse()
+
+        monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+        with pytest.raises(SystemExit) as exc:
+            mod._call_gemini("test prompt")
+        assert exc.value.code == 0
+
+    def test_valid_response(self, monkeypatch):
+        """Gemini returns valid JSON → parsed and returned."""
+        import json
+
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        mod = self._load_llm_module()
+
+        mock_gemini_payload = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps(
+                                    {"decision": "pass", "reasoning": "all good", "findings": None}
+                                )
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        class MockResponse:
+            def read(self):
+                return json.dumps(mock_gemini_payload).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        def mock_urlopen(*args, **kwargs):
+            return MockResponse()
+
+        monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+        result = mod._call_gemini("test prompt")
+        assert result["decision"] == "pass"
+        assert result["reasoning"] == "all good"
+
+
+# ── Unit tests for _detect_deferral_patterns ─────────────────────────────────
 class TestDetectDeferralPatterns:
     """Unit tests for _detect_deferral_patterns — imported directly via _load_stop_hook_module."""
 

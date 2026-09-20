@@ -2,11 +2,11 @@
 # /// script
 # requires-python = ">=3.13"
 # ///
-"""Stop Hook LLM Evaluator -- Sonnet quality gate via Vertex AI.
+"""Stop Hook LLM Evaluator -- Quality gate via Gemini API.
 
-Receives context JSON on stdin from stop-hook.py, calls claude-sonnet-4-6
-via Vertex AI with an adaptive prompt based on trigger reasons, and returns
-a pass/fail decision JSON on stdout.
+Receives context JSON on stdin from stop-hook.py, calls Gemini 3.8 Flash
+via direct HTTP request with an adaptive prompt based on trigger reasons,
+and returns a pass/fail decision JSON on stdout.
 
 Stdin schema (from stop-hook.py):
   {
@@ -34,19 +34,14 @@ Fails open (exits 0) on any infrastructure error (import, auth, timeout, parse).
 
 Environment variables:
   GEMINI_API_KEY                   -- Google Gemini API key (required)
-  ANTHROPIC_DEFAULT_SONNET_MODEL   -- (Legacy/unused, kept for compatibility)
 """
 
 import json
 import os
-import re
 import sys
 from typing import NoReturn
 
 _MAX_INPUT = 2 * 1024 * 1024  # 2 MB — includes recent message history
-# Strip Claude Code context-window suffixes like [1m] — Vertex AI doesn't accept them
-_RAW_MODEL = os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-6")
-_MODEL = re.sub(r"\[.*\]$", "", _RAW_MODEL)
 _MAX_TOKENS = 2048
 _TIMEOUT = 50  # seconds — stop-hook.py allows 60, leave buffer
 
@@ -233,8 +228,10 @@ def _build_prompt(ctx: dict) -> str:
 
     if work_type in ("code_config", "mixed"):
         criteria.append(
-            "CODE QUALITY: Were tests run after code changes? "
-            "Are there any TODOs or FIXMEs left in modified code?"
+            "CODE QUALITY: If code was modified for a bug fix or feature, the assistant "
+            "MUST run tests or a verification command (bash, etc.) to prove it works. "
+            "If no verification was performed, YOU MUST FAIL the gate. "
+            "Also FAIL if any placeholder TODOs or FIXMEs were left in the modified code."
         )
         criteria.append(
             "BRANCH SAFETY: Are changes on a feature branch (not main/master) "

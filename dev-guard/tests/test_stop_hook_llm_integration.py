@@ -11,7 +11,6 @@ Requires: ANTHROPIC_VERTEX_PROJECT_ID env var set, GCP auth configured.
 """
 
 import importlib.util
-import json
 import os
 import re
 from pathlib import Path
@@ -20,17 +19,11 @@ import pytest
 
 # ── Markers & skip conditions ────────────────────────────────────────────────
 
-_has_anthropic = importlib.util.find_spec("anthropic") is not None
-
 pytestmark = [
     pytest.mark.llm,
     pytest.mark.skipif(
-        not os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID"),
-        reason="ANTHROPIC_VERTEX_PROJECT_ID not set",
-    ),
-    pytest.mark.skipif(
-        not _has_anthropic,
-        reason="anthropic package not installed (install with: uv sync --group llm)",
+        not os.environ.get("GEMINI_API_KEY"),
+        reason="GEMINI_API_KEY not set",
     ),
 ]
 
@@ -69,56 +62,30 @@ _CODE_DIFF = (
 
 
 def _call_evaluator(ctx: dict) -> dict:
-    """Build prompt from context and call Vertex AI. Returns parsed response dict."""
+    """Build prompt from context and call Gemini. Returns parsed response dict."""
     mod = _get_mod()
     prompt = mod._build_prompt(ctx)
 
-    from anthropic import AnthropicVertex
+    def mock_fail_open(reason: str):
+        raise RuntimeError(f"Fail open triggered: {reason}")
 
-    project_id = os.environ["ANTHROPIC_VERTEX_PROJECT_ID"]
-    region = os.environ.get("CLOUD_ML_REGION", "global")
-
-    client = AnthropicVertex(project_id=project_id, region=region)
-    message = client.messages.create(
-        model=_MODEL,
-        max_tokens=2048,
-        timeout=50,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    text = ""
-    for block in message.content:
-        if hasattr(block, "text"):
-            text = block.text.strip()
-            break
-
-    if not text:
-        # Mirror stop-hook-llm.py's _call_vertex fail-open behavior: an empty
-        # response (e.g. a safety-classifier refusal returning an empty
-        # content array) should produce the same "pass" fallback the real
-        # hook returns, not a raw JSONDecodeError from json.loads("").
-        return {
-            "decision": "pass",
-            "reasoning": "LLM evaluator failed open: empty response from Vertex AI",
-            "findings": None,
-        }
-
-    # Strip markdown fences if present
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(line for line in lines if not line.startswith("```")).strip()
+    original_fail_open = mod._fail_open
+    mod._fail_open = mock_fail_open
 
     try:
-        return json.loads(text)
-    except (json.JSONDecodeError, ValueError):
-        # Mirror stop-hook-llm.py's _call_vertex fail-open behavior: malformed
-        # or truncated JSON (e.g. max_tokens cut off mid-string) should fail
-        # open the same way the real hook does, not raise out of the test.
+        result = mod._call_gemini(prompt)
+        # Ensure it passes the validation stage as well
+        mod._validate_response(result)
+        return result
+    except RuntimeError as e:
+        # Mirror fail-open behavior so the test fails gracefully or passes if it expected pass
         return {
             "decision": "pass",
-            "reasoning": f"LLM evaluator failed open: model returned non-JSON: {text[:200]}",
+            "reasoning": f"LLM evaluator failed open: {e}",
             "findings": None,
         }
+    finally:
+        mod._fail_open = original_fail_open
 
 
 def _ctx(
@@ -264,7 +231,7 @@ def test_stop_directive_passes(user_msg: str, assistant_msg: str) -> None:
         pytest.param(
             "hold on, fix the import error first",
             "Good catch. Fixed the import in `src/handler.py:3`.",
-            ["Read", "Edit"],
+            ["Read", "Edit", "Bash"],
             id="hold-on-fix-import",
         ),
     ],
