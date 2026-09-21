@@ -8,7 +8,7 @@ dev = ["ruff>=0.9", "pytest>=8", "pytest-xdist>=3", "pyright>=1.1.408"]
 llm = ["anthropic[vertex]>=0.59.0"]
 
 [tool.pytest.ini_options]
-testpaths = ["dev-guard/tests"]
+testpaths = ["dev-guard/tests", "chai-bot/tests"]
 addopts = "-v --tb=short -n4"
 markers = [
     "llm: marks tests that make real LLM API calls (deselect with '-m \"not llm\"')",
@@ -28,6 +28,6 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 quote-style = "double"
 
 [tool.pyright]
-include = ["dev-guard/hooks"]
+include = ["dev-guard/hooks", "chai-bot/hooks"]
 pythonVersion = "3.13"
 typeCheckingMode = "basic"

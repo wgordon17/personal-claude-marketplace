@@ -12,6 +12,7 @@ on:
       - '.github/scripts/**'
       - 'dev-guard/hooks/**'
       - 'dev-guard/references/**'
+      - 'chai-bot/hooks/**'
   workflow_dispatch:
 
 permissions:

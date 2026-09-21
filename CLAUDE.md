@@ -5,10 +5,10 @@
 ```bash
 make all          # Lint + test (CI runs this)
 make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
-make test         # uv run pytest (runs dev-guard/tests/)
+make test         # uv run pytest (runs the tests/ dirs in pyproject.toml testpaths)
 ```
 
-Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-guard/tests/`.
+Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per-plugin `tests/` directories (see `pyproject.toml` `testpaths`): currently `dev-guard/tests/` and `chai-bot/tests/`.
 
 ## Critical Rules
 
@@ -26,7 +26,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 
 1. **Develop and test locally** — Run `make all` before committing.
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits. Show the PR link to the user.
-3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `**/*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, plugin files, `.github/workflows/**`). If no checks appear, merge after local `make all` passes.
+3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `**/*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`, `chai-bot/hooks/**`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, plugin files, `.github/workflows/**`). If no checks appear, merge after local `make all` passes.
 4. **Wait for user to merge** — Do NOT merge automatically. Tell the user the PR is ready for review and wait for them to confirm the merge. Only proceed to step 5 after the user says it's merged.
 5. **Update local plugin** — After merge, run these commands (do not hand them to the user).
    Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:
@@ -39,17 +39,21 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests in `dev-gua
 
 ## Repository Structure
 
-Personal Claude Code plugin marketplace with 11 plugins. Master registry: `.claude-plugin/marketplace.json`.
+Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
-- **dev-guard/** — Tool selection guard, commit validation, subagent completion verification (only plugin with tests)
+- **dev-guard/** — Tool selection guard, commit validation, subagent completion verification
 - **code-quality/** — Agents (architect, security, QA, performance, test-runner, code-reviewer, code-simplifier), skills (21), commands (4), and orchestration
 - **git-tools/** — Git history, hooks, commit review, contributing guide; SessionStart git instructions
 - **github-mcp/** — GitHub MCP server (HTTP, api.githubcopilot.com); full toolsets for PRs, issues, actions, code security
 - **jira/** — Jira integration via Atlassian Rovo MCP server; OSAC defaults (project=OSAC); skill (`/jira:jira`) and spawnable agent (`jira:jira-agent`)
 - **drawio/** — Vendored draw.io diagram generation skill from jgraph/drawio-mcp (Apache 2.0); weekly upstream sync via GHA
+- **fetchaller-mcp/** — Pinned MCP fetch/search server for domains that block Claude Code's built-in WebFetch/WebSearch (Reddit and 15 other sites); commit-SHA pinned, never tracks main
+- **chai-bot/** — Advisory nudge + explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server; repo-gated to osac-project remotes, VPN-dependent
 
 Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
+
+**OMP dual-harness bridge (standing requirement):** every plugin that ships `hooks/hooks.json` must also ship an `omp-extension.ts` + `package.json` OMP dual-harness bridge, so its hooks also work under the OMP harness (`@oh-my-pi/pi-coding-agent`), not just Claude Code. This applies to every future hooks.json-owning plugin, not just the ones already bridged (`dev-guard/`, `git-tools/`, `github-mcp/`, `chai-bot/`). See `dev-guard/omp-extension.ts` for the shell-out pattern to follow when a plugin's hooks have real logic, and `dev-guard/OMP-COMPAT.md` for confirmed OMP behaviors (stdin handling, MCP tool-name re-encoding, event mapping).
 
 ## CI
 

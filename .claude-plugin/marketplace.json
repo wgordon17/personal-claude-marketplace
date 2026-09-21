@@ -149,6 +149,15 @@
       "category": "productivity",
       "tags": ["mcp", "fetch", "web-search", "reddit"],
       "author": { "name": "wgordon17" }
+    },
+    {
+      "name": "chai-bot",
+      "version": "1.0.0",
+      "source": "./chai-bot",
+      "description": "Advisory nudge and explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server",
+      "category": "productivity",
+      "tags": ["mcp", "osac", "advisory", "ship-help"],
+      "author": { "name": "wgordon17" }
     }
   ]
 }
