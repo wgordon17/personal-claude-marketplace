@@ -328,12 +328,11 @@ def _parse_transcript(
                 is_user = msg_type == "user" or role == "user"
                 is_assistant = msg_type == "assistant" or role == "assistant"
 
-                # Tool use entries (flat format: top-level type == "tool_use")
-                if msg_type == "tool_use":
+                # Tool use entries (flat format: top-level type == "tool_use" or "toolCall" for OMP)
+                if msg_type in ("tool_use", "toolCall"):
                     tool_name = entry.get("name", "")
                     if tool_name:
                         all_tool_calls.append(tool_name)
-
                 # Assistant messages — extract text and tool_use from content blocks
                 if is_assistant:
                     if isinstance(content, str) and content.strip():
@@ -344,7 +343,10 @@ def _parse_transcript(
                                 text = block.get("text", "")
                                 if text.strip():
                                     assistant_messages.append(text.strip())
-                            elif isinstance(block, dict) and block.get("type") == "tool_use":
+                            elif isinstance(block, dict) and block.get("type") in (
+                                "tool_use",
+                                "toolCall",
+                            ):
                                 name = block.get("name", "")
                                 if name:
                                     all_tool_calls.append(name)
