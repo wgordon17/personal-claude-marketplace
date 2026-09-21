@@ -8,12 +8,12 @@
 # With no stdin, prints an aggregate across all monitored models. If Claude
 # Code's session JSON is piped on stdin, prints the state for the active model.
 # When the cache is stale or missing it fires a throttled background refresh
-# (self-heal) via the stable refresh symlink, unless VERTEX_LOG_SELFHEAL=0.
+# (self-heal) via a sibling refresh.sh, located by BASH_SOURCE, unless
+# VERTEX_LOG_SELFHEAL=0.
 set -uo pipefail
 
 CACHE_DIR="${VERTEX_LOG_CACHE_DIR:-${HOME}/.claude/cache}"
 CACHE="${CACHE_DIR}/vertex-logging-state.json"
-REFRESH_LINK="${CACHE_DIR}/vertex-log-monitor-refresh.sh"
 MAX_AGE="${VERTEX_LOG_MAX_AGE:-5400}"
 
 if [ "${1:-}" = "--plain" ] || [ -n "${STATUSLINE_PLAIN:-}" ] || [ -n "${NO_COLOR:-}" ]; then
@@ -27,10 +27,15 @@ fi
 emit() { printf '%s%s%s' "$2" "$1" "$X"; exit 0; }
 unknown() { printf '%s⚪ vtx:? (%s)%s' "$D" "$1" "$X"; exit 0; }
 self_heal() {
-  # Invoke the symlink directly (its target has an `env bash` shebang and is
-  # executable) — no hardcoded interpreter path, so this works off-platform.
+  # Locate refresh.sh as a sibling of this script. The stable status entry point
+  # is a launcher that execs this file by its REAL versioned path, so
+  # BASH_SOURCE resolves to the plugin hooks/ dir and refresh.sh sits alongside
+  # -- no hardcoded interpreter path, no second stable symlink to maintain.
   [ "${VERTEX_LOG_SELFHEAL:-1}" != "0" ] || return
-  [ -x "$REFRESH_LINK" ] || return
+  local here refresh
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || return
+  refresh="${here}/refresh.sh"
+  [ -x "$refresh" ] || return
   # Skip only if a FRESH refresh lock is held (avoids forking a redundant bash
   # process on every render during an in-flight refresh). A stale/orphaned lock
   # (>120s, matching refresh.sh's own reclaim threshold) must NOT suppress
@@ -45,7 +50,7 @@ self_heal() {
     fi
     [ -n "$lm" ] && [ $(( $(date +%s) - lm )) -lt 120 ] && return
   fi
-  nohup "$REFRESH_LINK" >/dev/null 2>&1 &
+  nohup "$refresh" >/dev/null 2>&1 &
 }
 
 # A missing cache self-heals too (not just a stale one): the SessionStart

@@ -3385,28 +3385,36 @@ def _validate_rules_file(path: str, env_var: str, is_url: bool = False) -> tuple
     return issues, len(raw)
 
 
-def _validate_trusted_dirs_file(path: str) -> tuple[list[str], int]:
-    """Validate a GIT_TRUSTED_DIRS JSON file. Returns (issues, count) tuple."""
-    issues = []
+def _validate_trusted_dirs_file(path: str) -> tuple[list[str], list[str], int]:
+    """Validate a GIT_TRUSTED_DIRS JSON file. Returns (issues, warnings, count).
+
+    A configured directory that does not currently exist is a WARNING, not an
+    error: a trusted dir may live on an unmounted volume or be created later, and
+    the runtime containment check (_check_git_trusted_dirs) already tolerates a
+    missing dir by simply never matching it. Validation must not be stricter than
+    runtime, or one absent path fails the whole config.
+    """
+    issues: list[str] = []
+    warnings: list[str] = []
     env_var = "GIT_TRUSTED_DIRS"
     if not os.path.exists(path):
         issues.append(f"{env_var}: file not found: {path}")
-        return issues, 0
+        return issues, warnings, 0
     try:
         with open(path) as f:
             raw = json.load(f)
     except json.JSONDecodeError as e:
         issues.append(f"{env_var}: invalid JSON: {e}")
-        return issues, 0
+        return issues, warnings, 0
     except OSError as e:
         issues.append(f"{env_var}: cannot read file: {e}")
-        return issues, 0
+        return issues, warnings, 0
     if not isinstance(raw, list):
         issues.append(f"{env_var}: expected JSON array, got {type(raw).__name__}")
-        return issues, 0
+        return issues, warnings, 0
     if not raw:
         issues.append(f"{env_var}: file contains empty array (no directories)")
-        return issues, 0
+        return issues, warnings, 0
     for i, entry in enumerate(raw):
         if not isinstance(entry, str):
             issues.append(f"{env_var}[{i}]: expected string path, got {type(entry).__name__}")
@@ -3416,13 +3424,14 @@ def _validate_trusted_dirs_file(path: str) -> tuple[list[str], int]:
             continue
         resolved = Path(entry).expanduser()
         if not resolved.is_dir():
-            issues.append(f"{env_var}[{i}]: directory does not exist: {entry}")
-    return issues, len(raw)
+            warnings.append(f"{env_var}[{i}]: directory does not exist (skipped): {entry}")
+    return issues, warnings, len(raw)
 
 
-def _validate_unified_config(path: Path) -> tuple[list[str], list[str]]:
-    """Validate unified dev-guard config file. Returns (issues, loaded_msgs)."""
+def _validate_unified_config(path: Path) -> tuple[list[str], list[str], list[str]]:
+    """Validate unified dev-guard config file. Returns (issues, warnings, loaded_msgs)."""
     issues: list[str] = []
+    warnings: list[str] = []
     loaded: list[str] = []
     label = f"dev-guard.json ({path})"
     try:
@@ -3430,12 +3439,12 @@ def _validate_unified_config(path: Path) -> tuple[list[str], list[str]]:
             raw = json.load(f)
     except json.JSONDecodeError as e:
         issues.append(f"{label}: invalid JSON: {e}")
-        return issues, loaded
+        return issues, warnings, loaded
     except OSError:
-        return issues, loaded  # File not found is fine — it's optional
+        return issues, warnings, loaded  # File not found is fine — it's optional
     if not isinstance(raw, dict):
         issues.append(f"{label}: expected JSON object, got {type(raw).__name__}")
-        return issues, loaded
+        return issues, warnings, loaded
 
     valid_keys = {"command_rules", "url_rules", "git_trusted_dirs"}
     unknown = set(raw.keys()) - valid_keys
@@ -3484,11 +3493,13 @@ def _validate_unified_config(path: Path) -> tuple[list[str], list[str]]:
                 else:
                     resolved = Path(entry).expanduser()
                     if not resolved.is_dir():
-                        issues.append(f"{pfx}: directory does not exist: {entry}")
+                        # Not present now (unmounted volume, not-yet-created path):
+                        # warn but don't fail -- the runtime check never matches it.
+                        warnings.append(f"{pfx}: directory does not exist (skipped): {entry}")
             if not issues:
                 loaded.append(f"Git trusted dirs: {len(dirs)} path(s) from {path}")
 
-    return issues, loaded
+    return issues, warnings, loaded
 
 
 def _validate_rules_entries(
@@ -3615,12 +3626,14 @@ def _validate_config() -> int:
         return 0
 
     all_issues: list[str] = []
+    all_warnings: list[str] = []
     loaded: list[str] = []
 
     # Validate unified config first
     if has_unified:
-        issues, msgs = _validate_unified_config(_UNIFIED_CONFIG_PATH)
+        issues, warns, msgs = _validate_unified_config(_UNIFIED_CONFIG_PATH)
         all_issues.extend(issues)
+        all_warnings.extend(warns)
         loaded.extend(msgs)
 
     # Validate env var overrides
@@ -3637,7 +3650,8 @@ def _validate_config() -> int:
         else:
             loaded.append(f"Command rules: {count} rule(s) from {cmd_path}")
     if dirs_path:
-        issues, count = _validate_trusted_dirs_file(dirs_path)
+        issues, warns, count = _validate_trusted_dirs_file(dirs_path)
+        all_warnings.extend(warns)
         if issues:
             all_issues.extend(issues)
         else:
@@ -3648,6 +3662,8 @@ def _validate_config() -> int:
         print("Custom guard rules — validation failed:", file=sys.stderr)
         for issue in all_issues:
             print(f"  ✗ {issue}", file=sys.stderr)
+        for warning in all_warnings:
+            print(f"  ⚠ {warning}", file=sys.stderr)
         if loaded:
             for msg in loaded:
                 print(f"  ✓ {msg}", file=sys.stderr)
@@ -3655,6 +3671,8 @@ def _validate_config() -> int:
     # stdout + exit 0: shown in transcript
     for msg in loaded:
         print(f"Custom guard rules — {msg}")
+    for warning in all_warnings:
+        print(f"Custom guard rules — warning: {warning}")
     # Ensure rtk config is set up (telemetry off, tee always)
     rtk_msg = _ensure_rtk_config()
     if rtk_msg:
