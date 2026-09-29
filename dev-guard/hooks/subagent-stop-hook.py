@@ -96,8 +96,12 @@ def _extract_text_from_content(content: object) -> str:
                 text = block.get("text", "")
                 if isinstance(text, str) and text:
                     parts.append(text)
-            elif block_type == "tool_use":
-                inp = block.get("input", {})
+            elif block_type in ("tool_use", "toolCall"):
+                inp = (
+                    block.get("input", {})
+                    if block_type == "tool_use"
+                    else block.get("arguments", {})
+                )
                 if isinstance(inp, dict):
                     # Two detection paths for FixSummary in tool_use inputs:
                     # 1. Raw string values: catches JSON-encoded FixSummary in
@@ -186,10 +190,13 @@ def _find_fix_summary(transcript_path: str) -> dict | None:
                 role = entry.get("role", "")
                 content = entry.get("content", "")
 
-            # Also check flat tool_use entries ({"type": "tool_use", "input": {...}})
+            # Also check flat tool_use entries ({"type": "tool_use", "input": {...}} or
+            # OMP toolCall)
             msg_type = entry.get("type", "")
-            if msg_type == "tool_use":
-                inp = entry.get("input", {})
+            if msg_type in ("tool_use", "toolCall"):
+                inp = (
+                    entry.get("input", {}) if msg_type == "tool_use" else entry.get("arguments", {})
+                )
                 if isinstance(inp, dict):
                     if inp.get("schema") == "FixSummary" or "findings_fixed" in inp:
                         return inp
