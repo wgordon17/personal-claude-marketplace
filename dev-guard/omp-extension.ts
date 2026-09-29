@@ -356,7 +356,13 @@ export default function (pi: ExtensionAPI) {
 		// order), so messages are still delivered shared-feedback-first.
 		for (const result of referenceResults) {
 			if (result.stdout.trim()) {
-				pi.sendMessage(result.stdout, { deliverAs: "nextTurn" });
+				pi.sendMessage(
+					{
+						text: result.stdout,
+						role: "system",
+					},
+					{ deliverAs: "nextTurn" },
+				);
 			}
 		}
 	});
