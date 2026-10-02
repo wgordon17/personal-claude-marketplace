@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -77,6 +77,7 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
         patch("compactor.update_project_memory") as mock_update,
         patch("sys.argv", ["compactor.py", session_id]),
         patch("os.makedirs"),
+        patch("builtins.open", mock_open()),
     ):
         compactor.main()
         mock_update.assert_called_once_with("hack", ["Must use proxy"], [])
@@ -101,6 +102,7 @@ def test_main_api_failure_fallback(mock_exists, mock_urlopen, tmp_path):
         patch("sys.stdin.read", return_value="\n".join([json.dumps(m) for m in mock_history])),
         patch("sys.argv", ["compactor.py", session_id]),
         patch("os.makedirs"),
+        patch("builtins.open", mock_open()),
     ):
         # Should not raise exception, should use fallback semantic structure
         compactor.main()
