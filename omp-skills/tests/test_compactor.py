@@ -72,7 +72,7 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
     mock_urlopen.return_value.__enter__.return_value = mock_response_obj
 
     with (
-        patch("sys.stdin.read", return_value=json.dumps(mock_history)),
+        patch("sys.stdin.read", return_value="\n".join([json.dumps(m) for m in mock_history])),
         patch("compactor.detect_memory_dir", return_value="hack"),
         patch("compactor.update_project_memory") as mock_update,
         patch("sys.argv", ["compactor.py", session_id]),
@@ -98,7 +98,7 @@ def test_main_api_failure_fallback(mock_exists, mock_urlopen, tmp_path):
     mock_urlopen.side_effect = Exception("API Timeout")
 
     with (
-        patch("sys.stdin.read", return_value=json.dumps(mock_history)),
+        patch("sys.stdin.read", return_value="\n".join([json.dumps(m) for m in mock_history])),
         patch("sys.argv", ["compactor.py", session_id]),
         patch("os.makedirs"),
     ):
