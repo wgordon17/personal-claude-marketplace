@@ -158,6 +158,15 @@
       "category": "productivity",
       "tags": ["mcp", "osac", "advisory", "ship-help"],
       "author": { "name": "wgordon17" }
+    },
+    {
+      "name": "omp-skills",
+      "version": "1.0.0",
+      "source": "./omp-skills",
+      "description": "A collection of core OMP utility skills. Includes the session compactor for safely truncating and preserving long-running contexts.",
+      "category": "productivity",
+      "tags": ["omp", "session", "compactor", "memory"],
+      "author": { "name": "Platform Team" }
     }
   ]
 }
