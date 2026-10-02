@@ -25,35 +25,64 @@ def update_project_memory(mem_dir, constraints, rationale):
     if not os.path.exists(project_md_path):
         return
 
-    additions = "\n\n## Newly Discovered Context (Session Compaction)\n"
-    if constraints:
-        additions += (
-            "### Unbreakable Constraints\n" + "\n".join([f"- {c}" for c in constraints]) + "\n"
+    with open(project_md_path) as f:
+        content = f.read()
+
+    # Deterministic Deduplication: Only append insights not already present
+    novel_constraints = [c for c in constraints if c not in content]
+    novel_rationale = [r for r in rationale if r not in content]
+
+    if not novel_constraints and not novel_rationale:
+        print(
+            f"✅ Insights already present in {project_md_path}. Skipping append to prevent bloat."
         )
-    if rationale:
+        return
+
+    additions = ""
+    # Singleton Inbox: Only add the header if it doesn't exist
+    if "## Session Compaction Inbox" not in content:
+        additions += "\n\n## Session Compaction Inbox\n"
         additions += (
-            "### Architectural Rationale\n" + "\n".join([f"- {r}" for r in rationale]) + "\n"
+            "> **Note to Agent:** Consolidate these raw insights into the main architecture "
+            "sections and clear this inbox during the next `/session-end`.\n"
+        )
+
+    if novel_constraints:
+        additions += (
+            "\n### Unbreakable Constraints\n"
+            + "\n".join([f"- {c}" for c in novel_constraints])
+            + "\n"
+        )
+    if novel_rationale:
+        additions += (
+            "\n### Architectural Rationale\n"
+            + "\n".join([f"- {r}" for r in novel_rationale])
+            + "\n"
         )
 
     with open(project_md_path, "a") as f:
         f.write(additions)
-    print(f"✅ Updated {project_md_path} with new constraints and rationale.")
+    print(f"✅ Appended novel insights to {project_md_path} Inbox.")
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: cat <session.jsonl> | uv run python compactor.py <session_id>")
+        print("Usage: omp read history://<session_id> | uv run python compactor.py <session_id>")
         sys.exit(1)
 
     session_id = sys.argv[1]
 
     try:
-        raw_input = sys.stdin.read()
-        history = json.load(
-            raw_input if hasattr(raw_input, "read") else __import__("io").StringIO(raw_input)
-        )
+        raw_input = sys.stdin.read().strip()
+        if not raw_input:
+            raise ValueError("Empty input")
+
+        history = []
+        for line in raw_input.split("\n"):
+            if line.strip():
+                history.append(json.loads(line))
     except Exception as e:
-        print(f"Error reading history from stdin: {e}")
+        print(f"Error reading history (JSONL) from stdin: {e}")
         sys.exit(1)
 
     user_prompts = [msg.get("content", "") for msg in history if msg.get("role") == "user"][-3:]
@@ -118,7 +147,10 @@ def main():
             semantic_data.get("architectural_decisions", []),
         )
     else:
-        print("⚠️ No valid project memory directory (hack/) found. Skipping memory sync.")
+        print(
+            "⚠️ No valid project memory directory (hack/) found or it failed "
+            "the 2-stage check. Skipping memory sync."
+        )
 
     contract = f"""# SESSION HANDOFF PROTOCOL (Session: {session_id})
 
