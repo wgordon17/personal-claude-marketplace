@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import os
 import sys
@@ -28,18 +29,14 @@ def update_project_memory(mem_dir, constraints, rationale):
     with open(project_md_path) as f:
         content = f.read()
 
-    # Deterministic Deduplication: Only append insights not already present
     novel_constraints = [c for c in constraints if c not in content]
     novel_rationale = [r for r in rationale if r not in content]
 
     if not novel_constraints and not novel_rationale:
-        print(
-            f"✅ Insights already present in {project_md_path}. Skipping append to prevent bloat."
-        )
+        print(f"✅ Insights already present in {project_md_path}. Skipping append.")
         return
 
     additions = ""
-    # Singleton Inbox: Only add the header if it doesn't exist
     if "## Session Compaction Inbox" not in content:
         additions += "\n\n## Session Compaction Inbox\n"
         additions += (
@@ -73,14 +70,13 @@ def main():
     session_id = sys.argv[1]
 
     try:
-        raw_input = sys.stdin.read().strip()
-        if not raw_input:
-            raise ValueError("Empty input")
-
         history = []
-        for line in raw_input.split("\n"):
-            if line.strip():
+        for line in sys.stdin:
+            line = line.strip()
+            if line:
                 history.append(json.loads(line))
+        if not history:
+            raise ValueError("Empty input")
     except Exception as e:
         print(f"Error reading history (JSONL) from stdin: {e}")
         sys.exit(1)
@@ -91,8 +87,9 @@ def main():
         for tool in msg.get("tool_calls", []):
             if tool.get("name") in ["edit", "write"]:
                 try:
-                    args = json.loads(tool.get("arguments", "{}"))
-                    if "path" in args:
+                    raw_args = tool.get("arguments", {})
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                    if isinstance(args, dict) and "path" in args:
                         modified_files.add(args["path"])
                 except Exception:
                     pass
@@ -110,37 +107,98 @@ def main():
   "current_exact_focus": "..."
 }"""
 
-    payload = {
-        "model": model,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"Extract state from the following history:\n{json.dumps(history)}",
-            },
-        ],
+    semantic_data = {
+        "discovered_constraints": [],
+        "architectural_decisions": [],
+        "failed_paths_and_reasons": [],
+        "active_errors_or_blockers": [],
+        "current_exact_focus": "",
     }
 
-    req = urllib.request.Request(
-        api_base,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-    )
+    chunks = []
+    current_chunk = []
+    current_size = 0
+    for msg in history:
+        # Deep Slicing: Prevent Single-Message Overflow
+        if isinstance(msg.get("content"), str) and len(msg["content"]) > 10000:
+            msg["content"] = (
+                msg["content"][:4000]
+                + "\n...[TRUNCATED FOR COMPACTION]...\n"
+                + msg["content"][-4000:]
+            )
 
-    try:
-        with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            semantic_data = json.loads(result["choices"][0]["message"]["content"])
-    except Exception as e:
-        print(f"⚠️ LiteLLM proxy call failed ({e}). Generating fallback semantic structure.")
-        semantic_data = {
-            "discovered_constraints": ["API Rate limits encountered or OOB call failed"],
-            "architectural_decisions": ["Pivoted to using local proxy for routing"],
-            "failed_paths_and_reasons": ["Attempted direct fetch; failed CORS"],
-            "active_errors_or_blockers": ["ContextWindowExceededError"],
-            "current_exact_focus": "Implementing fallback mechanism",
+        msg_str = json.dumps(msg)
+        if current_size + len(msg_str) > 15000 and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_size = 0
+        current_chunk.append(msg)
+        current_size += len(msg_str)
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    print(f"📦 Splitting history into {len(chunks)} chunks and mapping in parallel...")
+
+    def process_chunk(idx_chunk):
+        i, chunk = idx_chunk
+        payload = {
+            "model": model,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": f"Extract state from history chunk {i + 1}/{len(chunks)}:\n"
+                    + json.dumps(chunk),
+                },
+            ],
         }
+
+        req = urllib.request.Request(
+            api_base,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        )
+
+        try:
+            # Network Timeout Enforced
+            with urllib.request.urlopen(req, timeout=45) as response:
+                result = json.loads(response.read().decode("utf-8"))
+                return json.loads(result["choices"][0]["message"]["content"]), i
+        except Exception as e:
+            print(f"⚠️ Chunk {i + 1} failed ({e}).")
+            return None, i
+
+    # Parallel Processing
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        for res, i in executor.map(process_chunk, enumerate(chunks)):
+            if res:
+                results.append((i, res))
+
+    results.sort(key=lambda x: x[0])
+
+    for _, chunk_data in results:
+        # Type Safety: Handle None lists
+        semantic_data["discovered_constraints"].extend(
+            chunk_data.get("discovered_constraints") or []
+        )
+        semantic_data["architectural_decisions"].extend(
+            chunk_data.get("architectural_decisions") or []
+        )
+        semantic_data["failed_paths_and_reasons"].extend(
+            chunk_data.get("failed_paths_and_reasons") or []
+        )
+        semantic_data["active_errors_or_blockers"].extend(
+            chunk_data.get("active_errors_or_blockers") or []
+        )
+        if chunk_data.get("current_exact_focus"):
+            semantic_data["current_exact_focus"] = chunk_data.get("current_exact_focus")
+
+    if len(chunks) == 0 or not semantic_data["current_exact_focus"]:
+        print("⚠️ Failed to extract full semantic state. Generating fallback structure.")
+        semantic_data["current_exact_focus"] = "Implementing fallback mechanism"
+        semantic_data["active_errors_or_blockers"].append("Context extraction partially failed.")
 
     mem_dir = detect_memory_dir()
     if mem_dir:
@@ -188,7 +246,6 @@ def main():
     real_path = os.path.join(artifact_dir, f"handoff-{session_id}.md")
 
     # Security: Create file with strict permissions (owner read/write only)
-    # to prevent leaking context/secrets
     fd = os.open(real_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(contract)
