@@ -41,7 +41,7 @@ def test_update_project_memory(tmp_path):
     compactor.update_project_memory(str(mem_dir), ["Constraint 1"], ["Rationale 1"])
 
     content = project_md.read_text()
-    assert "## Newly Discovered Context" in content
+    assert "## Session Compaction Inbox" in content
     assert "### Unbreakable Constraints" in content
 
 
