@@ -1,0 +1,8 @@
+{
+  "name": "omp-skills",
+  "version": "1.0.0",
+  "description": "A collection of core OMP utility skills. Includes the session compactor for safely truncating and preserving long-running contexts.",
+  "author": {
+    "name": "Platform Team"
+  }
+}
