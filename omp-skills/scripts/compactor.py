@@ -183,9 +183,14 @@ def main():
 {chr(10).join(["- " + str(a) for a in semantic_data.get("architectural_decisions", [])])}
 """
 
-    os.makedirs("/tmp/omp-artifacts", exist_ok=True)
-    real_path = f"/tmp/omp-artifacts/handoff-{session_id}.md"
-    with open(real_path, "w") as f:
+    artifact_dir = os.path.expanduser("~/.omp/artifacts")
+    os.makedirs(artifact_dir, mode=0o700, exist_ok=True)
+    real_path = os.path.join(artifact_dir, f"handoff-{session_id}.md")
+
+    # Security: Create file with strict permissions (owner read/write only)
+    # to prevent leaking context/secrets
+    fd = os.open(real_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         f.write(contract)
 
     print(f"✅ Compaction complete. Artifact saved to {real_path}")

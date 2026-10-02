@@ -77,10 +77,16 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
         patch("compactor.update_project_memory") as mock_update,
         patch("sys.argv", ["compactor.py", session_id]),
         patch("os.makedirs"),
-        patch("builtins.open", mock_open()),
+        patch("os.open"),
+        patch("os.fdopen", mock_open()),
     ):
         compactor.main()
         mock_update.assert_called_once_with("hack", ["Must use proxy"], [])
+
+        # Verify the actual history was passed to the LLM
+        req_arg = mock_urlopen.call_args[0][0]
+        payload_sent = json.loads(req_arg.data.decode("utf-8"))
+        assert "Update the API" in payload_sent["messages"][1]["content"]
 
 
 @patch("urllib.request.urlopen")
@@ -102,7 +108,8 @@ def test_main_api_failure_fallback(mock_exists, mock_urlopen, tmp_path):
         patch("sys.stdin.read", return_value="\n".join([json.dumps(m) for m in mock_history])),
         patch("sys.argv", ["compactor.py", session_id]),
         patch("os.makedirs"),
-        patch("builtins.open", mock_open()),
+        patch("os.open"),
+        patch("os.fdopen", mock_open()),
     ):
         # Should not raise exception, should use fallback semantic structure
         compactor.main()
