@@ -125,7 +125,8 @@ def main():
         )
     else:
         print(
-            "⚠️ No valid project memory directory (hack/) found or it failed the 2-stage check. Skipping memory sync."
+            "⚠️ No valid project memory directory (hack/) found or it failed "
+            "the 2-stage check. Skipping memory sync."
         )
 
     # 4. Write Shared Artifact via OMP VFS

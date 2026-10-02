@@ -19,22 +19,27 @@ def test_detect_memory_dir(tmp_path):
     scratch_dir = tmp_path / "scratch"
     scratch_dir.mkdir()
 
-    with patch("os.path.isdir", side_effect=lambda d: d in [str(hack_dir), str(scratch_dir)]):
-        with patch(
+    with (
+        patch("os.path.isdir", side_effect=lambda d: d in [str(hack_dir), str(scratch_dir)]),
+        patch(
             "os.path.exists",
             side_effect=lambda f: f in [str(hack_dir / "PROJECT.md"), str(hack_dir / "TODO.md")],
+        ),
+    ):
+        # We mock the working directory behavior or just pass base paths
+        # if we adapt the function
+        # Since compactor uses relative paths, we mock specific path checks
+        def mock_isdir(path):
+            return path in ["hack", "scratch"]
+
+        def mock_exists(path):
+            return path in ["hack/PROJECT.md", "hack/TODO.md"]
+
+        with (
+            patch("os.path.isdir", side_effect=mock_isdir),
+            patch("os.path.exists", side_effect=mock_exists),
         ):
-            # We mock the working directory behavior or just pass base paths if we adapt the function
-            # Since compactor uses relative paths, we mock the specific path checks
-            def mock_isdir(path):
-                return path in ["hack", "scratch"]
-
-            def mock_exists(path):
-                return path in ["hack/PROJECT.md", "hack/TODO.md"]
-
-            with patch("os.path.isdir", side_effect=mock_isdir):
-                with patch("os.path.exists", side_effect=mock_exists):
-                    assert compactor.detect_memory_dir() == "hack"
+            assert compactor.detect_memory_dir() == "hack"
 
 
 def test_update_project_memory(tmp_path):
@@ -66,9 +71,7 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
             return True
         if path == "hack/PROJECT.md":
             return True
-        if path == "hack/TODO.md":
-            return True
-        return False
+        return path == "hack/TODO.md"
 
     mock_exists.side_effect = mock_exists_impl
 
@@ -84,7 +87,8 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
         "choices": [
             {
                 "message": {
-                    "content": '{"discovered_constraints": ["Must use proxy"], "architectural_decisions": ["LiteLLM"]}'
+                    "content": '{"discovered_constraints": ["Must use proxy"], '
+                    '"architectural_decisions": ["LiteLLM"]}'
                 }
             }
         ]
@@ -94,10 +98,12 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
     mock_response_obj.read.return_value = json.dumps(mock_llm_response).encode("utf-8")
     mock_urlopen.return_value.__enter__.return_value = mock_response_obj
 
-    with patch("builtins.open", mock_open(read_data=json.dumps(mock_history))):
-        with patch("compactor.detect_memory_dir", return_value="hack"):
-            with patch("compactor.update_project_memory") as mock_update:
-                with patch("sys.argv", ["compactor.py", session_id]):
-                    with patch("os.makedirs"):
-                        compactor.main()
-                        mock_update.assert_called_once_with("hack", ["Must use proxy"], ["LiteLLM"])
+    with (
+        patch("builtins.open", mock_open(read_data=json.dumps(mock_history))),
+        patch("compactor.detect_memory_dir", return_value="hack"),
+        patch("compactor.update_project_memory") as mock_update,
+        patch("sys.argv", ["compactor.py", session_id]),
+        patch("os.makedirs"),
+    ):
+        compactor.main()
+        mock_update.assert_called_once_with("hack", ["Must use proxy"], ["LiteLLM"])
