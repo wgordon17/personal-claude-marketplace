@@ -115,7 +115,10 @@ def main():
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "Extract state from history. (Truncated for payload size)"},
+            {
+                "role": "user",
+                "content": f"Extract state from the following history:\n{json.dumps(history)}",
+            },
         ],
     }
 
