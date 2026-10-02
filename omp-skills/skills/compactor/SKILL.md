@@ -1,3 +1,7 @@
+---
+name: compactor
+description: Compact a stalled or massive session and safely update project memory
+---
 # /compactor
 
 Compact a stalled or massive session and safely update project memory.
