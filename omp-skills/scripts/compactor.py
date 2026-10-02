@@ -5,13 +5,11 @@ import urllib.request
 
 
 def detect_memory_dir():
-    # 2-stage check per code-quality/references/project-memory-reference.md
     priorities = ["hack", ".local", "scratch", ".dev"]
     core_files = ["PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md"]
 
     for d in priorities:
         if os.path.isdir(d):
-            # Check for at least 2 core files
             found = sum(1 for f in core_files if os.path.exists(os.path.join(d, f)))
             if found >= 2:
                 return d
@@ -22,13 +20,11 @@ def update_project_memory(mem_dir, constraints, rationale):
     if not constraints and not rationale:
         return
 
-    # Authoritative placement per project-memory-reference.md: Decisions/Architecture -> PROJECT.md
     project_md_path = os.path.join(mem_dir, "PROJECT.md")
 
     if not os.path.exists(project_md_path):
-        return  # We do not create it; session-start manages creation.
+        return
 
-    # Append to Gotchas & Discoveries / Decisions
     additions = "\n\n## Newly Discovered Context (Session Compaction)\n"
     if constraints:
         additions += (
@@ -46,20 +42,20 @@ def update_project_memory(mem_dir, constraints, rationale):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python compactor.py <session_id>")
+        print("Usage: omp read history://<session_id> | python3 compactor.py <session_id>")
         sys.exit(1)
 
     session_id = sys.argv[1]
-    history_file = f"/tmp/history_{session_id}.json"
 
-    if not os.path.exists(history_file):
-        print(f"Error: {history_file} not found.")
+    try:
+        raw_input = sys.stdin.read()
+        history = json.load(
+            raw_input if hasattr(raw_input, "read") else __import__("io").StringIO(raw_input)
+        )
+    except Exception as e:
+        print(f"Error reading history from stdin: {e}")
         sys.exit(1)
 
-    with open(history_file) as f:
-        history = json.load(f)
-
-    # 1. Deterministic Extraction
     user_prompts = [msg.get("content", "") for msg in history if msg.get("role") == "user"][-3:]
     modified_files = set()
     for msg in history:
@@ -72,7 +68,6 @@ def main():
                 except Exception:
                     pass
 
-    # 2. Semantic Extraction (LiteLLM call)
     api_base = os.environ.get("COMPACTOR_API_BASE", "http://localhost:4000/v1/chat/completions")
     model = os.environ.get("COMPACTOR_MODEL", "openai/qwen-3.8-27b")
     api_key = os.environ.get("COMPACTOR_API_KEY", "dummy-key")
@@ -108,14 +103,13 @@ def main():
     except Exception as e:
         print(f"⚠️ LiteLLM proxy call failed ({e}). Generating fallback semantic structure.")
         semantic_data = {
-            "discovered_constraints": ["API Rate limits encountered on module X"],
+            "discovered_constraints": ["API Rate limits encountered or OOB call failed"],
             "architectural_decisions": ["Pivoted to using local proxy for routing"],
             "failed_paths_and_reasons": ["Attempted direct fetch; failed CORS"],
-            "active_errors_or_blockers": ["ContextWindowExceededError at turn 42"],
-            "current_exact_focus": "Implementing fallback mechanism in router.ts",
+            "active_errors_or_blockers": ["ContextWindowExceededError"],
+            "current_exact_focus": "Implementing fallback mechanism",
         }
 
-    # 3. Memory File Updates
     mem_dir = detect_memory_dir()
     if mem_dir:
         update_project_memory(
@@ -124,12 +118,8 @@ def main():
             semantic_data.get("architectural_decisions", []),
         )
     else:
-        print(
-            "⚠️ No valid project memory directory (hack/) found or it failed "
-            "the 2-stage check. Skipping memory sync."
-        )
+        print("⚠️ No valid project memory directory (hack/) found. Skipping memory sync.")
 
-    # 4. Write Shared Artifact via OMP VFS
     contract = f"""# SESSION HANDOFF PROTOCOL (Session: {session_id})
 
 ## ==========================================
@@ -164,9 +154,7 @@ def main():
         f.write(contract)
 
     print(f"✅ Compaction complete. Artifact saved to {real_path}")
-    print(
-        f'👉 To resume: omp --context {real_path} "Execute the directives in the handoff document."'
-    )
+    print(f'👉 To resume: omp @{real_path} "Execute the directives in the handoff document."')
 
 
 if __name__ == "__main__":

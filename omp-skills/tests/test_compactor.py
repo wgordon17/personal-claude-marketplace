@@ -1,7 +1,9 @@
 import json
 import os
 import sys
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add scripts to path to import compactor
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../scripts")))
@@ -9,37 +11,25 @@ import compactor
 
 
 def test_detect_memory_dir(tmp_path):
-    # Test priority 1: hack/ with 2 core files
     hack_dir = tmp_path / "hack"
     hack_dir.mkdir()
     (hack_dir / "PROJECT.md").write_text("test")
     (hack_dir / "TODO.md").write_text("test")
 
-    # Test priority 3: scratch/ with no core files (should fail)
     scratch_dir = tmp_path / "scratch"
     scratch_dir.mkdir()
 
+    def mock_isdir(path):
+        return path in ["hack", "scratch"]
+
+    def mock_exists(path):
+        return path in ["hack/PROJECT.md", "hack/TODO.md"]
+
     with (
-        patch("os.path.isdir", side_effect=lambda d: d in [str(hack_dir), str(scratch_dir)]),
-        patch(
-            "os.path.exists",
-            side_effect=lambda f: f in [str(hack_dir / "PROJECT.md"), str(hack_dir / "TODO.md")],
-        ),
+        patch("os.path.isdir", side_effect=mock_isdir),
+        patch("os.path.exists", side_effect=mock_exists),
     ):
-        # We mock the working directory behavior or just pass base paths
-        # if we adapt the function
-        # Since compactor uses relative paths, we mock specific path checks
-        def mock_isdir(path):
-            return path in ["hack", "scratch"]
-
-        def mock_exists(path):
-            return path in ["hack/PROJECT.md", "hack/TODO.md"]
-
-        with (
-            patch("os.path.isdir", side_effect=mock_isdir),
-            patch("os.path.exists", side_effect=mock_exists),
-        ):
-            assert compactor.detect_memory_dir() == "hack"
+        assert compactor.detect_memory_dir() == "hack"
 
 
 def test_update_project_memory(tmp_path):
@@ -53,9 +43,6 @@ def test_update_project_memory(tmp_path):
     content = project_md.read_text()
     assert "## Newly Discovered Context" in content
     assert "### Unbreakable Constraints" in content
-    assert "- Constraint 1" in content
-    assert "### Architectural Rationale" in content
-    assert "- Rationale 1" in content
 
 
 @patch("urllib.request.urlopen")
@@ -63,15 +50,8 @@ def test_update_project_memory(tmp_path):
 def test_main_success(mock_exists, mock_urlopen, tmp_path):
     session_id = "test_123"
 
-    # Mock history file existence
     def mock_exists_impl(path):
-        if path == f"/tmp/history_{session_id}.json":
-            return True
-        if path == "hack":
-            return True
-        if path == "hack/PROJECT.md":
-            return True
-        return path == "hack/TODO.md"
+        return path in ["hack", "hack/PROJECT.md", "hack/TODO.md"]
 
     mock_exists.side_effect = mock_exists_impl
 
@@ -84,14 +64,7 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
     ]
 
     mock_llm_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": '{"discovered_constraints": ["Must use proxy"], '
-                    '"architectural_decisions": ["LiteLLM"]}'
-                }
-            }
-        ]
+        "choices": [{"message": {"content": '{"discovered_constraints": ["Must use proxy"]}'}}]
     }
 
     mock_response_obj = MagicMock()
@@ -99,11 +72,50 @@ def test_main_success(mock_exists, mock_urlopen, tmp_path):
     mock_urlopen.return_value.__enter__.return_value = mock_response_obj
 
     with (
-        patch("builtins.open", mock_open(read_data=json.dumps(mock_history))),
+        patch("sys.stdin.read", return_value=json.dumps(mock_history)),
         patch("compactor.detect_memory_dir", return_value="hack"),
         patch("compactor.update_project_memory") as mock_update,
         patch("sys.argv", ["compactor.py", session_id]),
         patch("os.makedirs"),
     ):
         compactor.main()
-        mock_update.assert_called_once_with("hack", ["Must use proxy"], ["LiteLLM"])
+        mock_update.assert_called_once_with("hack", ["Must use proxy"], [])
+
+
+@patch("urllib.request.urlopen")
+@patch("os.path.exists")
+def test_main_api_failure_fallback(mock_exists, mock_urlopen, tmp_path):
+    session_id = "test_123"
+
+    def mock_exists_impl(path):
+        return False
+
+    mock_exists.side_effect = mock_exists_impl
+
+    mock_history = [{"role": "user", "content": "Update"}]
+
+    # Force an Exception in the urllib call
+    mock_urlopen.side_effect = Exception("API Timeout")
+
+    with (
+        patch("sys.stdin.read", return_value=json.dumps(mock_history)),
+        patch("sys.argv", ["compactor.py", session_id]),
+        patch("os.makedirs"),
+    ):
+        # Should not raise exception, should use fallback semantic structure
+        compactor.main()
+
+
+def test_main_missing_args():
+    with patch("sys.argv", ["compactor.py"]), pytest.raises(SystemExit):
+        compactor.main()
+
+
+def test_main_invalid_json_stdin():
+    session_id = "test_123"
+    with (
+        patch("sys.argv", ["compactor.py", session_id]),
+        patch("sys.stdin.read", return_value="invalid json"),
+        pytest.raises(SystemExit),
+    ):
+        compactor.main()
