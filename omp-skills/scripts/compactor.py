@@ -42,7 +42,7 @@ def update_project_memory(mem_dir, constraints, rationale):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: omp read history://<session_id> | python3 compactor.py <session_id>")
+        print("Usage: omp read history://<session_id> | uv run python compactor.py <session_id>")
         sys.exit(1)
 
     session_id = sys.argv[1]
