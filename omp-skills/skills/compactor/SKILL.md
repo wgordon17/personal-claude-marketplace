@@ -21,6 +21,6 @@ The user wants to compact the session ID passed in their prompt.
    SESSION_FILE=$(find ~/.omp/agent/sessions ~/.omp/sessions -type f -name "*_<session-id>*.jsonl" 2>/dev/null)
    ```
 3. Locate the compactor script on the filesystem:
-   `SCRIPT=$(find ~/.omp/plugins ~/.claude/plugins -path "*/omp-skills/*/compactor.py" | head -n 1)`
+   `SCRIPT=$(find -L ~/.omp/plugins ~/.claude/plugins -path "*/omp-skills/*/compactor.py" 2>/dev/null | head -n 1)`
 4. Execute the compactor pipeline via `bash`, piping the raw JSONL session data directly into the script:
    `cat "$SESSION_FILE" | uv run python "$SCRIPT" <session-id>`

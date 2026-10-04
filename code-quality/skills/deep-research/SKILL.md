@@ -234,7 +234,7 @@ Stakeholder selection should be informed by `{research_scope}` — prioritize pe
 ### Output Location
 
 Detect the project memory directory using the convention in
-`code-quality/references/project-memory-reference.md` (Directory Detection section).
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 If a memory directory is found, write the research report to a file:
 
@@ -320,7 +320,7 @@ If no memory directory exists, deliver the report in the conversation only.
 | Cost | Free | $X/mo | Free |
 | ... | ... | ... | ... |
 
-*(Science & Technology) For dependency/tool comparisons, add these rows from dependency-evaluation.md criteria:*
+*(Science & Technology) For dependency/tool comparisons, add these rows from [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria:*
 
 | Criteria | Option A | Option B | Option C |
 |----------|----------|----------|----------|

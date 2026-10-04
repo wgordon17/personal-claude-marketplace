@@ -33,7 +33,7 @@ This skill activates when:
 ### Check for Existing BUGS.md
 
 Before starting, detect the memory directory using the convention in
-`code-quality/references/project-memory-reference.md` (Directory Detection section).
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 Then check if `{memory_dir}/BUGS.md` already exists:
 
 ```
@@ -60,7 +60,7 @@ Read {memory_dir}/BUGS.md
 > **Note on Impact vs Classification:** The `Impact` field (Critical/High/Medium/Low) describes
 > the bug's effect on users — it is NOT finding classification. All bugs are `needs-fix` by
 > definition; Impact conveys urgency and scope. See
-> `code-quality/references/finding-classification.md` for the classification taxonomy.
+> `[../../references/finding-classification.md](../../references/finding-classification.md)` for the classification taxonomy.
 
 ```markdown
 # Bug Investigation & Resolution Tracking
@@ -288,7 +288,7 @@ Mitigation strategies:
 
 ### Setup
 ```
-1. Detect memory dir (per project-memory-reference.md) → check for {memory_dir}/BUGS.md → clean up or create
+1. Detect memory dir (per [project-memory-reference.md](../../references/project-memory-reference.md)) → check for {memory_dir}/BUGS.md → clean up or create
 2. Determine next BUG-NNN ID
 3. Confirm readiness to user
 ```

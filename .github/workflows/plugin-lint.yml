@@ -83,3 +83,15 @@ jobs:
       # no AI credentials available in CI, this only flags a diff-coverage
       # gap for a human to review, it never fails the job.
       - run: make eval-coverage-check
+
+  markdown-link-check:
+    name: Markdown Link Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+      - name: Verify Local Markdown Links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --no-progress '**/*.md'
+          fail: true

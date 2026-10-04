@@ -19,11 +19,11 @@ and github-mcp cover their own much simpler single-hook bridges directly in thei
 
 | Plugin | Description | Execution | Docs |
 |--------|-------------|-----------|------|
-| pyright-uvx | Python language server | `uvx` (always latest) | [README](pyright-uvx/README.md) |
-| vtsls-npx | TypeScript/JavaScript language server | `npx` (always latest) | [README](vtsls-npx/README.md) |
-| gopls-go | Go language server | system `gopls` | [README](gopls-go/README.md) |
-| vscode-html-css-npx | HTML/CSS language servers | `npx` (always latest) | [README](vscode-html-css-npx/README.md) |
-| rust-analyzer-rustup | Rust language server | `rustup` (always latest) | [README](rust-analyzer-rustup/README.md) |
+| pyright-uvx | Python language server | `uvx` (always latest) | [Source](pyright-uvx/) |
+| vtsls-npx | TypeScript/JavaScript language server | `npx` (always latest) | [Source](vtsls-npx/) |
+| gopls-go | Go language server | system `gopls` | [Source](gopls-go/) |
+| vscode-html-css-npx | HTML/CSS language servers | `npx` (always latest) | [Source](vscode-html-css-npx/) |
+| rust-analyzer-rustup | Rust language server | `rustup` (always latest) | [Source](rust-analyzer-rustup/) |
 
 ### Code Quality
 

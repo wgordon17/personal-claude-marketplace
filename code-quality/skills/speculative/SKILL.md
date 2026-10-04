@@ -45,7 +45,7 @@ Gather the problem and success criteria before spawning anything.
    - Simplicity (is it the minimum necessary complexity?)
    - Add or substitute criteria based on user priorities
 
-4. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+4. Generate a run-ID using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
    (Run-ID Naming Convention section) and create the audit trail directory at
    `{memory_dir}/speculative/{run-id}/`.
 
@@ -56,7 +56,7 @@ Gather the problem and success criteria before spawning anything.
 Spawn N competitor agents (sonnet, general-purpose) in parallel, each with
 `isolation: "worktree"` and `mode: "bypassPermissions"` (they write code).
 
-Each competitor receives a `SpeculativeSpec` (see `references/communication-schema.md`) containing:
+Each competitor receives a `SpeculativeSpec` (see `[references/communication-schema.md](./references/communication-schema.md)`) containing:
 - The problem description and success criteria
 - An approach hint if the user provided one (otherwise: null — competitor chooses its own approach)
 - Its competitor ID (e.g., `competitor-1`)
@@ -102,7 +102,7 @@ to inspect code to make an informed decision, it reads specific files from each 
 using the Read tool. The judge should only inspect code when self-reported results are
 insufficient to distinguish approaches.
 
-The judge produces a `JudgmentResult` (see `references/communication-schema.md`) with:
+The judge produces a `JudgmentResult` (see `[references/communication-schema.md](./references/communication-schema.md)`) with:
 - A winner (or "hybrid" if combining elements is better than either alone)
 - A scoring matrix with per-criterion scores for each competitor
 - Clear rationale for the decision
@@ -281,5 +281,5 @@ out of scope for the current task.
 
 | File | Content |
 |------|---------|
-| `references/communication-schema.md` | JSON schemas for SpeculativeSpec, ImplementationResult, JudgmentResult |
-| `references/agent-prompts.md` | Full prompt templates for competitor and judge agents |
+| `[references/communication-schema.md](./references/communication-schema.md)` | JSON schemas for SpeculativeSpec, ImplementationResult, JudgmentResult |
+| `[references/agent-prompts.md](./references/agent-prompts.md)` | Full prompt templates for competitor and judge agents |

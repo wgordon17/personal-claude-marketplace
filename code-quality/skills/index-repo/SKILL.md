@@ -42,7 +42,7 @@ For each file category, identify:
 ### Phase 3: Generate PROJECT_INDEX.md
 
 Determine output location: detect the project memory directory using the convention in
-`code-quality/references/project-memory-reference.md` (Directory Detection section).
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 Write there. Fall back to project root only if none exists.
 
 ```markdown
@@ -102,4 +102,4 @@ Generated: {timestamp}
 ## Output
 
 Creates `PROJECT_INDEX.md` in the project memory directory (detected per
-`code-quality/references/project-memory-reference.md`) or project root if none exists (~3K tokens, human-readable).
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`) or project root if none exists (~3K tokens, human-readable).

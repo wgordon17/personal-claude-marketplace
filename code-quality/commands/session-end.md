@@ -12,7 +12,13 @@ Before ending this session, update the project's persistent memory in `hack/` (o
 
 Detect the project memory directory using the convention in `code-quality/references/project-memory-reference.md` (Directory Detection section), which requires a directory to both exist and contain at least 2 of the 5 core memory files.
 
-If no directory passes content validation and this session had meaningful work, create `hack/` and add it to `.gitignore`.
+If no directory passes content validation and this session had meaningful work:
+1. Find the main worktree path:
+   ```bash
+   git worktree list --porcelain | head -1 | sed 's/^worktree //'
+   ```
+   *(If this fails, fall back to the current directory).*
+2. Create `hack/` in the main worktree (e.g., `{main_worktree_path}/hack`) and add `hack/` to its `.gitignore`. This ensures memory is not duplicated across worktrees.
 
 ### Step 2: Read Current State
 

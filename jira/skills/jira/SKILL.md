@@ -121,7 +121,7 @@ Offer these patterns based on user intent:
 | "Show OSAC epics" | `project = OSAC AND type = Epic AND statusCategory != Done` |
 | "What did I do recently?" | `project = OSAC AND assignee = currentUser() AND updated >= -7d` |
 
-For complex query construction, read `jira/reference/jql-reference.md`.
+For complex query construction, read `[../../reference/jql-reference.md](../../reference/jql-reference.md)`.
 
 **`search` note:** The `search` tool (Rovo Search) returns results from both Jira AND
 Confluence. Prefer `searchJiraIssuesUsingJql` for Jira-only queries — it has structured
@@ -158,11 +158,11 @@ Sprint is not available at create time. Assign post-creation via `editJiraIssue`
 `fields: {"customfield_10020": <sprint-id>}` (raw integer, not object). Discover sprint
 IDs by querying `sprint in openSprints()` and reading `customfield_10020` from results.
 
-Before writing descriptions, read `jira/reference/osac-conventions.md` for the appropriate template (Epic, Task, Story, or Bug). Read `jira/reference/jira-formatting.md` to write markdown correctly.
+Before writing descriptions, read `[../../reference/osac-conventions.md](../../reference/osac-conventions.md)` for the appropriate template (Epic, Task, Story, or Bug). Read `[../../reference/jira-formatting.md](../../reference/jira-formatting.md)` to write markdown correctly.
 
 **Creating Epics:** Epics use `issueTypeName: "Epic"`. Add `"customfield_10011": "Epic Name"`
 to `additional_fields` (typically the same as `summary`). Epic descriptions must follow the
-structured template from `jira/reference/osac-conventions.md` (Summary → Use Cases →
+structured template from `[../../reference/osac-conventions.md](../../reference/osac-conventions.md)` (Summary → Use Cases →
 Capabilities → Implementation Notes → optional Scope → optional Deliverables).
 
 **Post-create assignee verification:** After every issue creation, verify the assignee on
@@ -174,7 +174,7 @@ mismatch to the user — do not silently leave an unassigned or mis-assigned car
 ### Custom Field Validation (First CRUD Operation Each Session)
 
 On the first CRUD operation each session, call `getJiraIssueTypeMetaWithFields` for the
-target issue type in OSAC and verify that the custom field IDs from `jira/reference/jql-reference.md`
+target issue type in OSAC and verify that the custom field IDs from `[../../reference/jql-reference.md](../../reference/jql-reference.md)`
 still resolve:
 - Epic Link: `customfield_10014`
 - Epic Name (Epic type only): `customfield_10011`
@@ -199,9 +199,9 @@ are unresolvable):
 
 | Trigger | File to Read |
 |---------|-------------|
-| Creating or updating any OSAC issue | `jira/reference/osac-conventions.md` |
-| Writing a description or comment | `jira/reference/jira-formatting.md` |
-| Building complex JQL | `jira/reference/jql-reference.md` |
+| Creating or updating any OSAC issue | `[../../reference/osac-conventions.md](../../reference/osac-conventions.md)` |
+| Writing a description or comment | `[../../reference/jira-formatting.md](../../reference/jira-formatting.md)` |
+| Building complex JQL | `[../../reference/jql-reference.md](../../reference/jql-reference.md)` |
 | First invocation | Bootstrap sequence only (no reference files needed) |
 
 ## Generalized Jira (Non-OSAC Projects)
@@ -213,7 +213,7 @@ When working outside the OSAC project, drop the default project filter. Self-ass
 2. Call `getJiraIssueTypeMetaWithFields` to discover required and custom fields
 3. Call `getTransitionsForJiraIssue` to discover available workflow transitions
 4. Use `statusCategory` for cross-project status queries (avoids workflow-specific status names)
-5. Note that `jira/reference/osac-conventions.md` templates are OSAC-specific — adapt as needed
+5. Note that `[../../reference/osac-conventions.md](../../reference/osac-conventions.md)` templates are OSAC-specific — adapt as needed
 
 ### Generic Escape Hatches
 

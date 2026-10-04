@@ -65,7 +65,7 @@ Determine work type from session activity:
 | Short Q&A, no tool use | **Question** |
 | Multiple of the above | **Mixed** (apply all relevant criteria) |
 
-Select the lens set for the detected type (see `references/lens-rubrics.md`).
+Select the lens set for the detected type (see `[references/lens-rubrics.md](./references/lens-rubrics.md)`).
 
 **Test plan discovery (Planning/Mixed/Code work types):** After classifying the work type,
 discover the plan file using branch-header matching (same algorithm as Layer
@@ -111,7 +111,7 @@ comprehensive coverage from different angles.
 | 6 | **Structural** | What design flaws, race conditions, or failure modes exist in this system's architecture — not just in the current change, but in how it integrates? (Code/Mixed only) |
 
 Table shows code lenses. Other work types adapt lens names — e.g., planning uses "Feasibility"
-for Round 1, Q&A uses a reduced 3-round review. See `references/lens-rubrics.md` for all
+for Round 1, Q&A uses a reduced 3-round review. See `[references/lens-rubrics.md](./references/lens-rubrics.md)` for all
 work-type-specific lens prompts.
 
 ### Skill Integration Per Round
@@ -121,7 +121,7 @@ work-type-specific lens prompts.
   atomic requirements, check each independently.
 - **Round 4 (BLOCKING):** Calculate net lines delta (`git diff --stat`). Spawn
   `code-quality:code-simplifier` with the delta as context. Apply the full checklist from
-  `code-quality/references/simplification-checklist.md`. Dead code, unnecessary abstractions,
+  `[../../references/simplification-checklist.md](../../references/simplification-checklist.md)`. Dead code, unnecessary abstractions,
   and unused imports are `needs-fix` findings — they BLOCK proceeding to Round 5. Fix all
   such simplification findings before continuing. These are objectively wasteful, not
   judgment calls.
@@ -160,7 +160,7 @@ Execute this protocol for EVERY round:
       - Any other project-specific rules that apply to this type of change
 
    b) Documentation completeness: check every change against the documentation
-      triggers in `code-quality/references/documentation-taxonomy.md`. For each
+      triggers in `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`. For each
       trigger that fires, verify the corresponding documentation surfaces were
       updated. Use the taxonomy's surface detection patterns to discover all
       surfaces, and its ecosystem-specific component discovery patterns to count
@@ -339,28 +339,28 @@ Reviewer 1 — Security (code-quality:security):
   Agent(
     description="Security domain review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: Security>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Security>
   )
 
 Reviewer 2 — QA (code-quality:qa):
   Agent(
     description="QA domain review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: QA>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: QA>
   )
 
 Reviewer 3 — Performance (code-quality:performance):
   Agent(
     description="Performance domain review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: Performance>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Performance>
   )
 
 Reviewer 4 — Code Review (code-quality:code-reviewer):
   Agent(
     description="Code style and maintainability review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: Code-Reviewer>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Code-Reviewer>
   )
 ```
 
@@ -372,7 +372,7 @@ Each reviewer receives:
 ### Synthesis Protocol
 
 After all 4 reviewers complete, synthesize findings by classification
-(see `code-quality/references/finding-classification.md`):
+(see `[../../references/finding-classification.md](../../references/finding-classification.md)`):
 
 1. Collect all findings across the 4 reviewers
 2. Fix all `needs-fix` findings immediately. Do not carry them forward.
@@ -390,15 +390,15 @@ After all 4 reviewers complete, synthesize findings by classification
 
 **Note:** Quality-gate domain reviewers do not go through a Finding Verifier. When a
 domain reviewer classifies a finding as `needs-input`, the Lead applies the de-escalation
-test from `code-quality/references/finding-classification.md` before presenting to the
+test from `[../../references/finding-classification.md](../../references/finding-classification.md)` before presenting to the
 user. If the finding has a single correct resolution, reclassify to `needs-fix` and fix
 it. If genuine ambiguity exists, generate 2-4 concrete options per the Option Quality
-section in `code-quality/references/finding-classification.md` (labels 3-7 words, include
+section in `[../../references/finding-classification.md](../../references/finding-classification.md)` (labels 3-7 words, include
 tradeoff in description, mutually exclusive) and present via AskUserQuestion with Defer
 appended.
 
 **Finding completion verification:** After fixing all `needs-fix` items and resolving all
-`needs-input` items, verify completeness per `code-quality/references/finding-classification.md`
+`needs-input` items, verify completeness per `[../../references/finding-classification.md](../../references/finding-classification.md)`
 Verification Protocol: count total findings from all 4 reviewers vs (findings fixed +
 user-deferred items). Delta > 0 → findings were silently dropped → fix them before Layer 2.
 
@@ -427,7 +427,7 @@ Agent(
   description="Plan adherence review",
   subagent_type="code-quality:plan-adherence",
   model="opus",
-  prompt=<see references/subagent-prompts.md, Layer 1.75: Plan Adherence Reviewer>
+  prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Layer 1.75: Plan Adherence Reviewer>
 )
 ```
 
@@ -516,7 +516,7 @@ PASS 1:
   pass1_result = Agent(
     description="Completeness review",
     model="opus",
-    prompt=<see references/subagent-prompts.md, Subagent A Pass 1>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Subagent A Pass 1>
   )
   → Save pass1_result.agentId
   → Fix ALL findings
@@ -540,7 +540,7 @@ PASS 1:
   pass1_result = Agent(
     description="Adversarial review",
     model="opus",
-    prompt=<see references/subagent-prompts.md, Subagent B Pass 1>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Subagent B Pass 1>
   )
   → Save pass1_result.agentId
   → Fix ALL findings
@@ -632,7 +632,7 @@ Cannot proceed past this gate without completing all applicable checks.
 Memory that drifts from reality is worse than no memory.
 
 Update project memory files per the content placement rules in
-`code-quality/references/project-memory-reference.md`. Key surfaces:
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`. Key surfaces:
 
 | Memory Surface | Action |
 |----------------|--------|
@@ -725,7 +725,7 @@ Cannot proceed past this gate without completing all applicable checks.
 **This gate catches code→docs gaps** — features that exist on disk but aren't documented.
 Round 2 checks docs→code (do documented claims match reality). This gate checks the inverse.
 
-Use `code-quality/references/documentation-taxonomy.md` for all definitions.
+Use `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)` for all definitions.
 
 | Check | Action |
 |-------|--------|
@@ -863,7 +863,7 @@ Overall: [PASS / NEEDS WORK]
 
 | Skill | Relationship |
 |-------|-------------|
-| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens, BLOCKING sub-gate) for dead code, unnecessary abstractions. Uses `references/simplification-checklist.md` and `references/dependency-evaluation.md`. |
+| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens, BLOCKING sub-gate) for dead code, unnecessary abstractions. Uses `[references/simplification-checklist.md](../../references/simplification-checklist.md)` and `[references/dependency-evaluation.md](../../references/dependency-evaluation.md)`. |
 | `code-quality:plan-adherence` | Spawned in Layer 1.75 for plan file verification (planning/mixed work types). |
 | `code-quality:reflect` | Invoked for metacognitive checkpoints via Serena reflection tools. |
 | `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |

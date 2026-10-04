@@ -43,7 +43,7 @@ Phase 4 verifies everything passes and generates a report.
 ## Workflow Phases
 
 ### Phase 0: Index & Setup
-1. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+1. Generate a run-ID using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
    (Run-ID Naming Convention section)
 2. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection (the implicit team is established automatically by these first named teammate spawns — no separate setup call is needed)
 4. Create feature branch: `cleanup/comprehensive-{run-id}` (from `origin/main`)
@@ -58,7 +58,7 @@ retry-on-failure for individual discovery agents, and structured ReductionResult
 If /map-reduce skill is unavailable, fall back to direct parallel agents as described below.
 
 All agents run simultaneously in background. Each writes structured JSON findings to
-`{run_dir}/discovery/`. Full prompts in `references/discovery-agents.md`.
+`{run_dir}/discovery/`. Full prompts in `[references/discovery-agents.md](./references/discovery-agents.md)`.
 
 | Agent | Role | Paired Skills | External Tools | Output |
 |-------|------|---------------|----------------|--------|
@@ -66,7 +66,7 @@ All agents run simultaneously in background. Each writes structured JSON finding
 | duplicate-detector | Copy-paste code, near-duplicates, redundant wrappers | `file-audit` | jscpd | `duplicates.json` |
 | security-auditor | OWASP Top 10, secrets, CVEs, auth gaps | `code-quality:security` | Semgrep, gitleaks, Bandit | `security.json` |
 | architecture-reviewer | Circular deps, divergent patterns, god objects | `code-quality:architect` | dependency-cruiser, Madge | `architecture.json` |
-| ai-slop-detector | Over-abstraction, unnecessary wrappers, catch-rethrow, comment noise | (novel — see `references/ai-slop-checklist.md`) | — | `ai-slop.json` |
+| ai-slop-detector | Over-abstraction, unnecessary wrappers, catch-rethrow, comment noise | (novel — see `[references/ai-slop-checklist.md](./references/ai-slop-checklist.md)`) | — | `ai-slop.json` |
 | complexity-auditor | Long functions, deep nesting, magic values, parameter bloat | `code-quality:qa` | radon | `complexity.json` |
 | documentation-auditor | README drift, broken links, stale TODOs, missing docs | `file-audit` | — | `documentation.json` |
 
@@ -74,7 +74,7 @@ All agents run simultaneously in background. Each writes structured JSON finding
 All others use `sonnet`.
 
 **Tool fallback:** When external tools are unavailable, agents perform equivalent analysis
-manually using LSP, Grep, and file reading. See `references/external-tools.md` fallback table.
+manually using LSP, Grep, and file reading. See `[references/external-tools.md](./references/external-tools.md)` fallback table.
 
 ### Phase 1.5: External Research Escalation (conditional)
 
@@ -127,7 +127,7 @@ The orchestrator assigns categories in priority order (security → dead code �
    - Per-category breakdown with specific changes and commit SHAs
    - Blocked items (test failures, needs-input) with stash names and manual fix guidance
    - External tools used vs agent-only analysis
-   - Remaining `needs-input` findings presented to user via AskUserQuestion with LoE (see `code-quality/references/finding-classification.md`)
+   - Remaining `needs-input` findings presented to user via AskUserQuestion with LoE (see `[../../references/finding-classification.md](../../references/finding-classification.md)`)
 5. Clean up intermediate discovery files
 6. Report completion to user with summary and report location
 
@@ -145,7 +145,7 @@ The orchestrator assigns categories in priority order (security → dead code �
 - Security fixes NEVER auto-applied if they could change business logic
 - AskUserQuestion for all ambiguous or high-risk decisions
 - `--dry-run` flag for discovery + planning without implementation
-- Agents use `needs-input` escape hatch for uncertain changes — see `code-quality/references/finding-classification.md` Fixer Protocol
+- Agents use `needs-input` escape hatch for uncertain changes — see `[../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol
 
 ## Output Files
 
@@ -160,8 +160,8 @@ The orchestrator assigns categories in priority order (security → dead code �
 
 | File | Content |
 |------|---------|
-| `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide with JSON schemas, dedup algorithm, rollback procedures, agent roster config, and error handling |
-| `references/discovery-agents.md` | Full prompts for all 7 discovery agents — role, methodology, external tool commands, LSP patterns, classification/LoE/risk guides, output format |
-| `references/implementation-agents.md` | Full prompts for all 7 implementation agents — fix strategies, paired skills, safety rules, test cadence, commit formats |
-| `references/ai-slop-checklist.md` | 32 anti-patterns across 7 categories (structural, error handling, naming, comments, testing, imports, types) with before/after examples and false-positive guidance |
-| `references/external-tools.md` | Tool matrix by language, detection commands, JSON output schemas, parsing instructions, Phase 0 detection script, fallback strategies |
+| `[references/orchestration-playbook.md](./references/orchestration-playbook.md)` | Complete phase-by-phase coordination guide with JSON schemas, dedup algorithm, rollback procedures, agent roster config, and error handling |
+| `[references/discovery-agents.md](./references/discovery-agents.md)` | Full prompts for all 7 discovery agents — role, methodology, external tool commands, LSP patterns, classification/LoE/risk guides, output format |
+| `[references/implementation-agents.md](./references/implementation-agents.md)` | Full prompts for all 7 implementation agents — fix strategies, paired skills, safety rules, test cadence, commit formats |
+| `[references/ai-slop-checklist.md](./references/ai-slop-checklist.md)` | 32 anti-patterns across 7 categories (structural, error handling, naming, comments, testing, imports, types) with before/after examples and false-positive guidance |
+| `[references/external-tools.md](./references/external-tools.md)` | Tool matrix by language, detection commands, JSON output schemas, parsing instructions, Phase 0 detection script, fallback strategies |
