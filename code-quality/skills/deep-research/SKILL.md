@@ -320,7 +320,7 @@ If no memory directory exists, deliver the report in the conversation only.
 | Cost | Free | $X/mo | Free |
 | ... | ... | ... | ... |
 
-*(Science & Technology) For dependency/tool comparisons, add these rows from dependency-evaluation.md criteria:*
+*(Science & Technology) For dependency/tool comparisons, add these rows from [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria:*
 
 | Criteria | Option A | Option B | Option C |
 |----------|----------|----------|----------|

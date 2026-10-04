@@ -288,7 +288,7 @@ Mitigation strategies:
 
 ### Setup
 ```
-1. Detect memory dir (per project-memory-reference.md) → check for {memory_dir}/BUGS.md → clean up or create
+1. Detect memory dir (per [project-memory-reference.md](../../references/project-memory-reference.md)) → check for {memory_dir}/BUGS.md → clean up or create
 2. Determine next BUG-NNN ID
 3. Confirm readiness to user
 ```

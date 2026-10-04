@@ -143,7 +143,7 @@ If `incremental`:
 - **Initial branch naming:** For the first PR boundary (no checkpoint exists), derive
   `{plan-slug}` from the plan file path using the same algorithm as checkpoint resume:
   extract the basename, strip the run-id prefix (`{branch-slug}-{timestamp}-`) and `.md`
-  extension, then apply the Branch Slug Sanitization Rules from `project-memory-reference.md`.
+  extension, then apply the Branch Slug Sanitization Rules from `[project-memory-reference.md](../../references/project-memory-reference.md)`.
   Rename the Phase 0-created branch to `feat/{plan-slug}-pr1` (via `git branch -m`). This
   rename happens after the test baseline. The rename is a git-only operation that does not
   affect the audit trail, which is keyed to the run-id independent of the branch name.
@@ -171,7 +171,7 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
   (filename only), then strip the run-id prefix (`{branch-slug}-{timestamp}-`) and the
   `.md` extension. Example: `hack/plans/feat-auth-1711388400-session-auth.md` → basename
   `feat-auth-1711388400-session-auth.md` → strip prefix and extension → `session-auth`.
-  Apply the Branch Slug Sanitization Rules from `project-memory-reference.md`.
+  Apply the Branch Slug Sanitization Rules from `[project-memory-reference.md](../../references/project-memory-reference.md)`.
 - Create new branch for the next PR boundary: `feat/{plan-slug}-pr{N}` from
   `origin/{branch_base}` (using the `branch_base` field from the checkpoint, typically `main`)
 - Announce: "Resuming swarm. Prior work merged. Remaining tasks: {list}."
@@ -219,7 +219,7 @@ run in Phase 4. Include it in the composition count presented to the user.
 
 **jira:jira-agent** (conditional) — Spawned at Phase 7 completion when `{tracker}` contains
 `jira:PROJ-N`. Verifies card status and transitions to In Progress. Cross-plugin agent
-spawning is validated: jira-agent.md explicitly lists "swarm implementers, quality-gate
+spawning is validated: [jira-agent.md](../../../jira/agents/jira-agent.md) explicitly lists "swarm implementers, quality-gate
 verifiers, or any agent" as valid spawners.
 
 ### Phase 2: Architect (opus)
@@ -432,7 +432,7 @@ After completing all tasks in the current PR boundary (all components for tasks 
    per the Phase 4.5 incremental workflow section).
 2. Run Phase 5 Fixer scoped to the current boundary's files only — the Lead passes
    `pr_boundary_files` to the Fixer agent's prompt (same mechanism as Phase 4 reviewers).
-   Structural scoping per finding-classification.md Fixer Protocol.
+   Structural scoping per [finding-classification.md](../../references/finding-classification.md) Fixer Protocol.
    Note: Phase 5.5 (Plan Reconciliation) does NOT run at non-final boundary stops — it
    runs only at final completion, scoped to all tasks across all boundaries.
 3. Spawn Verifier agent (tests + lint) — same agent as Phase 7 but invoked inline at

@@ -69,7 +69,7 @@ else:
     # Discover files
     git ls-files --cached --others --exclude-standard
 
-    # Read project memory (files per project-memory-reference.md Memory Files section)
+    # Read project memory (files per [project-memory-reference.md](../../references/project-memory-reference.md) Memory Files section)
     Read {memory_dir}/PROJECT.md, {memory_dir}/TODO.md, {memory_dir}/LESSONS.md (if exist)
 
     # Create queue

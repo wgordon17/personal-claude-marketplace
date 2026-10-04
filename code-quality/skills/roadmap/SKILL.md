@@ -648,7 +648,7 @@ NEVER IN CHAT: Full roadmap content, raw table data, raw diff content from subag
 ### Roadmap File Location (Phase 4 — document generation)
 
 ```
-1. {memory_dir}/plans/{run-id}-roadmap-<name>.md → if memory dir exists (detect per project-memory-reference.md)
+1. {memory_dir}/plans/{run-id}-roadmap-<name>.md → if memory dir exists (detect per [project-memory-reference.md](../../references/project-memory-reference.md))
 2. ~/.claude/plans/{run-id}-roadmap-<name>.md → fallback for all other cases
 ```
 

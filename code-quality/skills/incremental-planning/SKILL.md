@@ -887,6 +887,6 @@ NEVER IN CHAT: Full plan content, task details, code blocks from the plan
 
 ### Plan File Location
 ```
-1. {memory_dir}/plans/{run-id}-<feature>.md → if memory dir exists (detect per project-memory-reference.md)
+1. {memory_dir}/plans/{run-id}-<feature>.md → if memory dir exists (detect per [project-memory-reference.md](../../references/project-memory-reference.md))
 2. ~/.claude/plans/{run-id}-<feature>.md → fallback for all other cases
 ```

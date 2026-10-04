@@ -70,7 +70,7 @@ LEAD (you)
    "unused in my chunk" vs "might be used elsewhere." See `[references/fidelity-guide.md](./references/fidelity-guide.md)`.
 
 4. **Cap at 8 mappers:** if the workload naturally splits into more, merge the smallest chunks.
-   If the user wants more than 8, use AskUserQuestion to confirm — document in fidelity-guide.md
+   If the user wants more than 8, use AskUserQuestion to confirm — document in [fidelity-guide.md](./references/fidelity-guide.md)
    that uncapped splitting is a known fidelity risk.
 
 5. **Create audit trail:** Generate a run-ID using the convention in
