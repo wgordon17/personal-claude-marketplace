@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -10,26 +11,62 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../s
 import compactor
 
 
-def test_detect_memory_dir(tmp_path):
+def test_detect_memory_dir_worktree(tmp_path):
+    main_worktree = str(tmp_path / "main_repo")
+    hack_dir = tmp_path / "main_repo" / "hack"
+    hack_dir.mkdir(parents=True)
+    (hack_dir / "PROJECT.md").write_text("test")
+    (hack_dir / "TODO.md").write_text("test")
+
+    def mock_run(*args, **kwargs):
+        mock_result = MagicMock()
+        mock_result.stdout = f"worktree {main_worktree}\nworktree /some/other/path"
+        return mock_result
+
+    with patch("subprocess.run", side_effect=mock_run):
+        assert compactor.detect_memory_dir() == str(hack_dir)
+
+
+def test_detect_memory_dir_standard_repo(tmp_path):
+    main_worktree = str(tmp_path)
+    hack_dir = tmp_path / "hack"
+    hack_dir.mkdir(parents=True)
+    (hack_dir / "PROJECT.md").write_text("test")
+    (hack_dir / "TODO.md").write_text("test")
+
+    def mock_run(*args, **kwargs):
+        mock_result = MagicMock()
+        mock_result.stdout = f"worktree {main_worktree}"
+        return mock_result
+
+    with patch("subprocess.run", side_effect=mock_run):
+        assert compactor.detect_memory_dir() == str(hack_dir)
+
+
+def test_detect_memory_dir_non_git(tmp_path):
     hack_dir = tmp_path / "hack"
     hack_dir.mkdir()
     (hack_dir / "PROJECT.md").write_text("test")
     (hack_dir / "TODO.md").write_text("test")
 
-    scratch_dir = tmp_path / "scratch"
-    scratch_dir.mkdir()
+    def mock_run(*args, **kwargs):
+        raise subprocess.CalledProcessError(128, ["git"])
 
     def mock_isdir(path):
-        return path in ["hack", "scratch"]
+        return path == os.path.join(".", "hack")
 
     def mock_exists(path):
-        return path in ["hack/PROJECT.md", "hack/TODO.md"]
+        return path in [
+            os.path.join(".", "hack", "PROJECT.md"),
+            os.path.join(".", "hack", "TODO.md"),
+        ]
 
     with (
+        patch("subprocess.run", side_effect=mock_run),
         patch("os.path.isdir", side_effect=mock_isdir),
         patch("os.path.exists", side_effect=mock_exists),
     ):
-        assert compactor.detect_memory_dir() == "hack"
+        assert compactor.detect_memory_dir() == os.path.join(".", "hack")
 
 
 def test_update_project_memory(tmp_path):
