@@ -11,6 +11,8 @@ allowed-tools: [Read, Edit, Bash, Agent, AskUserQuestion]
 
 # PR Review Skill
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Multi-agent pull request review. Spawns 6 parallel reviewers (5 Sonnet + 1 Opus) — security, QA,
 performance, code quality, correctness, and plan adherence — each required to investigate and
 verify findings before reporting. A Sonnet verification agent then reads source files to confirm
@@ -105,7 +107,7 @@ Store as `{claude_md_rules}` and `{contributing_md_rules}`.
 ### Discover Implementation Plan
 
 Search for a plan file that matches the PR's topic. Detect the memory directory using the
-convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+convention in `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 **Primary:** Search `{memory_dir}/plans/` files and parse each file's `**Branch:**` header
 field. Match the value against the PR's head branch name. If a match is found, this is the
@@ -187,7 +189,7 @@ Record which reviewers will run.
 
 ## Phase 2 — Parallel Review
 
-Read `[references/reviewer-prompts.md](./references/reviewer-prompts.md)`. For each applicable reviewer, locate the corresponding
+Read `[{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md)`. For each applicable reviewer, locate the corresponding
 prompt template, substitute all placeholders with actual values, and spawn an agent. Most
 reviewers use `model="sonnet"`; the Plan Adherence Reviewer uses `model="opus"`.
 
@@ -199,31 +201,31 @@ Spawn all applicable reviewers simultaneously (parallel Agent calls).
 Agent(
   description="Security review of PR #{number}",
   model="sonnet",
-  prompt=<Security Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Security Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="QA review of PR #{number}",
   model="sonnet",
-  prompt=<QA Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<QA Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Performance review of PR #{number}",
   model="sonnet",
-  prompt=<Performance Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Performance Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Code quality review of PR #{number}",
   model="sonnet",
-  prompt=<Code Quality Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Code Quality Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Correctness review of PR #{number}",
   model="sonnet",
-  prompt=<Correctness Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Correctness Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -239,7 +241,7 @@ Only spawned if a plan was found in Phase 0 (i.e., `{plan_file_path}` is non-emp
 Agent(
   description="Plan adherence review of PR #{number}",
   model="opus",
-  prompt=<Plan Adherence Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Plan Adherence Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -297,7 +299,7 @@ investigate each finding.
 Agent(
   description="Finding verification for PR #{number}",
   model="opus",
-  prompt=<Finding Verifier template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Finding Verifier template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -323,7 +325,7 @@ every submitted finding. For each finding ID in the original `{findings_json}`, 
 matching `finding_id` exists in the verifier's response. Any finding without a returned verdict
 is assigned verdict `unverified` with `investigation_summary`: "Verifier did not return a
 verdict for this finding." This prevents silent finding loss during verification - the same
-principle as the Fixer verification protocol in `[../../references/finding-classification.md](../../references/finding-classification.md)`.
+principle as the Fixer verification protocol in `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`.
 
 ### Categorize
 
@@ -529,7 +531,7 @@ After output and counter increment, return to the original branch or worktree re
 
 ## Reviewer Prompt Templates
 
-Prompt templates are in `[references/reviewer-prompts.md](./references/reviewer-prompts.md)`. Read that file and substitute
+Prompt templates are in `[{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md)`. Read that file and substitute
 placeholders before passing to each Agent call. The templates are not executable — they are
 documentation that Claude reads and fills in. Do not reference `quality-gate/references/` at
 runtime; this skill owns its own copies adapted for PR review context.

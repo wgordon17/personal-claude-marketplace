@@ -23,6 +23,8 @@ allowed-tools:
 
 # Test Plan Skill
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Produces a user-facing test plan from an existing implementation plan file. The test plan is
 written as a human-walkthrough document (personas, Given/When/Then scenarios, manual UAT steps,
 traceability matrix) and annotated back into the plan file so all downstream skills discover it
@@ -75,14 +77,14 @@ Read and parse the input plan file before doing anything else.
      the `## Test Plan` section from `{plan_file}` to regenerate."
 
 3. **Read project memory** — Detect `{memory_dir}` per
-   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree
+   `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree
    Resolution sections). Then read:
    - `{memory_dir}/PROJECT.md` — architectural decisions, domain context
    - `{memory_dir}/LESSONS.md` — past lessons (if exists). Silently incorporate.
 
 4. **Generate `{run-id}`** — Generate the run-id early so it is available for the staging file
    in Phase 2. Follow the Run-ID Naming Convention in
-   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`: `{branch-slug}-{unix-timestamp}`
+   `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`: `{branch-slug}-{unix-timestamp}`
    (e.g., `feat-auth-1711388400`).
 
 5. **Identify user-facing tasks** — Not every plan task represents a user-visible behavior.

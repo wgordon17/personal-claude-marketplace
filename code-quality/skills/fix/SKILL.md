@@ -13,6 +13,8 @@ allowed-tools: [Read, Write, Edit, Bash, Agent, Skill, AskUserQuestion, WebSearc
 
 # Fix Skill
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 **Never auto-commits.** All fixes are left in the working tree for user review.
 
 ## Usage
@@ -42,7 +44,7 @@ Detect the review source using these rules in order:
 | Session output contains `CODE REVIEW — PR #` | Code (PR diff) | Extract PR number from the header line: `CODE REVIEW — PR #{number}` |
 | File `{memory_dir}/BUGS.md` exists on disk | Bug resolutions | Read BUGS.md; extract entries with `**Status:** Root Cause Found` |
 
-Detect `memory_dir` per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+Detect `memory_dir` per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 ### Resolution
 
@@ -192,7 +194,7 @@ on description text.
 **Incremental workflow scoping:** When the Lead provides a `pr_boundary_files` list (during
 incremental swarm execution), the Fixer processes ONLY findings whose `file` field matches
 a file in the list. This is structural filtering by the Lead per the Fixer Protocol in
-[finding-classification.md](../../references/finding-classification.md) — the Fixer does not make scoping decisions.
+[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md) — the Fixer does not make scoping decisions.
 When invoked standalone: existing behavior unchanged — process all findings.
 
 ---
@@ -490,7 +492,7 @@ Do NOT commit. Leave all changes in the working tree for user review.
 
 ## Phase 4 — Verification
 
-Apply the Verification Protocol from `[../../references/finding-classification.md](../../references/finding-classification.md)`, extended
+Apply the Verification Protocol from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`, extended
 with 7 outcome buckets to cover all standalone /fix outcomes.
 
 ### Outcome Buckets

@@ -88,7 +88,7 @@
     },
     {
       "name": "code-quality",
-      "version": "3.30.1",
+      "version": "3.30.2",
       "source": "./code-quality",
       "description": "Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning (with issue tracking and PR boundary markers), roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, summarize, and test-plan",
       "category": "quality",
@@ -99,7 +99,7 @@
     },
     {
       "name": "git-tools",
-      "version": "2.6.1",
+      "version": "2.6.2",
       "source": "./git-tools",
       "description": "Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation",
       "category": "productivity",
@@ -121,7 +121,7 @@
     },
     {
       "name": "jira",
-      "version": "1.4.2",
+      "version": "1.4.3",
       "source": "./jira",
       "description": "Jira integration for issue tracking, querying, and management — OSAC defaults with full redhat.atlassian.net support",
       "category": "productivity",
@@ -132,7 +132,7 @@
     },
     {
       "name": "drawio",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "source": "./drawio",
       "description": "Draw.io diagram generation skill — creates native .drawio files with optional PNG/SVG/PDF export via draw.io Desktop CLI. Vendored from jgraph/drawio-mcp (Apache 2.0).",
       "category": "productivity",

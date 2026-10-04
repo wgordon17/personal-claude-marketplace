@@ -11,6 +11,8 @@ allowed-tools: [Read, Edit, Bash, Agent, AskUserQuestion]
 
 # Plan Review Skill
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Multi-agent plan review. Spawns 6 parallel reviewers (4 plan-specific + 2 domain) — feasibility,
 scope & completeness, dependency ordering, unknown unknowns/spike detection, architect, and security
 — each required to read and analyze the plan independently. A verification agent then cross-checks
@@ -43,7 +45,7 @@ If a plan file path was provided in `$ARGUMENTS`, use it directly. Skip discover
 If no path was given:
 
 1. Detect the memory directory using the convention in
-   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree
+   `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree
    Resolution sections). If no validated memory directory is found, stop with:
    "No memory directory found. Pass a plan file path explicitly: `/plan-review <path>`"
 
@@ -143,7 +145,7 @@ Record which reviewers will run.
 
 ## Phase 2 — Parallel Review
 
-Read `[references/reviewer-prompts.md](./references/reviewer-prompts.md)`. For each applicable reviewer, locate the corresponding
+Read `[{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md)`. For each applicable reviewer, locate the corresponding
 prompt template, substitute all placeholders with actual values, and spawn an agent. Most
 reviewers use `model="sonnet"`; the Unknown Unknowns Reviewer uses `model="opus"`.
 
@@ -163,25 +165,25 @@ Spawn all applicable reviewers simultaneously (parallel Agent calls).
 Agent(
   description="Feasibility review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Feasibility Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Feasibility Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Scope & completeness review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Scope & Completeness Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Scope & Completeness Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Dependency & ordering review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Dependency & Ordering Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Dependency & Ordering Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Unknown unknowns review of plan: {plan_file_path}",
   model="opus",
-  prompt=<Unknown Unknowns Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Unknown Unknowns Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -202,13 +204,13 @@ label, or empty placeholder.
 Agent(
   description="Architect review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Architect Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Architect Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Security review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Security Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Security Reviewer template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -262,7 +264,7 @@ Build the findings JSON array:
 Agent(
   description="Finding verification for plan: {plan_file_path}",
   model="opus",
-  prompt=<Finding Verifier template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
+  prompt=<Finding Verifier template from [{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -289,7 +291,7 @@ every submitted finding. For each finding ID in the original `{findings_json}`, 
 matching `finding_id` exists in the verifier's response. Any finding without a returned verdict
 is assigned verdict `unverified` with `investigation_summary`: "Verifier did not return a
 verdict for this finding." This prevents silent finding loss during verification - the same
-principle as the Fixer verification protocol in `[../../references/finding-classification.md](../../references/finding-classification.md)`.
+principle as the Fixer verification protocol in `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`.
 
 ### Categorize
 
@@ -492,7 +494,7 @@ on the plan file. This is the only plan file modification plan-review makes.
 
 ## Reviewer Prompt Templates
 
-Prompt templates are in `[references/reviewer-prompts.md](./references/reviewer-prompts.md)`. Read that file and substitute
+Prompt templates are in `[{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md)`. Read that file and substitute
 placeholders before passing to each Agent call. The templates are not executable — they are
 documentation that Claude reads and fills in.
 

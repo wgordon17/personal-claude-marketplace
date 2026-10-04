@@ -10,6 +10,8 @@ allowed-tools: [Read, Write, Edit, Agent, Bash, AskUserQuestion]
 
 # Bug Investigation Workflow
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Interactive workflow for reporting, investigating, and tracking bugs using background agents.
 The user reports bugs conversationally while background agents investigate each one
 autonomously, documenting root causes and resolution plans in a central tracking file.
@@ -33,7 +35,7 @@ This skill activates when:
 ### Check for Existing BUGS.md
 
 Before starting, detect the memory directory using the convention in
-`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+`[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 Then check if `{memory_dir}/BUGS.md` already exists:
 
 ```
@@ -60,7 +62,7 @@ Read {memory_dir}/BUGS.md
 > **Note on Impact vs Classification:** The `Impact` field (Critical/High/Medium/Low) describes
 > the bug's effect on users — it is NOT finding classification. All bugs are `needs-fix` by
 > definition; Impact conveys urgency and scope. See
-> `[../../references/finding-classification.md](../../references/finding-classification.md)` for the classification taxonomy.
+> `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` for the classification taxonomy.
 
 ```markdown
 # Bug Investigation & Resolution Tracking
@@ -288,7 +290,7 @@ Mitigation strategies:
 
 ### Setup
 ```
-1. Detect memory dir (per [project-memory-reference.md](../../references/project-memory-reference.md)) → check for {memory_dir}/BUGS.md → clean up or create
+1. Detect memory dir (per [{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)) → check for {memory_dir}/BUGS.md → clean up or create
 2. Determine next BUG-NNN ID
 3. Confirm readiness to user
 ```
