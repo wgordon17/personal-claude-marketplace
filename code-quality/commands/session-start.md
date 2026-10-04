@@ -116,12 +116,22 @@ Ask targeted questions:
 
 ### Step 3: Create Memory Directory
 
+To ensure the memory directory isn't duplicated when creating git worktrees, you MUST create it in the main repository worktree.
+
+1. Find the main worktree path:
 ```bash
-mkdir -p hack
-echo "hack/" >> .gitignore
+git worktree list --porcelain | head -1 | sed 's/^worktree //'
+```
+*(If this fails, fall back to the current directory).*
+Store this as `{main_worktree_path}`.
+
+2. Create the directory in the main worktree:
+```bash
+mkdir -p {main_worktree_path}/hack
+echo "hack/" >> {main_worktree_path}/.gitignore
 ```
 
-Or use `.local/`, `scratch/`, or `.dev/` if user prefers.
+Or use `.local/`, `scratch/`, or `.dev/` if the user prefers.
 
 > **Note:** `session-start` and `session-end` are the only paths for creating memory directories. Other skills must
 > not create the directory — they should skip memory operations if no validated dir is found.

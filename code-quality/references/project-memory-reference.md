@@ -11,29 +11,28 @@ this file. Do not maintain ad-hoc memory conventions elsewhere — point here.
 
 ## Directory Detection
 
-Skills detect the memory directory using a two-stage check. Use the first directory that passes both stages.
+Skills detect the memory directory using a unified algorithm that is completely **worktree-aware**. Because project memory directories (like `hack/`) are typically git-ignored, they do not automatically clone or link into new git worktrees. To prevent duplicating memory directories across worktrees, all skills MUST resolve the memory directory against the **main** worktree.
 
-| Priority | Directory | Notes |
-|----------|-----------|-------|
-| 1 | `hack/` | Primary; most projects use this |
-| 2 | `.local/` | Alternative for projects that prefer hidden dirs |
-| 3 | `scratch/` | Alternative naming convention |
-| 4 | `.dev/` | Alternative for dev-only scratch space |
+### Detection Algorithm (All skills MUST use this)
 
-**Detection rule:** For each directory in priority order:
-1. Check that the directory exists.
-2. Verify it contains at least 2 of the 5 core memory files: `PROJECT.md`, `TODO.md`, `SESSIONS.md`, `NEXT.md`, `LESSONS.md`.
+1. **Locate the main worktree:**
+   Run the following command to find the absolute path to the main repository worktree:
+   ```bash
+   git worktree list --porcelain | head -1 | sed 's/^worktree //'
+   ```
+   *(If the command fails or you are not in a git repository, fall back to the current directory).*
+   Store this as `{main_worktree_path}`.
 
-Use the first directory that passes both checks. If none pass, treat as "no memory directory" — skip memory operations.
+2. **Check candidate directories:**
+   For each candidate in priority order (`hack/`, `.local/`, `scratch/`, `.dev/`), check if it exists within the main worktree (e.g., `{main_worktree_path}/hack/`).
 
-> **Why bare existence is insufficient:** Many projects use `hack/` for build scripts (Go convention), `scratch/` for
-> experiments, etc. Content validation prevents these false positives.
+3. **Validate contents:**
+   Verify the candidate directory contains at least 2 of the 5 core memory files: `PROJECT.md`, `TODO.md`, `SESSIONS.md`, `NEXT.md`, `LESSONS.md`.
+   *(Why? Many projects use `hack/` for build scripts. Content validation prevents false positives).*
 
-**Creation gatekeeper:** If no directory passes validation, skip memory operations. Only `session-start` and
-`session-end` may create and initialize a new memory directory. All other skills must skip memory operations when
-no validated directory is found.
+**Result:** Use the first directory that passes both existence and content validation. This absolute path becomes your `{memory_dir}` for ALL reads and writes.
 
-**Worktree resolution:** See [Worktree Resolution](#worktree-resolution) for git worktree handling.
+**Creation gatekeeper:** If no directory passes validation, skip memory operations entirely. Only the `/session-start` and `/session-end` commands are authorized to initialize a new memory directory. When they do, they MUST create it in the `{main_worktree_path}` so it is shared globally across all worktrees.
 
 ---
 
@@ -210,31 +209,6 @@ Created by the swarm skill at each PR boundary during an incremental workflow ru
 **Lifecycle:** Created by swarm at each PR boundary stop. Read by swarm on resume to restore state. Deleted at final swarm completion (after Phase 7), not at the start of the final boundary's run.
 
 For `run-id` format, see [Run-ID Naming Convention](#run-id-naming-convention).
-
----
-
-## Worktree Resolution
-
-Skills running inside a git worktree must resolve where to find (and write) memory files.
-
-### Resolution Order
-
-1. **Symlink check:** If a validated memory dir (per the [Detection Rule](#directory-detection)) exists as a symlink
-   in the current worktree, follow it. Use the resolved path.
-2. **Main worktree fallback:** If no validated memory dir in the current worktree, locate the main worktree:
-   ```bash
-   git worktree list --porcelain | head -1 | sed 's/^worktree //'
-   ```
-   Apply the two-stage detection rule against `{main_worktree_path}` (e.g., check `{main_worktree_path}/hack/`
-   for existence + content). Use the first directory that passes.
-3. **No validated memory dir anywhere:** Skip memory operations entirely. Do not create the directory.
-
-### Read vs. Write Behavior
-
-| Operation | Behavior |
-|-----------|---------|
-| **Write** (audit trails, run outputs) | Write to resolved memory dir; run-ID subdirectory prevents contention across worktrees |
-| **Read** (shared memory files) | Read from resolved main memory dir (PROJECT.md, TODO.md, etc. are shared) |
 
 ---
 

@@ -105,8 +105,7 @@ Store as `{claude_md_rules}` and `{contributing_md_rules}`.
 ### Discover Implementation Plan
 
 Search for a plan file that matches the PR's topic. Detect the memory directory using the
-convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and
-Worktree Resolution sections).
+convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 **Primary:** Search `{memory_dir}/plans/` files and parse each file's `**Branch:**` header
 field. Match the value against the PR's head branch name. If a match is found, this is the

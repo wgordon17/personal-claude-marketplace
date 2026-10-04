@@ -169,7 +169,7 @@ Stop.
 
 **Step 1 — Detect memory directory.**
 Use the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
-(Directory Detection and Worktree Resolution sections).
+(Directory Detection section).
 
 If no memory directory is found, print:
 > "No project memory directory detected. Provide a file path directly: `/summarize path/to/artifact`"
@@ -431,7 +431,7 @@ against a plan would produce misleading FAIL results.
 
 2. If `{memory_dir}` was not resolved in Phase 0 (PR detected via Path A before Path B scan),
    resolve it now using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
-   (Directory Detection and Worktree Resolution sections).
+   (Directory Detection section).
 
    Search `{memory_dir}/plans/` and `{memory_dir}/plans/done/` for a plan file whose
    `**Branch:**` header matches the head branch. Use exact string match first; if no exact

@@ -42,7 +42,7 @@ Detect the review source using these rules in order:
 | Session output contains `CODE REVIEW — PR #` | Code (PR diff) | Extract PR number from the header line: `CODE REVIEW — PR #{number}` |
 | File `{memory_dir}/BUGS.md` exists on disk | Bug resolutions | Read BUGS.md; extract entries with `**Status:** Root Cause Found` |
 
-Detect `memory_dir` per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree Resolution sections).
+Detect `memory_dir` per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 ### Resolution
 
