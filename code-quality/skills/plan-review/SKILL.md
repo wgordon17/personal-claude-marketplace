@@ -143,7 +143,7 @@ Record which reviewers will run.
 
 ## Phase 2 — Parallel Review
 
-Read `references/reviewer-prompts.md`. For each applicable reviewer, locate the corresponding
+Read `[references/reviewer-prompts.md](./references/reviewer-prompts.md)`. For each applicable reviewer, locate the corresponding
 prompt template, substitute all placeholders with actual values, and spawn an agent. Most
 reviewers use `model="sonnet"`; the Unknown Unknowns Reviewer uses `model="opus"`.
 
@@ -163,25 +163,25 @@ Spawn all applicable reviewers simultaneously (parallel Agent calls).
 Agent(
   description="Feasibility review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Feasibility Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+  prompt=<Feasibility Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Scope & completeness review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Scope & Completeness Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+  prompt=<Scope & Completeness Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Dependency & ordering review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Dependency & Ordering Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+  prompt=<Dependency & Ordering Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Unknown unknowns review of plan: {plan_file_path}",
   model="opus",
-  prompt=<Unknown Unknowns Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+  prompt=<Unknown Unknowns Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -202,13 +202,13 @@ label, or empty placeholder.
 Agent(
   description="Architect review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Architect Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+  prompt=<Architect Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 
 Agent(
   description="Security review of plan: {plan_file_path}",
   model="sonnet",
-  prompt=<Security Reviewer template from references/reviewer-prompts.md, placeholders substituted>
+  prompt=<Security Reviewer template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -262,7 +262,7 @@ Build the findings JSON array:
 Agent(
   description="Finding verification for plan: {plan_file_path}",
   model="opus",
-  prompt=<Finding Verifier template from references/reviewer-prompts.md, placeholders substituted>
+  prompt=<Finding Verifier template from [references/reviewer-prompts.md](./references/reviewer-prompts.md), placeholders substituted>
 )
 ```
 
@@ -492,7 +492,7 @@ on the plan file. This is the only plan file modification plan-review makes.
 
 ## Reviewer Prompt Templates
 
-Prompt templates are in `references/reviewer-prompts.md`. Read that file and substitute
+Prompt templates are in `[references/reviewer-prompts.md](./references/reviewer-prompts.md)`. Read that file and substitute
 placeholders before passing to each Agent call. The templates are not executable — they are
 documentation that Claude reads and fills in.
 

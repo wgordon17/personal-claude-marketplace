@@ -226,7 +226,7 @@ verifiers, or any agent" as valid spawners.
 
 Spawn the architect agent with the full task description, codebase context, and audit trail path.
 The architect begins by classifying the task using the Cynefin framework
-(see `references/cynefin-reference.md`), then designs the solution accordingly:
+(see `[references/cynefin-reference.md](./references/cynefin-reference.md)`), then designs the solution accordingly:
 
 - **Clear / Complicated:** Standard decomposition into independent components with dependency graph.
 - **Complex:** Probe design — experiments and signals rather than a full plan. Smaller components
@@ -240,7 +240,7 @@ The Cynefin classification (`cynefin_domain` and `domain_justification`) is writ
 run. The Lead reads the classification to inform Phase 2.5 skip decisions.
 
 Output is a structured JSON plan written to `{run_dir}/architect-plan.json`
-(see schema in `references/communication-schema.md`). The architect also identifies global risks,
+(see schema in `[references/communication-schema.md](./references/communication-schema.md)`). The architect also identifies global risks,
 data model changes, API surface changes, and **documentation impact** — a `documentation_impact`
 array listing which documentation surfaces are affected and why (READMEs, manifests, registries,
 component tables, descriptions, dependency matrices, user-facing docs). This array feeds Phase 6.
@@ -279,7 +279,7 @@ The agent reviews architect-plan.json for:
 - Security constraints the implementer must respect
 
 Output: SecurityDesignReview JSON written to `{run_dir}/security-design-review.json`
-(see schema in `references/communication-schema.md`).
+(see schema in `[references/communication-schema.md](./references/communication-schema.md)`).
 
 **Routing:**
 - needs-fix findings requiring architect plan revision → Route back to Architect (Phase 2) with security feedback for
@@ -386,12 +386,12 @@ Test-Runner. The Lead routes work through the pipeline using structured JSON mes
 flow from Implementer to Reviewer to Test-Writer to Test-Runner, with the Implementer moving to
 the next component while earlier ones advance through the pipeline. Each agent sends a
 ContextAcknowledgment immediately upon receiving an assignment (see
-`references/communication-schema.md`). Each handoff uses a typed JSON message. If the Reviewer
+`[references/communication-schema.md](./references/communication-schema.md)`). Each handoff uses a typed JSON message. If the Reviewer
 rejects a component, the Lead routes specific feedback back to the Implementer for targeted fixes
 and re-submission (max 3 iterations per component). If Test-Runner reports failures, the Lead
 routes the failure details back to the Implementer for fixes, then re-submits through Review and
 Test stages. The watchdog is torn down (CronDelete) when Phase 3 completes or on any abort path.
-See `references/pipeline-model.md` for full parallelism rules, backpressure handling, and
+See `[references/pipeline-model.md](./references/pipeline-model.md)` for full parallelism rules, backpressure handling, and
 fallback to sequential mode.
 
 #### Parallel Mini-Pipelines (when applicable)
@@ -546,7 +546,7 @@ Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance
 auto-detected optional reviewers (UI, API, DB). Also spawn the Plan Adherence reviewer if an
 incremental plan file is found (see below). All reviewers operate in read-only mode on the
 completed implementation. Each writes structured JSON findings to `{run_dir}/reviews/`
-(see schema in `references/communication-schema.md`). The Lead collects ALL findings and
+(see schema in `[references/communication-schema.md](./references/communication-schema.md)`). The Lead collects ALL findings and
 synthesizes into a consolidated view. Every finding — regardless of classification — is routed to
 Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
 
@@ -580,7 +580,7 @@ findings, escalate to the human via AskUserQuestion rather than re-running again
 Phase 3 re-implementations at 2 regardless of escalation type.
 
 All escalation events are recorded in `{run_dir}/escalations.json`
-(see schema in `references/communication-schema.md` under "Escalation Events Schema").
+(see schema in `[references/communication-schema.md](./references/communication-schema.md)` under "Escalation Events Schema").
 
 **Incremental workflow scoping:** When `{workflow_mode}` is `incremental`, reviewers receive
 only the diff for the current PR boundary's files (not the full branch diff). The Lead
@@ -976,7 +976,7 @@ task graph should be visible from the start so the user can see the plan at any 
 ### Context Relay
 
 Every agent receives a structured context bundle when spawned (see schema in
-`references/communication-schema.md`). The bundle includes: project name, task description,
+`[references/communication-schema.md](./references/communication-schema.md)`). The bundle includes: project name, task description,
 current branch, key files from the architect's plan, audit trail path (`run_dir`), and the
 tool guard reminder. Never spawn an agent without the full context bundle.
 
@@ -989,7 +989,7 @@ blocker or a pre-existing issue. Lean toward escalation for ambiguous decisions.
 ### Pipeline Coordination
 
 Monitor the pipeline flow actively. Route handoff messages between agents using the schemas in
-`references/communication-schema.md`. Detect backpressure (see `references/pipeline-model.md`)
+`[references/communication-schema.md](./references/communication-schema.md)`. Detect backpressure (see `[references/pipeline-model.md](./references/pipeline-model.md)`)
 and throttle the Implementer when the Reviewer queue is full.
 
 ### Watchdog Monitoring
@@ -1004,7 +1004,7 @@ or on any abort path — do not leave orphaned cron jobs.
 
 Track `turn_count` from every agent's structured messages. Proactively recycle agents approaching
 context limits (default: 25 turns for Implementer/Test-Writer, 30 for Reviewer) using the
-HandoffRequest → HandoffSummary → shutdown → respawn protocol (see `references/orchestration-playbook.md`
+HandoffRequest → HandoffSummary → shutdown → respawn protocol (see `[references/orchestration-playbook.md](./references/orchestration-playbook.md)`
 Step 3.6). Detect silent failures: if a teammate goes idle without completing their task or sending
 a final message, initiate recovery (status check → replacement spawn → escalate if repeated).
 
@@ -1110,9 +1110,9 @@ agent that does the job right over multiple sonnet agents that require rework.
 
 | File | Content |
 |------|---------|
-| `references/orchestration-playbook.md` | Complete phase-by-phase coordination guide, error handling, rollback procedures, agent roster config, and git workflow |
-| `references/agent-prompts.md` | Full prompt templates for all 21+ agents — role, boundaries, communication protocol, output format |
-| `references/communication-schema.md` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
-| `references/pipeline-model.md` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
-| `references/cynefin-reference.md` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |
-| `references/warm-bundle-handoff.md` | Warm-bundle handoff — the four optional per-component fields (files_examined, ruled_out, change_sites, proposed_first_change), the consumer contract, KV-cache/verification caveats, and the anti-injection note |
+| `[references/orchestration-playbook.md](./references/orchestration-playbook.md)` | Complete phase-by-phase coordination guide, error handling, rollback procedures, agent roster config, and git workflow |
+| `[references/agent-prompts.md](./references/agent-prompts.md)` | Full prompt templates for all 21+ agents — role, boundaries, communication protocol, output format |
+| `[references/communication-schema.md](./references/communication-schema.md)` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
+| `[references/pipeline-model.md](./references/pipeline-model.md)` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
+| `[references/cynefin-reference.md](./references/cynefin-reference.md)` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |
+| `[references/warm-bundle-handoff.md](./references/warm-bundle-handoff.md)` | Warm-bundle handoff — the four optional per-component fields (files_examined, ruled_out, change_sites, proposed_first_change), the consumer contract, KV-cache/verification caveats, and the anti-injection note |

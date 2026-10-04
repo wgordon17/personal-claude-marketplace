@@ -65,7 +65,7 @@ Determine work type from session activity:
 | Short Q&A, no tool use | **Question** |
 | Multiple of the above | **Mixed** (apply all relevant criteria) |
 
-Select the lens set for the detected type (see `references/lens-rubrics.md`).
+Select the lens set for the detected type (see `[references/lens-rubrics.md](./references/lens-rubrics.md)`).
 
 **Test plan discovery (Planning/Mixed/Code work types):** After classifying the work type,
 discover the plan file using branch-header matching (same algorithm as Layer
@@ -111,7 +111,7 @@ comprehensive coverage from different angles.
 | 6 | **Structural** | What design flaws, race conditions, or failure modes exist in this system's architecture — not just in the current change, but in how it integrates? (Code/Mixed only) |
 
 Table shows code lenses. Other work types adapt lens names — e.g., planning uses "Feasibility"
-for Round 1, Q&A uses a reduced 3-round review. See `references/lens-rubrics.md` for all
+for Round 1, Q&A uses a reduced 3-round review. See `[references/lens-rubrics.md](./references/lens-rubrics.md)` for all
 work-type-specific lens prompts.
 
 ### Skill Integration Per Round
@@ -339,28 +339,28 @@ Reviewer 1 — Security (code-quality:security):
   Agent(
     description="Security domain review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: Security>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Security>
   )
 
 Reviewer 2 — QA (code-quality:qa):
   Agent(
     description="QA domain review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: QA>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: QA>
   )
 
 Reviewer 3 — Performance (code-quality:performance):
   Agent(
     description="Performance domain review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: Performance>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Performance>
   )
 
 Reviewer 4 — Code Review (code-quality:code-reviewer):
   Agent(
     description="Code style and maintainability review",
     model="sonnet",
-    prompt=<see references/subagent-prompts.md, Domain Reviewer: Code-Reviewer>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Code-Reviewer>
   )
 ```
 
@@ -427,7 +427,7 @@ Agent(
   description="Plan adherence review",
   subagent_type="code-quality:plan-adherence",
   model="opus",
-  prompt=<see references/subagent-prompts.md, Layer 1.75: Plan Adherence Reviewer>
+  prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Layer 1.75: Plan Adherence Reviewer>
 )
 ```
 
@@ -516,7 +516,7 @@ PASS 1:
   pass1_result = Agent(
     description="Completeness review",
     model="opus",
-    prompt=<see references/subagent-prompts.md, Subagent A Pass 1>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Subagent A Pass 1>
   )
   → Save pass1_result.agentId
   → Fix ALL findings
@@ -540,7 +540,7 @@ PASS 1:
   pass1_result = Agent(
     description="Adversarial review",
     model="opus",
-    prompt=<see references/subagent-prompts.md, Subagent B Pass 1>
+    prompt=<see [references/subagent-prompts.md](./references/subagent-prompts.md), Subagent B Pass 1>
   )
   → Save pass1_result.agentId
   → Fix ALL findings
@@ -863,7 +863,7 @@ Overall: [PASS / NEEDS WORK]
 
 | Skill | Relationship |
 |-------|-------------|
-| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens, BLOCKING sub-gate) for dead code, unnecessary abstractions. Uses `references/simplification-checklist.md` and `references/dependency-evaluation.md`. |
+| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens, BLOCKING sub-gate) for dead code, unnecessary abstractions. Uses `[references/simplification-checklist.md](../../references/simplification-checklist.md)` and `[references/dependency-evaluation.md](../../references/dependency-evaluation.md)`. |
 | `code-quality:plan-adherence` | Spawned in Layer 1.75 for plan file verification (planning/mixed work types). |
 | `code-quality:reflect` | Invoked for metacognitive checkpoints via Serena reflection tools. |
 | `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |

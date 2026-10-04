@@ -470,7 +470,7 @@ Each task includes:
 **After writing each task (full planning only — skip for light plans):**
 
 Dispatch a reviewer subagent. Read the template at
-`references/task-reviewer-prompt.md`, fill in the placeholders (`{PLAN_FILE_PATH}`,
+`[references/task-reviewer-prompt.md](./references/task-reviewer-prompt.md)`, fill in the placeholders (`{PLAN_FILE_PATH}`,
 `{TASK_NUMBER}`, `{PRIOR_TASK_SUMMARIES}`), and pass the result as the prompt:
 
 ```

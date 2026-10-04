@@ -368,7 +368,7 @@ Group plans (or task ranges) into phases that respect the dependency edges.
 
 For each phase:
 
-- **Assign worktree branches** — follow convention from `references/phase-schema.md`:
+- **Assign worktree branches** — follow convention from `[references/phase-schema.md](./references/phase-schema.md)`:
   `roadmap/phase-N/plan-name`
 - **Determine merge order** — order tracks to minimize conflict risk. Tracks that touch
   foundational files (schemas, interfaces, shared utilities) merge first.
@@ -421,7 +421,7 @@ Options:
 
 ## Phase 4: Document Generation
 
-Write the roadmap file following the schema in `references/phase-schema.md`.
+Write the roadmap file following the schema in `[references/phase-schema.md](./references/phase-schema.md)`.
 
 ### Determine roadmap file location
 
@@ -657,5 +657,5 @@ Projects using `~/.claude/plans/` skip Phase 0 and go straight to Phase 1.
 
 ### Schema Reference
 
-`references/phase-schema.md` — canonical schema for all roadmap document fields,
+`[references/phase-schema.md](./references/phase-schema.md)` — canonical schema for all roadmap document fields,
 including per-track table columns and worktree branch naming.
