@@ -1,19 +1,33 @@
 import concurrent.futures
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 
 
 def detect_memory_dir():
+    main_worktree = "."
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"], capture_output=True, text=True, check=True
+        )
+        for line in result.stdout.strip().split("\n"):
+            if line.startswith("worktree "):
+                main_worktree = line[len("worktree ") :].strip()
+                break
+    except Exception:
+        pass
+
     priorities = ["hack", ".local", "scratch", ".dev"]
     core_files = ["PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md"]
 
     for d in priorities:
-        if os.path.isdir(d):
-            found = sum(1 for f in core_files if os.path.exists(os.path.join(d, f)))
+        candidate_dir = os.path.join(main_worktree, d)
+        if os.path.isdir(candidate_dir):
+            found = sum(1 for f in core_files if os.path.exists(os.path.join(candidate_dir, f)))
             if found >= 2:
-                return d
+                return candidate_dir
     return None
 
 
