@@ -147,7 +147,7 @@
     },
     {
       "name": "git-tools",
-      "version": "2.6.0",
+      "version": "2.6.1",
       "source": "./git-tools",
       "description": "Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation",
       "category": "productivity",
