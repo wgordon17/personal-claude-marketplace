@@ -6,6 +6,8 @@ allowed-tools: [Bash, Read, Write, Edit]
 
 # uv-python
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 This skill ensures that all Python interactions utilize the `uv` CLI tool, a high-performance Python package and project manager that replaces pip, pipx, pyenv, and other tools.
 
 ## ⚠️ MANDATORY RULES - READ FIRST
@@ -126,7 +128,7 @@ Running `uv run script.py` automatically creates an isolated environment with th
 - Scripts that need reproducibility
 - One-off utilities with specific dependency versions
 
-**See `[references/pep723-examples.md](./references/pep723-examples.md)` for practical examples.**
+**See `[{skill_dir}/references/pep723-examples.md](./references/pep723-examples.md)` for practical examples.**
 
 ### 5. Use uv for Python Version Management
 
@@ -197,7 +199,7 @@ uv pip install requests  # or uv add requests in projects
 
 ## Command Reference
 
-For a comprehensive mapping of legacy commands to uv equivalents, consult `[references/command-mappings.md](./references/command-mappings.md)`.
+For a comprehensive mapping of legacy commands to uv equivalents, consult `[{skill_dir}/references/command-mappings.md](./references/command-mappings.md)`.
 
 Quick reference:
 - `python script.py` → `uv run script.py`
@@ -342,7 +344,7 @@ uv cache clean pyright
 
 ## Additional Resources
 
-- **Command Mappings**: `[references/command-mappings.md](./references/command-mappings.md)` - Comprehensive legacy → uv command table
-- **PEP 723 Examples**: `[references/pep723-examples.md](./references/pep723-examples.md)` - Practical inline dependency examples
+- **Command Mappings**: `[{skill_dir}/references/command-mappings.md](./references/command-mappings.md)` - Comprehensive legacy → uv command table
+- **PEP 723 Examples**: `[{skill_dir}/references/pep723-examples.md](./references/pep723-examples.md)` - Practical inline dependency examples
 - **LSP Navigation**: `/lsp-navigation skill` - LSP tool usage guide
 - **Official Docs**: https://docs.astral.sh/uv/

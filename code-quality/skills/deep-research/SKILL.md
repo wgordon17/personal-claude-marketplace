@@ -11,6 +11,8 @@ allowed-tools: [WebSearch, WebFetch, Read, Write, Agent, AskUserQuestion, mcp__c
 
 # deep-research — 5-Hop Deep Research Mode
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Comprehensive research methodology targeting 40+ sources with multi-hop exploration for thorough analysis of complex topics.
 
 ## When to Use
@@ -37,7 +39,7 @@ Before starting research:
    - What matters most to the user?
    - **Dependency/tool comparison detected?** *(Science & Technology)* If the research involves
      comparing libraries, frameworks, CLI tools, or dependencies, read
-     [dependency-evaluation.md](../../references/dependency-evaluation.md) and incorporate its
+     [{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md) and incorporate its
      Must-Have / Should-Have / Red Flags / Supply Chain Assessment criteria into the evaluation
      framework. These criteria replace ad-hoc quality assessments with a structured checklist
      covering maintenance signals, licensing, CVEs, bus factor, release integrity, and AI agent
@@ -193,7 +195,7 @@ Stakeholder selection should be informed by `{research_scope}` — prioritize pe
    - Side-by-side feature comparison
    - Quantitative metrics where available
    - **When domain is Science & Technology, for dependency/tool comparisons:** include rows from
-     [dependency-evaluation.md](../../references/dependency-evaluation.md) Must-Have criteria —
+     [{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md) Must-Have criteria —
      recent commits (6-month threshold from today), recent releases (12-month threshold),
      license, CVE status — plus bus factor and release integrity from Supply Chain Assessment.
      Use the Date Verification Protocol: state the actual gap in months, not "recently updated"
@@ -234,7 +236,7 @@ Stakeholder selection should be informed by `{research_scope}` — prioritize pe
 ### Output Location
 
 Detect the project memory directory using the convention in
-`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+`[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 If a memory directory is found, write the research report to a file:
 
@@ -320,7 +322,7 @@ If no memory directory exists, deliver the report in the conversation only.
 | Cost | Free | $X/mo | Free |
 | ... | ... | ... | ... |
 
-*(Science & Technology) For dependency/tool comparisons, add these rows from [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria:*
+*(Science & Technology) For dependency/tool comparisons, add these rows from [{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md) criteria:*
 
 | Criteria | Option A | Option B | Option C |
 |----------|----------|----------|----------|
@@ -385,7 +387,7 @@ If no memory directory exists, deliver the report in the conversation only.
 - **Include recent (2025-2026) sources** where available
 - **Cross-reference claims** (verify important claims with multiple sources)
 - *(Science & Technology)* **Verify API claims against current docs** — use Context7 MCP to confirm API signatures, configuration options, and version-specific behavior rather than relying on training data
-- *(Science & Technology)* **For dependency/tool comparisons: apply [dependency-evaluation.md](../../references/dependency-evaluation.md) criteria** — every candidate must be evaluated against Must-Have thresholds (recent commits, recent releases, license, CVEs). Use the Date Verification Protocol: calculate the actual gap in months from today's date. Never say "recently updated" without stating the date and gap. For CLI tools or code-executing dependencies, include the Supply Chain Assessment (maintainer provenance, bus factor, release integrity, code execution model)
+- *(Science & Technology)* **For dependency/tool comparisons: apply [{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md) criteria** — every candidate must be evaluated against Must-Have thresholds (recent commits, recent releases, license, CVEs). Use the Date Verification Protocol: calculate the actual gap in months from today's date. Never say "recently updated" without stating the date and gap. For CLI tools or code-executing dependencies, include the Supply Chain Assessment (maintainer provenance, bus factor, release integrity, code execution model)
 - **Verify authoritative source claims** — cross-reference with the governing body or official source for the domain (e.g., FDA for food safety, manufacturer specs for products, building codes for construction)
 - *(Bridged mode)* **Internal investigation must cover relevant source files** — not just PROJECT.md and LESSONS.md; read actual code files
 - *(Bridged mode)* **Internal-external bridge must be specific** — cite actual file paths, function names, and patterns, not vague descriptions

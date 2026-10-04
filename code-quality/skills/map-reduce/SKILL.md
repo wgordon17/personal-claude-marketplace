@@ -6,6 +6,8 @@ allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, CronCreate, Cro
 
 # /map-reduce — Parallelized Workload Processing
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Splits large workloads into parallelizable chunks, assigns independent mapper agents to each
 chunk, then synthesizes results through a single reducer agent with cross-chunk validation.
 Use for codebase-wide analysis, bulk transformations, and large file audits (20+ files).
@@ -67,14 +69,14 @@ LEAD (you)
 3. **Cross-reference manifest:** before splitting, build a lightweight manifest of exported
    symbols per file — function names, class names, and file paths for all files NOT in each
    chunk. Include this manifest in every ChunkAssignment so mappers can distinguish between
-   "unused in my chunk" vs "might be used elsewhere." See `[references/fidelity-guide.md](./references/fidelity-guide.md)`.
+   "unused in my chunk" vs "might be used elsewhere." See `[{skill_dir}/references/fidelity-guide.md](./references/fidelity-guide.md)`.
 
 4. **Cap at 8 mappers:** if the workload naturally splits into more, merge the smallest chunks.
-   If the user wants more than 8, use AskUserQuestion to confirm — document in [fidelity-guide.md](./references/fidelity-guide.md)
+   If the user wants more than 8, use AskUserQuestion to confirm — document in [{skill_dir}/references/fidelity-guide.md](./references/fidelity-guide.md)
    that uncapped splitting is a known fidelity risk.
 
 5. **Create audit trail:** Generate a run-ID using the convention in
-   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Run-ID Naming Convention section).
+   `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Run-ID Naming Convention section).
    Create `{memory_dir}/map-reduce/{run-id}/` and `{memory_dir}/map-reduce/{run-id}/chunks/`
    subdirectory for ChunkResult files.
 
@@ -85,7 +87,7 @@ LEAD (you)
 
 1. **Spawn N mapper agents in parallel** — all at once, not sequentially. Use `general-purpose`
    type with `sonnet` model. Each mapper receives a ChunkAssignment (see
-   `[references/communication-schema.md](./references/communication-schema.md)`).
+   `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`).
 
 2. **Mappers are fully isolated** — they do NOT communicate with each other. Each processes
    only the files/items in its chunk.
@@ -156,7 +158,7 @@ LEAD (you)
    options from the verifier's `options` array (if present) plus "Defer" as the last option,
    OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
    `multiSelect: false`. Map-reduce has no Finding Verifier — the Lead applies the
-   de-escalation test from `[../../references/finding-classification.md](../../references/finding-classification.md)` inline before
+   de-escalation test from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` inline before
    presenting to the user. If the finding has a single correct resolution, reclassify to
    `needs-fix` and fix it.
    Do NOT exit with unresolved `needs-input` findings. If AskUserQuestion is unavailable, treat
@@ -172,7 +174,7 @@ LEAD (you)
      with options from the verifier's `options` array (if present) plus "Defer" as the last
      option, OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
      `multiSelect: false`. Map-reduce has no Finding Verifier — the Lead applies the
-     de-escalation test from `[../../references/finding-classification.md](../../references/finding-classification.md)` inline before
+     de-escalation test from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` inline before
      presenting to the user. If the finding has a single correct resolution, reclassify to
      `needs-fix` and apply it.
      Selected items are applied, then tests re-run. Do NOT apply `needs-input` changes without
@@ -219,7 +221,7 @@ map-reduce (see table above).
 
 ### Context Bundle
 
-Every mapper and the reducer receive a context bundle (see `[references/communication-schema.md](./references/communication-schema.md)`).
+Every mapper and the reducer receive a context bundle (see `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`).
 The bundle includes: project name, task description, run_dir, the tool guard reminder, and the
 cross-reference manifest (embedded in ChunkAssignment for mappers).
 
@@ -251,6 +253,6 @@ hack/map-reduce/
 
 | File | Content |
 |------|---------|
-| `[references/communication-schema.md](./references/communication-schema.md)` | JSON schemas for ChunkAssignment, ChunkResult, ReductionInput, ReductionResult |
-| `[references/agent-prompts.md](./references/agent-prompts.md)` | Full prompt templates for mapper and reducer agents |
-| `[references/fidelity-guide.md](./references/fidelity-guide.md)` | Fidelity risks, mitigations, and when NOT to use map-reduce |
+| `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)` | JSON schemas for ChunkAssignment, ChunkResult, ReductionInput, ReductionResult |
+| `[{skill_dir}/references/agent-prompts.md](./references/agent-prompts.md)` | Full prompt templates for mapper and reducer agents |
+| `[{skill_dir}/references/fidelity-guide.md](./references/fidelity-guide.md)` | Fidelity risks, mitigations, and when NOT to use map-reduce |

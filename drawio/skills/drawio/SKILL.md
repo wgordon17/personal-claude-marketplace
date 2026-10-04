@@ -5,6 +5,8 @@ description: Always use when user asks to create, generate, draw, or design a di
 
 # Draw.io Diagram Skill
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Generate draw.io diagrams as native `.drawio` files. Optionally export to PNG, SVG, or PDF with the diagram XML embedded (so the exported file remains editable in draw.io).
 
 ## How to create a diagram
@@ -165,7 +167,7 @@ Every diagram must have this structure:
 
 ## XML reference
 
-For the complete draw.io XML reference including common styles, edge routing, containers, layers, tags, metadata, dark mode colors, and XML well-formedness rules, read and follow the instructions in the vendored sibling file `[xml-reference.md](./xml-reference.md)`.
+For the complete draw.io XML reference including common styles, edge routing, containers, layers, tags, metadata, dark mode colors, and XML well-formedness rules, read and follow the instructions in the vendored sibling file `[{skill_dir}/xml-reference.md](./xml-reference.md)`.
 
 ## Troubleshooting
 

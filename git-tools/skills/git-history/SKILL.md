@@ -6,6 +6,8 @@ allowed-tools: [Bash]
 
 # Non-Interactive Git History Commands (git-branchless)
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 This skill provides comprehensive reference for git-branchless commands that AI agents can execute reliably without interactive prompts.
 
 ## CRITICAL: Why Use git-branchless
@@ -36,10 +38,10 @@ git branchless init
 | **Move** | `git branchless move -s <src> -d <dest>` | Moves commit and descendants |
 | **Move exact** | `git branchless move -x <sha> -d <dest>` | Moves only specified commit |
 | **Squash** | `git branchless move --fixup -x <src> -d <dest>` | Experimental |
-| **Split** | Manual reset workflow | See [BRANCHLESS.md](./BRANCHLESS.md) |
+| **Split** | Manual reset workflow | See [{skill_dir}/BRANCHLESS.md](./BRANCHLESS.md) |
 | **Create** | `git branchless record -m "message"` | No editor |
 | **Undo** | `git branchless undo --yes` | No confirmation prompt |
 | **View** | `git sl` | Smart log (commit graph) |
 | **Restack** | `git restack` | Repair commit graph after manual ops |
 
-For detailed documentation, see [BRANCHLESS.md](./BRANCHLESS.md)
+For detailed documentation, see [{skill_dir}/BRANCHLESS.md](./BRANCHLESS.md)

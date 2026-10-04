@@ -16,6 +16,8 @@ allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion,
 
 # /swarm — Full Agent Swarm Implementation
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 You MUST use the full swarm described here. Do not take shortcuts. Do not implement
 the task yourself. Your role is orchestration — you route work, relay context, make judgment
 calls, and coordinate the pipeline. Every phase of implementation goes through the appropriate
@@ -95,7 +97,7 @@ Run the project test suite and record the baseline (pass/fail count, any pre-exi
 Check git status — ensure the working tree is clean, identify the current branch, and determine
 whether a feature branch is needed. If not already on a feature branch, create one from
 `upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
-depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
+depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
 (Run-ID Naming Convention section) and create the audit trail directory at `{memory_dir}/swarm/{run-id}/`.
 Create all tasks upfront with `addBlockedBy` dependencies so the full task graph is visible from
 the start. The implicit team is established automatically by the first named teammate spawn in
@@ -116,14 +118,14 @@ Plan Reconciliation to reuse (both phases skip re-discovery when the path is alr
 
 **Tracker Extraction:** If a plan file is found, extract `{tracker}` — the value of the
 `**Tracker:**` field from the plan file header (see
-`[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` for field values and parsing spec).
+`[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` for field values and parsing spec).
 Phase 7 references `{tracker}` without re-reading the plan file. This keeps plan file
 parsing centralized at Phase 0, consistent with the existing `{TEST_PLAN}` pattern. If
 the `**Tracker:**` field is absent from the plan file header (pre-feature plans), set
 `{tracker}` to `none`.
 
 **Tracker validation:** After extraction, verify `{tracker}` is a terminal state
-(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) per `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
+(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) per `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
 Finalization Constraint section. If `{tracker}` is a non-terminal state (`github:pending`,
 `github:linked#N`, or `jira:pending`), warn via `AskUserQuestion`: "Plan file has unresolved
 tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or set to 'none'
@@ -143,7 +145,7 @@ If `incremental`:
 - **Initial branch naming:** For the first PR boundary (no checkpoint exists), derive
   `{plan-slug}` from the plan file path using the same algorithm as checkpoint resume:
   extract the basename, strip the run-id prefix (`{branch-slug}-{timestamp}-`) and `.md`
-  extension, then apply the Branch Slug Sanitization Rules from `[project-memory-reference.md](../../references/project-memory-reference.md)`.
+  extension, then apply the Branch Slug Sanitization Rules from `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`.
   Rename the Phase 0-created branch to `feat/{plan-slug}-pr1` (via `git branch -m`). This
   rename happens after the test baseline. The rename is a git-only operation that does not
   affect the audit trail, which is keyed to the run-id independent of the branch name.
@@ -171,7 +173,7 @@ If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
   (filename only), then strip the run-id prefix (`{branch-slug}-{timestamp}-`) and the
   `.md` extension. Example: `hack/plans/feat-auth-1711388400-session-auth.md` → basename
   `feat-auth-1711388400-session-auth.md` → strip prefix and extension → `session-auth`.
-  Apply the Branch Slug Sanitization Rules from `[project-memory-reference.md](../../references/project-memory-reference.md)`.
+  Apply the Branch Slug Sanitization Rules from `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`.
 - Create new branch for the next PR boundary: `feat/{plan-slug}-pr{N}` from
   `origin/{branch_base}` (using the `branch_base` field from the checkpoint, typically `main`)
 - Announce: "Resuming swarm. Prior work merged. Remaining tasks: {list}."
@@ -219,14 +221,14 @@ run in Phase 4. Include it in the composition count presented to the user.
 
 **jira:jira-agent** (conditional) — Spawned at Phase 7 completion when `{tracker}` contains
 `jira:PROJ-N`. Verifies card status and transitions to In Progress. Cross-plugin agent
-spawning is validated: [jira-agent.md](../../../jira/agents/jira-agent.md) explicitly lists "swarm implementers, quality-gate
+spawning is validated: [{skill_dir}/../../../jira/agents/jira-agent.md](../../../jira/agents/jira-agent.md) explicitly lists "swarm implementers, quality-gate
 verifiers, or any agent" as valid spawners.
 
 ### Phase 2: Architect (opus)
 
 Spawn the architect agent with the full task description, codebase context, and audit trail path.
 The architect begins by classifying the task using the Cynefin framework
-(see `[references/cynefin-reference.md](./references/cynefin-reference.md)`), then designs the solution accordingly:
+(see `[{skill_dir}/references/cynefin-reference.md](./references/cynefin-reference.md)`), then designs the solution accordingly:
 
 - **Clear / Complicated:** Standard decomposition into independent components with dependency graph.
 - **Complex:** Probe design — experiments and signals rather than a full plan. Smaller components
@@ -240,7 +242,7 @@ The Cynefin classification (`cynefin_domain` and `domain_justification`) is writ
 run. The Lead reads the classification to inform Phase 2.5 skip decisions.
 
 Output is a structured JSON plan written to `{run_dir}/architect-plan.json`
-(see schema in `[references/communication-schema.md](./references/communication-schema.md)`). The architect also identifies global risks,
+(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). The architect also identifies global risks,
 data model changes, API surface changes, and **documentation impact** — a `documentation_impact`
 array listing which documentation surfaces are affected and why (READMEs, manifests, registries,
 component tables, descriptions, dependency matrices, user-facing docs). This array feeds Phase 6.
@@ -279,7 +281,7 @@ The agent reviews architect-plan.json for:
 - Security constraints the implementer must respect
 
 Output: SecurityDesignReview JSON written to `{run_dir}/security-design-review.json`
-(see schema in `[references/communication-schema.md](./references/communication-schema.md)`).
+(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`).
 
 **Routing:**
 - needs-fix findings requiring architect plan revision → Route back to Architect (Phase 2) with security feedback for
@@ -356,7 +358,7 @@ The Reduction Analyst evaluates:
 
 3. **Dependency opportunities:** For each proposed custom implementation, check whether a
    well-maintained library already solves the problem (per
-   `[../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`). Use WebSearch to verify recency and
+   `[{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`). Use WebSearch to verify recency and
    popularity against today's actual date.
 
 4. **Net complexity assessment:** Will the plan result in a net increase or decrease in codebase
@@ -386,12 +388,12 @@ Test-Runner. The Lead routes work through the pipeline using structured JSON mes
 flow from Implementer to Reviewer to Test-Writer to Test-Runner, with the Implementer moving to
 the next component while earlier ones advance through the pipeline. Each agent sends a
 ContextAcknowledgment immediately upon receiving an assignment (see
-`[references/communication-schema.md](./references/communication-schema.md)`). Each handoff uses a typed JSON message. If the Reviewer
+`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Each handoff uses a typed JSON message. If the Reviewer
 rejects a component, the Lead routes specific feedback back to the Implementer for targeted fixes
 and re-submission (max 3 iterations per component). If Test-Runner reports failures, the Lead
 routes the failure details back to the Implementer for fixes, then re-submits through Review and
 Test stages. The watchdog is torn down (CronDelete) when Phase 3 completes or on any abort path.
-See `[references/pipeline-model.md](./references/pipeline-model.md)` for full parallelism rules, backpressure handling, and
+See `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)` for full parallelism rules, backpressure handling, and
 fallback to sequential mode.
 
 #### Parallel Mini-Pipelines (when applicable)
@@ -432,7 +434,7 @@ After completing all tasks in the current PR boundary (all components for tasks 
    per the Phase 4.5 incremental workflow section).
 2. Run Phase 5 Fixer scoped to the current boundary's files only — the Lead passes
    `pr_boundary_files` to the Fixer agent's prompt (same mechanism as Phase 4 reviewers).
-   Structural scoping per [finding-classification.md](../../references/finding-classification.md) Fixer Protocol.
+   Structural scoping per [{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md) Fixer Protocol.
    Note: Phase 5.5 (Plan Reconciliation) does NOT run at non-final boundary stops — it
    runs only at final completion, scoped to all tasks across all boundaries.
 3. Spawn Verifier agent (tests + lint) — same agent as Phase 7 but invoked inline at
@@ -546,7 +548,7 @@ Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance
 auto-detected optional reviewers (UI, API, DB). Also spawn the Plan Adherence reviewer if an
 incremental plan file is found (see below). All reviewers operate in read-only mode on the
 completed implementation. Each writes structured JSON findings to `{run_dir}/reviews/`
-(see schema in `[references/communication-schema.md](./references/communication-schema.md)`). The Lead collects ALL findings and
+(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). The Lead collects ALL findings and
 synthesizes into a consolidated view. Every finding — regardless of classification — is routed to
 Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
 
@@ -580,7 +582,7 @@ findings, escalate to the human via AskUserQuestion rather than re-running again
 Phase 3 re-implementations at 2 regardless of escalation type.
 
 All escalation events are recorded in `{run_dir}/escalations.json`
-(see schema in `[references/communication-schema.md](./references/communication-schema.md)` under "Escalation Events Schema").
+(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)` under "Escalation Events Schema").
 
 **Incremental workflow scoping:** When `{workflow_mode}` is `incremental`, reviewers receive
 only the diff for the current PR boundary's files (not the full branch diff). The Lead
@@ -634,7 +636,7 @@ Otherwise, spawn agents in this order:
 
 **Step 5.1 — Fixer:** Spawn the Fixer with ALL consolidated findings (all classifications)
 and full context of the implementation. The Fixer processes all findings — process in file order
-per `[../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. After the Fixer
+per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. After the Fixer
 completes, the Lead handles user triage for `needs_input_items` and structural verification
 per Step 5.2.1. For each `user_deferred` item:
 1. Create a `TaskCreate` entry marked as blocked with the reason (visible in task list throughout)
@@ -727,7 +729,7 @@ The Docs agent performs three passes:
 corresponding documentation needs updating (README behavior descriptions, API docs, config docs,
 CONTRIBUTING.md). Update only what is directly affected.
 
-The Docs agent also detects the project's memory directory (per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`,
+The Docs agent also detects the project's memory directory (per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`,
 Directory Detection section) and updates PROJECT.md with architectural decisions, TODO.md with completed and new
 items, and SESSIONS.md with a 3-5 bullet summary.
 
@@ -764,13 +766,13 @@ Findings are written to `{run_dir}/reviews/docs-review.json` using the standard 
 schema with `DOC-R` prefix. `needs-fix` findings are routed back to the Docs agent for fixes
 (max 1 iteration — the Docs Reviewer re-reviews after fixes). `needs-input` findings are
 presented to the user via AskUserQuestion using the option-based format from
-`[../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. All findings are recorded
+`[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. All findings are recorded
 in the audit trail.
 
 After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
 agent scans the swarm run's audit trail and extracts principle-level lessons to
 `{memory_dir}/LESSONS.md` (creating the file if it does not exist, where `{memory_dir}` is the
-project memory directory detected per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`). It reads:
+project memory directory detected per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`). It reads:
 - `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged
 - `{run_dir}/reviews/` — recurring finding patterns across reviewers
 - `{run_dir}/escalations.json` — escalation events (if the file exists)
@@ -778,7 +780,7 @@ project memory directory detected per `[../../references/project-memory-referenc
 - Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
 
 Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
-format from `[../incremental-planning/references/lessons-template.md](../incremental-planning/references/lessons-template.md)`:
+format from `[{skill_dir}/../incremental-planning/references/lessons-template.md](../incremental-planning/references/lessons-template.md)`:
 `- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
 
 The Lessons Extractor runs after Docs completes to avoid audit trail races.
@@ -798,13 +800,13 @@ catch any issues introduced at scale.
 **Issue Tracking (before completion announcement):**
 
 If `{tracker}` matches `github:owner/repo#N`:
-1. Validate format before interpolation per `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
+1. Validate format before interpolation per `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
    Validation Regex section. Skip if invalid.
 2. Add the `in-progress` label to the linked GH issue (best-effort — if the command
    fails, log a warning in the completion announcement and continue):
    `gh label create in-progress --repo <owner/repo> --description 'Work actively underway' --color 'fbca04' 2>/dev/null || true`
    `gh issue edit N --repo <owner/repo> --add-label 'in-progress'`
-   (auto-create the label first per `[../../references/github-label-definitions.md](../../references/github-label-definitions.md)`,
+   (auto-create the label first per `[{skill_dir}/../../references/github-label-definitions.md](../../references/github-label-definitions.md)`,
    using create-if-missing without `--force` to avoid overwriting existing repo customizations)
 3. Include in the completion announcement: "Include `Closes #N` in the PR body
    to auto-close the linked GH issue when merged. After merge, remove the
@@ -976,7 +978,7 @@ task graph should be visible from the start so the user can see the plan at any 
 ### Context Relay
 
 Every agent receives a structured context bundle when spawned (see schema in
-`[references/communication-schema.md](./references/communication-schema.md)`). The bundle includes: project name, task description,
+`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). The bundle includes: project name, task description,
 current branch, key files from the architect's plan, audit trail path (`run_dir`), and the
 tool guard reminder. Never spawn an agent without the full context bundle.
 
@@ -989,7 +991,7 @@ blocker or a pre-existing issue. Lean toward escalation for ambiguous decisions.
 ### Pipeline Coordination
 
 Monitor the pipeline flow actively. Route handoff messages between agents using the schemas in
-`[references/communication-schema.md](./references/communication-schema.md)`. Detect backpressure (see `[references/pipeline-model.md](./references/pipeline-model.md)`)
+`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`. Detect backpressure (see `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)`)
 and throttle the Implementer when the Reviewer queue is full.
 
 ### Watchdog Monitoring
@@ -1004,7 +1006,7 @@ or on any abort path — do not leave orphaned cron jobs.
 
 Track `turn_count` from every agent's structured messages. Proactively recycle agents approaching
 context limits (default: 25 turns for Implementer/Test-Writer, 30 for Reviewer) using the
-HandoffRequest → HandoffSummary → shutdown → respawn protocol (see `[references/orchestration-playbook.md](./references/orchestration-playbook.md)`
+HandoffRequest → HandoffSummary → shutdown → respawn protocol (see `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)`
 Step 3.6). Detect silent failures: if a teammate goes idle without completing their task or sending
 a final message, initiate recovery (status check → replacement spawn → escalate if repeated).
 
@@ -1110,9 +1112,9 @@ agent that does the job right over multiple sonnet agents that require rework.
 
 | File | Content |
 |------|---------|
-| `[references/orchestration-playbook.md](./references/orchestration-playbook.md)` | Complete phase-by-phase coordination guide, error handling, rollback procedures, agent roster config, and git workflow |
-| `[references/agent-prompts.md](./references/agent-prompts.md)` | Full prompt templates for all 21+ agents — role, boundaries, communication protocol, output format |
-| `[references/communication-schema.md](./references/communication-schema.md)` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
-| `[references/pipeline-model.md](./references/pipeline-model.md)` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
-| `[references/cynefin-reference.md](./references/cynefin-reference.md)` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |
-| `[references/warm-bundle-handoff.md](./references/warm-bundle-handoff.md)` | Warm-bundle handoff — the four optional per-component fields (files_examined, ruled_out, change_sites, proposed_first_change), the consumer contract, KV-cache/verification caveats, and the anti-injection note |
+| `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` | Complete phase-by-phase coordination guide, error handling, rollback procedures, agent roster config, and git workflow |
+| `[{skill_dir}/references/agent-prompts.md](./references/agent-prompts.md)` | Full prompt templates for all 21+ agents — role, boundaries, communication protocol, output format |
+| `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
+| `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |
+| `[{skill_dir}/references/cynefin-reference.md](./references/cynefin-reference.md)` | Cynefin domain classification — five domains, decision tree, domain-to-phase mapping, misclassification traps |
+| `[{skill_dir}/references/warm-bundle-handoff.md](./references/warm-bundle-handoff.md)` | Warm-bundle handoff — the four optional per-component fields (files_examined, ruled_out, change_sites, proposed_first_change), the consumer contract, KV-cache/verification caveats, and the anti-injection note |

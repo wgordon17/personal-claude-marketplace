@@ -9,6 +9,8 @@ allowed-tools: [Read, Write, Bash]
 
 # Repository Indexing
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Generate a compact PROJECT_INDEX.md (~3K tokens) that gives any agent full project orientation
 without reading the entire codebase (~50-60K tokens).
 
@@ -42,7 +44,7 @@ For each file category, identify:
 ### Phase 3: Generate PROJECT_INDEX.md
 
 Determine output location: detect the project memory directory using the convention in
-`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+`[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 Write there. Fall back to project root only if none exists.
 
 ```markdown
@@ -102,4 +104,4 @@ Generated: {timestamp}
 ## Output
 
 Creates `PROJECT_INDEX.md` in the project memory directory (detected per
-`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`) or project root if none exists (~3K tokens, human-readable).
+`[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`) or project root if none exists (~3K tokens, human-readable).

@@ -13,6 +13,8 @@ allowed-tools: [Read, Write, Edit, Agent, AskUserQuestion, Bash, ToolSearch]
 
 # Roadmap
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Stateful multi-plan phase sequencing with roadmap lifecycle management. Takes existing plan
 files as input, produces a structured roadmap document consumable by `/swarm` and other
 orchestrators. Detects existing roadmaps and routes to update, cleanup, status/drift, or
@@ -37,7 +39,7 @@ Before ingesting any plans, check whether an existing roadmap document already e
 ### Step 1: Locate plan directory
 
 Detect the project memory directory using the convention in
-`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+`[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 - **If found:** Plan directory is `{memory_dir}/plans/`
 - **If none found:** **Skip Phase 0** — proceed to Phase 1. Stateful roadmap management
@@ -280,7 +282,7 @@ best-effort extraction or skip. Do not silently proceed.
 
 After all plans are ingested and conformance-checked, check if any address open bugs.
 Detect or reuse the memory directory (using the convention in
-`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`). If Phase 0 was skipped (no
+`[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`). If Phase 0 was skipped (no
 project-local memory directory exists), skip this check entirely — proceed to
 `### Chat output`.
 
@@ -368,7 +370,7 @@ Group plans (or task ranges) into phases that respect the dependency edges.
 
 For each phase:
 
-- **Assign worktree branches** — follow convention from `[references/phase-schema.md](./references/phase-schema.md)`:
+- **Assign worktree branches** — follow convention from `[{skill_dir}/references/phase-schema.md](./references/phase-schema.md)`:
   `roadmap/phase-N/plan-name`
 - **Determine merge order** — order tracks to minimize conflict risk. Tracks that touch
   foundational files (schemas, interfaces, shared utilities) merge first.
@@ -421,14 +423,14 @@ Options:
 
 ## Phase 4: Document Generation
 
-Write the roadmap file following the schema in `[references/phase-schema.md](./references/phase-schema.md)`.
+Write the roadmap file following the schema in `[{skill_dir}/references/phase-schema.md](./references/phase-schema.md)`.
 
 ### Determine roadmap file location
 
 Use the same logic as `/incremental-planning`:
 
 1. Detect the project memory directory using the convention in
-   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+   `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
    write to `{memory_dir}/plans/{run-id}-roadmap-<name>.md`
    (create the `plans/` subdirectory if it doesn't exist)
@@ -648,7 +650,7 @@ NEVER IN CHAT: Full roadmap content, raw table data, raw diff content from subag
 ### Roadmap File Location (Phase 4 — document generation)
 
 ```
-1. {memory_dir}/plans/{run-id}-roadmap-<name>.md → if memory dir exists (detect per [project-memory-reference.md](../../references/project-memory-reference.md))
+1. {memory_dir}/plans/{run-id}-roadmap-<name>.md → if memory dir exists (detect per [{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md))
 2. ~/.claude/plans/{run-id}-roadmap-<name>.md → fallback for all other cases
 ```
 
@@ -657,5 +659,5 @@ Projects using `~/.claude/plans/` skip Phase 0 and go straight to Phase 1.
 
 ### Schema Reference
 
-`[references/phase-schema.md](./references/phase-schema.md)` — canonical schema for all roadmap document fields,
+`[{skill_dir}/references/phase-schema.md](./references/phase-schema.md)` — canonical schema for all roadmap document fields,
 including per-track table columns and worktree branch naming.

@@ -14,6 +14,8 @@ allowed-tools: [Read, Write, Edit, Agent, Bash, AskUserQuestion, LSP, Skill, Too
 
 # Incremental Planning
 
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
+
 Replaces native plan mode with a question-first, file-based, incremental workflow.
 The plan lives in a file. Chat contains research, questions, and summaries — never full plan content.
 
@@ -103,7 +105,7 @@ specific questions — not generic ones.
 ### Actions
 
 - Launch an **Explore agent** (`Agent` with `subagent_type: "general-purpose"`) for relevant codebase areas
-- Read `PROJECT.md` from the memory directory (detect using `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` Directory Detection section) for past architectural decisions
+- Read `PROJECT.md` from the memory directory (detect using `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` Directory Detection section) for past architectural decisions
 - Read `LESSONS.md` (if exists) from the memory directory for relevant past lessons. Silently incorporate applicable
   lessons — especially Architecture and Planning categories — into your approach without
   announcing each one. Do not quote lessons verbatim in chat.
@@ -114,7 +116,7 @@ specific questions — not generic ones.
 - Use **Serena** MCP `get_symbols_overview` for component-level understanding (if applicable)
 - Use **sequential-thinking** MCP to reason about scope boundaries
 - **Discover documentation surfaces** — Use the detection patterns in
-  `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)` (Documentation Surfaces section) to
+  `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)` (Documentation Surfaces section) to
   find all surfaces in the project. Note which exist and what they document. This inventory
   feeds Phase 4 and Phase 5.
 - **Evaluate external research need** — If the task description or user request names a
@@ -274,7 +276,7 @@ Now write the plan. One section at a time.
 Before creating the plan file, check where it belongs:
 
 1. Detect the project memory directory using the convention in
-   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
+   `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
    create the plan at `{memory_dir}/plans/{run-id}-<feature>.md`
    (create the `plans/` subdirectory if it doesn't exist)
@@ -322,7 +324,7 @@ Write the plan file with a header containing:
   - quality-gate: 0
   ```
 - **Tracker:** — The issue tracking selection from Phase 2's Tracker Question. See
-  `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` for the full field value table, parsing
+  `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` for the full field value table, parsing
   spec, validation regex, and finalization constraint.
 - **Workflow:** — `fast` (default) or `incremental`. When `incremental`, PR boundary markers
   are required in tasks. When absent, defaults to `fast`. For light planning, `**Workflow:**`
@@ -349,7 +351,7 @@ Write the plan file with a header containing:
 
 **The following header sections apply to full planning only (skip for light planning):**
 - **Documentation Impact** — which documentation surfaces are affected by this work and how.
-  Use the trigger definitions from `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)` to
+  Use the trigger definitions from `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)` to
   determine if changes require documentation. Reference surfaces discovered in Phase 1.
   Format: `surface → action (add/update/remove) → why`. Omit if no documentation triggers apply.
 - **Options Considered** — for architecture-level plans, list the alternatives evaluated and
@@ -413,7 +415,7 @@ After writing the File Structure section, check if this plan addresses any open 
    precedence:
    - **Exact file match** (after stripping): always counts, strongest signal.
    - **Common directory prefix of at least 3 components** (e.g., `code-quality/skills/fix/`
-     matches `[../fix/SKILL.md](../fix/SKILL.md)`; `src/auth/handlers/` matches
+     matches `[{skill_dir}/../fix/SKILL.md](../fix/SKILL.md)`; `src/auth/handlers/` matches
      `src/auth/handlers/login.ts`): counts as overlap. Prefixes of 1 or 2 components
      (e.g., `code-quality/` or `code-quality/skills/`) are too broad and do not count.
    Rationale: depth-1 and depth-2 prefixes cover entire plugins or categories (20+ files
@@ -461,7 +463,7 @@ Each task includes:
 - Steps (each step is one concrete action — include test commands with expected output
   inline within the relevant step)
 - Documentation updates (what docs to create/update/remove. "None" if no documentation
-  triggers apply per `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`. Reference surfaces
+  triggers apply per `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`. Reference surfaces
   discovered in Phase 1.)
 - Commit message
 
@@ -470,7 +472,7 @@ Each task includes:
 **After writing each task (full planning only — skip for light plans):**
 
 Dispatch a reviewer subagent. Read the template at
-`[references/task-reviewer-prompt.md](./references/task-reviewer-prompt.md)`, fill in the placeholders (`{PLAN_FILE_PATH}`,
+`[{skill_dir}/references/task-reviewer-prompt.md](./references/task-reviewer-prompt.md)`, fill in the placeholders (`{PLAN_FILE_PATH}`,
 `{TASK_NUMBER}`, `{PRIOR_TASK_SUMMARIES}`), and pass the result as the prompt:
 
 ```
@@ -575,7 +577,7 @@ After all tasks are written:
    - Estimate lines changed per PR boundary (from File Structure). Flag if any boundary
      exceeds ~500 lines with a suggestion to split further — but do not auto-split.
 6. **Documentation coverage check:** For every task whose changes match the documentation
-   triggers in `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`, verify the plan includes
+   triggers in `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`, verify the plan includes
    corresponding documentation updates. Cross-reference surfaces discovered in Phase 1.
    Check both trigger coverage (every trigger has a doc update) and surface coverage (every
    affected surface is updated).
@@ -626,7 +628,7 @@ detect the target repo for GH issue creation:
 2. If no upstream, check `origin`: `git remote get-url origin`
 3. If neither exists or CWD is not a git repo, skip GH issue creation
 4. Extract owner/repo from the remote URL (handles both HTTPS and SSH formats)
-5. Validate: owner/repo must match the regex in `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`.
+5. Validate: owner/repo must match the regex in `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`.
    If validation fails, skip GH issue creation and warn the user.
 
 If repo detection fails (no remote found), warn the user via `AskUserQuestion` and
@@ -740,7 +742,7 @@ Example: `TITLE="..."; BODY="..."; gh issue create --title "$TITLE" --body "$BOD
 ### GitHub Label Definitions
 
 Label definitions (names, colors, branch-prefix mappings) are maintained in
-`[../../references/github-label-definitions.md](../../references/github-label-definitions.md)`. Read that file for the full table
+`[{skill_dir}/../../references/github-label-definitions.md](../../references/github-label-definitions.md)`. Read that file for the full table
 and the create-if-missing pattern. If the branch prefix does not match any row in the
 table, create the issue without a label.
 
@@ -790,7 +792,7 @@ where `upstream` is the target but `origin` is the fork.
 
 a. Detect repo (per Repo Detection rules) — same as the create path
 b. Validate N is a pure integer: N must match `^[0-9]+$` (per
-   `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`). If not, re-prompt the user via
+   `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`). If not, re-prompt the user via
    `AskUserQuestion` for a corrected issue number.
 c. Validate existence: `gh issue view N --repo <owner/repo> --json title,state` — if non-zero
    exit, inform user the issue doesn't exist and ask for a corrected issue number via
@@ -841,7 +843,7 @@ g. **Error handling:** If `jira:jira-agent` fails to create the card, inform the
 
 Note: The card is NOT transitioned to "In Progress" at plan time. Transition happens at
 swarm completion (Phase 7) — consistent with GitHub's `in-progress` label timing. See
-`[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` Lifecycle section.
+`[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` Lifecycle section.
 
 **If Tracker is `jira:PROJ-N` (linked existing):**
 
@@ -855,7 +857,7 @@ b. If the agent reports the key is invalid, inform the user via `AskUserQuestion
 
 Skip issue creation entirely.
 
-**Tracker finalization constraint:** See `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
+**Tracker finalization constraint:** See `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
 Finalization Constraint section. The `**Tracker:**` field must reach a terminal state
 (`github:owner/repo#N`, `jira:PROJ-N`, or `none`) before `/swarm` is invoked — no
 `pending` or `linked#N` states may remain.
@@ -887,6 +889,6 @@ NEVER IN CHAT: Full plan content, task details, code blocks from the plan
 
 ### Plan File Location
 ```
-1. {memory_dir}/plans/{run-id}-<feature>.md → if memory dir exists (detect per [project-memory-reference.md](../../references/project-memory-reference.md))
+1. {memory_dir}/plans/{run-id}-<feature>.md → if memory dir exists (detect per [{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md))
 2. ~/.claude/plans/{run-id}-<feature>.md → fallback for all other cases
 ```
