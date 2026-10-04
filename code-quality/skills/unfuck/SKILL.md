@@ -43,7 +43,7 @@ Phase 4 verifies everything passes and generates a report.
 ## Workflow Phases
 
 ### Phase 0: Index & Setup
-1. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+1. Generate a run-ID using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
    (Run-ID Naming Convention section)
 2. Spawn parallel setup teammates for: repo indexing (`code-quality:index-repo`), language detection, tool detection (the implicit team is established automatically by these first named teammate spawns — no separate setup call is needed)
 4. Create feature branch: `cleanup/comprehensive-{run-id}` (from `origin/main`)
@@ -127,7 +127,7 @@ The orchestrator assigns categories in priority order (security → dead code �
    - Per-category breakdown with specific changes and commit SHAs
    - Blocked items (test failures, needs-input) with stash names and manual fix guidance
    - External tools used vs agent-only analysis
-   - Remaining `needs-input` findings presented to user via AskUserQuestion with LoE (see `code-quality/references/finding-classification.md`)
+   - Remaining `needs-input` findings presented to user via AskUserQuestion with LoE (see `[../../references/finding-classification.md](../../references/finding-classification.md)`)
 5. Clean up intermediate discovery files
 6. Report completion to user with summary and report location
 
@@ -145,7 +145,7 @@ The orchestrator assigns categories in priority order (security → dead code �
 - Security fixes NEVER auto-applied if they could change business logic
 - AskUserQuestion for all ambiguous or high-risk decisions
 - `--dry-run` flag for discovery + planning without implementation
-- Agents use `needs-input` escape hatch for uncertain changes — see `code-quality/references/finding-classification.md` Fixer Protocol
+- Agents use `needs-input` escape hatch for uncertain changes — see `[../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol
 
 ## Output Files
 

@@ -121,7 +121,7 @@ work-type-specific lens prompts.
   atomic requirements, check each independently.
 - **Round 4 (BLOCKING):** Calculate net lines delta (`git diff --stat`). Spawn
   `code-quality:code-simplifier` with the delta as context. Apply the full checklist from
-  `code-quality/references/simplification-checklist.md`. Dead code, unnecessary abstractions,
+  `[../../references/simplification-checklist.md](../../references/simplification-checklist.md)`. Dead code, unnecessary abstractions,
   and unused imports are `needs-fix` findings — they BLOCK proceeding to Round 5. Fix all
   such simplification findings before continuing. These are objectively wasteful, not
   judgment calls.
@@ -160,7 +160,7 @@ Execute this protocol for EVERY round:
       - Any other project-specific rules that apply to this type of change
 
    b) Documentation completeness: check every change against the documentation
-      triggers in `code-quality/references/documentation-taxonomy.md`. For each
+      triggers in `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`. For each
       trigger that fires, verify the corresponding documentation surfaces were
       updated. Use the taxonomy's surface detection patterns to discover all
       surfaces, and its ecosystem-specific component discovery patterns to count
@@ -372,7 +372,7 @@ Each reviewer receives:
 ### Synthesis Protocol
 
 After all 4 reviewers complete, synthesize findings by classification
-(see `code-quality/references/finding-classification.md`):
+(see `[../../references/finding-classification.md](../../references/finding-classification.md)`):
 
 1. Collect all findings across the 4 reviewers
 2. Fix all `needs-fix` findings immediately. Do not carry them forward.
@@ -390,15 +390,15 @@ After all 4 reviewers complete, synthesize findings by classification
 
 **Note:** Quality-gate domain reviewers do not go through a Finding Verifier. When a
 domain reviewer classifies a finding as `needs-input`, the Lead applies the de-escalation
-test from `code-quality/references/finding-classification.md` before presenting to the
+test from `[../../references/finding-classification.md](../../references/finding-classification.md)` before presenting to the
 user. If the finding has a single correct resolution, reclassify to `needs-fix` and fix
 it. If genuine ambiguity exists, generate 2-4 concrete options per the Option Quality
-section in `code-quality/references/finding-classification.md` (labels 3-7 words, include
+section in `[../../references/finding-classification.md](../../references/finding-classification.md)` (labels 3-7 words, include
 tradeoff in description, mutually exclusive) and present via AskUserQuestion with Defer
 appended.
 
 **Finding completion verification:** After fixing all `needs-fix` items and resolving all
-`needs-input` items, verify completeness per `code-quality/references/finding-classification.md`
+`needs-input` items, verify completeness per `[../../references/finding-classification.md](../../references/finding-classification.md)`
 Verification Protocol: count total findings from all 4 reviewers vs (findings fixed +
 user-deferred items). Delta > 0 → findings were silently dropped → fix them before Layer 2.
 
@@ -632,7 +632,7 @@ Cannot proceed past this gate without completing all applicable checks.
 Memory that drifts from reality is worse than no memory.
 
 Update project memory files per the content placement rules in
-`code-quality/references/project-memory-reference.md`. Key surfaces:
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`. Key surfaces:
 
 | Memory Surface | Action |
 |----------------|--------|
@@ -725,7 +725,7 @@ Cannot proceed past this gate without completing all applicable checks.
 **This gate catches code→docs gaps** — features that exist on disk but aren't documented.
 Round 2 checks docs→code (do documented claims match reality). This gate checks the inverse.
 
-Use `code-quality/references/documentation-taxonomy.md` for all definitions.
+Use `[../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)` for all definitions.
 
 | Check | Action |
 |-------|--------|

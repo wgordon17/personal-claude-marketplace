@@ -168,7 +168,7 @@ Stop.
 ### Path B: No argument (auto-detect)
 
 **Step 1 — Detect memory directory.**
-Use the convention in `code-quality/references/project-memory-reference.md`
+Use the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
 (Directory Detection and Worktree Resolution sections).
 
 If no memory directory is found, print:
@@ -430,7 +430,7 @@ against a plan would produce misleading FAIL results.
 1. Extract the PR's head branch name from the Phase 1 JSON data (`headRefName`).
 
 2. If `{memory_dir}` was not resolved in Phase 0 (PR detected via Path A before Path B scan),
-   resolve it now using the convention in `code-quality/references/project-memory-reference.md`
+   resolve it now using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
    (Directory Detection and Worktree Resolution sections).
 
    Search `{memory_dir}/plans/` and `{memory_dir}/plans/done/` for a plan file whose
@@ -876,4 +876,4 @@ FILE: Only archive operations (status header + file move)
 | File | Content |
 |------|---------|
 | `[references/artifact-formats.md](./references/artifact-formats.md)` | Detection signatures, field extraction rules, audit checklists, completion criteria, and supersession signals for the 8 file-based artifact types. PR detection/summary logic is defined inline in Phases 0-2 (PRs are API-based, not file-based). |
-| `code-quality/references/project-memory-reference.md` | Memory directory detection and worktree resolution conventions |
+| `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` | Memory directory detection and worktree resolution conventions |

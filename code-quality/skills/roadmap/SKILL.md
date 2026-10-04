@@ -37,7 +37,7 @@ Before ingesting any plans, check whether an existing roadmap document already e
 ### Step 1: Locate plan directory
 
 Detect the project memory directory using the convention in
-`code-quality/references/project-memory-reference.md` (Directory Detection section).
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 - **If found:** Plan directory is `{memory_dir}/plans/`
 - **If none found:** **Skip Phase 0** — proceed to Phase 1. Stateful roadmap management
@@ -280,7 +280,7 @@ best-effort extraction or skip. Do not silently proceed.
 
 After all plans are ingested and conformance-checked, check if any address open bugs.
 Detect or reuse the memory directory (using the convention in
-`code-quality/references/project-memory-reference.md`). If Phase 0 was skipped (no
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`). If Phase 0 was skipped (no
 project-local memory directory exists), skip this check entirely — proceed to
 `### Chat output`.
 
@@ -428,7 +428,7 @@ Write the roadmap file following the schema in `[references/phase-schema.md](./r
 Use the same logic as `/incremental-planning`:
 
 1. Detect the project memory directory using the convention in
-   `code-quality/references/project-memory-reference.md` (Directory Detection section).
+   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
    write to `{memory_dir}/plans/{run-id}-roadmap-<name>.md`
    (create the `plans/` subdirectory if it doesn't exist)

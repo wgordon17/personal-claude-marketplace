@@ -74,7 +74,7 @@ LEAD (you)
    that uncapped splitting is a known fidelity risk.
 
 5. **Create audit trail:** Generate a run-ID using the convention in
-   `code-quality/references/project-memory-reference.md` (Run-ID Naming Convention section).
+   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Run-ID Naming Convention section).
    Create `{memory_dir}/map-reduce/{run-id}/` and `{memory_dir}/map-reduce/{run-id}/chunks/`
    subdirectory for ChunkResult files.
 
@@ -156,7 +156,7 @@ LEAD (you)
    options from the verifier's `options` array (if present) plus "Defer" as the last option,
    OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
    `multiSelect: false`. Map-reduce has no Finding Verifier — the Lead applies the
-   de-escalation test from `code-quality/references/finding-classification.md` inline before
+   de-escalation test from `[../../references/finding-classification.md](../../references/finding-classification.md)` inline before
    presenting to the user. If the finding has a single correct resolution, reclassify to
    `needs-fix` and fix it.
    Do NOT exit with unresolved `needs-input` findings. If AskUserQuestion is unavailable, treat
@@ -172,7 +172,7 @@ LEAD (you)
      with options from the verifier's `options` array (if present) plus "Defer" as the last
      option, OR the binary `[{"label": "Fix"}, {"label": "Defer"}]` if `options` is null.
      `multiSelect: false`. Map-reduce has no Finding Verifier — the Lead applies the
-     de-escalation test from `code-quality/references/finding-classification.md` inline before
+     de-escalation test from `[../../references/finding-classification.md](../../references/finding-classification.md)` inline before
      presenting to the user. If the finding has a single correct resolution, reclassify to
      `needs-fix` and apply it.
      Selected items are applied, then tests re-run. Do NOT apply `needs-input` changes without

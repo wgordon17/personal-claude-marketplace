@@ -43,7 +43,7 @@ If a plan file path was provided in `$ARGUMENTS`, use it directly. Skip discover
 If no path was given:
 
 1. Detect the memory directory using the convention in
-   `code-quality/references/project-memory-reference.md` (Directory Detection and Worktree
+   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree
    Resolution sections). If no validated memory directory is found, stop with:
    "No memory directory found. Pass a plan file path explicitly: `/plan-review <path>`"
 
@@ -289,7 +289,7 @@ every submitted finding. For each finding ID in the original `{findings_json}`, 
 matching `finding_id` exists in the verifier's response. Any finding without a returned verdict
 is assigned verdict `unverified` with `investigation_summary`: "Verifier did not return a
 verdict for this finding." This prevents silent finding loss during verification - the same
-principle as the Fixer verification protocol in `code-quality/references/finding-classification.md`.
+principle as the Fixer verification protocol in `[../../references/finding-classification.md](../../references/finding-classification.md)`.
 
 ### Categorize
 

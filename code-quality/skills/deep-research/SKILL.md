@@ -234,7 +234,7 @@ Stakeholder selection should be informed by `{research_scope}` — prioritize pe
 ### Output Location
 
 Detect the project memory directory using the convention in
-`code-quality/references/project-memory-reference.md` (Directory Detection section).
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 If a memory directory is found, write the research report to a file:
 

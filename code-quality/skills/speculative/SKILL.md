@@ -45,7 +45,7 @@ Gather the problem and success criteria before spawning anything.
    - Simplicity (is it the minimum necessary complexity?)
    - Add or substitute criteria based on user priorities
 
-4. Generate a run-ID using the convention in `code-quality/references/project-memory-reference.md`
+4. Generate a run-ID using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
    (Run-ID Naming Convention section) and create the audit trail directory at
    `{memory_dir}/speculative/{run-id}/`.
 

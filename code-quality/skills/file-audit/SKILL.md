@@ -59,7 +59,7 @@ ORCHESTRATOR (you)
 ### Step 1: Initialization
 
 Detect the memory directory using the convention in
-`code-quality/references/project-memory-reference.md` (Directory Detection section).
+`[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection section).
 
 ```bash
 # Check for existing queue
@@ -366,7 +366,7 @@ When `options` is `null` (findings from pipelines without a verifier), fall back
 `[{"label": "Fix"}, {"label": "Defer"}]`.
 
 File-audit has no Finding Verifier — the Lead applies the de-escalation test from
-`code-quality/references/finding-classification.md` inline before presenting to the user.
+`[../../references/finding-classification.md](../../references/finding-classification.md)` inline before presenting to the user.
 If the finding has a single correct resolution, reclassify to `needs-fix` and fix it.
 
 If more than 4 `needs-input` items exist, make multiple AskUserQuestion calls.
@@ -418,7 +418,7 @@ When LSP is unavailable for a file type:
 
 ## Integration with Project Memory
 
-The analyzer reads project memory files (detected per `code-quality/references/project-memory-reference.md`) to:
+The analyzer reads project memory files (detected per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`) to:
 
 1. **Understand intended behavior**: `PROJECT.md` describes architecture and decisions
 2. **Check for drift**: Compare code vs documented intent

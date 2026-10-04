@@ -105,7 +105,7 @@ Store as `{claude_md_rules}` and `{contributing_md_rules}`.
 ### Discover Implementation Plan
 
 Search for a plan file that matches the PR's topic. Detect the memory directory using the
-convention in `code-quality/references/project-memory-reference.md` (Directory Detection and
+convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and
 Worktree Resolution sections).
 
 **Primary:** Search `{memory_dir}/plans/` files and parse each file's `**Branch:**` header
@@ -324,7 +324,7 @@ every submitted finding. For each finding ID in the original `{findings_json}`, 
 matching `finding_id` exists in the verifier's response. Any finding without a returned verdict
 is assigned verdict `unverified` with `investigation_summary`: "Verifier did not return a
 verdict for this finding." This prevents silent finding loss during verification - the same
-principle as the Fixer verification protocol in `code-quality/references/finding-classification.md`.
+principle as the Fixer verification protocol in `[../../references/finding-classification.md](../../references/finding-classification.md)`.
 
 ### Categorize
 

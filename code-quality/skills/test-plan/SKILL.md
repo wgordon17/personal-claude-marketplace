@@ -75,14 +75,14 @@ Read and parse the input plan file before doing anything else.
      the `## Test Plan` section from `{plan_file}` to regenerate."
 
 3. **Read project memory** — Detect `{memory_dir}` per
-   `code-quality/references/project-memory-reference.md` (Directory Detection and Worktree
+   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree
    Resolution sections). Then read:
    - `{memory_dir}/PROJECT.md` — architectural decisions, domain context
    - `{memory_dir}/LESSONS.md` — past lessons (if exists). Silently incorporate.
 
 4. **Generate `{run-id}`** — Generate the run-id early so it is available for the staging file
    in Phase 2. Follow the Run-ID Naming Convention in
-   `code-quality/references/project-memory-reference.md`: `{branch-slug}-{unix-timestamp}`
+   `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`: `{branch-slug}-{unix-timestamp}`
    (e.g., `feat-auth-1711388400`).
 
 5. **Identify user-facing tasks** — Not every plan task represents a user-visible behavior.

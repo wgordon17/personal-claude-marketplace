@@ -42,7 +42,7 @@ Detect the review source using these rules in order:
 | Session output contains `CODE REVIEW — PR #` | Code (PR diff) | Extract PR number from the header line: `CODE REVIEW — PR #{number}` |
 | File `{memory_dir}/BUGS.md` exists on disk | Bug resolutions | Read BUGS.md; extract entries with `**Status:** Root Cause Found` |
 
-Detect `memory_dir` per `code-quality/references/project-memory-reference.md` (Directory Detection and Worktree Resolution sections).
+Detect `memory_dir` per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree Resolution sections).
 
 ### Resolution
 
@@ -318,7 +318,7 @@ Agent(
   model="sonnet",
   mode="bypassPermissions",
   run_in_background=true,
-  prompt=<standard investigator template from code-quality/skills/fix/references/investigator-prompt.md,
+  prompt=<standard investigator template from [references/investigator-prompt.md](references/investigator-prompt.md),
           with one <finding-data> block per finding in the group>
 )
 ```
@@ -332,7 +332,7 @@ Agent(
   model="sonnet",
   mode="bypassPermissions",
   run_in_background=true,
-  prompt=<spike investigator template from code-quality/skills/fix/references/investigator-prompt.md,
+  prompt=<spike investigator template from [references/investigator-prompt.md](references/investigator-prompt.md),
           with the finding's spike_question and plan_context fields populated;
           when no /deep-research was run for this spike, omit the RESEARCH CONTEXT section
           (the block from "RESEARCH CONTEXT (pre-fetched..." through the placeholder line)
@@ -490,7 +490,7 @@ Do NOT commit. Leave all changes in the working tree for user review.
 
 ## Phase 4 — Verification
 
-Apply the Verification Protocol from `code-quality/references/finding-classification.md`, extended
+Apply the Verification Protocol from `[../../references/finding-classification.md](../../references/finding-classification.md)`, extended
 with 7 outcome buckets to cover all standalone /fix outcomes.
 
 ### Outcome Buckets

@@ -95,7 +95,7 @@ Run the project test suite and record the baseline (pass/fail count, any pre-exi
 Check git status — ensure the working tree is clean, identify the current branch, and determine
 whether a feature branch is needed. If not already on a feature branch, create one from
 `upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
-depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `code-quality/references/project-memory-reference.md`
+depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
 (Run-ID Naming Convention section) and create the audit trail directory at `{memory_dir}/swarm/{run-id}/`.
 Create all tasks upfront with `addBlockedBy` dependencies so the full task graph is visible from
 the start. The implicit team is established automatically by the first named teammate spawn in
@@ -116,14 +116,14 @@ Plan Reconciliation to reuse (both phases skip re-discovery when the path is alr
 
 **Tracker Extraction:** If a plan file is found, extract `{tracker}` — the value of the
 `**Tracker:**` field from the plan file header (see
-`code-quality/references/tracker-field-spec.md` for field values and parsing spec).
+`[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` for field values and parsing spec).
 Phase 7 references `{tracker}` without re-reading the plan file. This keeps plan file
 parsing centralized at Phase 0, consistent with the existing `{TEST_PLAN}` pattern. If
 the `**Tracker:**` field is absent from the plan file header (pre-feature plans), set
 `{tracker}` to `none`.
 
 **Tracker validation:** After extraction, verify `{tracker}` is a terminal state
-(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) per `code-quality/references/tracker-field-spec.md`
+(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) per `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
 Finalization Constraint section. If `{tracker}` is a non-terminal state (`github:pending`,
 `github:linked#N`, or `jira:pending`), warn via `AskUserQuestion`: "Plan file has unresolved
 tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or set to 'none'
@@ -356,7 +356,7 @@ The Reduction Analyst evaluates:
 
 3. **Dependency opportunities:** For each proposed custom implementation, check whether a
    well-maintained library already solves the problem (per
-   `code-quality/references/dependency-evaluation.md`). Use WebSearch to verify recency and
+   `[../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`). Use WebSearch to verify recency and
    popularity against today's actual date.
 
 4. **Net complexity assessment:** Will the plan result in a net increase or decrease in codebase
@@ -634,7 +634,7 @@ Otherwise, spawn agents in this order:
 
 **Step 5.1 — Fixer:** Spawn the Fixer with ALL consolidated findings (all classifications)
 and full context of the implementation. The Fixer processes all findings — process in file order
-per `code-quality/references/finding-classification.md` Fixer Protocol. After the Fixer
+per `[../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. After the Fixer
 completes, the Lead handles user triage for `needs_input_items` and structural verification
 per Step 5.2.1. For each `user_deferred` item:
 1. Create a `TaskCreate` entry marked as blocked with the reason (visible in task list throughout)
@@ -727,7 +727,7 @@ The Docs agent performs three passes:
 corresponding documentation needs updating (README behavior descriptions, API docs, config docs,
 CONTRIBUTING.md). Update only what is directly affected.
 
-The Docs agent also detects the project's memory directory (per `code-quality/references/project-memory-reference.md`,
+The Docs agent also detects the project's memory directory (per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`,
 Directory Detection section) and updates PROJECT.md with architectural decisions, TODO.md with completed and new
 items, and SESSIONS.md with a 3-5 bullet summary.
 
@@ -764,13 +764,13 @@ Findings are written to `{run_dir}/reviews/docs-review.json` using the standard 
 schema with `DOC-R` prefix. `needs-fix` findings are routed back to the Docs agent for fixes
 (max 1 iteration — the Docs Reviewer re-reviews after fixes). `needs-input` findings are
 presented to the user via AskUserQuestion using the option-based format from
-`code-quality/references/finding-classification.md` Fixer Protocol. All findings are recorded
+`[../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. All findings are recorded
 in the audit trail.
 
 After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
 agent scans the swarm run's audit trail and extracts principle-level lessons to
 `{memory_dir}/LESSONS.md` (creating the file if it does not exist, where `{memory_dir}` is the
-project memory directory detected per `code-quality/references/project-memory-reference.md`). It reads:
+project memory directory detected per `[../../references/project-memory-reference.md](../../references/project-memory-reference.md)`). It reads:
 - `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged
 - `{run_dir}/reviews/` — recurring finding patterns across reviewers
 - `{run_dir}/escalations.json` — escalation events (if the file exists)
@@ -778,7 +778,7 @@ project memory directory detected per `code-quality/references/project-memory-re
 - Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
 
 Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
-format from `code-quality/skills/incremental-planning/references/lessons-template.md`:
+format from `[../incremental-planning/references/lessons-template.md](../incremental-planning/references/lessons-template.md)`:
 `- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
 
 The Lessons Extractor runs after Docs completes to avoid audit trail races.
@@ -798,13 +798,13 @@ catch any issues introduced at scale.
 **Issue Tracking (before completion announcement):**
 
 If `{tracker}` matches `github:owner/repo#N`:
-1. Validate format before interpolation per `code-quality/references/tracker-field-spec.md`
+1. Validate format before interpolation per `[../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
    Validation Regex section. Skip if invalid.
 2. Add the `in-progress` label to the linked GH issue (best-effort — if the command
    fails, log a warning in the completion announcement and continue):
    `gh label create in-progress --repo <owner/repo> --description 'Work actively underway' --color 'fbca04' 2>/dev/null || true`
    `gh issue edit N --repo <owner/repo> --add-label 'in-progress'`
-   (auto-create the label first per `code-quality/references/github-label-definitions.md`,
+   (auto-create the label first per `[../../references/github-label-definitions.md](../../references/github-label-definitions.md)`,
    using create-if-missing without `--force` to avoid overwriting existing repo customizations)
 3. Include in the completion announcement: "Include `Closes #N` in the PR body
    to auto-close the linked GH issue when merged. After merge, remove the
