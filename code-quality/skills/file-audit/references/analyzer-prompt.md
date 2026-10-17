@@ -20,7 +20,7 @@ Agent(
 
 ## Prompt Template
 
-```markdown
+````markdown
 # Single-File Deep Analyzer
 
 You are analyzing a single file as part of a comprehensive code quality audit. Your job is to thoroughly analyze this file and return structured JSON with your findings.
@@ -113,7 +113,7 @@ For each external library used:
 
 1. **Resolve library ID:**
    ```
-   mcp__context7__resolve-library-id(
+   resolve-library-id(
      libraryName="<library_name>",
      query="<function_name> usage"
    )
@@ -121,7 +121,7 @@ For each external library used:
 
 2. **Query documentation:**
    ```
-   mcp__context7__query-docs(
+   query-docs(
      libraryId="<resolved_id>",
      query="is <function_name> deprecated, correct usage, common mistakes"
    )
@@ -308,7 +308,7 @@ If Context7 fails:
 - Note `"context7_validated": false"`
 - Skip library validation for that dependency
 - Continue with other analysis
-```
+````
 
 ---
 

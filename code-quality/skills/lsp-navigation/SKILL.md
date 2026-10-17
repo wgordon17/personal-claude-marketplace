@@ -1,10 +1,13 @@
 ---
 name: lsp-navigation
 description: PROACTIVE skill - Use when navigating code, understanding symbol definitions, finding references, or exploring call hierarchies. Triggers include questions like "where is X defined", "what calls Y", "show usages of Z", or any code exploration task. Prefer LSP over grep for semantic navigation.
-allowed-tools: [LSP, Read, Bash]
+compatibility: Requires an active LSP server plugin (pyright-uvx, vtsls-npx, gopls-go, vscode-html-css-npx, or rust-analyzer-rustup)
+allowed-tools: LSP Read Bash
 ---
 
 # lsp-navigation
+
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
 
 This skill optimizes code navigation by using LSP (Language Server Protocol) for semantic understanding rather than text-based search.
 

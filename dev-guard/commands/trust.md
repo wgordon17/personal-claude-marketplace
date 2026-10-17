@@ -1,13 +1,7 @@
 ---
-name: trust
 description: Manage trusted rules for dev-guard ask prompts
-arguments:
-  - name: action
-    description: "add, remove, or list"
-    required: true
-  - name: rule_name
-    description: "Rule name shown in the ask prompt (e.g. remote-remove, config-global-write)"
-    required: false
+argument-hint: "<add|remove|list> [rule_name]"
+allowed-tools: Bash
 ---
 
 # Dev-Guard Trust Management
@@ -15,6 +9,8 @@ arguments:
 Manage trusted rules so that repeated ask prompts for known-safe operations are automatically approved.
 
 ## Your Task
+
+Arguments: $ARGUMENTS
 
 Run the tool-selection-guard script with the `--trust` flag to manage trust rules.
 

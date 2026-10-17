@@ -167,7 +167,16 @@ class TestPatchDrawioXmlReferenceScript:
         "fetch and follow the instructions at:\n"
         "https://raw.githubusercontent.com/jgraph/drawio-mcp/main/shared/xml-reference.md\n"
     )
-    _SURROUNDING = "Before drawing anything, {}Then proceed.\n"
+    _SURROUNDING = (
+        "---\n"
+        "name: drawio\n"
+        "description: Always use when user asks to create a diagram.\n"
+        "---\n"
+        "\n"
+        "# Draw.io Diagram Skill\n"
+        "\n"
+        "Before drawing anything, {}Then proceed.\n"
+    )
 
     def test_rewrites_upstream_url_reference(self, tmp_path):
         fixture = tmp_path / "SKILL.md"
@@ -176,7 +185,12 @@ class TestPatchDrawioXmlReferenceScript:
         assert result.returncode == 0, result.stdout
         patched = fixture.read_text()
         assert "raw.githubusercontent.com" not in patched
-        assert "vendored sibling file `xml-reference.md`" in patched
+        assert (
+            "vendored sibling file `[{skill_dir}/xml-reference.md](./xml-reference.md)`" in patched
+        )
+        assert "compatibility: Optional PNG/SVG/PDF export requires draw.io Desktop CLI" in patched
+        assert "allowed-tools: Read Write Bash" in patched
+        assert '> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path' in patched
 
     def test_replaces_all_occurrences_on_same_line(self, tmp_path):
         """perl's s/// without /g replaces only the first match. A doc that
@@ -186,13 +200,71 @@ class TestPatchDrawioXmlReferenceScript:
         patch-token-efficiency.sh."""
         fixture = tmp_path / "SKILL.md"
         fixture.write_text(
-            self._SURROUNDING.format(self._OLD_TEXT) + self._SURROUNDING.format(self._OLD_TEXT)
+            self._SURROUNDING.format(self._OLD_TEXT + "\nAnd again, " + self._OLD_TEXT)
         )
         result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
         assert result.returncode == 0, result.stdout
         patched = fixture.read_text()
         assert "raw.githubusercontent.com" not in patched
-        assert patched.count("vendored sibling file `xml-reference.md`") == 2
+        assert (
+            patched.count(
+                "vendored sibling file `[{skill_dir}/xml-reference.md](./xml-reference.md)`"
+            )
+            == 2
+        )
+
+    def test_idempotent_when_run_twice(self, tmp_path):
+        """Running the patch script a second time on an already-patched file
+        must not duplicate frontmatter keys or the {skill_dir} note."""
+        fixture = tmp_path / "SKILL.md"
+        fixture.write_text(self._SURROUNDING.format(self._OLD_TEXT))
+        first = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
+        assert first.returncode == 0, first.stdout
+        after_first = fixture.read_text()
+
+        second = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
+        assert second.returncode == 0, second.stdout
+        after_second = fixture.read_text()
+        assert after_second == after_first
+        assert after_second.count("allowed-tools:") == 1
+        assert after_second.count("compatibility:") == 1
+        assert after_second.count("> **Note:** `{skill_dir}`") == 1
+
+    def test_round_trip_reproduces_vendored_drawio_skill_byte_for_byte(self, tmp_path):
+        """Reverting our 3 local patches on drawio/skills/drawio/SKILL.md to
+        reconstruct the upstream SKILL.md and running patch-drawio-xml-reference.sh
+        must reproduce drawio/skills/drawio/SKILL.md byte-for-byte."""
+        vendored_path = REPO_ROOT / "drawio" / "skills" / "drawio" / "SKILL.md"
+        vendored_text = vendored_path.read_text()
+
+        upstream_simulated = (
+            vendored_text.replace(
+                "compatibility: Optional PNG/SVG/PDF export requires draw.io Desktop CLI\n"
+                "allowed-tools: Read Write Bash\n",
+                "",
+                1,
+            )
+            .replace(
+                '> **Note:** `{skill_dir}` refers to the absolute "Skill directory" '
+                "path provided in your system instructions.\n\n",
+                "",
+                1,
+            )
+            .replace(
+                "read and follow the instructions in the vendored sibling file "
+                "`[{skill_dir}/xml-reference.md](./xml-reference.md)`.",
+                "fetch and follow the instructions at:\n"
+                "https://raw.githubusercontent.com/jgraph/drawio-mcp/main/shared/xml-reference.md",
+                1,
+            )
+        )
+        assert upstream_simulated != vendored_text
+
+        fixture = tmp_path / "SKILL.md"
+        fixture.write_text(upstream_simulated)
+        result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
+        assert result.returncode == 0, result.stdout
+        assert fixture.read_text() == vendored_text
 
     def test_missing_argument_exits_1(self):
         result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT)

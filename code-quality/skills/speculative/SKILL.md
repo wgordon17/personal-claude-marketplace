@@ -4,8 +4,8 @@ description: >-
   Run competing implementations in parallel with isolated worktrees, then judge and select the
   best approach. Use when multiple viable approaches exist and "try both and compare" beats
   "guess and commit."
-allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate,
-  TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill]
+compatibility: Requires Claude Code with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for multi-agent orchestration
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion SendMessage TaskCreate TaskUpdate TaskList TaskGet CronCreate CronDelete Skill
 ---
 
 # /speculative — Competing Implementations with Judge Selection

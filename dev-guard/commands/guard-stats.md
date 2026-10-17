@@ -1,10 +1,7 @@
 ---
-name: guard-stats
 description: Show actionable dev-guard metrics with improvement suggestions
-arguments:
-  - name: days
-    description: "Number of days to look back (default: 7)"
-    required: false
+argument-hint: "[days]"
+allowed-tools: Bash, Read, Edit, AskUserQuestion
 ---
 
 # Guard Stats
@@ -16,10 +13,10 @@ Analyze dev-guard metrics and suggest concrete improvements.
 Run the guard-stats script:
 
 ```bash
-uv run ${CLAUDE_PLUGIN_ROOT}/hooks/guard-stats.py $DAYS
+uv run ${CLAUDE_PLUGIN_ROOT}/hooks/guard-stats.py ${ARGUMENTS:-7}
 ```
 
-Where `$DAYS` is the days argument (default 7 if not provided).
+Where `$ARGUMENTS` is the optional days argument (defaulting to 7 if not provided).
 
 ## Step 2: Analyze and Recommend
 
@@ -32,7 +29,7 @@ changes to the global CLAUDE.md. Project-specific patterns go in the project CLA
 is already addressed, suggest rewording for emphasis. If not, draft a specific addition.
 
 **Trust Opportunities:** For rules asked 50+ times, recommend whether to trust permanently
-(`/trust add <rule> --scope always`) or investigate why the rule triggers so often.
+(`/dev-guard:trust add <rule> --scope always`) or investigate why the rule triggers so often.
 
 **RTK Compression:** If the expansion rate (full reads / compressions) exceeds 25%, identify which
 commands are being re-read and suggest bypassing RTK for those commands. If expansion is low,

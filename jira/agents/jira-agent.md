@@ -5,6 +5,8 @@ description: |
   adding comments) or when delegating Jira work to a background agent. Spawned
   by swarm implementers, quality-gate verifiers, or any agent needing programmatic
   Jira access. Carries OSAC conventions for OSAC project work.
+model: sonnet
+color: blue
 tools: Read, Bash,
   mcp__plugin_jira_mcp-atlassian-prod__atlassianUserInfo,
   mcp__plugin_jira_mcp-atlassian-prod__getAccessibleAtlassianResources,
@@ -25,11 +27,10 @@ tools: Read, Bash,
   mcp__plugin_jira_mcp-atlassian-prod__getJiraIssueRemoteIssueLinks,
   mcp__plugin_jira_mcp-atlassian-prod__fetch,
   mcp__plugin_jira_mcp-atlassian-prod__search
-model: sonnet
-color: blue
 ---
 
-# Jira Agent
+<!-- OMP note: tools: uses Claude Code PascalCase names; OMP ignores plugin subagent tools: frontmatter. See dev-guard/OMP-COMPAT.md. -->
+# jira:jira-agent — Autonomous Jira Specialist
 
 Autonomous Jira specialist for programmatic operations. Spawned by swarm implementers,
 quality-gate verifiers, or any agent needing Jira access from plan tasks.

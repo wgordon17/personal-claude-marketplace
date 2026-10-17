@@ -8,7 +8,8 @@ description: |
   - "Validate library usage"
   - "Review the entire project"
   Analyzes files in parallel with LSP and Context7, detecting issues, duplicates, and documentation drift.
-allowed-tools: [LSP, Read, Write, Bash, Agent, Skill, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs]
+compatibility: Requires Context7 MCP server for library API validation and LSP for symbol analysis
+allowed-tools: LSP Read Write Bash Agent Skill AskUserQuestion mcp__context7__resolve-library-id mcp__context7__query-docs
 ---
 
 # file-audit
@@ -429,3 +430,12 @@ The analyzer reads project memory files (detected per `[{skill_dir}/../../refere
 5. **Apply lessons**: `LESSONS.md` provides principle-level context for the project
 
 This enables detection of `documentation_drift` issues that pure code analysis would miss.
+
+---
+
+## References
+
+- [references/analyzer-prompt.md](./references/analyzer-prompt.md) — Single-file deep analyzer prompt template
+- [references/inventory-schema.json](./references/inventory-schema.json) — JSON Schema for `{memory_dir}/file-audit/inventory.json`
+- [references/issue-types.md](./references/issue-types.md) — Detailed issue type and subtype taxonomy
+

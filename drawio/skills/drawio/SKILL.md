@@ -1,6 +1,8 @@
 ---
 name: drawio
 description: Always use when user asks to create, generate, draw, or design a diagram, flowchart, architecture diagram, ER diagram, sequence diagram, class diagram, network diagram, mockup, wireframe, or UI sketch, or mentions draw.io, drawio, drawoi, .drawio files, or diagram export to PNG/SVG/PDF.
+compatibility: Optional PNG/SVG/PDF export requires draw.io Desktop CLI
+allowed-tools: Read Write Bash
 ---
 
 # Draw.io Diagram Skill

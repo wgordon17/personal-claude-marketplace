@@ -7,26 +7,8 @@ description: |
   "issue tracker", "sprint", "kanban", "story points", "epic",
   "create a ticket", "update the jira", "what's assigned to me",
   "OSAC backlog", "OSAC sprint".
-allowed-tools: [Read, Bash, Agent, AskUserQuestion,
-  mcp__plugin_jira_mcp-atlassian-prod__atlassianUserInfo,
-  mcp__plugin_jira_mcp-atlassian-prod__getAccessibleAtlassianResources,
-  mcp__plugin_jira_mcp-atlassian-prod__searchJiraIssuesUsingJql,
-  mcp__plugin_jira_mcp-atlassian-prod__getJiraIssue,
-  mcp__plugin_jira_mcp-atlassian-prod__editJiraIssue,
-  mcp__plugin_jira_mcp-atlassian-prod__createJiraIssue,
-  mcp__plugin_jira_mcp-atlassian-prod__addCommentToJiraIssue,
-  mcp__plugin_jira_mcp-atlassian-prod__transitionJiraIssue,
-  mcp__plugin_jira_mcp-atlassian-prod__getTransitionsForJiraIssue,
-  mcp__plugin_jira_mcp-atlassian-prod__lookupJiraAccountId,
-  mcp__plugin_jira_mcp-atlassian-prod__getJiraProjectIssueTypesMetadata,
-  mcp__plugin_jira_mcp-atlassian-prod__getJiraIssueTypeMetaWithFields,
-  mcp__plugin_jira_mcp-atlassian-prod__createIssueLink,
-  mcp__plugin_jira_mcp-atlassian-prod__getIssueLinkTypes,
-  mcp__plugin_jira_mcp-atlassian-prod__addWorklogToJiraIssue,
-  mcp__plugin_jira_mcp-atlassian-prod__getVisibleJiraProjects,
-  mcp__plugin_jira_mcp-atlassian-prod__getJiraIssueRemoteIssueLinks,
-  mcp__plugin_jira_mcp-atlassian-prod__fetch,
-  mcp__plugin_jira_mcp-atlassian-prod__search]
+compatibility: Requires Atlassian Rovo MCP server authenticated for redhat.atlassian.net
+allowed-tools: Read Bash Agent AskUserQuestion mcp__plugin_jira_mcp-atlassian-prod__atlassianUserInfo mcp__plugin_jira_mcp-atlassian-prod__getAccessibleAtlassianResources mcp__plugin_jira_mcp-atlassian-prod__searchJiraIssuesUsingJql mcp__plugin_jira_mcp-atlassian-prod__getJiraIssue mcp__plugin_jira_mcp-atlassian-prod__editJiraIssue mcp__plugin_jira_mcp-atlassian-prod__createJiraIssue mcp__plugin_jira_mcp-atlassian-prod__addCommentToJiraIssue mcp__plugin_jira_mcp-atlassian-prod__transitionJiraIssue mcp__plugin_jira_mcp-atlassian-prod__getTransitionsForJiraIssue mcp__plugin_jira_mcp-atlassian-prod__lookupJiraAccountId mcp__plugin_jira_mcp-atlassian-prod__getJiraProjectIssueTypesMetadata mcp__plugin_jira_mcp-atlassian-prod__getJiraIssueTypeMetaWithFields mcp__plugin_jira_mcp-atlassian-prod__createIssueLink mcp__plugin_jira_mcp-atlassian-prod__getIssueLinkTypes mcp__plugin_jira_mcp-atlassian-prod__addWorklogToJiraIssue mcp__plugin_jira_mcp-atlassian-prod__getVisibleJiraProjects mcp__plugin_jira_mcp-atlassian-prod__getJiraIssueRemoteIssueLinks mcp__plugin_jira_mcp-atlassian-prod__fetch mcp__plugin_jira_mcp-atlassian-prod__search
 ---
 
 # Jira Skill
