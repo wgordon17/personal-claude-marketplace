@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Plugin directories allowed as path prefixes in reference resolution.
 _PLUGIN_ALLOWLIST: frozenset[str] = frozenset(
-    {"code-quality", "dev-guard", "git-tools", "github-mcp", "jira"}
+    {"code-quality", "dev-guard", "git-tools", "github-mcp", "jira", "drawio", "chai-bot"}
 )
 
 # Regex for backtick-quoted reference paths.
@@ -42,6 +42,11 @@ _RE_BACKTICK = re.compile(r"`((?:[a-zA-Z0-9_.-]+/)*references/[a-zA-Z0-9_.-]+\.m
 _RE_ANGLE = re.compile(
     r"<[^>]*?((?:[a-zA-Z0-9_.-]+/)*references/[a-zA-Z0-9_.-]+\.md)[^>]*?>",
     re.DOTALL,
+)
+
+# Regex for markdown link targets pointing to references/*.md files.
+_RE_MD_LINK = re.compile(
+    r"\]\(\s*((?:\.\.?/|\./|(?:[a-zA-Z0-9_.-]+/))*references/[a-zA-Z0-9_.-]+\.md)\s*\)"
 )
 
 # Progress log path — pre-commit/prek-style hook runners buffer a hook's entire
@@ -170,54 +175,61 @@ def resolve_skill_bundle(
             return None
         skill_content = result.stdout
 
-    # ── Extract reference paths (two regex passes, dedup) ─────────────────
-    seen: dict[str, None] = {}
-    for match in _RE_BACKTICK.finditer(skill_content):
-        seen.setdefault(match.group(1), None)
-    for match in _RE_ANGLE.finditer(skill_content):
-        seen.setdefault(match.group(1), None)
-    ref_paths = list(seen.keys())
+    # ── Extract, resolve, and read reference files (0-hop + 1-hop) ────────
+    def _extract_ref_paths(text: str) -> list[str]:
+        seen: dict[str, None] = {}
+        for regex in (_RE_BACKTICK, _RE_ANGLE, _RE_MD_LINK):
+            for match in regex.finditer(text):
+                seen.setdefault(match.group(1).removeprefix("./"), None)
+        return list(seen.keys())
 
-    # ── Resolve and read each reference file ──────────────────────────────
     ref_sections: list[str] = []
-    for ref_path in ref_paths:
-        parts = ref_path.split("/")
+    seen_resolved: set[Path] = set()
+
+    def _resolve_and_read_ref(ref_path: str, *, dotdot_base: Path) -> tuple[Path, str] | None:
+        norm_path = ref_path.removeprefix("./")
+        parts = norm_path.split("/")
         if parts[0] == "references":
             # Bare per-skill path: resolve against skill_dir.
-            candidate = skill_dir / ref_path
+            candidate = skill_dir / norm_path
+        elif parts[0] == "..":
+            # Relative parent path: resolve against dotdot_base (skill_dir or parent ref dir).
+            candidate = dotdot_base / norm_path
         elif parts[0] in _PLUGIN_ALLOWLIST:
             # Plugin-prefixed path: resolve against repo_root.
-            candidate = repo_root / ref_path
+            candidate = repo_root / norm_path
         else:
             logger.warning(
                 "Reference prefix %r not in allowlist — skipping %s",
                 parts[0],
                 ref_path,
             )
-            continue
+            return None
 
         # Security boundary check BEFORE any file read.
         try:
             resolved_ref = candidate.resolve()
         except OSError:
             logger.warning("Cannot resolve path %s — skipping", candidate)
-            continue
+            return None
         if not resolved_ref.is_relative_to(repo_root):
             logger.warning("Reference %s resolves outside repo root — skipping", ref_path)
-            continue
+            return None
+        if resolved_ref in seen_resolved:
+            return None
 
         if git_ref is None:
             try:
-                ref_content = candidate.read_text(encoding="utf-8")
+                ref_content = resolved_ref.read_text(encoding="utf-8")
             except OSError as exc:
-                logger.warning("Cannot read reference %s: %s", candidate, exc)
-                continue
+                logger.warning("Cannot read reference %s: %s", resolved_ref, exc)
+                return None
         else:
             try:
-                rel_ref = candidate.relative_to(repo_root)
+                rel_ref = resolved_ref.relative_to(repo_root)
             except ValueError:
-                logger.warning("Reference %s is outside repo root — skipping", candidate)
-                continue
+                logger.warning("Reference %s is outside repo root — skipping", resolved_ref)
+                return None
             git_ref_path = f"{git_ref}:{rel_ref.as_posix()}"
             result = subprocess.run(
                 ["git", "show", git_ref_path],
@@ -226,10 +238,25 @@ def resolve_skill_bundle(
             )
             if result.returncode != 0:
                 logger.warning("git show %s failed: %s", git_ref_path, result.stderr.strip())
-                continue
+                return None
             ref_content = result.stdout
 
-        ref_sections.append(f"## {candidate.name}\n{ref_content}")
+        seen_resolved.add(resolved_ref)
+        ref_sections.append(f"## {resolved_ref.name}\n{ref_content}")
+        return resolved_ref, ref_content
+
+    skill_refs_dir = (skill_dir / "references").resolve()
+    hop1_sources: list[tuple[Path, str]] = []
+    for ref_path in _extract_ref_paths(skill_content):
+        loaded = _resolve_and_read_ref(ref_path, dotdot_base=skill_dir)
+        if loaded is not None:
+            resolved_ref, ref_content = loaded
+            if resolved_ref.is_relative_to(skill_refs_dir):
+                hop1_sources.append((resolved_ref, ref_content))
+
+    for parent_ref, parent_content in hop1_sources:
+        for sub_ref_path in _extract_ref_paths(parent_content):
+            _resolve_and_read_ref(sub_ref_path, dotdot_base=parent_ref.parent)
 
     # ── Concatenate bundle ─────────────────────────────────────────────────
     bundle = f"# SKILL.MD\n{skill_content}"

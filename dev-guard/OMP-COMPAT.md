@@ -3,9 +3,9 @@
 This is the marketplace's single detailed reference for running these plugins under
 [OMP](https://omp.sh) (`@oh-my-pi/pi-coding-agent`) in addition to Claude Code. It covers
 dev-guard's bridge (`dev-guard/omp-extension.ts`) in full, since dev-guard's `hooks.json` is
-by far the most complex of the three bridged plugins. git-tools and github-mcp ship their own,
-much simpler single-hook bridges — see their own READMEs for a short description; this file
-does not duplicate that content.
+by far the most complex of the four bridged plugins. `git-tools`, `github-mcp`, and `chai-bot`
+ship their own, much simpler single-hook bridges — see their own READMEs for a short description;
+this file does not duplicate that content.
 
 All findings below come from a live verification spike against a real, unpinned OMP install
 (`omp v17.4.2`, tested 2026-08-21). The spike combined live behavioral tests with static
@@ -34,7 +34,7 @@ todo, web_search, write, memory_edit, retain, recall, reflect, learn, manage_ski
 | `Edit` | `edit` | **Untyped** (`Record<string, unknown>`) — OMP's edit tool uses a hashline-based protocol, not a simple old/new-string diff | **Materially different tool** — bridge passes input through unchanged; no known field rename exists |
 | `Grep`/`Glob` | `grep`/`glob` | `pattern`, `path` (legacy alias `paths`) — same field names both sides | Confirmed, but **dev-guard's bridge has no dispatch for these** — `tool-selection-guard.py` has no Grep/Glob-specific guard logic to bridge (its own `grep`/`find`/`ls` command-redirection rules were removed in v1.63.0 once Claude Code itself routed search through Bash) |
 | `WebSearch` | `web_search` | Best-effort guess: `query`, `allowed_domains`, `blocked_domains` | **Not live-verified against OMP** — re-check per the manual checklist below |
-| `TodoWrite` | `todo` (nominal) | n/a | Nominal mapping only — live testing found OMP does not currently grant `todo` to plugin-provided subagents regardless of their declared `tools:` list (see "Subagent `tools:` frontmatter enforcement" below) |
+| `TaskCreate` / `TaskUpdate` / `TaskList` (formerly `TodoWrite`) | `todo` (nominal) | n/a | Nominal mapping only — live testing found OMP does not currently grant `todo` to plugin-provided subagents regardless of their declared `tools:` list (see "Subagent `tools:` frontmatter enforcement" below) |
 | `AskUserQuestion` | *(none built in)* | n/a | No OMP built-in exists. dev-guard's own bridge registers a **custom tool literally named `AskUserQuestion`** — confirmed permitted with no collision against OMP's built-in `ask` tool. Only available where dev-guard's own bridge is installed and active. |
 | `SendMessage` | *(none)* | n/a | **No OMP equivalent at all.** Multi-agent teammate messaging (Claude Code Agent Teams) has no analog in OMP's tool surface. |
 | `NotebookEdit` | *(none)* | n/a | No OMP `tool_call` event exists for a notebook-editing equivalent. |
@@ -177,21 +177,22 @@ stdin. `omp-extension.ts` uses `Bun.spawn()` uniformly for every script invocati
 the stdin-free `--validate`/`--session-end`/`inject-reference.sh` calls, for one consistent
 code path rather than two).
 
-## claudelint `--strict` compatibility
+## `skillsaw` (and legacy `claudelint --strict`) compatibility
 
 Both sub-questions resolved favorably — **no CI blocker**:
 
 1. A zero-dependency `package.json` (`{"name": ..., "private": true, "omp": {"extensions":
-   [...]}}`) plus a `.ts` file added to a plugin directory: `uvx claudelint --strict` exits 0,
-   no new warnings or errors.
-2. An agent file's frontmatter rewritten to OMP-compatible values (`tools: read, bash, lsp,
-   web_search`, `model: claude-opus-5`) in place: also exits 0.
+   [...]}}`) plus a `.ts` file added to a plugin directory: `skillsaw v0.21.0` (`pi-config-valid`
+   rule, replacing legacy `claudelint --strict`) exits 0 with no warnings or errors.
+2. Agent files are validated by `skillsaw`'s `claude-agent-frontmatter` rule (requiring `name`
+   and `description` in YAML frontmatter); keeping literal Claude Code tool names in `tools:`
+   satisfies both `skillsaw` and Claude Code runtime enforcement.
 
-Root cause: `claudelint --list-rules` shows the `agent-frontmatter` rule's actual scope is
-"Agent files must have valid frontmatter with name and description" — it only validates the
-*presence* of `name`/`description`, never inspecting `tools:`/`model:` values against any
-allowlist. This fully resolves the plan's original open question about whether Claude Code's
-own CI would reject OMP-compatible frontmatter values.
+Historical note from the initial spike: `claudelint --list-rules` showed the `agent-frontmatter`
+rule's scope was "Agent files must have valid frontmatter with name and description" — it only
+validated the *presence* of `name`/`description`. Following the repository's migration from
+`claudelint` to `skillsaw v0.21.0`, `skillsaw lint` enforces `claude-agent-frontmatter` and
+`pi-config-valid` across all plugins.
 
 ## `allowed-tools:` (SKILL.md) enforcement
 
@@ -204,10 +205,11 @@ with no blocking or error. `allowed-tools:` is informational only under both har
 
 This is the most consequential finding for Task 4 (code-quality/jira agent frontmatter). Live
 testing spawned the actual installed `code-quality` plugin's `test-runner` subagent
-(frontmatter: `tools: Bash, Read, TodoWrite`) and asked it to list its own available tools. The
+(frontmatter: `tools: Bash, Read, TaskCreate, TaskUpdate, TaskList` — originally tested when it
+still listed `TodoWrite`) and asked it to list its own available tools. The
 result: its **actual** active tool set was `bash, read, yield, hub` **plus all installed MCP
-tools, completely unfiltered** — not restricted to the Bash/Read/TodoWrite-equivalents at all
-(and `todo`, `TodoWrite`'s nominal OMP counterpart, was not granted either).
+tools, completely unfiltered** — not restricted to the declared `Bash, Read, TaskCreate, TaskUpdate, TaskList` equivalents at all
+(and `todo`, the nominal OMP task-list counterpart, was not granted either).
 
 **Conclusion**: the `tools:` frontmatter field does not currently restrict — or even correctly
 map — a plugin-discovered subagent's tool access under this OMP version. This is not "unmapped
@@ -221,17 +223,17 @@ their `tools:` values as literal, unchanged Claude Code tool names — rewriting
 lowercase convention would have bought **zero** real restriction under OMP (per this finding)
 while actively breaking Claude Code's own enforcement (Claude Code's tool-name matching is
 case-sensitive; an unrecognized lowercase name matches nothing, effectively zeroing out that
-agent's tool access under Claude Code). Each of those 9 files instead carries a one-line HTML
-comment in its markdown body (after the frontmatter's closing `---`, since YAML has no comment
-syntax compatible with inline annotations of this kind) cross-referencing this document and
-naming which of its own listed tools have no OMP equivalent:
+agent's tool access under Claude Code). Each of those 9 files instead carries a standardized
+one-line `<!-- OMP note: ... -->` HTML comment in its markdown body (immediately after the
+frontmatter's closing `---`, before the `# <plugin>:<agent-name> — <Role Title>` H1 heading)
+cross-referencing this document and naming which of its own listed tools have no OMP equivalent:
 
 | File | Tools with no OMP equivalent |
 |---|---|
 | `architect.md` | `WebFetch` |
 | `code-reviewer.md`, `code-simplifier.md`, `performance.md`, `qa.md`, `security.md` | none — every listed tool has a direct equivalent |
 | `plan-adherence.md` | `AskUserQuestion` (no built-in; only reachable via dev-guard's bridge), `SendMessage` (no equivalent at all) |
-| `test-runner.md` | `TodoWrite` (nominal `todo` equivalent exists but is not actually granted, per the finding above) |
+| `test-runner.md` | `TaskCreate, TaskUpdate, TaskList` (nominal `todo` equivalent exists but is not actually granted, per the finding above) |
 | `jira-agent.md` | 19 MCP identifiers using OMP's differently-shaped `mcp__<server>_<tool>` re-encoding — the Jira/Atlassian server mapping is unverified against a live OMP install (not one of the 6 live-verified servers above) |
 
 `model:` frontmatter (`opus`/`sonnet`/`haiku`) is unaffected by any of this — confirmed live
@@ -261,7 +263,7 @@ multiline-bash override logic is ported unchanged in the bridge, since it operat
 Confirmed low risk: linking a plugin with a zero-dependency `package.json` added produces **no
 `node_modules` inside the plugin's own directory** and **no network activity** — OMP just
 symlinks the plugin into a shared `node_modules` tree so its `omp.extensions` entry resolves.
-`dev-guard/package.json` and the git-tools/github-mcp equivalents can all safely stay
+`dev-guard/package.json` and the `git-tools`, `github-mcp`, and `chai-bot` equivalents can all safely stay
 zero-dependency.
 
 ## Command namespacing (informational)
@@ -301,33 +303,49 @@ No native TypeScript fallback exists for `GIT_DENY_RULES` — fail-closed-on-sub
 alone is the accepted mitigation, to avoid a second, unsandboxed source of truth for
 security-relevant logic that could drift from the Python original.
 
-## `ask`-type decisions have no interactive path under OMP
+## Interactive `ask`-type permission decisions and `updatedInput` forwarding
 
 Claude Code's `PreToolUse` `hookSpecificOutput` protocol has three permission decisions:
-`allow`, `ask`, and `deny`. `ask` normally pauses the tool call and shows the user an
-interactive confirmation prompt they can approve in the moment — `tool-selection-guard.py`'s
-own `_exit_with_decision()` `ask` branch is built around that round trip, including its trust
-hint ("To trust: `/dev-guard trust add <rule>`...") shown alongside the prompt.
+`allow`, `ask`, and `deny`. `ask` pauses the tool call and shows the user an interactive
+confirmation prompt they can approve in the moment — `tool-selection-guard.py`'s
+`_exit_with_decision()` `ask` branch prefixes its reason with `[{rule_name}] {guidance}` and
+checks `_check_trust()` against the SQLite trust store before prompting.
 
-OMP's `ToolCallEventResult` (the bridge's `tool_call` return type) has no field for "pause and
-show an interactive confirmation" — only `block` (with a `reason`), `input` (an in-place
-correction), or no-op (allow). `omp-extension.ts`'s `tool_call` handler therefore folds `ask`
-into the same branch as `deny`:
+While OMP's `ToolCallEventResult` return type itself has only `block`, `input`, or `undefined`
+(allow), the `tool_call` handler in `dev-guard/omp-extension.ts` is `async` and has access to
+`ctx.ui.select()`. When `output?.permissionDecision === "ask"`, `omp-extension.ts` prompts the
+user interactively via `ctx.ui.select()` inside a bounded `MAX_ASK_ROUNDS = 5` re-evaluation
+loop:
 
-```ts
-if (output?.permissionDecision === "ask" || output?.permissionDecision === "deny") {
-    return { block: true, reason: output.permissionDecisionReason ?? "Blocked by dev-guard." };
-}
-```
-
-This is intentional and security-conservative — fail-closed rather than silently downgrading
-`ask` to `allow` — but it changes the remediation path. Under Claude Code, an `ask`-type rule
-firing mid-session can be approved on the spot. **Under OMP it cannot**: the only way to
-unblock an `ask`-type rule is to pre-establish trust *before* the call, via `/dev-guard trust
-add <rule-name> [--match <pattern>] [--scope session|--scope always]` — the same trust store
-`_check_trust()` reads for `ask` decisions under both harnesses. OMP users who hit a hard block
-from what was designed as an interactive confirmation should reach for that command rather
-than expect a retry-and-approve prompt.
+1. **Hard blocks never prompt**: `result.code === 2` and `output?.permissionDecision === "deny"`
+   always return `{ block: true, reason }` unconditionally before `ask` handling is reached.
+   On compound commands (`cmd1 && cmd2`), `tool-selection-guard.py` defers `"ask"` and `"allow"`
+   decisions across all subcommands, pipes, subshells, and URLs via `_PendingDecision` and
+   `_flush_pending_decisions()` so a later `"block"` subcommand always exits 2 immediately and
+   untrusted `"ask"` rules always take precedence over `"allow"` or trusted `"ask"` rules.
+2. **Interactive selector (`ctx.ui.select`)**: The bridge extracts `ruleName` from `reason` via
+   `/^\[([a-z0-9-]+)\]\s/`, constructs `promptText` (appending `\nCommand: ${toolInput.command}`
+   for `Bash` calls so the user sees the full untruncated command), and presents up to 4 options:
+   - `Allow once` — approves this tool call once (`return undefined`).
+   - `Allow for session` (shown when `ruleName` and `sessionId` are present) — runs
+     `tool-selection-guard.py --trust add <ruleName> --scope session --session-id <sessionId>`,
+     verifies `trustResult.code === 0 && !trustResult.spawnFailed && !trustResult.timedOut`, and
+     `continue`s the `MAX_ASK_ROUNDS` loop so the tool call is re-evaluated (surfacing any
+     subsequent untrusted `"ask"` rule on a multi-ask compound command or applying RTK
+     `updatedInput` rewrites).
+   - `Allow always` (shown when `ruleName` is present) — runs
+     `tool-selection-guard.py --trust add <ruleName> --scope always`, verifies exit code 0, and
+     `continue`s the loop to re-evaluate.
+   - `Deny` — returns `{ block: true, reason }`.
+3. **Fail-closed fallback**: If `ctx.ui?.select` is unavailable (headless/non-interactive mode),
+   throws, returns `undefined` (Escape/cancel) or `"Deny"`, if `--trust add` fails, or if
+   `MAX_ASK_ROUNDS` is exhausted, the bridge returns `{ block: true, reason }`.
+4. **`updatedInput` forwarding for `Read` and `Bash`**: When `output?.permissionDecision === "allow"`
+   includes `output.updatedInput`, `omp-extension.ts` forwards both `Read` path rewrites
+   (`output.updatedInput.file_path` → `{ input: { ...origInput, path } }`, e.g., `.claire` →
+   `.claude`) and `Bash` command rewrites (`output.updatedInput.command` →
+   `{ input: { ...origInput, command } }`, e.g., RTK token-saving rewrites), spreading
+   `origInput` so optional OMP fields (`cwd`, `timeout`, `env`) are preserved.
 
 ## Manual verification checklist
 
@@ -350,9 +368,14 @@ OMP install before each dev-guard release that touches `omp-extension.ts`.
 2. **tool_call/tool_result dispatch**, one round-trip per tool type:
    - `bash`: a blocked case (a `printf`/`echo-noop`-style rule) fires with exit code 2, and the
      block reason reaches the model as a tool error, not a passthrough. An allowed case (e.g.
-     `ls`) succeeds. Separately, confirm a `permissionDecision: ask` response (e.g. from a
-     git-ask-rule like `git stash drop`) is correctly folded into a hard block, not passed
-     through as an allow.
+     `ls`) succeeds, and when `rtk` is installed on `PATH`, a compressible command's
+     `updatedInput.command` rewrite is forwarded via `ToolCallEventResult.input` while
+     preserving optional OMP `bash` fields (`cwd`, `timeout`, `env`). Separately, confirm a
+     `permissionDecision: ask` response (e.g. from a git-ask-rule like `git stash drop`)
+     prompts interactively via `ctx.ui.select()` with `Allow once` / `Allow for session` /
+     `Allow always` / `Deny` displaying the full `Bash` command, persists session/always trust
+     via `--trust add` (with exit-code verification and re-evaluation), and fails closed to a
+     hard block when denied, cancelled, `--trust add` fails, or `ctx.ui.select` is unavailable.
    - `write`, `edit`: an allowed case succeeds. Separately, a case that WOULD hit one of
      `_guard_tmp_path`/`_guard_comment_narration`'s real hard-block paths still succeeds if the
      bridge's own subprocess call is broken (fail-open on subprocess failure, not because these

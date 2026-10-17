@@ -38,10 +38,18 @@ the docs task — keep both copies in sync if this list changes.)
   2. tool_call/tool_result dispatch, one round-trip per tool type:
        - bash: a blocked case (a printf/echo-noop-style rule) fires with
          exit code 2, and the block reason reaches the model as a tool
-         error, not a passthrough. An allowed case (e.g. `ls`) succeeds.
-         Separately, confirm a `permissionDecision: ask` response (e.g. from
-         a git-ask-rule like `git stash drop`) is correctly folded into a
-         hard block, not passed through as an allow.
+         error, not a passthrough. An allowed case (e.g. `ls`) succeeds,
+         and when `rtk` is installed on `PATH`, a compressible command's
+         `updatedInput.command` rewrite is forwarded via
+         `ToolCallEventResult.input` while preserving optional OMP `bash`
+         fields (`cwd`, `timeout`, `env`). Separately, confirm a
+         `permissionDecision: ask` response (e.g. from a git-ask-rule like
+         `git stash drop`) prompts interactively via `ctx.ui.select()` with
+         `Allow once` / `Allow for session` / `Allow always` / `Deny`
+         displaying the full `Bash` command, persists session/always trust
+         via `--trust add` (with exit-code verification and re-evaluation),
+         and fails closed to a hard block when denied, cancelled,
+         `--trust add` fails, or `ctx.ui.select` is unavailable.
        - write, edit: an allowed case succeeds. Separately, a case that WOULD
          hit one of _guard_tmp_path/_guard_comment_narration's real
          hard-block paths still succeeds if the bridge's own subprocess call
@@ -298,29 +306,79 @@ class TestBashPreToolUsePayloadShape:
         result = run_guard(payload, cwd=tmp_path)
         assert result.returncode == 0
 
+    def test_rtk_rewrite_returns_updated_input_command(self, tmp_path):
+        """When rtk rewrites a compressible Bash command, tool-selection-guard.py
+        returns permissionDecision == 'allow' with updatedInput.command set to a
+        string — the exact shape omp-extension.ts forwards via ToolCallEventResult.input."""
+        rtk_script = tmp_path / "rtk"
+        rtk_script.write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = "rewrite" ]; then\n'
+            "    shift\n"
+            '    echo "rtk $*"\n'
+            "    exit 0\n"
+            "fi\n"
+            "exit 1\n"
+        )
+        rtk_script.chmod(0o755)
+        env = {
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        env.pop("RTK_DISABLED", None)
+        payload = {
+            "session_id": str(uuid.uuid4()),
+            "tool_use_id": "tc-rtk-1",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "ls -la"},
+        }
+        result = run_guard(payload, cwd=tmp_path, env=env)
+        assert result.returncode == 0
+        output = json.loads(result.stdout)
+        hook = output["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "allow"
+        assert isinstance(hook.get("updatedInput", {}).get("command"), str)
+        assert hook["updatedInput"]["command"] == "rtk ls -la"
 
-# ── Regression: `ask` permissionDecision must fold into a hard block, not a
-#    silent passthrough (omp-extension.ts's tool_call handler, ~lines
-#    531-533 — OMP's ToolCallEventResult has no "pause and prompt" outcome,
-#    so the bridge treats "ask" the same as "deny") ─────────────────────────
+
+# ── Interactive `ask` permissionDecision and compound command precedence
+#    (omp-extension.ts tool_call handler + tool-selection-guard.py deferral) ──
+
+
+def run_guard_trust(
+    trust_args: list[str], *, cwd: Path, env: dict[str, str]
+) -> subprocess.CompletedProcess:
+    """Invoke tool-selection-guard.py --trust ..., matching omp-extension.ts's runGuard."""
+    return subprocess.run(
+        ["uv", "run", str(TOOL_SELECTION_GUARD), "--trust", *trust_args],
+        input="{}",
+        capture_output=True,
+        text=True,
+        cwd=str(cwd),
+        env=env,
+        timeout=30,
+    )
 
 
 class TestAskDecisionSignal:
     """`ask` decisions are live-reachable (e.g. a git-ask-rule like `git
     stash drop`, or an MCP fetchaller POST call) and exit 0 with a
-    hookSpecificOutput JSON payload — a third block signal alongside exit
-    code 2 (TestDualBlockSignalRegression) and the "block"/"deny" JSON. A
-    bridge that doesn't check for `permissionDecision === "ask"` would treat
-    a dev-guard "confirm this is intentional" prompt as a silent allow. This
-    pins the exact stdout shape omp-extension.ts's tool_call handler reads
-    to make that fold decision."""
+    hookSpecificOutput JSON payload prefixed by `[{rule_name}] `.
+    omp-extension.ts parses `ruleName` via `/^\\[([a-z0-9-]+)\\]\\s/`, prompts
+    via `ctx.ui.select()`, persists session/always trust via `--trust add`,
+    and re-evaluates in a bounded loop."""
 
     def test_git_stash_drop_signals_ask_not_block_or_allow(self, tmp_path):
-        # Isolate from the real ~/.claude/dev-guard.json: a local git_trusted_dirs
-        # allowlist would otherwise make _check_git_trusted_dirs hard-block this
-        # command (tmp_path is untrusted) before the ASK rule ever runs, same
-        # isolation pattern test_tool_selection_guard.py uses throughout.
-        env = {**os.environ, "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json")}
+        # Isolate both DEV_GUARD_CONFIG and GUARD_DB_PATH so tests never
+        # read or write ~/.claude/logs/dev-guard.db.
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-18",
@@ -329,13 +387,129 @@ class TestAskDecisionSignal:
             "tool_input": {"command": "git stash drop"},
         }
         result = run_guard(payload, cwd=tmp_path, env=env)
-        # Exits 0, unlike the exit-code-2 hard block signal — "ask" is only
-        # distinguishable from "allow" by parsing this stdout JSON.
         assert result.returncode == 0
         output = json.loads(result.stdout)
         hook = output["hookSpecificOutput"]
         assert hook["permissionDecision"] == "ask"
-        assert hook["permissionDecisionReason"]
+        assert hook["permissionDecisionReason"].startswith("[stash-drop] ")
+
+    def test_trust_add_session_and_always_cli_contract(self, tmp_path):
+        """omp-extension.ts invokes `--trust add <ruleName> --scope session --session-id <sid>`
+        and `--trust add <ruleName> --scope always`. Verify both CLI shapes exit 0
+        (including for fetchaller-fetch-mutating-call) and that a subsequent
+        PreToolUse call with that session_id returns permissionDecision == 'allow'."""
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        sid = str(uuid.uuid4())
+
+        # Session-scoped trust for stash-drop
+        trust_res = run_guard_trust(
+            ["add", "stash-drop", "--scope", "session", "--session-id", sid],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert trust_res.returncode == 0, trust_res.stderr
+
+        # Subsequent PreToolUse with matching session_id -> allow ([trusted])
+        payload = {
+            "session_id": sid,
+            "tool_use_id": "tc-18b",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git stash drop"},
+        }
+        result = run_guard(payload, cwd=tmp_path, env=env)
+        assert result.returncode == 0
+        hook = json.loads(result.stdout)["hookSpecificOutput"]
+        assert hook["permissionDecision"] == "allow"
+        assert "[trusted] [stash-drop]" in hook["permissionDecisionReason"]
+
+        # Always-scoped trust for fetchaller-fetch-mutating-call
+        trust_mcp = run_guard_trust(
+            ["add", "fetchaller-fetch-mutating-call", "--scope", "always"],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert trust_mcp.returncode == 0, trust_mcp.stderr
+
+    def test_compound_ask_then_block_always_exits_2(self, tmp_path):
+        """A compound command with an 'ask' subcommand followed by a 'block'
+        subcommand (`git stash drop && git push --force origin main`) must
+        always exit 2 ('block'), both when stash-drop is untrusted AND when
+        stash-drop is trusted."""
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        sid = str(uuid.uuid4())
+        payload = {
+            "session_id": sid,
+            "tool_use_id": "tc-18c",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git stash drop && git push --force origin main"},
+        }
+
+        # 1. Untrusted stash-drop: block on second subcommand still exits 2
+        res_untrusted = run_guard(payload, cwd=tmp_path, env=env)
+        assert res_untrusted.returncode == 2
+
+        # 2. Trusted stash-drop: block on second subcommand still exits 2
+        trust_res = run_guard_trust(
+            ["add", "stash-drop", "--scope", "session", "--session-id", sid],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert trust_res.returncode == 0
+        res_trusted = run_guard(payload, cwd=tmp_path, env=env)
+        assert res_trusted.returncode == 2
+
+    def test_compound_multi_ask_re_evaluates_second_rule_after_trust(self, tmp_path):
+        """A compound command with two distinct 'ask' subcommands
+        (`git remote remove upstream && git stash drop`) returns 'ask' for
+        remote-remove initially (surfacing stash-drop in the reason), and after
+        trusting remote-remove for the session, re-evaluation returns 'ask' for
+        stash-drop rather than auto-approving stash-drop."""
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        sid = str(uuid.uuid4())
+        payload = {
+            "session_id": sid,
+            "tool_use_id": "tc-18d",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git remote remove upstream && git stash drop"},
+        }
+
+        # Round 1: ask for remote-remove, with stash-drop noted as additional confirmation
+        res1 = run_guard(payload, cwd=tmp_path, env=env)
+        assert res1.returncode == 0
+        hook1 = json.loads(res1.stdout)["hookSpecificOutput"]
+        assert hook1["permissionDecision"] == "ask"
+        assert hook1["permissionDecisionReason"].startswith("[remote-remove] ")
+        assert "Also requires confirmation: [stash-drop]" in hook1["permissionDecisionReason"]
+
+        # Trust remote-remove for session
+        trust_res = run_guard_trust(
+            ["add", "remote-remove", "--scope", "session", "--session-id", sid],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert trust_res.returncode == 0
+
+        # Round 2: re-evaluation prompts for stash-drop
+        res2 = run_guard(payload, cwd=tmp_path, env=env)
+        assert res2.returncode == 0
+        hook2 = json.loads(res2.stdout)["hookSpecificOutput"]
+        assert hook2["permissionDecision"] == "ask"
+        assert hook2["permissionDecisionReason"].startswith("[stash-drop] ")
 
 
 # ── Write/Edit: PreToolUse translation (input passed through unchanged) ─────

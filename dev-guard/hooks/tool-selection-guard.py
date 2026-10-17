@@ -528,6 +528,19 @@ def _hook_output(
     return json.dumps({"hookSpecificOutput": output})
 
 
+class _PendingDecision(NamedTuple):
+    guidance: str
+    action: str
+    rule_name: str | None = None
+    matched_segment: str | None = None
+    category: str = "guard"
+    detail: dict[str, object] | None = None
+
+
+_defer_decisions: bool = False
+_pending_decisions: list[_PendingDecision] = []
+
+
 def _exit_with_decision(
     guidance: str,
     action: str,
@@ -545,9 +558,19 @@ def _exit_with_decision(
                permissionDecision "ask", exits 0 (prompts user for confirmation).
       "block": prints guidance to stderr, exits 2.
 
+    When _defer_decisions is True, "allow" and "ask" decisions are appended to
+    _pending_decisions instead of exiting immediately so later subcommands/segments
+    are still checked against "block" rules.
+
     category: audit log category (default "guard"; URL callers pass "url").
     detail: optional dict logged as JSON; string values are redacted via _redact_secrets.
     """
+    if _defer_decisions and action in ("allow", "ask"):
+        _pending_decisions.append(
+            _PendingDecision(guidance, action, rule_name, matched_segment, category, detail)
+        )
+        return
+
     if action == "allow":
         # Allow: log and output allow decision
         _log_event(category, "allowed", rule=rule_name, command=matched_segment, detail=detail)
@@ -592,6 +615,73 @@ def _exit_with_decision(
         _log_event(category, "blocked", rule=rule_name, command=matched_segment, detail=detail)
         print(msg, file=sys.stderr)
         sys.exit(2)
+
+
+def _flush_pending_decisions(all_subcmds_covered: bool = True) -> None:
+    """Resolve and emit deferred non-block ('ask'/'allow') decisions.
+
+    Called after all subcommands/domains have been verified against 'block' rules:
+    - Any untrusted 'ask' takes precedence over 'allow' and trusted 'ask'.
+      Multiple untrusted asks are combined into a single 'ask' decision reason.
+    - When only 'allow' or trusted 'ask' decisions exist, permissionDecision: 'allow'
+      is emitted only if all_subcmds_covered is True; otherwise each event is logged
+      without emitting a blanket auto-approve for unreviewed sibling subcommands.
+    """
+    if not _pending_decisions:
+        return
+
+    decisions = list(_pending_decisions)
+    _pending_decisions.clear()
+
+    untrusted_asks: list[_PendingDecision] = []
+    allows_or_trusted: list[_PendingDecision] = []
+    for d in decisions:
+        if d.action == "ask" and not (
+            d.rule_name and _check_trust(d.rule_name, d.matched_segment, _session_id)
+        ):
+            untrusted_asks.append(d)
+        else:
+            allows_or_trusted.append(d)
+
+    if untrusted_asks:
+        first = untrusted_asks[0]
+        combined_guidance = first.guidance
+        if len(untrusted_asks) > 1:
+            extra_lines = [
+                f"Also requires confirmation: [{d.rule_name}] {d.guidance} "
+                f"(Matched: {d.matched_segment})"
+                for d in untrusted_asks[1:]
+            ]
+            combined_guidance = f"{combined_guidance}\n" + "\n".join(extra_lines)
+        _exit_with_decision(
+            combined_guidance,
+            "ask",
+            rule_name=first.rule_name,
+            matched_segment=first.matched_segment,
+            category=first.category,
+            detail=first.detail,
+        )
+    elif allows_or_trusted:
+        if all_subcmds_covered:
+            first = allows_or_trusted[0]
+            _exit_with_decision(
+                first.guidance,
+                first.action,
+                rule_name=first.rule_name,
+                matched_segment=first.matched_segment,
+                category=first.category,
+                detail=first.detail,
+            )
+        else:
+            for d in allows_or_trusted:
+                outcome = "trusted" if d.action == "ask" else "allowed"
+                _log_event(
+                    d.category,
+                    outcome,
+                    rule=d.rule_name,
+                    command=d.matched_segment,
+                    detail=d.detail,
+                )
 
 
 def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
@@ -1853,11 +1943,15 @@ def _check_worktree_stash(cmd: str) -> None:
         )
 
 
-def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
-    """Check a command against git safety rules. Exits on block or ask match."""
+def check_git_safety(cmd: str, fetch_seen: bool = False) -> bool:
+    """Check a command against git safety rules.
+
+    Exits immediately on block match. Records or emits ask decision and returns True
+    on ask match; returns False otherwise.
+    """
     # Early exit: not a git command
     if not re.search(r"(^|\s)git\s", cmd):
-        return
+        return False
 
     # Trusted directory check (before other rules — fundamental access control)
     _check_git_trusted_dirs(cmd)
@@ -1893,6 +1987,9 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass  # If we can't determine branch, allow (fail open)
 
+    # Worktree stash safety (block) — must come before git ASK rules
+    _check_worktree_stash(cmd)
+
     # Special: branch from upstream without a preceding fetch in the command chain
     parsed = _parse_branch_creation(cmd)
     if (
@@ -1909,14 +2006,15 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
             rule_name="branch-needs-fetch",
             matched_segment=cmd,
         )
-
-    # Worktree stash safety — must come before generic stash-drop ASK rule
-    _check_worktree_stash(cmd)
+        return True
 
     # ASK rules — prompt user for confirmation
     for name, check_fn, message in GIT_ASK_RULES:
         if check_fn(cmd):
             _exit_with_decision(message, "ask", rule_name=name, matched_segment=cmd)
+            return True
+
+    return False
 
 
 def _is_command_delimiter(text: str, i: int, current: list[str]) -> int | None:
@@ -2149,18 +2247,20 @@ def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
 _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
 
 
-def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = None) -> None:
-    """Check a command against all rules. Exits on match.
+def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = None) -> bool:
+    """Check a command against all rules.
 
-    Block rules: stderr + exit 2.
-    Ask rules: hookSpecificOutput JSON + exit 0 (prompts user).
+    Block rules: stderr + exit 2 immediately.
+    Ask/Allow rules: recorded via _exit_with_decision (exits 0 or defers when
+    _defer_decisions is True). Returns True if a non-block rule matched.
 
     skip_rules: frozenset of rule names to skip (used for pipe segments
     where native-tool alternatives don't apply to piped output).
     """
     cmd = strip_shell_keyword(cmd)
-    check_git_safety(cmd, fetch_seen=fetch_seen)
+    git_asked = check_git_safety(cmd, fetch_seen=fetch_seen)
     normalized = strip_env_prefix(cmd)
+    first_non_block: tuple[CommandRule, str] | None = None
     for rule in RULES:
         if skip_rules and rule.name in skip_rules:
             continue
@@ -2172,9 +2272,19 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
             # match because EVIL=1 is at the start of the raw command.
             if rule.exception and rule.exception.search(cmd):
                 continue
-            _exit_with_decision(
-                rule.guidance, rule.action, rule_name=rule.name, matched_segment=m.group(0)
-            )
+            if rule.action not in ("allow", "ask"):
+                _exit_with_decision(
+                    rule.guidance, rule.action, rule_name=rule.name, matched_segment=m.group(0)
+                )
+            elif not git_asked and first_non_block is None:
+                first_non_block = (rule, m.group(0))
+    if first_non_block is not None:
+        rule, matched = first_non_block
+        _exit_with_decision(
+            rule.guidance, rule.action, rule_name=rule.name, matched_segment=matched
+        )
+        return True
+    return git_asked
 
 
 def _check_pipes(
@@ -2259,16 +2369,17 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
         _check_pipes(inner, fetch_seen)
 
     # Now check the full subcommand (including allow rules that exit 0)
-    _check_rules(subcmd, fetch_seen)
+    rule_matched = _check_rules(subcmd, fetch_seen)
 
-    # oc/kubectl introspection — after user-defined rules (which take priority)
-    normalized = strip_env_prefix(strip_shell_keyword(subcmd))
-    if re.match(r"^\s*(oc|kubectl)\b", normalized):
-        _check_oc_introspection(subcmd)
+    if not rule_matched:
+        # oc/kubectl introspection — after user-defined rules (which take priority)
+        normalized = strip_env_prefix(strip_shell_keyword(subcmd))
+        if re.match(r"^\s*(oc|kubectl)\b", normalized):
+            _check_oc_introspection(subcmd)
 
-    # Kill command guard — validate targets against Claude session process tree
-    if re.match(r"^\s*(kill|killall|pkill)\b", normalized):
-        _check_kill_command(subcmd)
+        # Kill command guard — validate targets against Claude session process tree
+        if re.match(r"^\s*(kill|killall|pkill)\b", normalized):
+            _check_kill_command(subcmd)
 
     return fetch_seen
 
@@ -3214,6 +3325,8 @@ def _get_askable_rule_names() -> set[str]:
     names.add("kill-non-claude-process")
     # Branch-needs-fetch (dynamic git ask)
     names.add("branch-needs-fetch")
+    # MCP fetchaller mutating call ask rule
+    names.add("fetchaller-fetch-mutating-call")
     return names
 
 
@@ -3944,7 +4057,12 @@ def _handle_websearch(tool_input: dict) -> NoReturn:
     # BLOCKED_URL_RULES patterns like "(?:^|//)(?:www\.)?reddit\.com/", which
     # require a leading "^"/"//" and trailing "/" -- a plain "reddit.com"
     # string alone (no "//" prefix) never matches those patterns.
+    global _defer_decisions
+    _defer_decisions = True
+    _pending_decisions.clear()
+    covered_domains = 0
     for domain in domains:
+        before_count = len(_pending_decisions)
         result = _check_url_rules(f"//{domain.rstrip('/')}/")
         if result:
             rule_name, _guidance, action = result
@@ -3959,12 +4077,17 @@ def _handle_websearch(tool_input: dict) -> NoReturn:
                 category="url",
                 detail={"tool": "WebSearch", "phase": "pre"},
             )
+        if len(_pending_decisions) > before_count:
+            covered_domains += 1
+    _defer_decisions = False
+    _flush_pending_decisions(all_subcmds_covered=bool(domains) and covered_domains == len(domains))
     _log_url_event(tool_input.get("query", ""), None, "allowed", "WebSearch")
     sys.exit(0)
 
 
 def _handle_bash_command(command: str) -> NoReturn:
     """Process a Bash command through all guard checks. Always exits."""
+    global _defer_decisions
     if not command:
         sys.exit(0)
 
@@ -3978,13 +4101,17 @@ def _handle_bash_command(command: str) -> NoReturn:
     if command.startswith("GUARD_BYPASS=1 "):
         _log_event("bypass", "bypassed", command=command)
         real_cmd = command[len("GUARD_BYPASS=1 ") :]
-        _check_fetch_command(real_cmd)
+        _defer_decisions = True
+        _pending_decisions.clear()
         subcmds = split_commands(real_cmd)
         for subcmd in subcmds:
+            _check_fetch_command(subcmd)
             stripped = strip_env_prefix(strip_shell_keyword(subcmd))
             for name, check_fn, message in GIT_DENY_RULES:
                 if check_fn(stripped) or check_fn(subcmd):
                     _exit_with_decision(message, "block", rule_name=name, matched_segment=subcmd)
+        _defer_decisions = False
+        _flush_pending_decisions(all_subcmds_covered=False)
         # Explicit allow for multiline bypass commands (same rationale as below)
         if "\n" in real_cmd:
             _exit_with_decision(
@@ -3995,17 +4122,26 @@ def _handle_bash_command(command: str) -> NoReturn:
             )
         sys.exit(0)
 
-    # Check curl/wget commands for authenticated URLs (before rule checks)
-    _check_fetch_command(command)
-
     subcmds = split_commands(command)
 
     # Block cd && git compounds before processing individual subcommands
     _check_cd_git_compound(subcmds, command)
 
+    _defer_decisions = True
+    _pending_decisions.clear()
     fetch_seen = False
+    covered_subcmds = 0
     for subcmd in subcmds:
+        before_count = len(_pending_decisions)
+        # Check curl/wget commands for authenticated URLs per subcommand
+        _check_fetch_command(subcmd)
         fetch_seen = _check_subcmd(subcmd, fetch_seen)
+        if len(_pending_decisions) > before_count:
+            covered_subcmds += 1
+
+    all_subcmds_covered = bool(subcmds) and (covered_subcmds == len(subcmds))
+    _defer_decisions = False
+    _flush_pending_decisions(all_subcmds_covered=all_subcmds_covered)
 
     # ── RTK compression: rewrite commands that passed all deny rules ──
     # Runs AFTER deny rules so blocked commands never reach RTK.

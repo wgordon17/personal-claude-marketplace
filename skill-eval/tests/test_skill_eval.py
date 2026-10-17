@@ -101,6 +101,21 @@ def tty_stdin():
         yield
 
 
+class TestDisabledCliMain:
+    """cli.main() was disabled in 6453cefb (PR #169) and exits 0 immediately."""
+
+    def test_cli_main_prints_disabled_and_exits_0(self, capsys):
+        from skill_eval import cli
+
+        with pytest.raises(SystemExit) as exc:
+            cli.main()
+
+        assert exc.value.code == 0
+        captured = capsys.readouterr()
+        assert "skill-eval is disabled." in captured.out
+
+
+@pytest.mark.skip(reason="cli.main() disabled in 6453cefb (PR #169)")
 class TestHookNoChangedSkills:
     """Pre-push and --all with no skills → exit 0."""
 
@@ -131,6 +146,7 @@ class TestHookNoChangedSkills:
         assert exc.value.code == 0
 
 
+@pytest.mark.skip(reason="cli.main() disabled in 6453cefb (PR #169)")
 class TestHookPassingBaseline:
     """_eval_skills returns True → exit 0."""
 
@@ -152,6 +168,7 @@ class TestHookPassingBaseline:
         assert exc.value.code == 0
 
 
+@pytest.mark.skip(reason="cli.main() disabled in 6453cefb (PR #169)")
 class TestHookRegression:
     """_eval_skills returns False → exit 1."""
 
@@ -173,6 +190,7 @@ class TestHookRegression:
         assert exc.value.code == 1
 
 
+@pytest.mark.skip(reason="cli.main() disabled in 6453cefb (PR #169)")
 class TestHookAllFlag:
     """--all dispatches to _mode_all, not _mode_prepush."""
 
@@ -192,6 +210,7 @@ class TestHookAllFlag:
         mock_prepush.assert_not_called()
 
 
+@pytest.mark.skip(reason="cli.main() disabled in 6453cefb (PR #169)")
 class TestHookPrePushDispatch:
     """No flags → dispatches to _mode_prepush."""
 
@@ -209,6 +228,7 @@ class TestHookPrePushDispatch:
         mock_pp.assert_called_once_with(tmp_path)
 
 
+@pytest.mark.skip(reason="cli.main() disabled in 6453cefb (PR #169)")
 class TestHookCoverageCheckDispatch:
     """--coverage-check dispatches to _mode_coverage_check, not _mode_prepush."""
 
@@ -530,6 +550,73 @@ class TestResolveSkillBundle:
 
         result = resolve_skill_bundle(skill_dir, repo_root=repo)
         assert result is not None  # no crash; prefix skipped
+
+    def test_markdown_link_dot_slash_reference_included(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (skill_dir / "references" / "foo.md").write_text("# Foo Reference Content\n")
+        _write_skill_md(skill_dir, "# Skill\nSee [see foo](./references/foo.md).\n")
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert "Foo Reference Content" in result
+
+    def test_markdown_link_bare_and_deduplicated_with_backtick(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (skill_dir / "references" / "foo.md").write_text("UNIQUE_FOO_MARKER\n")
+        _write_skill_md(
+            skill_dir,
+            "# Skill\n"
+            "See `references/foo.md`, [see foo](references/foo.md), "
+            "and [see foo again](./references/foo.md).\n",
+        )
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert result.count("UNIQUE_FOO_MARKER") == 1
+
+    def test_markdown_link_plugin_relative_parent_resolved(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (repo / "code-quality" / "references" / "shared.md").write_text("# Shared Plugin Ref\n")
+        _write_skill_md(skill_dir, "# Skill\nSee [shared](../../references/shared.md).\n")
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert "Shared Plugin Ref" in result
+
+    def test_transitive_one_hop_reference_included(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (skill_dir / "references" / "local.md").write_text(
+            "# Local Ref\n"
+            "Links to [shared](../../../references/shared.md) and `references/sibling.md`.\n"
+        )
+        (skill_dir / "references" / "sibling.md").write_text("# Sibling Ref Content\n")
+        (repo / "code-quality" / "references" / "shared.md").write_text(
+            "# Transitive Shared Content\n"
+        )
+        _write_skill_md(skill_dir, "# Skill\nSee [local](./references/local.md).\n")
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert "Local Ref" in result
+        assert "Sibling Ref Content" in result
+        assert "Transitive Shared Content" in result
+
+    def test_markdown_link_path_traversal_outside_repo_rejected(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (tmp_path / "evil.md").write_text("EVIL_ROOT_CONTENT\n")
+        outside_refs = tmp_path / "references"
+        outside_refs.mkdir(exist_ok=True)
+        (outside_refs / "evil.md").write_text("EVIL_REF_CONTENT\n")
+        _write_skill_md(
+            skill_dir,
+            "# Skill\n"
+            "See [evil](../../../../evil.md) and [evil ref](../../../../references/evil.md).\n",
+        )
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert "EVIL_ROOT_CONTENT" not in result
+        assert "EVIL_REF_CONTENT" not in result
 
 
 # ── Group 6: ContainsMetric ───────────────────────────────────────────────────
@@ -1111,6 +1198,7 @@ class TestVerifyEvalIntegrity:
         assert len(modified) == 2
 
 
+@pytest.mark.skip(reason="cli.main() disabled in 6453cefb (PR #169)")
 class TestLockedMode:
     """--locked flag blocks update-baselines and verifies integrity."""
 
