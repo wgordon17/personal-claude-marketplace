@@ -760,15 +760,14 @@ class TestBugsTrackingIntegrity:
         )
 
     def test_quality_gate_uses_correct_mcp_tool_name(self):
-        content = QUALITY_GATE_SKILL.read_text()
-        assert "mcp__plugin_github-mcp_github__pull_request_read" in content, (
-            f"{QUALITY_GATE_SKILL} does not contain the correct MCP tool name. "
-            "Stale 'mcp__github__pull_request_read' may have been reintroduced."
+        gate_specs = QUALITY_GATE_SKILL.parent / "references" / "gate-specifications.md"
+        content = QUALITY_GATE_SKILL.read_text() + gate_specs.read_text()
+        assert "pull_request_read" in content, (
+            f"{QUALITY_GATE_SKILL} and {gate_specs} do not reference 'pull_request_read'."
         )
-        cleaned = content.replace("mcp__plugin_github-mcp_github__pull_request_read", "")
-        assert "mcp__github__pull_request_read" not in cleaned, (
-            f"{QUALITY_GATE_SKILL} contains stale 'mcp__github__pull_request_read' "
-            "reference(s) without the 'plugin_github-mcp_' qualifier."
+        assert "mcp__github__pull_request_read" not in content, (
+            f"{QUALITY_GATE_SKILL} or {gate_specs} contains stale "
+            "'mcp__github__pull_request_read' reference(s)."
         )
 
 

@@ -4,7 +4,7 @@ description: |
   Use when about to claim ANY work is complete — code, research, planning,
   config, or general answers. Also after /swarm, /spawn, subagent-driven
   development, or any significant deliverable.
-allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, SendMessage, Skill]
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion SendMessage Skill
 ---
 
 # Quality Gate
@@ -69,28 +69,9 @@ Determine work type from session activity:
 
 Select the lens set for the detected type (see `[{skill_dir}/references/lens-rubrics.md](./references/lens-rubrics.md)`).
 
-**Test plan discovery (Planning/Mixed/Code work types):** After classifying the work type,
-discover the plan file using branch-header matching (same algorithm as Layer
-1.75: search `{memory_dir}/plans/` for files whose `**Branch:**` header matches the current git
-branch; fallback to branch slug prefix matching; use most recent by unix timestamp if multiple
-match). If a plan file is found, store its absolute path as `{plan_file_path}` and its content
-as `{plan_content}`. These are consumed by Layer 1.75 and the Lifecycle Gate. If a plan file
-is found and it contains a `## Test Plan` section, read the `**Test Plan:**`
-path annotation from that section. Normalize the path (resolve any `..` components, strip
-trailing slashes) and verify it falls within `{memory_dir}/test-plans/`. If the path escapes
-that directory, set `{plan_test_plan}` to empty string and log a warning:
-"Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan}
-to empty string." If the path is valid but the file does not exist, set `{plan_test_plan}` to
-empty string (graceful fallback — no warning). If the path is valid and the file exists,
-read the test plan file and store its content as `{plan_test_plan}`. This
-value is available to all subsequent layers (Layer 1 Rounds 2 and 5, and Layer 2 Subagent A).
-If no plan file is found for the current branch, set `{plan_test_plan}` to empty string.
+**Test plan discovery (Planning/Mixed/Code work types):** Search `{memory_dir}/plans/` by `**Branch:**` header match (fallback: branch slug prefix; use most recent timestamp). If found, store `{plan_file_path}` and `{plan_content}` for Layer 1.75 and the Lifecycle Gate. If the plan has a `## Test Plan` section, normalize `**Test Plan:**` (resolve `..`, strip trailing slashes) and verify it stays within `{memory_dir}/test-plans/`. If it escapes, set `{plan_test_plan}` = `""` and log a warning; if missing, set `{plan_test_plan}` = `""`; if valid and present, read into `{plan_test_plan}` for Layer 1 (Rounds 2 and 5) and Layer 2 (Subagent A).
 
-**Incremental workflow scoping:** When invoked during an incremental swarm run (the swarm Lead
-passes a `pr_boundary_files` list), scope all review passes to only the files in that list.
-Findings for files outside the boundary are not collected, not reviewed, and not counted.
-When invoked standalone (no `pr_boundary_files` context): existing behavior unchanged — review
-all changed files.
+**Incremental workflow scoping:** When invoked during an incremental swarm run (`pr_boundary_files` provided), scope all review passes to only the files in `pr_boundary_files`. When standalone, review all changed files.
 
 ---
 
@@ -136,758 +117,81 @@ structured reasoning; without them, be explicit about pausing to reason through 
 
 ### Round Execution Protocol
 
-Execute this protocol for EVERY round:
+Execute this 7-step protocol for EVERY round (see `[{skill_dir}/references/lens-rubrics.md](./references/lens-rubrics.md)` for full Step 3 & Step 5 trap catalogs):
 
-```
-1. serena::think_about_task_adherence
-   "Is this round's review still aligned with the original request?"
+1. **`serena::think_about_task_adherence`** — "Is this round's review still aligned with the original request?"
+2. **APPLY THE LENS** — Check every modified file, function, and edge case exhaustively from first principles until genuinely out of things to check.
+3. **PROJECT RULES + CROSS-REFERENCE INTEGRITY (Round 2 only)** — Re-read `CLAUDE.md`/`CONTRIBUTING.md` for version bumps, manifests, and conventions; check documentation triggers against `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`; verify UAT scenario coverage against `{plan_test_plan}` (Planning/Mixed); and grep the codebase for stale cross-references to renamed/removed items.
+4. **FIX ALL FINDINGS IMMEDIATELY** — Every identified issue must result in an edit or a documented, specific blocker.
+5. **ACTION AUDIT** — Scan all output (yours and subagents' `last_assistant_message`) for identified-but-unactioned items and enforce the 4 anti-deferral trap gates defined in `[{skill_dir}/references/lens-rubrics.md](./references/lens-rubrics.md)`:
+   - **THE "DEFERRAL-TO-USER" TRAP** ("should be verified" / "you should check" → verify it yourself)
+   - **THE "PREEXISTING" TRAP** ("pre-existing" → investigate root cause and verify against baseline)
+   - **THE "SELF-SCOPING" TRAP / SELF-SCOPING TRAP** ("v1"/"v2"/"future iteration" → implement or present via `AskUserQuestion`; never self-scope)
+   - **THE "NOT MY REVIEW" TRAP** (PR diff is the scope boundary, not prior review output)
+6. **FINDING COUNT TRACKING** — Record `finding_count[round_N]`. If `N >= 3` and `finding_count[round_N] > finding_count[round_N-1]`, print oscillation warning.
+7. **`serena::think_about_whether_you_are_done`** — "Did I genuinely address everything this lens covers?"
 
-2. APPLY THE LENS
-   Think through this EXHAUSTIVELY. Do not stop at the first issue.
-   Check every modified file, every function, every edge case.
-   Continue until you have genuinely run out of things to check —
-   not until you feel like you've done enough.
+### No Early Exit, Valid Zero Findings & Adaptive Rounds 5-6
 
-   For this round's specific lens, use first-principles thinking:
-   break the problem down to fundamental truths and rebuild
-   your assessment from the ground up.
-
-3. PROJECT RULES + CROSS-REFERENCE INTEGRITY (Round 2 only)
-   a) Re-read CLAUDE.md and CONTRIBUTING.md (if they exist).
-      Check every change against project-specific conventions:
-      - Version bump rules (e.g., "always bump plugin versions in both files")
-      - Commit message conventions
-      - Required file updates (changelogs, manifests, registries)
-      - Deployment/delivery requirements (will this change actually reach users?)
-      - Any other project-specific rules that apply to this type of change
-
-   b) Documentation completeness: check every change against the documentation
-      triggers in `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`. For each
-      trigger that fires, verify the corresponding documentation surfaces were
-      updated. Use the taxonomy's surface detection patterns to discover all
-      surfaces, and its ecosystem-specific component discovery patterns to count
-      on-disk components. Counts must match what's documented. A new component
-      with no documentation entry is a completeness failure, same as a missing test.
-
-   c) UAT coverage verification (Planning/Mixed only): if Step 0 loaded a
-      non-empty `{plan_test_plan}`, for each scenario in the test plan: is
-      there a corresponding planned task or test case in the plan? Will the
-      planned work verify this scenario? A UAT scenario with no corresponding
-      plan coverage is a completeness gap — treat as `needs-fix`.
-
-   d) Cross-reference integrity: search the ENTIRE codebase for references
-      to things you changed, renamed, or removed. Files you DIDN'T modify
-      can have stale references to things you DID modify. Grep for:
-      - Old names/values you replaced
-      - Functions/skills/tools you renamed or removed
-      - Version numbers that should match across files
-      - Import paths, file references, cross-links
-
-   This catches issues that no generic lens covers — project conventions
-   and cross-file consistency are invisible to single-file review.
-
-4. FIX ALL FINDINGS IMMEDIATELY
-   Do not note issues for later. Do not say "could be improved."
-   Fix them NOW. Every identified issue must result in an edit or
-   a documented, specific blocker.
-
-5. ACTION AUDIT
-   Scan ALL output (yours and any subagent output) for
-   identified-but-unactioned items:
-   - "could be improved" / "might want to" / "consider"
-   - "potential issue" / "noted for future" / "TODO"
-   - "follow-up" / "out of scope" / "later"
-   - "pre-existing" / "preexisting" / "known issue" / "existing failure"
-   - "should be verified" / "needs to be confirmed" / "you should check"
-   - "verify against your" / "please verify" / "you may want to update"
-   - Any issue described without a corresponding fix
-   - "v1" / "v2" / "future iteration" / "future enhancement" / "next version" / "phase N enhancement" / "deferred to future" / "out of scope for this implementation" (when used as self-scoping — legitimate software version references like "API v1" or "Pydantic v2" are not deferral)
-
-   THE "DEFERRAL-TO-USER" TRAP:
-   Saying "should be verified" or "you should check" is an admission that
-   work needs doing — and a confession that you didn't do it. If it should
-   be verified, verify it. If it needs checking, check it. If it needs
-   confirming, confirm it. The user asked you to do the work, not to
-   generate a checklist of work for them to do.
-   - "The field ID should be verified against your instance" → Look it up.
-   - "You may want to update the config" → Update it.
-   - "This should be tested with..." → Test it.
-   - "Needs to be confirmed" → Confirm it.
-   Every "should be" is either done or documented as a specific blocker
-   with why you couldn't do it yourself.
-
-   THE "PREEXISTING" TRAP:
-   Labeling something "preexisting" is NOT permission to ignore it.
-   For every issue labeled preexisting or known:
-   - WHY does it exist? Investigate the root cause, don't just note it.
-   - Is it within scope of the current work? If your changes touch the
-     same area, fix it.
-   - Is it ACTUALLY preexisting? Verify by checking the baseline, not
-     by assuming.
-   - Even if truly preexisting and out of scope: document it as a
-     concrete follow-up task, not a hand-wave.
-   "4 pre-existing test failures" repeated without investigation is
-   the same as ignoring 4 bugs.
-
-   THE "SELF-SCOPING" TRAP:
-   Labeling work as "v1" and deferring to "v2" is creating a permission
-   gradient — the model decides what is "in scope" and uses version
-   boundaries to justify skipping work. Scope decisions belong to the
-   user via AskUserQuestion, not to the model via self-invented
-   version labels.
-   - "V2 Enhancements: [list]" → implement them or ask the user
-   - "Scope: v1 vs. Deferred" → present as AskUserQuestion options
-   - "Deferred (out of scope for v1)" → ask the user what to defer
-   - "Future iteration: [feature]" → add it as a task or ask the user
-   If the model claims "the user explicitly deferred this," verify the
-   claim — cite the user's actual message. Fabricated user deferral
-   is a violation.
-
-   THE "NOT MY REVIEW" TRAP (PR review context):
-   After /pr-review → /fix, the quality gate may find issues the review
-   missed. Dismissing them as "out of scope because the review didn't
-   flag it" is self-scoping — the review is not the scope boundary,
-   the PR diff is. If the code was introduced by the PR and the quality
-   gate finds a real issue in it, fix it. The review is a starting
-   point, not an exhaustive inventory.
-
-   For EACH identified-but-unactioned item:
-   - Can fix now? → Fix it.
-   - Genuinely blocked? → Document the SPECIFIC blocker.
-   - Deferred without justification? → Fix it.
-   - User explicitly deferred it? → Leave it, cite the user's decision.
-
-   For subagent/spawn output specifically:
-   - Parse every subagent's last_assistant_message
-   - Extract findings/issues/concerns mentioned
-   - Cross-reference against actual edits made
-   - The delta is "identified-but-unactioned" — fix or justify each one
-
-6. FINDING COUNT TRACKING (after step 5)
-   Count the needs-fix findings identified and fixed in this round.
-   Record as finding_count[round_N].
-   If N >= 3 and finding_count[round_N] > finding_count[round_N-1]:
-     Print: "⚠ Oscillation signal: round N produced more findings than
-     round N-1. Verify late-round findings are genuine, not artifacts
-     of over-review."
-   This is a WARNING, not a blocker — continue the round.
-
-7. serena::think_about_whether_you_are_done
-   "Did I genuinely address everything this lens covers?"
-   If no → fix remaining items before proceeding to next round.
-```
-
-### No Early Exit
-
-**All 6 rounds are mandatory for Code and Mixed work types.** Each round uses a categorically
-different lens — a clean Round 3 says nothing about Round 4 (Simplicity catches AI slop and
-over-engineering), Round 5 (Adversarial catches what you rationalized away), and Round 6
-(Structural catches integration issues invisible to single-component review).
-
-For non-Code work types: Rounds 1-5 always run. Round 6 (Structural) is skipped since it
-targets code architecture integration.
-
-Do NOT exit early because a round "produced zero findings." Each lens catches categorically
-different issues. The next round will find what this round cannot see.
-
-### Valid Zero Findings
-
-Reporting zero findings for a round is a valid outcome — it means this lens found nothing
-wrong, not that you didn't look hard enough. Do not fabricate findings to satisfy the "do not
-exit early" instruction. "Do not exit early" means run the lens thoroughly — it does not mean
-you must find something. An honest "no issues under this lens" after genuine investigation is
-the correct result when the work is sound.
-
-### Adaptive Rounds 5-6
-
-If rounds 1-4 collectively produced fewer than 2 needs-fix findings, rounds 5-6 shift to
-**scan-only mode**: run the lens as analysis but report findings for Layer 2 subagent
-verification instead of applying "fix immediately." This respects the empirical observation that
-most improvement occurs in early rounds, while preserving lens diversity.
-
-In scan-only mode:
-- Still apply the full lens checklist — do not skip the analysis
-- Record findings with `[scan-only]` prefix
-- Do NOT apply step 4 (FIX ALL FINDINGS IMMEDIATELY) — instead, carry findings to Layer 2
-- Layer 2 subagents receive scan-only findings as additional context for verification
-- If a scan-only finding is clearly critical (security vulnerability, data loss), override
-  scan-only and fix immediately — use judgment, not a blanket rule
+- **No Early Exit:** All 6 rounds are mandatory for Code/Mixed (Rounds 1-5 for non-Code). Never exit early because a round produced zero findings — each lens catches categorically different issues.
+- **Valid Zero Findings:** Reporting zero findings after genuine investigation is valid — do not fabricate findings.
+- **Adaptive Rounds 5-6:** If rounds 1-4 collectively produced `< 2` `needs-fix` findings, rounds 5-6 run in **scan-only mode**: apply the full lens checklist and record `[scan-only]` findings for Layer 2 verification instead of fixing immediately (unless clearly critical like security or data loss).
 
 ---
 
 ## Layer 1.5: Domain Expert Review
 
-**Applies to: Code and Mixed work types only.** Skip for Research, Planning, Config, and
-Question work types.
-
-Domain reviewers catch categories of issues that self-review lenses systematically miss:
-security vulnerabilities require dedicated adversarial security reasoning; performance issues
-require cost-model thinking; QA issues require test coverage analysis; code review issues
-require holistic style and maintainability assessment. Layer 1 cannot replicate these because
-each domain has its own expert heuristics.
-
-**Layer 1.5 is NOT optional for code work.** Do not skip it because Layer 1 "seemed thorough."
-
-### Trigger
-
-Work type is **Code** or **Mixed** (with a code component).
+**Applies to: Code and Mixed work types only (mandatory — never skip for code work).** Skip for Research, Planning, Config, and Question work types.
 
 ### Reviewer Spawning (4 in parallel)
 
-```
-Spawn all 4 reviewers simultaneously:
-
-Reviewer 1 — Security (code-quality:security):
-  Agent(
-    description="Security domain review",
-    model="sonnet",
-    prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Security>
-  )
-
-Reviewer 2 — QA (code-quality:qa):
-  Agent(
-    description="QA domain review",
-    model="sonnet",
-    prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: QA>
-  )
-
-Reviewer 3 — Performance (code-quality:performance):
-  Agent(
-    description="Performance domain review",
-    model="sonnet",
-    prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Performance>
-  )
-
-Reviewer 4 — Code Review (code-quality:code-reviewer):
-  Agent(
-    description="Code style and maintainability review",
-    model="sonnet",
-    prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Domain Reviewer: Code-Reviewer>
-  )
-```
-
-Each reviewer receives:
-- `git diff` of all changes
-- The original user request (verbatim)
-- CLAUDE.md / CONTRIBUTING.md project rules (if they exist)
+Spawn all 4 domain reviewers simultaneously (`model="sonnet"`, receiving `git diff`, verbatim user request, and `CLAUDE.md`/`CONTRIBUTING.md`) using the prompts in `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`:
+1. **Security** (`code-quality:security`) — Domain Reviewer: Security
+2. **QA** (`code-quality:qa`) — Domain Reviewer: QA
+3. **Performance** (`code-quality:performance`) — Domain Reviewer: Performance
+4. **Code Review** (`code-quality:code-reviewer`) — Domain Reviewer: Code-Reviewer
 
 ### Synthesis Protocol
 
-After all 4 reviewers complete, synthesize findings by classification
-(see `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`):
-
-1. Collect all findings across the 4 reviewers
-2. Fix all `needs-fix` findings immediately. Do not carry them forward.
-3. For `needs-input` findings: present each individually via AskUserQuestion (one question
-   per finding, batch up to 4 per call). Each question includes full context:
-   `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`
-   For each `needs-input` finding, the Lead first applies de-escalation (see Note below).
-   For findings that remain `needs-input` after de-escalation, present via AskUserQuestion
-   with the Lead-generated options + Defer appended as the final option. `multiSelect: false`.
-   User selects an approach or defers. Fix approved items using the selected approach —
-   record the selected option label in the finding's `suggested_fix` field per the Record
-   Decisions convention. Record deferred items with reason.
-4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
-   `needs-input` items are resolved via user decision.
-
-**Note:** Quality-gate domain reviewers do not go through a Finding Verifier. When a
-domain reviewer classifies a finding as `needs-input`, the Lead applies the de-escalation
-test from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` before presenting to the
-user. If the finding has a single correct resolution, reclassify to `needs-fix` and fix
-it. If genuine ambiguity exists, generate 2-4 concrete options per the Option Quality
-section in `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` (labels 3-7 words, include
-tradeoff in description, mutually exclusive) and present via AskUserQuestion with Defer
-appended.
-
-**Finding completion verification:** After fixing all `needs-fix` items and resolving all
-`needs-input` items, verify completeness per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`
-Verification Protocol: count total findings from all 4 reviewers vs (findings fixed +
-user-deferred items). Delta > 0 → findings were silently dropped → fix them before Layer 2.
-
-If AskUserQuestion is unavailable during synthesis, treat all `needs-input` findings as
-`needs_context` - surface them in the quality gate output report (don't hide them, don't
-block on them). Do NOT silently drop needs-input findings because the tool is unavailable.
-
-**The synthesis step is not optional.** If you find yourself writing "domain review skipped"
-or "findings noted for later," stop. Fix the needs-fix findings now.
+After all 4 reviewers complete, synthesize findings per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`:
+1. Fix all `needs-fix` findings immediately.
+2. For `needs-input` findings: first apply the de-escalation test from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` (reclassify to `needs-fix` if a single correct resolution exists). Present remaining `needs-input` findings via `AskUserQuestion` (up to 4 per call, `multiSelect: false`, 2-4 mutually exclusive options + `Defer`, with `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`). Fix approved items and record `user_deferred` items. (If `AskUserQuestion` is unavailable, surface as `needs_context` in the report.)
+3. **Verification:** Verify `total_findings == findings_fixed + user_deferred` before proceeding to Layer 2.
 
 ---
 
 ## Layer 1.75: Plan Adherence Review
 
-**Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0. If Step 0 did not
-discover a plan file, skip Layer 1.75 with note: "No plan file found — skipping plan
-adherence check."
+**Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0 (if no plan file, skip with `"No plan file found — skipping plan adherence check."`). When a plan file exists, Layer 1.75 is **BLOCKING**.
 
-**Gate behavior:** When a plan IS found, Layer 1.75 is BLOCKING — cannot proceed to Layer 2
-without completing plan verification. REQUIRED gate when a plan file exists.
-
-**Execution:**
-
-```
-Agent(
-  description="Plan adherence review",
-  subagent_type="code-quality:plan-adherence",
-  model="opus",
-  prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Layer 1.75: Plan Adherence Reviewer>
-)
-```
-
-Provide: plan file path, plan file content (`{plan_content}`), `git diff`, changed file list,
-original user request. Store `{plan_content}` in context so Layer 2 Subagent A can receive it.
-
-**Escalation handling:** If the plan-adherence agent triggers AskUserQuestion for unchecked
-tasks, the quality gate waits for user responses. User can:
-- Approve skip (`[SKIPPED by user]`)
-- Mark blocked (`[BLOCKED: reason]`)
-- Request implementation (quality gate fails, returns to implementation)
-
-**Output:** Plan Adherence findings included in quality gate output report.
-
-**Failure handling:** If the agent crashes or times out, retry once. If the second attempt
-fails, mark as `[UNREVIEWED]` and proceed with note. If AskUserQuestion is unavailable, report
-unchecked tasks as `needs-fix` findings.
+Spawn `code-quality:plan-adherence` (`model="opus"`, prompt in `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`, Layer 1.75) with `{plan_file_path}`, `{plan_content}`, `git diff`, changed files, and user request. Wait for any `AskUserQuestion` escalations on unchecked tasks (`[SKIPPED by user]`, `[BLOCKED: reason]`, or return to implementation). Retry once on crash/timeout; if still failing, mark `[UNREVIEWED]`.
 
 ---
 
 ## Layer 2: Fresh-Context Subagent Reviews
 
-Same-context review has an anchoring ceiling. Fresh-context subagents break through it by
-reviewing with no knowledge of your implementation decisions.
-
-**Layer 2 is NEVER optional and NEVER substitutable.** Do not skip it because the change "seems
-trivial" or subagents feel "disproportionate." Do not substitute it with prior review work —
-swarm Phase 4 reviewers, domain reviewer output, or any other earlier review does NOT replace Layer 2.
-
-**Why Layer 2 is distinct from all prior reviews:**
-- **Timing:** Layer 2 reviews the FINAL state — after Layer 1 fixes, after any swarm Phase 5
-  fixes, after everything. Prior reviews examined earlier, now-stale versions of the work.
-- **Lens:** Layer 2 uses holistic lenses (completeness-vs-original-request, adversarial).
-  Domain-specific reviewers (security, performance, QA) cover different ground.
-- **Context:** Layer 2 subagents have zero knowledge of your implementation decisions,
-  rationalizations, or "good enough" compromises. Prior reviewers in the same session share
-  your context ceiling.
-
-If you find yourself writing "SUBSTITUTED by" or "already covered by" for Layer 2, you are
-rationalizing. Stop. Spawn the subagents. If the change is truly trivial, the subagents
-finish quickly — that's cheap insurance, not wasted effort.
+**Layer 2 is NEVER optional and NEVER substitutable** (prior swarm Phase 4 or Layer 1.5 reviews do not replace it — Layer 2 reviews the final post-fix state with zero anchoring using holistic Completeness and Adversarial lenses).
 
 ### Preparation
 
-```
-serena::think_about_collected_information
-→ "What context do the subagents need to review effectively?"
-```
-
-Collect:
-- `git diff` (for code) or artifact content (for non-code)
-- The original user request (verbatim)
-- Work type classification from Step 0
-- CLAUDE.md / CONTRIBUTING.md project rules (if they exist) — subagents need these
-  to check project convention compliance
-- `{plan_content}` — plan content discovered by Layer 1.75 (if a plan was found). Pass to
-  Subagent A (Completeness Reviewer) via the `{plan_content}` placeholder. Value is the plan
-  file content or `'No plan file found.'` if Layer 1.75 was skipped.
-- `{plan_test_plan}` — UAT test plan content loaded in Step 0. Pass to Subagent A
-  (Completeness Reviewer) only. Value is the test plan file content or empty string if Step 0
-  did not load a test plan. Subagent B does NOT receive this context.
-  When `{plan_test_plan}` is empty string, omit the `UAT TEST PLAN` section entirely from the
-  Subagent A prompt — do not render the heading, label, or empty placeholder.
+Run `serena::think_about_collected_information` and collect: `git diff` (or artifact content), verbatim user request, Step 0 work type, `CLAUDE.md`/`CONTRIBUTING.md`, `{plan_content}` (for Subagent A; `'No plan file found.'` if skipped), and `{plan_test_plan}` (for Subagent A only; omit the `UAT TEST PLAN` section entirely when empty).
 
 ### Subagent Execution (2 passes each — BOTH mandatory)
 
-Each subagent runs TWO passes. Pass 2 is NOT optional — it catches issues the subagent
-missed on Pass 1 and verifies your fixes didn't introduce new problems.
-
-Pass 2 resumes the Pass 1 agent via `SendMessage` using the **agent ID** (not the name).
-This preserves the agent's full conversation history from Pass 1. You MUST use the agent
-ID returned in the Pass 1 result — using the agent name routes to a team inbox instead.
-
-**CRITICAL — Pass 2 synchronization:** `SendMessage` is asynchronous — it returns immediately
-but the agent's response arrives later as a teammate notification. You MUST wait for each
-Pass 2 response before proceeding. Do NOT move to Memory Gate or any subsequent gate until
-BOTH Pass 2 responses are received and all findings are fixed. "Message sent" is not
-"response received." If the agent does not respond within 2 minutes, re-do the Pass 2 check
-yourself: re-read the files you fixed and verify the fixes are semantically correct (not just
-syntactically applied). A self-performed Pass 2 is better than a skipped one.
-
-**Subagent A: Completeness Reviewer (opus)**
-
-```
-PASS 1:
-  pass1_result = Agent(
-    description="Completeness review",
-    model="opus",
-    prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Subagent A Pass 1>
-  )
-  → Save pass1_result.agentId
-  → Fix ALL findings
-
-PASS 2 (MANDATORY — do not skip):
-  SendMessage(
-    to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
-    message="Here are the fixes I made: {summary_of_fixes}.
-             Review them. Also: what did YOU miss on your first pass?
-             You had fresh eyes but still have blind spots. Look again.",
-    summary="Pass 2 completeness re-review"
-  )
-  → WAIT for response (do not proceed to gates)
-  → Fix ALL findings from Pass 2
-```
-
-**Subagent B: Adversarial Reviewer (opus)**
-
-```
-PASS 1:
-  pass1_result = Agent(
-    description="Adversarial review",
-    model="opus",
-    prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Subagent B Pass 1>
-  )
-  → Save pass1_result.agentId
-  → Fix ALL findings
-
-PASS 2 (MANDATORY — do not skip):
-  SendMessage(
-    to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
-    message="Here are the fixes: {summary_of_fixes}.
-             Verify they're correct. What else breaks in production?",
-    summary="Pass 2 adversarial re-review"
-  )
-  → WAIT for response (do not proceed to gates)
-  → Fix ALL findings from Pass 2
-```
-
-**Why Pass 2 matters:** Pass 1 finds issues. You fix them. But fixes can introduce NEW
-issues, and the subagent's first pass always misses something (fresh eyes still have blind
-spots). Pass 2 catches both. Skipping it is like running tests once, making changes, and
-not re-running them.
+Each subagent runs **2 mandatory passes** using `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`:
+- **Pass 1:** Spawn **Subagent A (Completeness Reviewer, opus)** and **Subagent B (Adversarial Reviewer, opus)** via `Agent(model="opus")`, save each `agentId`, and fix ALL Pass 1 findings.
+- **Pass 2 (MANDATORY):** Resume each Pass 1 agent via `SendMessage(to=<agentId from Pass 1>, ...)` (MUST use `agentId`, not agent name) with `{summary_of_fixes}` asking it to verify fixes and check for blind spots. **Wait for both Pass 2 responses** before proceeding to the gates (if no response within 2 minutes, perform the Pass 2 verification yourself) and fix all Pass 2 findings.
 
 ---
 
-## Lifecycle Gate (BLOCKING)
-
-Validates artifact lifecycle counters on the plan file. Cannot proceed past this gate without
-completing all applicable checks. Runs BEFORE the Memory Gate to ensure the plan file still
-exists (Memory Gate may delete completed plans).
-
-**Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0. If no plan file was
-discovered, skip entire gate with `SKIP (no plan)`.
-
-**Backward compatibility:** If the plan file exists but has no `**Iterations:**` block
-(pre-feature plan), skip with `SKIP (pre-feature plan)`. Do NOT fail structural checks on
-plans created before this feature existed.
-
-### Structural Checks
-
-- All 5 counters present (review-cycle, fix-cycle, pr-review-cycle, pr-fix-cycle, quality-gate) → PASS/FAIL
-- All values are integers >= 0 → PASS/FAIL
-
-**Classification:** Structural failures are `needs-fix` (blocking).
-
-**Remediation:** Missing individual counters → add missing counters at 0, re-read the plan
-file from disk, then re-run structural checks. If structural checks still fail after one
-remediation attempt, report FAIL (do not loop). Non-integer values → report FAIL, do not
-auto-fix (data corruption).
-
-### Logical Checks (advisory — WARN, not blocking)
-
-- At least one review counter > 0 (`review-cycle` > 0 OR `pr-review-cycle` > 0) → WARN if
-  neither is > 0 (suggests reviewing before claiming done, but does not block — common workflow
-  runs quality-gate immediately after incremental-planning before any review has occurred)
-
-### Behavioral Checks (advisory — WARN, not blocking)
-
-Session transcript markers verify a minimum floor: "a review/fix occurred in this session."
-They prove "this happened at some point" — NOT "this happened after the most recent change."
-
-**Reliability caveat:** Behavioral checks are advisory for two reasons: (1) cross-session
-workflows — markers from session A are absent in session B, and (2) LLM recall limits — markers
-from early output may be outside the active context window. Failures are advisory warnings only.
-
-- If session contains `PLAN REVIEW —` marker: verify `review-cycle` > 0 → WARN if mismatch
-- If session contains `CODE REVIEW — PR #` marker: verify `pr-review-cycle` > 0 → WARN if mismatch
-- If session contains `FIX REPORT` marker: parse the `Source:` line to determine fix source.
-  If source was `plan-review` → verify `fix-cycle` > 0. If source was `pr-review` → verify
-  `pr-fix-cycle` > 0. If source was `bug-investigation` → skip this check.
-  WARN if mismatch.
-
-### Counter Increment (runs AFTER Lifecycle Gate, only on PASS)
-
-Only proceed if the Lifecycle Gate result is PASS (including PASS after successful
-remediation). For FAIL, SKIP (no plan), and SKIP (pre-feature plan), do not increment.
-
-1. Re-read the plan file from disk using `{plan_file_path}` from Step 0
-2. Find the `**Iterations:**` block
-3. Read the current `quality-gate` value N from the line matching `- quality-gate: {N}`
-4. Verify N is a non-negative integer (digits only, e.g. `0`, `1`, `12`). If N is not a valid
-   integer, skip the increment silently
-5. Increment `quality-gate` by 1: use Edit to replace `- quality-gate: {N}` with
-   `- quality-gate: {N+1}`, where `{N}` is the actual integer read in step 3
-6. If no plan file or no block, skip silently
-
----
-
-## Memory Gate (BLOCKING)
-
-Cannot proceed past this gate without completing all applicable checks.
-Memory that drifts from reality is worse than no memory.
-
-Update project memory files per the content placement rules in
-`[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`. Key surfaces:
-
-| Memory Surface | Action |
-|----------------|--------|
-| **{memory_dir}/TODO.md** | Mark completed items `[x]` with date. Add new tasks. Remove stale items. |
-| **{memory_dir}/PROJECT.md** | Document decisions, gotchas, architecture changes from this work. |
-| **{memory_dir}/NEXT.md** | Update pointer to actual next task. |
-| **{memory_dir}/SESSIONS.md** | Append 3-5 bullet summary (if session-end isn't imminent). |
-| **{memory_dir}/plans/** | Delete completed plans. Update partial plans with progress. Delete superseded plans. |
-| **claude-mem** | Search for related observations. Flag stale ones. Save new cross-session insights. |
-| **Serena memories** | List, verify accuracy, update stale, write new project knowledge. |
-| **Auto-memory** | Check project memory path, verify and update if relevant. |
-| **{memory_dir}/LESSONS.md** | Check if current work produced principle-level lessons worth capturing. If human corrections or rejected approaches occurred, extract and write lessons before proceeding. |
-
-**Skip conditions:** No memory dir found (per Directory Detection section of the reference) → skip
-memory-dir checks. No plans directory → skip plan checks. claude-mem MCP unavailable → skip
-claude-mem checks. Serena MCP unavailable → skip Serena memory checks. Pure question with no
-persistent insights → skip memory saves. LESSONS.md doesn't exist → skip LESSONS check.
-
----
-
-## Artifact Gate (BLOCKING)
-
-Ensures work products aren't lost AND project conventions are satisfied.
-
-| Work Type | Gate Criteria |
-|-----------|---------------|
-| **Code** | Tests pass. Changes committed, pushed, and PR created (or ready to — do not commit without user request). "In the working tree" is not sufficient. |
-| **Planning** | Plan file written. Tasks concrete and actionable. No hand-waving. |
-| **Research** | Key findings documented persistently (claude-mem, PROJECT.md, or file). |
-| **Config** | Valid syntax. Consistent with existing patterns. Validated. |
-| **Question** | No gate (unless answer revealed something worth persisting). |
-
-**Project-specific checks (all work types) — final re-verification:**
-Round 2 checked project rules during review. This gate re-verifies AFTER all fixes are applied
-(Layer 1 fixes + Layer 2 subagent fixes may have changed the state). Re-read CLAUDE.md:
-- Version bumps in plugin/package manifests (if project requires them)
-- Registry/marketplace entries updated to match
-- Will the change actually reach users after merge? (cache invalidation, version detection)
-- Any required companion files (changelogs, migration guides, etc.)
-
-**Upstream state verification (if a PR exists):**
-Do not assume prior pushes landed or that the PR is still open. Verify:
-- `mcp__plugin_github-mcp_github__pull_request_read` (preferred) or `gh pr view` — is the PR still open, or was it already merged/closed?
-- `git log origin/main..HEAD` — does the branch contain ALL intended commits?
-- If force-pushing to an already-merged branch, commits are silently orphaned
-- After merge: `git log origin/main` — confirm the merge includes your changes
-
----
-
-## BUGS.md Verification Gate (CONDITIONAL)
-
-Ensures bug tracking stays current as work progresses. This gate only runs when a
-`{memory_dir}/BUGS.md` file exists — skip entirely if no memory directory is found or
-no BUGS.md exists.
-
-**Branch prerequisite:** Run `git diff --name-only origin/main...HEAD`. If the output is
-empty (e.g., running on main itself, or no commits ahead of origin/main), skip the
-Stale Tracked In and PR detection checks silently — there are no branch-specific changes
-to match against. The Merged detection and Stale entries checks still apply (they operate
-on BUGS.md state alone, not branch context).
-
-| Check | Action |
-|-------|--------|
-| **Stale Tracked In** | *Requires non-empty git diff (skip if on main or no ahead commits).* For each entry with `**Status:** Fix Ready` and `**Tracked In:** —` (or missing field): check if the current branch's changed files (from `git diff --name-only origin/main...HEAD`) overlap with the entry's `### Files Involved` paths. Path matching: strip `:NN` line number suffixes, then match by exact file path OR common directory prefix of at least 3 components — prefixes of 1 or 2 components are too broad and do not count. If overlap exists, update `**Tracked In:**` to `PR: #N` (via `gh pr view --json number`) or `Branch: {branch-name}` if no PR exists. |
-| **PR detection** | *Requires non-empty git diff (skip if on main or no ahead commits).* For entries with `**Tracked In:** Plan: ...`, `**Tracked In:** Roadmap: ...`, or `**Tracked In:** Branch: ...`: check if a PR exists for the current branch (via `gh pr view --json number`). If a PR exists, verify the entry's `### Files Involved` paths overlap with the current branch's changed files using the same path matching as Stale Tracked In (strip `:NN`, exact match or depth-3 prefix). For `**Tracked In:** Branch: {name}` entries specifically, also verify the branch name matches the current branch (`git branch --show-current`) — skip entries where the branch name differs (they belong to a different session's scope). If overlap confirmed (and branch name matches for Branch entries), update to `**Tracked In:** PR: #N`. |
-| **Merged detection** | For entries with `**Tracked In:** PR: #N`: check PR status via `mcp__plugin_github-mcp_github__pull_request_read` or `gh pr view #N --json state,mergedAt`. If merged, update to `**Tracked In:** PR: #N (merged YYYY-MM-DD)` and set `**Status:** Fixed` if still at `Fix Ready`. |
-| **Stale entries** | Flag any entry with `**Status:** Root Cause Found` and `**Reported:**` date older than 14 days where `**Tracked In:**` is either absent or `—` (untracked). Report in gate output as informational (not blocking). |
-
-**Backward compatibility:** Entries created before the `Tracked In` field was added may lack
-the field entirely. Treat a missing `**Tracked In:**` line the same as `**Tracked In:** —`
-for all checks. If updating such an entry, insert `**Tracked In:** {value}` after the
-`**Impact:**` or `**Severity:**` line.
-
-**Gate behavior:** This gate is CONDITIONAL, not BLOCKING. It performs best-effort updates
-and reports findings, but does not prevent proceeding to the Documentation Gate. Bugs that
-can't be matched are noted, not escalated.
-
-**Chat output:** If any updates were made, report:
-> "BUGS.md: Updated N entries (M to PR status, K to Merged). L stale entries flagged."
-
-If no BUGS.md exists or no updates needed: omit from gate output entirely.
-
----
-
-## Documentation Gate (BLOCKING)
-
-Ensures documentation accurately reflects the current state of the codebase after all changes.
-Cannot proceed past this gate without completing all applicable checks.
-
-**This gate catches code→docs gaps** — features that exist on disk but aren't documented.
-Round 2 checks docs→code (do documented claims match reality). This gate checks the inverse.
-
-Use `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)` for all definitions.
-
-| Check | Action |
-|-------|--------|
-| **Trigger check** | Do any changes in this work match documentation triggers (taxonomy § Triggers)? If no triggers fire, skip remaining checks. |
-| **Component inventory** | Use ecosystem-specific discovery patterns (taxonomy § Component Discovery) to count on-disk components. Compare against documentation surfaces (taxonomy § Surfaces). Mismatches are blocking. |
-| **Feature coverage** | For each trigger that fired: is there a corresponding documentation update? New component without doc entry = fail. Removed component with stale references = fail. |
-| **Cross-surface consistency** | Apply consistency rules (taxonomy § Cross-Surface Consistency). All surfaces must agree on names, counts, and descriptions. |
-
-**Skip conditions:** No documentation triggers fire (per taxonomy § "Changes that DO NOT require
-documentation updates"). When in doubt, run the check.
-
----
-
-## No Data Loss Gate (BLOCKING)
-
-Ensures work artifacts are persisted to a **durable, externally-trackable location** — not just
-in the conversation context or the local working tree. Cannot proceed past this gate without
-confirming each applicable item.
-
-**THE WORKING TREE TRAP:**
-"Changes are in the working tree" is NOT a durable location. Working tree changes are:
-- Lost on `git checkout`, `git stash`, branch switches, or worktree cleanup
-- Invisible to other sessions, agents, or future conversations
-- Not findable by anyone searching git history, PRs, or project memory
-- Equivalent to "I wrote it on a sticky note" — it exists, but nobody will find it
-
-Durable means: **another agent in a fresh session can find the work without being told where
-to look.** PRs show up in `gh pr list`. Commits show up in `git log`. Plan files show up in
-`{memory_dir}/plans/`. Project decisions show up in `{memory_dir}/PROJECT.md`. Conversation-only knowledge
-and working-tree-only changes fail this test.
-
-| Work Type | Persistence Check |
-|-----------|-------------------|
-| **Code** | Changes are on a **pushed feature branch with a PR** (verifiable via `gh pr view`). Not just committed locally — pushed and PR-visible. Uncommitted or committed-but-not-pushed work is NOT durable. |
-| **Planning** | Plan written to `{memory_dir}/plans/{run-id}-<topic>.md`. New tasks added to `{memory_dir}/TODO.md`. Decisions documented in `{memory_dir}/PROJECT.md`. |
-| **Research** | Findings written to `{memory_dir}/research/{run-id}-<topic>.md` (if memory dir exists), or to `{memory_dir}/PROJECT.md`, or saved to claude-mem. Key findings must survive session end. |
-| **All types** | For each significant artifact, state WHERE it is persisted and HOW a future agent finds it. "It's in the working tree" or "it's in the conversation" fails this gate. |
-
-**Skip conditions:** Pure question with no artifacts → skip. Work explicitly scoped as
-"conversation only" by the user → skip.
-
----
-
-## Final Verification
-
-| Work Type | Verification |
-|-----------|-------------|
-| **Code** | Run test suite + lint. Compare against baseline. |
-| **Planning** | Re-read plan end-to-end. Walk through mentally step-by-step. |
-| **Research** | Re-read findings against original question. |
-| **Config** | Validate syntax. Verify integration. |
-
-Final check:
-```
-serena::think_about_whether_you_are_done → "Is this genuinely complete?"
-```
-
----
-
-## Output
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-QUALITY GATE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Work type: [code / research / plan / config / question / mixed]
-
-Layer 1 — Self-Review:
-  Rounds completed: [N/6]
-  Issues found: [count]
-  Issues fixed: [count]
-  Identified-but-unactioned caught: [count]
-  Project rules violations caught: [count]
-  Round 4 (Simplicity gate): [PASS — 0 needs-fix | BLOCKED — N needs-fix fixed]
-  Net lines delta: +[added] / -[removed] (net: [+/-X])
-
-Layer 1.5 — Domain Expert Review: [N/A for non-code | COMPLETE]
-  Security reviewer: [count] findings ([needs-fix/needs-input breakdown])
-  QA reviewer: [count] findings ([needs-fix/needs-input breakdown])
-  Performance reviewer: [count] findings ([needs-fix/needs-input breakdown])
-  Code-reviewer: [count] findings ([needs-fix/needs-input breakdown])
-  needs-fix fixed before Layer 2: [count]
-  needs-input resolved via user decision: [count]
-
-Layer 1.75 — Plan Adherence: [N/A (no plan) | COMPLETE]
-  Plan file: [path or "not found"]
-  Tasks verified: [N/M]
-  Tasks escalated: [count] ([approved/blocked/returned-for-implementation])
-  File structure: [MATCH | N discrepancies]
-
-Layer 2 — Subagent Reviews:
-  Subagent A (Completeness): [count] findings across 2 passes — agent ID: [id]
-  Subagent B (Adversarial): [count] findings across 2 passes — agent ID: [id]
-  (Layer 2 MUST show agent IDs. "SUBSTITUTED" or "N/A" is NEVER valid here.)
-
-Lifecycle Gate: [PASS / FAIL / SKIP (no plan) / SKIP (pre-feature plan)]
-  (For SKIP variants, omit the sub-lines below — show only the top-level result)
-  Counters (pre-increment): review-cycle=[N] | fix-cycle=[N] | pr-review-cycle=[N] | pr-fix-cycle=[N] | quality-gate=[N]
-  Structural: [all 5 counters, valid integers]
-  Logical (advisory): [review>0 or pr-review>0 — WARN only]
-  Behavioral (advisory): [markers vs counters — WARN only]
-
-Memory Gate: [PASS / UPDATED]
-  hack/ files: [updated / N/A]
-  Plans: [N completed, N updated, N unchanged]
-  Stale memories flagged: [count]
-  New memories saved: [count]
-
-Artifact Gate: [PASS / N/A]
-  [work-type-specific status]
-
-BUGS.md Gate: [PASS / UPDATED] (omit section if no BUGS.md or no updates)
-  Entries updated: [count] ([PR status / Merged / Tracked In set])
-  Stale entries flagged: [count]
-
-Documentation Gate: [PASS / SKIP / N/A]
-  Components on disk: [count] | Documented: [count]
-  Surfaces checked: [list]
-  Gaps found: [count]
-
-No Data Loss Gate: [PASS / N/A]
-  [artifact persistence status]
-
-Final Verification: [PASS / FAIL]
-
-Overall: [PASS / NEEDS WORK]
-[If NEEDS WORK: list what remains]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## Relationship to Other Skills
-
-| Skill | Relationship |
-|-------|-------------|
-| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens, BLOCKING sub-gate) for dead code, unnecessary abstractions. Uses `[{skill_dir}/../../references/simplification-checklist.md](../../references/simplification-checklist.md)` and `[{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`. |
-| `code-quality:plan-adherence` | Spawned in Layer 1.75 for plan file verification (planning/mixed work types). |
-| `code-quality:reflect` | Invoked for metacognitive checkpoints via Serena reflection tools. |
-| `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
-| `code-quality:qa` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
-| `code-quality:performance` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
-| `code-quality:code-reviewer` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
-| `session-end` | Complementary — quality-gate reviews accuracy; session-end does final save. |
-| `swarm` Phase 7 | Invokes quality-gate as the final validation step. |
-| `code-quality:fix` | Standalone finding fixer for non-swarm workflows. Not a source — quality-gate fixes findings inline. Suggest /quality-gate after /fix for verification. |
-| `code-quality:bug-investigation` | BUGS.md Verification Gate updates `Tracked In` field for entries created by `/bug-investigation`. |
-| `code-quality:incremental-planning` | Producer: sets `Tracked In: Plan: ...` on overlapping BUGS.md entries when a plan is created. quality-gate verifies and advances those references. |
-| `code-quality:roadmap` | Producer: sets `Tracked In: Roadmap: plans/{filename}.md (Phase N)` on overlapping BUGS.md entries during roadmap generation. quality-gate verifies and advances those references. |
-
----
-
-## Stop Hook Safety Net
-
-A global Stop hook in `dev-guard` (`type: command`) catches premature completion claims that bypass
-this skill. It uses a two-script architecture for speed: `stop-hook.py` (stdlib-only, <200ms)
-performs deterministic triage — loop guard, transcript delta, signal detection (write tools, MCP
-writes, completion claim regex, git diff hash change) — and fast-exits for low-signal cases.
-When signals warrant deeper evaluation, it delegates to `stop-hook-llm.py` which calls
-claude-sonnet-4-6 via Vertex AI with an adaptive prompt based on work type (code, research,
-questions, planning) and trigger reasons. Fails open on any infrastructure error.
-Uses `stop_hook_active` guard to prevent infinite loops.
+## Gates & Final Verification
+
+Execute all 6 gates in order using the full check tables, remediation rules, and terminal output template in `[{skill_dir}/references/gate-specifications.md](./references/gate-specifications.md)`:
+
+1. **Lifecycle Gate (BLOCKING):** If `{plan_file_path}` exists and has an `**Iterations:**` block, verify all 5 counters (`review-cycle`, `fix-cycle`, `pr-review-cycle`, `pr-fix-cycle`, `quality-gate`) are present with integer values >= 0 (auto-remediate missing counters at 0; check logical/behavioral advisory warnings). On PASS, re-read `{plan_file_path}` and increment `- quality-gate: {N}` to `- quality-gate: {N+1}` via `Edit`.
+2. **Memory Gate (BLOCKING):** Update `{memory_dir}/TODO.md`, `PROJECT.md`, `NEXT.md`, `SESSIONS.md`, `LESSONS.md`, `plans/`, `claude-mem`, and Serena memories per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`.
+3. **Artifact Gate (BLOCKING):** Verify work-type deliverables, re-verify `CLAUDE.md` version/manifest rules, and check upstream PR state via the GitHub MCP `pull_request_read` tool or `gh pr view`.
+4. **BUGS.md Verification Gate (CONDITIONAL):** When `{memory_dir}/BUGS.md` exists, reconcile `**Tracked In:** —` (or missing field) and existing `**Tracked In:**` references against branch files (`git diff --name-only origin/main...HEAD`, matching by exact path after stripping `:NN` or common directory prefix of at least 3 components) and PR status via `pull_request_read` or `gh pr view`.
+5. **Documentation Gate (BLOCKING):** Verify code→docs completeness and cross-surface consistency against `[{skill_dir}/../../references/documentation-taxonomy.md](../../references/documentation-taxonomy.md)`.
+6. **No Data Loss Gate (BLOCKING):** Confirm every artifact is persisted to a durable, externally-trackable location (pushed branch + PR, `{memory_dir}/plans/`, `{memory_dir}/research/`, `PROJECT.md` — never working-tree-only).
+7. **Final Verification & Output:** Run the test suite + lint (or re-read plan/research/config end-to-end), run `serena::think_about_whether_you_are_done`, and print the `QUALITY GATE` report from `[{skill_dir}/references/gate-specifications.md](./references/gate-specifications.md)`.

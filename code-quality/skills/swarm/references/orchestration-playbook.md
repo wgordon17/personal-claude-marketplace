@@ -1831,17 +1831,28 @@ Agent(name="docs", subagent_type="general-purpose", model="sonnet",
 
 The Docs agent performs three passes:
 
-**Pass 1 (Architect-guided):** Works through each entry in `documentation_impact` from the
-architect's plan. For each surface, reads the current state and updates it — adding new
-entries to README tables, updating component counts, fixing manifest descriptions, removing
-stale references for deleted features.
+**Pass 1: Architect-guided updates** — Work through each entry in `documentation_impact`:
+- For each affected documentation surface, read the current state and update it
+- If a new feature/skill/command/agent was added: add entries to README tables, update component
+  counts, add to plugin manifest descriptions, add to marketplace registry descriptions
+- If a feature was removed/renamed: remove or update all references across all doc surfaces
+- If dependencies changed: update dependency matrices and requirements sections
 
-**Pass 2 (Discovery-based):** Independent of the architect's list, Globs for all documentation
-surfaces and on-disk components, cross-references counts, and verifies consistency. This
-catches documentation gaps the architect missed.
+**Pass 2: Discovery-based completeness check** — Independent of the architect's list:
+- Glob for all documentation surfaces (READMEs, manifests, registries, CONTRIBUTING.md)
+- Compare on-disk components against documented components (e.g., count skills in `skills/*/SKILL.md`
+  vs skills listed in README table — they must match)
+- Grep for stale references to renamed/removed features
+- Verify component counts, descriptions, and cross-references are internally consistent
 
-**Pass 3 (Changed-file):** For each modified file in the swarm, checks if corresponding
-documentation needs updating (README behavior descriptions, API docs, config docs).
+**Pass 3: Changed-file documentation** — For each file modified in the swarm, check if
+corresponding documentation needs updating (README behavior descriptions, API docs, config docs,
+CONTRIBUTING.md). Update only what is directly affected.
+
+**Skip conditions for Phase 6 docs (memory updates always run):**
+Only skip documentation updates for purely internal refactors with no public API, documented
+behavior, feature, or component changes. When in doubt, run the docs pass — the cost of a
+no-op docs check is low; the cost of missing documentation is high.
 
 ### Step 6.3: Project Memory
 
@@ -1886,7 +1897,30 @@ Agent(name="docs-reviewer", subagent_type="general-purpose", model="sonnet",
             "DOCS AGENT REPORT:\n<docs agent completion summary>")
 ```
 
-The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it reports
+The Docs Reviewer receives:
+- The architect's `documentation_impact` array from `architect-plan.json`
+- The Docs agent's completion report (surfaces updated, counts, gaps found)
+- `git diff` of documentation changes made by the Docs agent
+- `git diff` of **implementation changes** (code, config, skills — everything NOT docs) so the
+  reviewer can verify docs against what was actually written, not just what the architect planned
+
+The Docs Reviewer checks:
+1. **Impact coverage** — Was every entry in `documentation_impact` addressed? If the architect
+   flagged a surface and the Docs agent didn't touch it, that's a finding.
+2. **Accuracy vs implementation** — Assume the docs are wrong until proven otherwise. Read the
+   implementation diff and verify every documented claim against the actual code. Do component
+   counts match on-disk reality? Do descriptions accurately describe the implemented behavior
+   (not just the planned behavior)? If a feature was implemented differently than the architect
+   planned, do the docs reflect what was actually built?
+3. **Consistency** — Do all documentation surfaces agree with each other after the Docs agent's
+   edits? (README ↔ manifest ↔ registry ↔ root README)
+4. **Completeness** — Did the Docs agent miss any documentation surface the Reviewer can
+   discover independently via Glob?
+5. **Plan drift** — Does the implementation diff reveal behavior that diverged from the
+   architect's plan? If so, do the docs follow the plan (wrong) or the code (right)?
+   Docs must always describe what the code does, never what the plan said it would do.
+
+The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json` using the standard ReviewFindings schema with `DOC-R` prefix. If it reports
 `needs-fix` findings:
 1. Route findings back to the Docs agent (still alive)
 2. Docs agent fixes, re-commits
@@ -1894,7 +1928,7 @@ The Docs Reviewer writes findings to `{run_dir}/reviews/docs-review.json`. If it
 
 If `needs-input` findings: present each individually via AskUserQuestion (one question per
 finding, batch up to 4 per call, `multiSelect: false`) using the option-based format from
-`code-quality/references/finding-classification.md` Fixer Protocol. Each question includes
+`[{skill_dir}/../../references/finding-classification.md](../../../references/finding-classification.md)` Fixer Protocol. Each question includes
 `▸dp:file={file},line={line},cat=docs,skill=swarm` metadata suffix for decision persistence.
 Proceed after all resolved.
 If no `needs-fix` findings, proceed.
@@ -1919,8 +1953,20 @@ Agent(name="lessons-extractor", subagent_type="general-purpose", model="sonnet",
 ```
 
 The Lessons Extractor reads the swarm audit trail and writes principle-level lessons to
-`{memory_dir}/LESSONS.md`. It does NOT touch PROJECT.md, SESSIONS.md,
-or TODO.md — those are the Docs agent's responsibility.
+`{memory_dir}/LESSONS.md` (creating the file if it does not exist, where `{memory_dir}` is the
+project memory directory detected per `[{skill_dir}/../../references/project-memory-reference.md](../../../references/project-memory-reference.md)`). It reads:
+- `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged
+- `{run_dir}/reviews/` — recurring finding patterns across reviewers
+- `{run_dir}/escalations.json` — escalation events (if the file exists)
+- `{run_dir}/fix-summary.json` — what the Fixer had to address (if the file exists)
+- Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
+
+Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
+format from `[{skill_dir}/../incremental-planning/references/lessons-template.md](../../incremental-planning/references/lessons-template.md)`:
+`- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
+
+It does NOT touch PROJECT.md, SESSIONS.md,
+or TODO.md — those are the Docs agent's responsibility. The Lessons Extractor runs after Docs completes to avoid audit trail races.
 
 ### Step 6.8: Shutdown Lessons Extractor
 
@@ -2233,3 +2279,286 @@ Minimum agent count: 21 (all domain reviewers skipped, all conditional phases ru
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.
+
+---
+
+## Orchestration Flow Diagram
+
+```
+User request
+     |
+     v
+Phase 0: Pre-flight
+  +-- Baseline tests
+  +-- Git branch check/create
+  +-- Generate run-ID, create {memory_dir}/swarm/{run-id}/
+  +-- Create TaskGraph (implicit team established by first named teammate spawn)
+  +-- Extract {tracker} from plan file (default: none)
+  +-- Workflow detection: extract **Workflow:** from plan header
+       |
+       +-- [incremental] Checkpoint glob: {memory_dir}/swarm/*/checkpoint.json
+       |        |
+       |        +-- [checkpoint found, PR not merged] --> AskUserQuestion (blocker)
+       |        |
+       |        +-- [checkpoint found, PRs merged] --> Resume:
+       |        |     fetch origin/main, create feat/{plan-slug}-pr{N} branch
+       |        |     skip Phase 1 + Phase 2, jump to Phase 3 (current PR boundary tasks)
+       |        |
+       |        +-- [no checkpoint] --> rename branch to feat/{plan-slug}-pr1, continue
+       |
+       +-- [fast / absent] --> existing behavior unchanged
+     |
+     v
+Phase 1: Clarify & Checkpoint <-- AskUserQuestion (ambiguity resolution)
+  +-- Auto-detect optional reviewers
+  +-- Present composition to user
+  +-- User approves -------------- FIRE-AND-FORGET AFTER THIS
+     |
+     v
+Phase 2: Architect (opus)
+  +-- Analyzes codebase
+  +-- Decomposes into components
+  +-- Writes architect-plan.json
+  +-- Lead reviews --> AskUserQuestion if risky
+     |
+     v
+Phase 2.5: Security Design Review (conditional, opus)
+  +-- Reviews architect-plan.json for threat surface
+  +-- STRIDE analysis of proposed architecture
+  +-- needs-fix findings requiring revision --> back to Architect (max 2 iterations)
+  +-- no needs-fix findings blocking implementation --> append security_constraints, proceed
+  +-- Unresolved findings after 2 iterations --> AskUserQuestion
+     |
+     v
+Phase 2.7: Speculative Fork (conditional)
+  +-- Triggered by speculative_fork_recommended: true in architect-plan.json
+  +-- OR Lead identifies 2+ incompatible design choices with real trade-offs
+  +-- Spawn N competitors (sonnet, isolated worktrees) for contested components
+  +-- CronCreate watchdog (60s interval)
+  +-- Spawn judge (opus) --> JudgmentResult selects winner
+  +-- Winning approach written back into architect-plan.json
+  +-- (optional) Phase 3.5 synthesis if hybrid recommended and approved
+     |
+     v
+Phase 2.8: Pre-Implementation Simplification Review (conditional)
+  +-- Reduction Analyst (opus, read-only): reviews plan against codebase
+  +-- Identifies: removable code, premature abstractions, dependency alternatives
+  +-- Net complexity assessment: will this increase or decrease codebase size?
+  +-- Lead integrates accepted recommendations into architect plan
+     |
+     v
+Phase 3: Pipelined Implementation
+  +-------------------------------------------------------+
+  | Implementer --> Reviewer --> Test-Writer --> Test-Runner |
+  |      |              |              |               |    |
+  | (next comp)   (feedback)     (next comp)    (results)   |
+  |      <-------- reject ----------------------------------  |
+  +-------------------------------------------------------+
+     |
+     +-- [incremental, non-final PR boundary] ---------------+
+     |   PR boundary stop:                                   |
+     |   +-- Phase 4 review (scoped to boundary files)       |
+     |   +-- Phase 5 Fixer (scoped to boundary files)        |
+     |   +-- Verifier (full test suite, baseline comparison) |
+     |   +-- Boundary Updater agent: write checkpoint.json   |
+     |   +-- gh pr create --draft feat/{slug}-pr{N}          |
+     |   +-- gh issue comment (if tracker exists)            |
+     |   +-- Boundary Updater: set pr_number in checkpoint + update plan **PRs:**   |
+     |   +-- Announce PR + checkpoint, shutdown teammates, exit |
+     |   [user merges PR, invokes /swarm again → Phase 0]    |
+     +-------------------------------------------------------+
+     |
+     v  [fast workflow OR final PR boundary]
+Phase 3.5: BDD Step Writing (conditional — only when Feature Files in Test Plan annotation)
+  +-- Promote .feature files from staging → {feature_target_dir}
+  +-- Install BDD dependency if BDD Setup Needed: yes
+  +-- BDD-Step-Writer (sonnet, bypassPermissions): generate step definition skeletons
+  +-- Collect BDDStepHandoff, store {bdd_framework_info} for Phase 7
+     |
+     v
+Phase 4: Parallel Review
+  +-- Security (opus) --------------------------------+
+  +-- QA (opus) --------------------------------------|
+  +-- Code-Reviewer (sonnet) -------------------------+--> Lead synthesizes findings
+  +-- Performance (sonnet) ---------------------------|
+  +-- Optional: UI / API / DB reviewers -------------+
+  [incremental: reviewers receive pr_boundary_files, analyze only those files]
+     |
+     v
+Phase 4.5: Structural Design Review (always runs)
+  +-- Analyst 1: Concurrency & State (opus) ---------+
+  +-- Analyst 2: Integration & Contract (opus) -------+--> Lead merges STRUCT findings
+  [incremental non-final: analysts review as standalone work — don't flag future-boundary gaps]
+     |
+     v
+Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
+  +-- Fixer: ALL findings (process in file order — needs-fix first, then needs-input to Lead)
+  +-- Test Coverage Agent: coverage gaps from Phase 4/4.5
+  +-- Code-Simplifier: post-fix pass
+     |
+     v
+Phase 5.5: Plan Reconciliation (if incremental plan file found)
+  +-- Lead: discover plan file via Branch-header matching
+  +-- Lead: cross-reference tasks against git diff origin/main..HEAD
+  +-- Lead: AskUserQuestion for any unaddressed tasks
+  +-- Plan File Updater (sonnet): check off completed, mark skipped/blocked
+  [incremental: verify **PRs:** fully populated, check off tasks from ALL boundaries]
+     |
+     v
+Phase 6: Docs & Memory
+  +-- Docs agent: repo docs + hack/ updates
+  +-- Docs Reviewer: verify Docs agent's work
+  +-- Lessons Extractor: audit trail → {memory_dir}/LESSONS.md
+     |
+     v
+Phase 7: Verification & Completion
+  +-- Verifier: full test + lint
+  +-- quality-gate skill
+  +-- /unfuck sweep (if 20+ files changed)
+  +-- Issue tracking: add in-progress label (GH) or transition card (Jira)
+  +-- Generate {run_dir}/swarm-report.md
+  +-- Shutdown each active teammate individually
+```
+
+---
+
+## Lead Responsibilities
+
+You are the orchestrator. You coordinate the pipeline, relay context, and make judgment calls.
+You never implement, review, or test code yourself.
+
+### Task Graph
+
+Create all tasks upfront in Phase 0 using TaskCreate with addBlockedBy dependencies. The full
+task graph should be visible from the start so the user can see the plan at any time.
+
+### Context Relay
+
+Every agent receives a structured context bundle when spawned (see schema in
+`[{skill_dir}/references/communication-schema.md](./communication-schema.md)`). The bundle includes: project name, task description,
+current branch, key files from the architect's plan, audit trail path (`run_dir`), and the
+tool guard reminder. Never spawn an agent without the full context bundle.
+
+### Judgment Calls
+
+You decide: which review findings are critical vs. noise; when to escalate to the user; whether
+a component rejection warrants escalation vs. another iteration; whether a test failure is a
+blocker or a pre-existing issue. Lean toward escalation for ambiguous decisions.
+
+### Pipeline Coordination
+
+Monitor the pipeline flow actively. Route handoff messages between agents using the schemas in
+`[{skill_dir}/references/communication-schema.md](./communication-schema.md)`. Detect backpressure (see `[{skill_dir}/references/pipeline-model.md](./pipeline-model.md)`)
+and throttle the Implementer when the Reviewer queue is full.
+
+### Watchdog Monitoring
+
+Create a CronCreate watchdog (60-second interval) in Phase 3 Step 3.0 before spawning pipeline
+agents. On each tick, check `TaskList` for `in_progress` tasks and cross-reference with agent
+message timestamps. If any agent has been idle for 2+ consecutive checks, alert yourself and
+trigger Silent Failure Detection (Step 3.6). Always CronDelete the watchdog when Phase 3 ends
+or on any abort path — do not leave orphaned cron jobs.
+
+### Context Health Monitoring
+
+Track `turn_count` from every agent's structured messages. Proactively recycle agents approaching
+context limits (default: 25 turns for Implementer/Test-Writer, 30 for Reviewer) using the
+HandoffRequest → HandoffSummary → shutdown → respawn protocol (see `[{skill_dir}/references/orchestration-playbook.md](./orchestration-playbook.md)`
+Step 3.6). Detect silent failures: if a teammate goes idle without completing their task or sending
+a final message, initiate recovery (status check → replacement spawn → escalate if repeated).
+
+### Feedback Loops
+
+When the Reviewer rejects a component: collect the specific issues JSON, add context about what
+the Implementer tried, and route the combined feedback back to the Implementer. Track iteration
+counts per component — after 3 failed iterations, stash the component, create a blocked task,
+and report to the user with full context.
+
+### Audit Trail
+
+Write all structured outputs to `{run_dir}/`:
+- `architect-plan.json` — architect's component plan
+- `reviews/security.json`, `reviews/qa.json`, etc. — review findings
+- `escalations.json` — escalation events for Lessons extraction
+- `swarm-report.md` — final completion report
+
+### Escalation Protocol
+
+Escalate to the user (via `AskUserQuestion`) when: the architect flags a decision point; a
+reviewer finds a security issue that might require business logic changes; a component fails
+3 iterations; the Verifier fails after 2 fix attempts; a git conflict blocks the pipeline.
+After escalation, wait for user input before proceeding.
+
+### Context Bundle Template
+
+```json
+{
+  "project": "<project name>",
+  "task": "<original task description>",
+  "branch": "<current git branch>",
+  "run_dir": "{memory_dir}/swarm/{run-id}",
+  "key_files": ["<files identified by architect as central>"],
+  "tool_guard": "Use Read/Write/Edit/Glob/Grep/Bash for file ops. No raw shell for file reads."
+}
+```
+
+---
+
+## When to Skip Phases
+
+| Phase / Agent | Skip When |
+|---------------|-----------|
+| Phase 2.5: Security Design Review | Config-only, docs-only, or test-only changes that don't touch auth/data/network/API surfaces. Clear-domain tasks without auth/data/network/API involvement. |
+| Phase 2.7: Speculative Fork | Architect did NOT flag `speculative_fork_recommended: true` AND Lead does not identify 2+ incompatible approach choices. Skip for single-component tasks and tasks where the user specified an approach. |
+| Phase 2.8: Reduction Review | Config-only, docs-only, or test-only changes. Tasks where architect plan modifies fewer than 3 files total. |
+| Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
+| Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
+| Phase 3.5: BDD Step Writing | No `## Test Plan` section in plan file, OR `## Test Plan` has no `**Feature Files:**` path, OR test plan path validation failed (test plan or Feature Files path escapes `{memory_dir}/test-plans/`). |
+| Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings |
+| Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
+| Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |
+| Phase 5.5: Plan Reconciliation | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. Also skipped at non-final PR boundary stops during incremental workflow (runs only at final completion). |
+| Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
+| /unfuck sweep | Fewer than 20 files modified and not an architectural change |
+| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
+
+---
+
+## Scope Matching
+
+Match the tool to the task scope:
+
+| Scenario | Recommended Approach |
+|----------|----------------------|
+| Simple bug fix (1-3 files) | Single targeted subagent |
+| Medium feature (4-10 files) | 2-3 targeted subagents in sequence |
+| Large feature or architectural change | `/swarm` |
+| Codebase-wide cleanup | `/unfuck` |
+| Security audit only | `code-quality:security` directly |
+| Test coverage only | `code-quality:test-runner` directly |
+| Codebase-wide analysis or bulk transformation (20+ files) | `/map-reduce` |
+| Multiple viable approaches, need to compare | `/speculative` |
+| Architectural analysis (cross-cutting concerns) | Single agent (NOT /map-reduce) |
+
+### Model Assignment
+
+Use opus for any task requiring judgment, evaluation, or nuanced reasoning. Use sonnet for
+implementation and mechanical tasks. Use haiku for execution-only tasks. When in doubt,
+prefer opus — one strong pass beats multiple weaker passes.
+
+| Model | Used For |
+|-------|---------|
+| opus | Architect, Reduction Analyst, Reviewer, Security, QA, Structural Analysts, **Plan Adherence** — judgment-heavy tasks |
+| sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Boundary Updater, Plan File Updater, Docs, Docs Reviewer, Lessons Extractor |
+| haiku | Test-Runner, Verifier — execution-only tasks |
+
+### Work Completion Principle
+
+Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
+If the task requires an agent, spawn the agent. If a finding needs fixing, fix it.
+If tests need writing, write them. The only valid reasons to skip work are:
+(1) the user explicitly opted out, (2) the skip condition in the phase table applies,
+or (3) the work is genuinely out of scope for the current task.
+
+"It would be expensive" is NEVER a valid reason to skip work. Prefer spawning one opus
+agent that does the job right over multiple sonnet agents that require rework.

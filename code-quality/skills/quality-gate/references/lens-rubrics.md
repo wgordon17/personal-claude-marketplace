@@ -263,3 +263,79 @@ For simple Q&A, use a reduced review:
 
 - Is the answer direct and actionable?
 - Any AI slop (filler phrases, hedging, unnecessary elaboration)?
+
+---
+
+## Round Execution Protocol: Step 3 & Step 5 Trap Catalog
+
+### Step 3: Project Rules + Cross-Reference Integrity (Round 2 only)
+
+a) Re-read `CLAUDE.md` and `CONTRIBUTING.md` (if they exist). Check every change against project-specific conventions:
+   - Version bump rules (e.g., "always bump plugin versions in both files")
+   - Commit message conventions
+   - Required file updates (changelogs, manifests, registries)
+   - Deployment/delivery requirements (will this change actually reach users?)
+   - Any other project-specific rules that apply to this type of change
+
+b) Documentation completeness: check every change against the documentation triggers in `[{skill_dir}/../../references/documentation-taxonomy.md](../../../references/documentation-taxonomy.md)`. For each trigger that fires, verify the corresponding documentation surfaces were updated. Use the taxonomy's surface detection patterns to discover all surfaces, and its ecosystem-specific component discovery patterns to count on-disk components. Counts must match what's documented. A new component with no documentation entry is a completeness failure, same as a missing test.
+
+c) UAT coverage verification (Planning/Mixed only): if Step 0 loaded a non-empty `{plan_test_plan}`, for each scenario in the test plan: is there a corresponding planned task or test case in the plan? Will the planned work verify this scenario? A UAT scenario with no corresponding plan coverage is a completeness gap — treat as `needs-fix`.
+
+d) Cross-reference integrity: search the ENTIRE codebase for references to things you changed, renamed, or removed. Files you DIDN'T modify can have stale references to things you DID modify. Grep for:
+   - Old names/values you replaced
+   - Functions/skills/tools you renamed or removed
+   - Version numbers that should match across files
+   - Import paths, file references, cross-links
+
+This catches issues that no generic lens covers — project conventions and cross-file consistency are invisible to single-file review.
+
+### Step 5: Action Audit & Trap Catalog
+
+Scan ALL output (yours and any subagent output) for identified-but-unactioned items:
+- "could be improved" / "might want to" / "consider"
+- "potential issue" / "noted for future" / "TODO"
+- "follow-up" / "out of scope" / "later"
+- "pre-existing" / "preexisting" / "known issue" / "existing failure"
+- "should be verified" / "needs to be confirmed" / "you should check"
+- "verify against your" / "please verify" / "you may want to update"
+- Any issue described without a corresponding fix
+- "v1" / "v2" / "future iteration" / "future enhancement" / "next version" / "phase N enhancement" / "deferred to future" / "out of scope for this implementation" (when used as self-scoping — legitimate software version references like "API v1" or "Pydantic v2" are not deferral)
+
+**THE "DEFERRAL-TO-USER" TRAP:**
+Saying "should be verified" or "you should check" is an admission that work needs doing — and a confession that you didn't do it. If it should be verified, verify it. If it needs checking, check it. If it needs confirming, confirm it. The user asked you to do the work, not to generate a checklist of work for them to do.
+- "The field ID should be verified against your instance" → Look it up.
+- "You may want to update the config" → Update it.
+- "This should be tested with..." → Test it.
+- "Needs to be confirmed" → Confirm it.
+Every "should be" is either done or documented as a specific blocker with why you couldn't do it yourself.
+
+**THE "PREEXISTING" TRAP:**
+Labeling something "preexisting" is NOT permission to ignore it. For every issue labeled preexisting or known:
+- WHY does it exist? Investigate the root cause, don't just note it.
+- Is it within scope of the current work? If your changes touch the same area, fix it.
+- Is it ACTUALLY preexisting? Verify by checking the baseline, not by assuming.
+- Even if truly preexisting and out of scope: document it as a concrete follow-up task, not a hand-wave.
+"4 pre-existing test failures" repeated without investigation is the same as ignoring 4 bugs.
+
+**THE "SELF-SCOPING" TRAP:**
+Labeling work as "v1" and deferring to "v2" is creating a permission gradient — the model decides what is "in scope" and uses version boundaries to justify skipping work. Scope decisions belong to the user via `AskUserQuestion`, not to the model via self-invented version labels.
+- "V2 Enhancements: [list]" → implement them or ask the user
+- "Scope: v1 vs. Deferred" → present as `AskUserQuestion` options
+- "Deferred (out of scope for v1)" → ask the user what to defer
+- "Future iteration: [feature]" → add it as a task or ask the user
+If the model claims "the user explicitly deferred this," verify the claim — cite the user's actual message. Fabricated user deferral is a violation.
+
+**THE "NOT MY REVIEW" TRAP (PR review context):**
+After `/pr-review` → `/fix`, the quality gate may find issues the review missed. Dismissing them as "out of scope because the review didn't flag it" is self-scoping — the review is not the scope boundary, the PR diff is. If the code was introduced by the PR and the quality gate finds a real issue in it, fix it. The review is a starting point, not an exhaustive inventory.
+
+For EACH identified-but-unactioned item:
+- Can fix now? → Fix it.
+- Genuinely blocked? → Document the SPECIFIC blocker.
+- Deferred without justification? → Fix it.
+- User explicitly deferred it? → Leave it, cite the user's decision.
+
+For subagent/spawn output specifically:
+- Parse every subagent's `last_assistant_message`
+- Extract findings/issues/concerns mentioned
+- Cross-reference against actual edits made
+- The delta is "identified-but-unactioned" — fix or justify each one
