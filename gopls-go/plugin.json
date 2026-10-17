@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "gopls-go",
+  "version": "1.0.1",
+  "description": "Go language server (requires gopls on PATH)",
+  "author": {
+    "name": "wgordon17"
+  }
+}

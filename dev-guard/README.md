@@ -1,6 +1,13 @@
 # Dev Guard Plugin
 
-Development environment policy enforcement: tool selection guard, commit validation, subagent completion verification, and anti-deferral enforcement.
+Development environment policy enforcement: tool selection guard, commit validation, URL fetch guard, trust management, oc/kubectl introspection, subagent completion verification, decision persistence, anti-deferral enforcement, shared behavioral feedback, path hallucination guard, narrative comment guard, token efficiency guidance.
+
+## Commands (2)
+
+| Command | Description |
+|---------|-------------|
+| `/dev-guard:guard-stats` | Query dev-guard audit database for trigger trends, trust candidates, and noise signals |
+| `/dev-guard:trust` | Manage dev-guard trust rules — list, add, remove, or clear trusted rules |
 
 ## Hooks
 

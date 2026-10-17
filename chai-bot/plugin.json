@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "chai-bot",
+  "version": "1.0.1",
+  "description": "Advisory nudge and explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server",
+  "author": {
+    "name": "wgordon17"
+  }
+}

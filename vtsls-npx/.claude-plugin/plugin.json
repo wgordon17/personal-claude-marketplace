@@ -1,7 +1,7 @@
 {
   "name": "vtsls-npx",
-  "description": "TypeScript/JavaScript language server via npx (always latest)",
-  "version": "1.0.0",
+  "description": "TypeScript/JavaScript language server (via npx - always latest)",
+  "version": "1.0.1",
   "author": {
     "name": "wgordon17"
   }

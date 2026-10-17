@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fetchaller-mcp",
+  "version": "1.0.1",
+  "description": "Pinned MCP fetch/search server for domains that block Claude's built-in WebFetch/WebSearch (Reddit and 15 other sites), verified live against Reddit and web.archive.org",
+  "author": {
+    "name": "wgordon17"
+  }
+}
