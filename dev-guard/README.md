@@ -206,7 +206,7 @@ Both URL and command rules support an optional `action` field:
 | `"ask"` | JSON `hookSpecificOutput` + exit 0 | Prompts the user for confirmation | No |
 | `"allow"` | JSON `hookSpecificOutput` + exit 0 | Explicitly allows the command via the hook, bypassing Claude's permission system. Exit code 0 with `permissionDecision: "allow"` JSON. | No |
 
-Rules are matched in order of specificity: `"allow"` rules first, then `"ask"`, then `"block"`. The first matching rule wins.
+`"block"` rules always take precedence (exiting 2 immediately across all subcommands, pipes, subshells, and URLs). Among non-block matches, untrusted `"ask"` rules take precedence over `"allow"` and trusted `"ask"` rules, and `"allow"` is only emitted on compound commands when every subcommand is covered.
 
 The `"ask"` action outputs `permissionDecision: "ask"` via Claude Code's [PreToolUse hook JSON protocol](https://code.claude.com/docs/en/hooks#pretooluse-decision-control). Claude Code displays a permission prompt with the rule's `message` as the reason. This overrides `permissions.allow` auto-approve rules — even commands matching `Bash(git:*)` or `Bash(oc:*)` will prompt when a hook returns `"ask"`.
 
@@ -424,6 +424,9 @@ Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-n
 
 **Kill command guard rules (ask actions):**
 - `kill-non-claude-process` — Killing processes not spawned by this Claude session
+
+**MCP guard rules (ask actions):**
+- `fetchaller-fetch-mutating-call` — Mutating (`POST`) or custom-header/body calls to `fetchaller-mcp`'s `fetch` tool
 
 ### Bypass Mechanisms
 
