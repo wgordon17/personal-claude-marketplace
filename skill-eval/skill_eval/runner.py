@@ -134,8 +134,8 @@ def resolve_skill_bundle(
         Concatenated bundle string, or None if SKILL.md cannot be read
         (e.g. renamed directory in git history).
     """
-    if repo_root is None:
-        repo_root = _get_repo_root()
+    repo_root = _get_repo_root() if repo_root is None else repo_root.resolve()
+    skill_dir = skill_dir.resolve()
 
     skill_md_path = skill_dir / "SKILL.md"
 
@@ -161,6 +161,7 @@ def resolve_skill_bundle(
         git_path = f"{git_ref}:{rel.as_posix()}"
         result = subprocess.run(
             ["git", "show", git_path],
+            cwd=repo_root,
             capture_output=True,
             text=True,
         )
@@ -231,6 +232,7 @@ def resolve_skill_bundle(
             git_ref_path = f"{git_ref}:{rel_ref.as_posix()}"
             result = subprocess.run(
                 ["git", "show", git_ref_path],
+                cwd=repo_root,
                 capture_output=True,
                 text=True,
             )

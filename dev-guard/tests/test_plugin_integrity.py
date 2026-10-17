@@ -547,12 +547,14 @@ class TestPluginVersionParity:
         codex_marketplace_path = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
         assert codex_marketplace_path.exists(), f"Missing {codex_marketplace_path}"
 
-        claude_names = [
-            entry["name"] for entry in json.loads(MARKETPLACE_JSON.read_text())["plugins"]
-        ]
-        codex_names = [
-            entry["name"] for entry in json.loads(codex_marketplace_path.read_text())["plugins"]
-        ]
+        claude_marketplace = json.loads(MARKETPLACE_JSON.read_text())
+        codex_marketplace = json.loads(codex_marketplace_path.read_text())
+        assert codex_marketplace["name"] == claude_marketplace["name"], (
+            f"Marketplace name mismatch: {codex_marketplace['name']} != "
+            f"{claude_marketplace['name']}"
+        )
+        claude_names = [entry["name"] for entry in claude_marketplace["plugins"]]
+        codex_names = [entry["name"] for entry in codex_marketplace["plugins"]]
         assert len(claude_names) == 13, f"Expected 13 plugins, got {len(claude_names)}"
         assert set(claude_names) == set(codex_names), (
             f"Marketplace registration mismatch: claude={claude_names} vs codex={codex_names}"

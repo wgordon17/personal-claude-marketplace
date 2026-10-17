@@ -1,5 +1,5 @@
 {
-  "name": "private-claude-marketplace",
+  "name": "personal-claude-marketplace",
   "plugins": [
     {
       "name": "pyright-uvx",

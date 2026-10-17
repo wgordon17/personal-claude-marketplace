@@ -2289,7 +2289,7 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
 
 def _check_pipes(
     cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = _PIPE_SEGMENT_SKIP
-) -> bool:
+) -> None:
     """Check later pipe segments of a command for guarded patterns.
 
     NOTE: _check_oc_introspection is NOT called on individual pipe segments.
@@ -2301,16 +2301,13 @@ def _check_pipes(
     another command downstream.
     """
     pipe_segments = split_pipes(cmd)
-    all_segments_covered = True
     if len(pipe_segments) > 1:
         last_idx = len(pipe_segments) - 1
         for i, segment in enumerate(pipe_segments[1:], start=1):
             effective_skip = skip_rules
             if i == last_idx and skip_rules:
                 effective_skip = skip_rules - {"echo-noop", "printf-noop"}
-            if not _check_rules(segment, fetch_seen, skip_rules=effective_skip):
-                all_segments_covered = False
-    return all_segments_covered
+            _check_rules(segment, fetch_seen, skip_rules=effective_skip)
 
 
 def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
@@ -2363,18 +2360,25 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
 
     # Check pipe segments and subshells FIRST — deny/ask on dangerous segments
     # must happen before any "allow" rule on the full command can short-circuit.
-    pipes_covered = _check_pipes(subcmd, fetch_seen)
+    before_pipes = len(_pending_decisions)
+    _check_pipes(subcmd, fetch_seen)
+    pipes_matched = len(_pending_decisions) > before_pipes
 
     subshells_covered = True
     for inner in extract_subshells(subcmd):
         if _FETCH_PATTERN.search(inner):
             fetch_seen = True
         inner_matched = _check_rules(inner, fetch_seen)
-        inner_pipes_covered = _check_pipes(inner, fetch_seen)
-        if not (inner_matched and inner_pipes_covered):
+        _check_pipes(inner, fetch_seen)
+        if not inner_matched:
             subshells_covered = False
 
-    # Now check the full subcommand (including allow rules that exit 0)
+    # Now check the full subcommand (including allow rules that exit 0).
+    # If _check_pipes already added a pending decision on a downstream pipe
+    # segment (e.g. `rm -rf build/ | uvx prek`), an unanchored rule matching
+    # only pipe_segments[1:] must not count as covering an unreviewed
+    # pipe_segments[0].
+    pipe_segments = split_pipes(subcmd)
     before_outer = len(_pending_decisions)
     rule_matched = _check_rules(subcmd, fetch_seen)
 
@@ -2389,7 +2393,9 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
             _check_kill_command(subcmd)
 
     outer_matched = rule_matched or (len(_pending_decisions) > before_outer)
-    return fetch_seen, (outer_matched and pipes_covered and subshells_covered)
+    if pipes_matched and len(pipe_segments) > 1:
+        outer_matched = _check_rules(pipe_segments[0], fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP)
+    return fetch_seen, (outer_matched and subshells_covered)
 
 
 # ── Trust management ──
