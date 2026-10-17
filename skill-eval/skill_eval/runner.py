@@ -45,9 +45,7 @@ _RE_ANGLE = re.compile(
 )
 
 # Regex for markdown link targets pointing to references/*.md files.
-_RE_MD_LINK = re.compile(
-    r"\]\(\s*((?:\.\.?/|\./|(?:[a-zA-Z0-9_.-]+/))*references/[a-zA-Z0-9_.-]+\.md)\s*\)"
-)
+_RE_MD_LINK = re.compile(r"\]\(\s*((?:[a-zA-Z0-9_.-]+/)*references/[a-zA-Z0-9_.-]+\.md)\s*\)")
 
 # Progress log path — pre-commit/prek-style hook runners buffer a hook's entire
 # stdout until it exits, so this file is the only way to see live progress

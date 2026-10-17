@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -617,6 +618,18 @@ class TestResolveSkillBundle:
         assert result is not None
         assert "EVIL_ROOT_CONTENT" not in result
         assert "EVIL_REF_CONTENT" not in result
+
+    def test_markdown_link_redos_non_matching_repeated_dot_slash(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        pathological_link = "[other](" + "./" * 25 + "other.md)"
+        _write_skill_md(skill_dir, f"# Skill\nSee {pathological_link}.\n")
+
+        start = time.monotonic()
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        elapsed = time.monotonic() - start
+
+        assert result is not None
+        assert elapsed < 0.1
 
 
 # ── Group 6: ContainsMetric ───────────────────────────────────────────────────
