@@ -8,6 +8,20 @@ receives `{plan_content}` for plan drift detection. The Plan Adherence Reviewer 
 files, CLAUDE.md, and CONTRIBUTING.md, and actively investigates each finding by reading
 source files.
 
+## Placeholder Reference
+
+| Placeholder | Value | Used by |
+|-------------|-------|---------|
+| `{pr_description}` | "PR #N: {title}\n\n{body}" | All reviewers (not Verifier) |
+| `{diff}` | Local `git diff` against merge base | Security, QA, Performance, Code Quality, Correctness, Plan Adherence |
+| `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers + Verifier |
+| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers + Verifier |
+| `{changed_files}` | Newline-separated file paths (from `files` in PR metadata) | All reviewers + Verifier |
+| `{plan_content}` | Implementation plan content or "No implementation plan found." | Correctness Reviewer, Plan Adherence Reviewer |
+| `{plan_file_path}` | Path to discovered plan file or empty string | Plan Adherence Reviewer only |
+| `{plan_test_plan}` | Full test plan document content or empty string | QA Reviewer, Correctness Reviewer, Plan Adherence Reviewer |
+| `{findings_json}` | JSON array of all findings with diff_context | Finding Verifier only |
+
 ---
 
 ## Security Reviewer

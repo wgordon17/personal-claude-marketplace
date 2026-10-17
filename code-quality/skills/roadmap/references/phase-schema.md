@@ -75,6 +75,38 @@ must appear as columns — do not add per-track metadata outside the table.
 | Sync point | Yes | Always: "All tracks must complete before Phase N+1 begins." (or "Final phase." for last) |
 | Merge order | Yes | Ordered list of tracks (A first, B second, etc.) with conflict risk rationale |
 
+### Intra-Plan PR Boundaries and Mixed Phases
+
+**Intra-plan PR boundaries:** When a source plan has `**Workflow:** incremental`, each PR
+boundary becomes a separate track within a single phase. The track table expands:
+
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | plan.md | Tasks 1-3 | PR 1 | feat/{plan-slug}-pr1 | None | /swarm | Complicated |
+| B | plan.md | Tasks 4-6 | PR 2 | feat/{plan-slug}-pr2 | Track A | /swarm | Complicated |
+
+Intra-plan tracks are ALWAYS sequential at the PR-boundary level (Track B depends on
+Track A) because PR boundaries branch sequentially from main — each boundary creates a new
+branch from main after the prior boundary's PR merges. Track B cannot start until Track A's
+PR merges. This is PR-level sequencing, not task-level — tasks WITHIN a
+single PR boundary may still be parallelizable if the swarm architect determines they are
+independent. The `PR 1`, `PR 2` labels in the table are internal plumbing — each PR created
+from a boundary is standalone work described by what it accomplishes, never "Part X of Y".
+
+Completion tracking for intra-plan tracks uses the same branch merge detection as inter-plan
+tracks (primary: `gh pr list --state merged`, fallback: `git branch --merged main`).
+
+**Mixed phases** (incremental + non-incremental tracks in the same phase):
+
+| Track | Plan | Tasks | PR | Worktree Branch | Depends On | Skill | Domain |
+|-------|------|-------|----|-----------------|------------|-------|--------|
+| A | plan-a.md | Tasks 1-3 | PR 1 | feat/{slug-a}-pr1 | None | /swarm | Complicated |
+| B | plan-a.md | Tasks 4-6 | PR 2 | feat/{slug-a}-pr2 | Track A | /swarm | Complicated |
+| C | plan-b.md | All | — | roadmap/phase-1/plan-b | None | /swarm | Clear |
+
+Track C (non-incremental) runs independently of Tracks A/B. Tracks A and B are sequential
+(same plan, PR boundaries). The phase completes when all tracks merge.
+
 ---
 
 ## Phase Transition Rules
