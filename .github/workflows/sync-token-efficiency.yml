@@ -123,6 +123,10 @@ jobs:
             dev-guard/.claude-plugin/plugin.json > "$RUNNER_TEMP/plugin.json"
           mv "$RUNNER_TEMP/plugin.json" dev-guard/.claude-plugin/plugin.json
 
+          jq '.version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
+            dev-guard/plugin.json > "$RUNNER_TEMP/root-plugin.json"
+          mv "$RUNNER_TEMP/root-plugin.json" dev-guard/plugin.json
+
           jq '(.plugins[] | select(.name == "dev-guard")).version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
             .claude-plugin/marketplace.json > "$RUNNER_TEMP/marketplace.json"
           mv "$RUNNER_TEMP/marketplace.json" .claude-plugin/marketplace.json
@@ -179,7 +183,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add dev-guard/references/token-efficiency.md dev-guard/UPSTREAM.md \
-            dev-guard/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+            dev-guard/.claude-plugin/plugin.json dev-guard/plugin.json .claude-plugin/marketplace.json
           git commit -m "chore(dev-guard): syncs upstream token-efficiency ruleset to v${NEW_VERSION}"
           git push origin "$BRANCH"
 
