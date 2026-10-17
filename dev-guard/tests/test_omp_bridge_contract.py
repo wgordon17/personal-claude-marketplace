@@ -511,6 +511,81 @@ class TestAskDecisionSignal:
         assert hook2["permissionDecision"] == "ask"
         assert hook2["permissionDecisionReason"].startswith("[stash-drop] ")
 
+        # Round 3: after trusting stash-drop too, both subcommands are covered -> allow
+        trust_res2 = run_guard_trust(
+            ["add", "stash-drop", "--scope", "session", "--session-id", sid],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert trust_res2.returncode == 0
+        res3 = run_guard(payload, cwd=tmp_path, env=env)
+        assert res3.returncode == 0
+        hook3 = json.loads(res3.stdout)["hookSpecificOutput"]
+        assert hook3["permissionDecision"] == "allow"
+
+    def test_compound_or_subshell_with_unreviewed_segment_does_not_emit_allow(self, tmp_path):
+        """When a trusted ask subcommand is paired with an unreviewed sibling
+        subcommand (`git stash drop && rm -rf build/`), or when an unreviewed
+        outer command contains a trusted subshell (`rm -rf build/ $(uvx prek)`),
+        the guard must exit 0 without emitting permissionDecision: 'allow'."""
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        sid = str(uuid.uuid4())
+        for rule in ("stash-drop", "prek"):
+            t_res = run_guard_trust(
+                ["add", rule, "--scope", "session", "--session-id", sid],
+                cwd=tmp_path,
+                env=env,
+            )
+            assert t_res.returncode == 0
+
+        for cmd in (
+            "git stash drop && rm -rf build/",
+            "rm -rf build/ $(uvx prek)",
+            "rm -rf build/ | uvx prek",
+            "git stash drop $(rm -rf build/)",
+        ):
+            res = run_guard(
+                {
+                    "session_id": sid,
+                    "tool_use_id": "tc-18e",
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": cmd},
+                },
+                cwd=tmp_path,
+                env=env,
+            )
+            assert res.returncode == 0
+            assert res.stdout.strip() == "", f"Expected passthrough (empty stdout) for {cmd!r}"
+
+    def test_websearch_ask_then_block_domain_exits_2(self, tmp_path):
+        """A WebSearch call whose allowed_domains contains an 'ask' domain
+        followed by a 'block' domain must exit 2 ('block' beats 'ask')."""
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        res = run_guard(
+            {
+                "session_id": str(uuid.uuid4()),
+                "tool_use_id": "tc-18f",
+                "hook_event_name": "PreToolUse",
+                "tool_name": "WebSearch",
+                "tool_input": {
+                    "query": "test",
+                    "allowed_domains": ["amazon.com", "reddit.com"],
+                },
+            },
+            cwd=tmp_path,
+            env=env,
+        )
+        assert res.returncode == 2
+
 
 # ── Write/Edit: PreToolUse translation (input passed through unchanged) ─────
 

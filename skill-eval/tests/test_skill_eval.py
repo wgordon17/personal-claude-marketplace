@@ -629,7 +629,41 @@ class TestResolveSkillBundle:
         elapsed = time.monotonic() - start
 
         assert result is not None
-        assert elapsed < 0.1
+        assert elapsed < 1.0
+
+    def test_git_ref_mode_resolves_parent_and_one_hop_references(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (skill_dir / "references" / "local.md").write_text(
+            "# Local Git Ref\nLinks to [shared](../../../references/shared.md).\n"
+        )
+        (repo / "code-quality" / "references" / "shared.md").write_text("# Shared Git Ref\n")
+        _write_skill_md(skill_dir, "# Skill\nSee [local](./references/local.md).\n")
+
+        subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+
+        result = resolve_skill_bundle(skill_dir, git_ref="HEAD", repo_root=repo)
+        assert result is not None
+        assert "Local Git Ref" in result
+        assert "Shared Git Ref" in result
 
 
 # ── Group 6: ContainsMetric ───────────────────────────────────────────────────

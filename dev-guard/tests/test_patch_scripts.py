@@ -10,6 +10,8 @@ argument, mutates it in place, and exits 0/1.
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 PATCH_TOKEN_EFFICIENCY_SCRIPT = REPO_ROOT / ".github" / "scripts" / "patch-token-efficiency.sh"
 PATCH_DRAWIO_XML_REFERENCE_SCRIPT = (
@@ -288,3 +290,36 @@ class TestPatchDrawioXmlReferenceScript:
         result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
         assert result.returncode == 1
         assert "still contains upstream xml-reference URL after patching" in result.stdout
+
+    @pytest.mark.parametrize(
+        ("content", "expected_error"),
+        [
+            (
+                "# Draw.io Diagram Skill\n\n"
+                "Before generating any XML, fetch and follow the instructions at:\n"
+                "https://raw.githubusercontent.com/jgraph/drawio-mcp/main/shared/xml-reference.md\n",
+                "missing expected 'allowed-tools: Read Write Bash' frontmatter after patching",
+            ),
+            (
+                "---\nname: drawio\ndescription: Draw.io skill\n---\n\n"
+                "# Renamed Heading\n\n"
+                "Before generating any XML, fetch and follow the instructions at:\n"
+                "https://raw.githubusercontent.com/jgraph/drawio-mcp/main/shared/xml-reference.md\n",
+                "missing expected '{skill_dir}' note after patching",
+            ),
+            (
+                "---\nname: drawio\ndescription: Draw.io skill\n---\n\n"
+                "# Draw.io Diagram Skill\n\n"
+                "Upstream removed the XML reference instruction entirely.\n",
+                "missing expected vendored sibling link after patching",
+            ),
+        ],
+    )
+    def test_post_conditions_reject_missing_injected_sections(
+        self, tmp_path, content, expected_error
+    ):
+        fixture = tmp_path / "SKILL.md"
+        fixture.write_text(content)
+        result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
+        assert result.returncode == 1
+        assert expected_error in result.stdout

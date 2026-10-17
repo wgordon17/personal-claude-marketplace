@@ -2289,7 +2289,7 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
 
 def _check_pipes(
     cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = _PIPE_SEGMENT_SKIP
-) -> None:
+) -> bool:
     """Check later pipe segments of a command for guarded patterns.
 
     NOTE: _check_oc_introspection is NOT called on individual pipe segments.
@@ -2301,19 +2301,22 @@ def _check_pipes(
     another command downstream.
     """
     pipe_segments = split_pipes(cmd)
+    all_segments_covered = True
     if len(pipe_segments) > 1:
         last_idx = len(pipe_segments) - 1
         for i, segment in enumerate(pipe_segments[1:], start=1):
             effective_skip = skip_rules
             if i == last_idx and skip_rules:
                 effective_skip = skip_rules - {"echo-noop", "printf-noop"}
-            _check_rules(segment, fetch_seen, skip_rules=effective_skip)
+            if not _check_rules(segment, fetch_seen, skip_rules=effective_skip):
+                all_segments_covered = False
+    return all_segments_covered
 
 
-def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
+def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
     """Analyze one subcommand: unwrap bash -c, check pipes, check subshells.
 
-    Returns updated fetch_seen.
+    Returns (updated fetch_seen, subcmd_covered).
     """
     if _FETCH_PATTERN.search(subcmd):
         fetch_seen = True
@@ -2360,15 +2363,19 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
 
     # Check pipe segments and subshells FIRST — deny/ask on dangerous segments
     # must happen before any "allow" rule on the full command can short-circuit.
-    _check_pipes(subcmd, fetch_seen)
+    pipes_covered = _check_pipes(subcmd, fetch_seen)
 
+    subshells_covered = True
     for inner in extract_subshells(subcmd):
         if _FETCH_PATTERN.search(inner):
             fetch_seen = True
-        _check_rules(inner, fetch_seen)
-        _check_pipes(inner, fetch_seen)
+        inner_matched = _check_rules(inner, fetch_seen)
+        inner_pipes_covered = _check_pipes(inner, fetch_seen)
+        if not (inner_matched and inner_pipes_covered):
+            subshells_covered = False
 
     # Now check the full subcommand (including allow rules that exit 0)
+    before_outer = len(_pending_decisions)
     rule_matched = _check_rules(subcmd, fetch_seen)
 
     if not rule_matched:
@@ -2381,7 +2388,8 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
         if re.match(r"^\s*(kill|killall|pkill)\b", normalized):
             _check_kill_command(subcmd)
 
-    return fetch_seen
+    outer_matched = rule_matched or (len(_pending_decisions) > before_outer)
+    return fetch_seen, (outer_matched and pipes_covered and subshells_covered)
 
 
 # ── Trust management ──
@@ -4132,11 +4140,12 @@ def _handle_bash_command(command: str) -> NoReturn:
     fetch_seen = False
     covered_subcmds = 0
     for subcmd in subcmds:
-        before_count = len(_pending_decisions)
+        before_fetch = len(_pending_decisions)
         # Check curl/wget commands for authenticated URLs per subcommand
         _check_fetch_command(subcmd)
-        fetch_seen = _check_subcmd(subcmd, fetch_seen)
-        if len(_pending_decisions) > before_count:
+        fetch_matched = len(_pending_decisions) > before_fetch
+        fetch_seen, subcmd_covered = _check_subcmd(subcmd, fetch_seen)
+        if fetch_matched or subcmd_covered:
             covered_subcmds += 1
 
     all_subcmds_covered = bool(subcmds) and (covered_subcmds == len(subcmds))
