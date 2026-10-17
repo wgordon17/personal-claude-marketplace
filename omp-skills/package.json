@@ -1,8 +1,0 @@
-{
-  "name": "omp-skills",
-  "version": "1.0.0",
-  "private": true,
-  "omp": {
-    "skills": ["skills/compactor"]
-  }
-}

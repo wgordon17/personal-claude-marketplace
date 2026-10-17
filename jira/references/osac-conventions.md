@@ -194,7 +194,7 @@ What should happen instead.
 ```
 
 Always pass `contentFormat: "markdown"` for description fields in MCP write operations.
-See `jira/reference/jira-formatting.md` for markdown guidance.
+See `jira/references/jira-formatting.md` for markdown guidance.
 
 ## Title Conventions
 

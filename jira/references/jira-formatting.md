@@ -92,7 +92,7 @@ Avoid the old `{code}...{code}` wiki syntax — it is not valid markdown.
 
 ## Description Templates
 
-Follow the templates in `jira/reference/osac-conventions.md` for OSAC issue types. Write them in standard markdown — the MCP server handles the conversion.
+Follow the templates in `jira/references/osac-conventions.md` for OSAC issue types. Write them in standard markdown — the MCP server handles the conversion.
 
 ## Always Pass Content Format Parameters
 

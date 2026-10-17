@@ -3,23 +3,12 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "3.5.0"
+    "version": "3.6.0"
   },
   "owner": {
     "name": "wgordon17"
   },
   "plugins": [
-    {
-      "name": "vertex-log-monitor",
-      "version": "0.1.0",
-      "source": "./vertex-log-monitor",
-      "description": "Surfaces whether Vertex AI request/response (prompt+output) logging or Data Access audit logging is enabled for the Claude Code project; refreshes a cache on SessionStart and exposes a status reader for a shell prompt or slash command. Zero-config from ANTHROPIC_*/CLOUD_ML_REGION env.",
-      "category": "quality",
-      "tags": ["hooks", "vertex", "observability", "security"],
-      "author": {
-        "name": "wgordon17"
-      }
-    },
     {
       "name": "pyright-uvx",
       "version": "1.0.0",
@@ -158,15 +147,6 @@
       "category": "productivity",
       "tags": ["mcp", "osac", "advisory", "ship-help"],
       "author": { "name": "wgordon17" }
-    },
-    {
-      "name": "omp-skills",
-      "version": "1.0.2",
-      "source": "./omp-skills",
-      "description": "A collection of core OMP utility skills. Includes the session compactor for safely truncating and preserving long-running contexts.",
-      "category": "productivity",
-      "tags": ["omp", "session", "compactor", "memory"],
-      "author": { "name": "Platform Team" }
     }
   ]
 }
