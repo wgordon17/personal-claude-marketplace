@@ -263,10 +263,12 @@ Plugins in this marketplace have external tool requirements and optional MCP ser
 
 | Tool | Required By | Purpose |
 |------|------------|---------|
-| [`uv`](https://docs.astral.sh/uv/) | **All non-LSP plugins** | dev-guard hooks (`uv run`), test-runner, uv-python enforcement, hook installation |
+| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`) |
 | [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
 | [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
 | [`pre-commit`](https://pre-commit.com/) | git-tools | Defense-in-depth git hook scripts |
+| [Chrome / Chromium](https://www.google.com/chrome/) | fetchaller-mcp | Dedicated logged-out browser (`BROWSER_EXECUTABLE_PATH`) for bot-protected site fallback |
+| [draw.io Desktop CLI](https://www.drawio.com/) | drawio (optional) | Optional PNG/SVG/PDF export from generated `.drawio` files |
 | [Node.js/npm](https://nodejs.org/) | vtsls-npx, vscode-html-css-npx | Runs LSP servers via `npx` |
 | [Go](https://go.dev/) | gopls-go | Runs gopls language server |
 | [Rust/rustup](https://rustup.rs/) | rust-analyzer-rustup | Runs rust-analyzer |
@@ -279,6 +281,8 @@ These MCP servers enhance functionality but are not required for core operation 
 |------------|--------|------------|---------|
 | **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
 | **[Atlassian Rovo MCP](https://www.atlassian.com/rovo)** | jira | **Hard** (OAuth required) | Full Jira API: issue query, create, update, transitions, comments, worklogs via `mcp__plugin_jira_mcp-atlassian-prod__*` tools. |
+| **[Fetchaller MCP](fetchaller-mcp/README.md)** | fetchaller-mcp | **Hard** (plugin is the server) | Commit-SHA-pinned stdio MCP fetch/search server for Reddit and 15 other bot-blocked domains. |
+| **[Chai Bot MCP](chai-bot/README.md)** | chai-bot | **Hard** (VPN + token required) | Red Hat-internal OSAC Chai Bot (`ask_persona`) via `${CHAI_BOT_BASE_URL}` and `${CHAI_TOKEN}`. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
 | **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode. Alternative tools work. |
@@ -310,6 +314,9 @@ Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** =
 | **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 | **jira** | -- | -- | -- | -- | -- | -- | -- | -- | HARD |
+| **drawio** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **fetchaller-mcp** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **chai-bot** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.

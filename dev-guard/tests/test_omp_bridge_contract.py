@@ -1378,3 +1378,173 @@ class TestMcpServerSyncContract:
             "tools keep auto-approving under OMP instead of silently falling "
             "back to settings.json passthrough."
         )
+
+
+def _find_bun() -> str | None:
+    import shutil
+
+    return shutil.which("bun") or (
+        str(Path.home() / ".bun" / "bin" / "bun")
+        if (Path.home() / ".bun" / "bin" / "bun").exists()
+        else None
+    )
+
+
+class TestOmpExtensionToolCallTsExecution:
+    """Executes dev-guard/omp-extension.ts's actual `tool_call` handler under `bun`
+    against the real `tool-selection-guard.py` subprocess, verifying the TypeScript
+    interactive `ask` loop (`Allow once`, `Allow for session` multi-round re-evaluation,
+    `Allow always`, `Deny`, `undefined`/Escape, headless missing `ctx.ui.select`),
+    hard-block bypass prevention (`result.code === 2`), and `Bash` `updatedInput.command`
+    forwarding while preserving optional OMP `bash` fields (`cwd`, `timeout`)."""
+
+    def _run_ts_tool_call(
+        self,
+        tmp_path: Path,
+        *,
+        event: dict,
+        select_choices: object = "none",
+        session_id: str = "ts-test-session",
+        extra_env: dict[str, str] | None = None,
+    ) -> dict:
+        bun_bin = _find_bun()
+        if bun_bin is None:
+            import pytest
+
+            pytest.skip("bun not available on PATH")
+            raise RuntimeError("unreachable")
+
+        ext_path = (Path(__file__).parent.parent / "omp-extension.ts").resolve()
+        harness = tmp_path / "run_omp_tool_call.ts"
+        harness.write_text(
+            f"""
+import ompExtension from {json.dumps(str(ext_path))};
+
+const handlers: Record<string, Function> = {{}};
+const zStub: any = () => ({{ optional: () => ({{}}) }});
+const pi: any = {{
+    zod: {{ object: zStub, array: zStub, string: zStub, boolean: zStub }},
+    registerTool: () => {{}},
+    on: (name: string, fn: Function) => {{ handlers[name] = fn; }},
+    sendMessage: () => {{}},
+    logger: {{ debug: () => {{}} }},
+}};
+
+ompExtension(pi);
+
+const event = {json.dumps(event)};
+const choicesSpec = {json.dumps(select_choices)};
+const selectCalls: any[] = [];
+
+const ctx: any = {{
+    cwd: {json.dumps(str(tmp_path))},
+    sessionManager: {{ getSessionId: () => {json.dumps(session_id)} }},
+    ui: choicesSpec === "headless" ? {{}} : {{
+        select: async (promptText: string, options: any[]) => {{
+            selectCalls.push({{ promptText, options }});
+            if (choicesSpec === "throw") throw new Error("UI error");
+            if (Array.isArray(choicesSpec)) {{
+                const next = choicesSpec.shift();
+                return next === null ? undefined : next;
+            }}
+            return undefined;
+        }},
+    }},
+}};
+
+const result = await handlers["tool_call"](event, ctx);
+console.log(JSON.stringify({{ result: result ?? null, selectCalls }}));
+"""
+        )
+        env = _isolated_guard_env(tmp_path, extra_env)
+        proc = subprocess.run(
+            [bun_bin, "run", str(harness)],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path),
+            env=env,
+            timeout=30,
+        )
+        assert proc.returncode == 0, f"bun failed:\nstdout={proc.stdout}\nstderr={proc.stderr}"
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+
+    def test_ts_hard_block_never_calls_ui_select(self, tmp_path):
+        out = self._run_ts_tool_call(
+            tmp_path,
+            event={
+                "toolName": "bash",
+                "toolCallId": "tc-ts-1",
+                "input": {"command": "git push --force origin main"},
+            },
+            select_choices=["Allow once"],
+        )
+        assert out["result"]["block"] is True
+        assert out["selectCalls"] == []
+
+    def test_ts_ask_allow_once_and_fail_closed_variants(self, tmp_path):
+        ask_event = {
+            "toolName": "bash",
+            "toolCallId": "tc-ts-2",
+            "input": {"command": "git stash drop"},
+        }
+        # 1. Allow once -> returns null (undefined in TS), after displaying full command & 4 options
+        allow_once = self._run_ts_tool_call(
+            tmp_path, event=ask_event, select_choices=["Allow once"]
+        )
+        assert allow_once["result"] is None
+        assert len(allow_once["selectCalls"]) == 1
+        call = allow_once["selectCalls"][0]
+        assert "Command: git stash drop" in call["promptText"]
+        assert [o["label"] for o in call["options"]] == [
+            "Allow once",
+            "Allow for session",
+            "Allow always",
+            "Deny",
+        ]
+
+        # 2. Deny, Escape (None), UI exception, and headless mode all fail closed
+        for spec in (["Deny"], [None], "throw", "headless"):
+            denied = self._run_ts_tool_call(tmp_path, event=ask_event, select_choices=spec)
+            assert denied["result"] is not None and denied["result"].get("block") is True
+
+    def test_ts_multi_ask_session_trust_and_always_trust_re_evaluation(self, tmp_path):
+        # Compound command with two distinct ask rules:
+        # Round 1 prompts for [remote-remove] -> user selects "Allow for session"
+        # Round 2 re-evaluates and prompts for [stash-drop] -> user selects "Allow always"
+        # Round 3 re-evaluates with both trusted -> returns null (allowed)
+        out = self._run_ts_tool_call(
+            tmp_path,
+            event={
+                "toolName": "bash",
+                "toolCallId": "tc-ts-3",
+                "input": {"command": "git remote remove upstream && git stash drop"},
+            },
+            select_choices=["Allow for session", "Allow always"],
+            session_id="sess-multi-ts",
+        )
+        assert out["result"] is None
+        assert len(out["selectCalls"]) == 2
+        assert out["selectCalls"][0]["promptText"].startswith("[remote-remove] ")
+        assert out["selectCalls"][1]["promptText"].startswith("[stash-drop] ")
+
+    def test_ts_bash_rtk_updated_input_preserves_optional_fields(self, tmp_path):
+        rtk_script = tmp_path / "rtk"
+        rtk_script.write_text(
+            '#!/bin/sh\nif [ "$1" = "rewrite" ]; then echo "rtk $2"; exit 0; fi\nexit 1\n'
+        )
+        rtk_script.chmod(0o755)
+        env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"}
+        env.pop("RTK_DISABLED", None)
+
+        out = self._run_ts_tool_call(
+            tmp_path,
+            event={
+                "toolName": "bash",
+                "toolCallId": "tc-ts-4",
+                "input": {"command": "ls -la", "cwd": "/custom/dir", "timeout": 5000},
+            },
+            extra_env=env,
+        )
+        assert out["result"] == {
+            "input": {"command": "rtk ls -la", "cwd": "/custom/dir", "timeout": 5000}
+        }

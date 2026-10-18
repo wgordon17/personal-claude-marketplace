@@ -55,11 +55,13 @@ if ! grep -q '^compatibility: Optional PNG/SVG/PDF export requires draw.io Deskt
 fi
 
 # Post-condition 4: {skill_dir} note and vendored sibling link present
+# shellcheck disable=SC2016
 if ! grep -q '> \*\*Note:\*\* `{skill_dir}`' "$FILE"; then
   echo "::error::$FILE missing expected '{skill_dir}' note after patching"
   exit 1
 fi
 
+# shellcheck disable=SC2016
 if ! grep -q 'vendored sibling file `\[{skill_dir}/xml-reference\.md\](\./xml-reference\.md)`' "$FILE"; then
   echo "::error::$FILE missing expected vendored sibling link after patching"
   exit 1

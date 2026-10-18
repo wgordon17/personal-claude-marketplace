@@ -7,6 +7,7 @@ test_stop_hook.py's TestInjectReferenceHook: each script takes a file path
 argument, mutates it in place, and exits 0/1.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -323,3 +324,27 @@ class TestPatchDrawioXmlReferenceScript:
         result = _run_script(PATCH_DRAWIO_XML_REFERENCE_SCRIPT, str(fixture))
         assert result.returncode == 1
         assert expected_error in result.stdout
+
+
+@pytest.mark.skipif(shutil.which("shellcheck") is None, reason="shellcheck not installed")
+class TestShellCheckAllRepoScripts:
+    """Ensure every tracked .sh script in the repository passes shellcheck cleanly,
+    matching the CI ShellCheck job in .github/workflows/plugin-lint.yml."""
+
+    def test_all_tracked_shell_scripts_pass_shellcheck(self):
+        git_ls = subprocess.run(
+            ["git", "ls-files", "*.sh"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        scripts = [line for line in git_ls.stdout.splitlines() if line.strip()]
+        assert scripts, "Expected at least one tracked .sh script"
+        res = subprocess.run(
+            ["shellcheck", *scripts],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        assert res.returncode == 0, f"shellcheck failed:\n{res.stdout}\n{res.stderr}"
