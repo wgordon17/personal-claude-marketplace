@@ -47,6 +47,9 @@ _RE_ANGLE = re.compile(
 # Regex for markdown link targets pointing to references/*.md files.
 _RE_MD_LINK = re.compile(r"\]\(\s*((?:[a-zA-Z0-9_.-]+/)*references/[a-zA-Z0-9_.-]+\.md)\s*\)")
 
+# Regex for explicit sibling markdown link targets (`[text](./sibling.md)`).
+_RE_MD_SIBLING_LINK = re.compile(r"\]\(\s*\./([a-zA-Z0-9_.-]+\.md)\s*\)")
+
 # Progress log path — pre-commit/prek-style hook runners buffer a hook's entire
 # stdout until it exits, so this file is the only way to see live progress
 # during a long eval triggered from the pre-push git hook.
@@ -177,7 +180,7 @@ def resolve_skill_bundle(
     # ── Extract, resolve, and read reference files (0-hop + 1-hop) ────────
     def _extract_ref_paths(text: str) -> list[str]:
         seen: dict[str, None] = {}
-        for regex in (_RE_BACKTICK, _RE_ANGLE, _RE_MD_LINK):
+        for regex in (_RE_BACKTICK, _RE_ANGLE, _RE_MD_LINK, _RE_MD_SIBLING_LINK):
             for match in regex.finditer(text):
                 seen.setdefault(match.group(1).removeprefix("./"), None)
         return list(seen.keys())
@@ -197,6 +200,13 @@ def resolve_skill_bundle(
         elif parts[0] in _PLUGIN_ALLOWLIST:
             # Plugin-prefixed path: resolve against repo_root.
             candidate = repo_root / norm_path
+        elif (
+            len(parts) == 1
+            and parts[0].endswith(".md")
+            and parts[0] not in ("SKILL.md", "README.md")
+        ):
+            # Explicit ./sibling.md link: resolve against dotdot_base (skill_dir or references/).
+            candidate = dotdot_base / parts[0]
         else:
             logger.warning(
                 "Reference prefix %r not in allowlist — skipping %s",

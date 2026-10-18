@@ -23,7 +23,7 @@ uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust add <rule_nam
 ### Trust a rule (current session only)
 
 ```bash
-uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust add <rule_name> --scope session
+uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust add <rule_name> --scope session --session-id ${CLAUDE_SESSION_ID}
 ```
 
 ### Trust a rule with a specific session ID
@@ -65,5 +65,5 @@ uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py --trust list
 ## Caveats
 
 - `--match <pattern>` is a **case-insensitive substring** match against the full command string, not a regex.
-- `--session` requires a prior guard invocation in the current session (it reads the session ID from the database), or an explicit `--session-id`.
+- `--scope session` (or `--session`) requires an explicit `--session-id <session_id>` (pass `${CLAUDE_SESSION_ID}` when running for the current Claude Code session).
 - Trust entries are validated against known ask-type rules. Unknown rule names are rejected.

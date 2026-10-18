@@ -611,11 +611,10 @@ class TestResolveSkillBundle:
         (skill_dir / "references" / "b.md").write_text(
             "UNIQUE_B_MARKER\nSee [a](./a.md) and [hop0](../references/hop0.md).\n"
         )
+        # SKILL.md only links hop0.md and a.md; b.md is reached via a.md's ./b.md link in hop 1
         _write_skill_md(
             skill_dir,
-            "# Skill\n"
-            "See [hop0](./references/hop0.md), [a](./references/a.md), "
-            "and [b](./references/b.md).\n",
+            "# Skill\nSee [hop0](./references/hop0.md) and [a](./references/a.md).\n",
         )
 
         result = resolve_skill_bundle(skill_dir, repo_root=repo)
@@ -626,6 +625,19 @@ class TestResolveSkillBundle:
         assert result.count("## a.md") == 1
         assert result.count("## b.md") == 1
         assert result.count("## hop0.md") == 1
+
+    def test_skill_root_sibling_markdown_link_included(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (skill_dir / "xml-reference.md").write_text("XML_REFERENCE_SIBLING_CONTENT\n")
+        _write_skill_md(
+            skill_dir,
+            "# Drawio Skill\nRead [{skill_dir}/xml-reference.md](./xml-reference.md).\n",
+        )
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert "XML_REFERENCE_SIBLING_CONTENT" in result
+        assert "## xml-reference.md" in result
 
     def test_second_hop_and_non_local_hop1_not_followed(self, tmp_path):
         repo, skill_dir = _make_repo(tmp_path)

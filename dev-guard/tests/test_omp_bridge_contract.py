@@ -1548,3 +1548,20 @@ console.log(JSON.stringify({{ result: result ?? null, selectCalls }}));
         assert out["result"] == {
             "input": {"command": "rtk ls -la", "cwd": "/custom/dir", "timeout": 5000}
         }
+
+        # Also verify that when an ask-rule command (`git stash drop`) is approved with
+        # "Allow for session", round 2 re-evaluation applies the RTK updatedInput rewrite!
+        out_ask_rtk = self._run_ts_tool_call(
+            tmp_path,
+            event={
+                "toolName": "bash",
+                "toolCallId": "tc-ts-5",
+                "input": {"command": "git stash drop", "cwd": "/custom/dir"},
+            },
+            select_choices=["Allow for session"],
+            session_id="sess-ask-rtk",
+            extra_env=env,
+        )
+        assert out_ask_rtk["result"] == {
+            "input": {"command": "rtk git stash drop", "cwd": "/custom/dir"}
+        }

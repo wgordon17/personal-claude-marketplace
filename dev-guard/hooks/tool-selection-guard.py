@@ -549,6 +549,7 @@ def _exit_with_decision(
     matched_segment: str | None = None,
     category: str = "guard",
     detail: dict[str, object] | None = None,
+    updated_input: dict[str, object] | None = None,
 ) -> None:
     """Exit with guidance, using the correct mechanism for the action type.
 
@@ -574,14 +575,14 @@ def _exit_with_decision(
     if action == "allow":
         # Allow: log and output allow decision
         _log_event(category, "allowed", rule=rule_name, command=matched_segment, detail=detail)
-        print(_hook_output("allow", guidance))
+        print(_hook_output("allow", guidance, updated_input=updated_input))
         sys.exit(0)
     elif action == "ask":
         # Ask: check trust first
         if rule_name and _check_trust(rule_name, matched_segment, _session_id):
             _log_event(category, "trusted", rule=rule_name, command=matched_segment, detail=detail)
             reason = f"[trusted] [{rule_name}] {guidance}" if rule_name else f"[trusted] {guidance}"
-            print(_hook_output("allow", reason))
+            print(_hook_output("allow", reason, updated_input=updated_input))
             sys.exit(0)
 
         # Build enhanced reason with trust hint
@@ -600,7 +601,7 @@ def _exit_with_decision(
         if rule_name:
             sid_hint = f" --session-id {_session_id}" if _session_id else ""
             parts.append(
-                f"To trust: /dev-guard trust add {rule_name}"
+                f"To trust: /dev-guard:trust add {rule_name}"
                 f" [--match <pattern>]"
                 f" [--scope session{sid_hint}|--scope always]"
             )
@@ -617,7 +618,9 @@ def _exit_with_decision(
         sys.exit(2)
 
 
-def _flush_pending_decisions(all_subcmds_covered: bool = True) -> None:
+def _flush_pending_decisions(
+    all_subcmds_covered: bool = True, *, rtk_original_cmd: str | None = None
+) -> None:
     """Resolve and emit deferred non-block ('ask'/'allow') decisions.
 
     Called after all subcommands/domains have been verified against 'block' rules:
@@ -664,6 +667,12 @@ def _flush_pending_decisions(all_subcmds_covered: bool = True) -> None:
     elif allows_or_trusted:
         if all_subcmds_covered:
             first = allows_or_trusted[0]
+            updated_input: dict[str, object] | None = None
+            if rtk_original_cmd is not None:
+                rtk_cmd = _rtk_rewrite(rtk_original_cmd)
+                if rtk_cmd is not None:
+                    _log_rtk_event("compressed", command=rtk_original_cmd, rtk_command=rtk_cmd)
+                    updated_input = {"command": rtk_cmd}
             _exit_with_decision(
                 first.guidance,
                 first.action,
@@ -671,6 +680,7 @@ def _flush_pending_decisions(all_subcmds_covered: bool = True) -> None:
                 matched_segment=first.matched_segment,
                 category=first.category,
                 detail=first.detail,
+                updated_input=updated_input,
             )
         else:
             for d in allows_or_trusted:
@@ -4215,11 +4225,21 @@ def _handle_bash_command(command: str) -> NoReturn:
         _pending_decisions.clear()
         subcmds = split_commands(real_cmd)
         for subcmd in subcmds:
-            _check_fetch_command(subcmd)
-            stripped = strip_env_prefix(strip_shell_keyword(subcmd))
-            for name, check_fn, message in GIT_DENY_RULES:
-                if check_fn(stripped) or check_fn(subcmd):
-                    _exit_with_decision(message, "block", rule_name=name, matched_segment=subcmd)
+            bypass_segments = [
+                subcmd,
+                *split_pipes(strip_subshells(subcmd))[1:],
+                *(
+                    inner_sub
+                    for raw_inner in extract_subshells(subcmd)
+                    for inner_sub in split_commands(raw_inner)
+                ),
+            ]
+            for seg in bypass_segments:
+                _check_fetch_command(seg)
+                stripped = strip_env_prefix(strip_shell_keyword(seg))
+                for name, check_fn, message in GIT_DENY_RULES:
+                    if check_fn(stripped) or check_fn(seg):
+                        _exit_with_decision(message, "block", rule_name=name, matched_segment=seg)
         _defer_decisions = False
         _flush_pending_decisions(all_subcmds_covered=False)
         # Explicit allow for multiline bypass commands (same rationale as below)
@@ -4248,21 +4268,24 @@ def _handle_bash_command(command: str) -> NoReturn:
 
     all_subcmds_covered = bool(subcmds) and (covered_subcmds == len(subcmds))
     had_pending = bool(_pending_decisions)
-    _defer_decisions = False
-    _flush_pending_decisions(all_subcmds_covered=all_subcmds_covered)
-
-    # ── RTK compression: rewrite commands that passed all deny rules ──
-    # Runs AFTER deny rules so blocked commands never reach RTK.
-    # Only for simple commands (single, non-piped, non-subshell), and never
-    # when _flush_pending_decisions suppressed allow on a partially-covered command.
-    if (
+    is_simple_cmd = (
         len(subcmds) == 1
         and len(split_pipes(command)) == 1
         and "$(" not in command
         and "`" not in command
         and "\n" not in command
-        and not (had_pending and not all_subcmds_covered)
-    ):
+    )
+    _defer_decisions = False
+    _flush_pending_decisions(
+        all_subcmds_covered=all_subcmds_covered,
+        rtk_original_cmd=command if is_simple_cmd else None,
+    )
+
+    # ── RTK compression: rewrite commands that passed all deny rules ──
+    # Runs AFTER deny rules so blocked commands never reach RTK.
+    # Only for simple commands (single, non-piped, non-subshell), and never
+    # when _flush_pending_decisions suppressed allow on a partially-covered command.
+    if is_simple_cmd and not (had_pending and not all_subcmds_covered):
         rtk_cmd = _rtk_rewrite(command)
         if rtk_cmd is not None:
             _exit_with_rtk_rewrite(command, rtk_cmd)

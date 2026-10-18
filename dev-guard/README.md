@@ -265,26 +265,24 @@ All hook decisions (blocked, asked, allowed, trusted) are logged to a SQLite dat
 Users can trust ask rules to auto-approve them without manual confirmation:
 
 ```bash
-/dev-guard trust add <rule-name>                                    # Add to session trust list
-/dev-guard trust add <rule-name> --scope session                    # Add to session trust
-/dev-guard trust add <rule-name> --scope always                     # Add to persistent trust (all sessions)
-/dev-guard trust add <rule-name> --match <pattern> --scope session  # Trust only commands matching substring
-/dev-guard trust add <rule-name> --session-id <id>                  # Explicitly provide session ID
-/dev-guard trust remove <rule-name>                                 # Remove from trust
-/dev-guard trust list                                               # Show trusted rules
+/dev-guard:trust add <rule-name> --scope session --session-id <id>                    # Add to session trust
+/dev-guard:trust add <rule-name> --scope always                                       # Add to persistent trust (all sessions)
+/dev-guard:trust add <rule-name> --match <pattern> --scope session --session-id <id>  # Trust only commands matching substring
+/dev-guard:trust remove <rule-name>                                                   # Remove from trust
+/dev-guard:trust list                                                                 # Show trusted rules
 ```
 
 **Important:**
 - Block rules are never trustable (only ask rules can be trusted)
 - Trust entries are stored in SQLite alongside the audit log
-- Session-scoped trust requires a prior hook invocation (reads `session_id` from the database)
-- Users receive a trust hint when prompted: "To trust this rule, run: `/dev-guard trust add <rule> --scope always`"
+- Session-scoped trust requires an explicit `--session-id <id>` (included in the trust hint on every `ask` prompt)
+- Users receive a trust hint when prompted: "To trust this rule, run: `/dev-guard:trust add <rule> --scope always`"
 
 **Workflow example:**
 1. Run a command that triggers an ask rule
 2. Receive permission prompt with trust hint
 3. Approve the command
-4. Run `/dev-guard trust add remote-remove --scope always` to auto-approve in the future
+4. Run `/dev-guard:trust add remote-remove --scope always` to auto-approve in the future
 5. Next session: same command auto-approves without prompting
 
 ## Processing Pipeline
@@ -404,7 +402,7 @@ Validates `kill`, `killall`, and `pkill` commands against the Claude Code sessio
 
 ## Trustable Rule Names
 
-Users can trust these built-in ask-type rules with `/dev-guard trust add <rule-name>`:
+Users can trust these built-in ask-type rules with `/dev-guard:trust add <rule-name>`:
 
 **Git safety rules (ask actions):**
 - `stash-drop` — Destructive stash operations

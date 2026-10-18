@@ -1359,6 +1359,15 @@ class TestAndonCord:
         )
         assert res_git_block.returncode == 2
 
+        # 1b. Git deny or URL block inside pipe/subshell under GUARD_BYPASS=1 -> block (exit 2)
+        for bypass_block_cmd in (
+            "GUARD_BYPASS=1 echo hi | git push --force origin main",
+            "GUARD_BYPASS=1 echo $(git push --force origin main)",
+            "GUARD_BYPASS=1 echo $(curl https://www.reddit.com/r/python)",
+        ):
+            res_sub = run_guard("Bash", {"command": bypass_block_cmd}, env=env)
+            assert res_sub.returncode == 2, f"Expected exit 2 for {bypass_block_cmd!r}"
+
         # 2. URL ask followed by URL block -> block (exit 2)
         res_url_block = run_guard(
             "Bash",
