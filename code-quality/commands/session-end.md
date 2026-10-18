@@ -1,5 +1,6 @@
 ---
 description: Sync project memory and update hack/ files before ending session
+allowed-tools: Read, Write, Edit, Bash
 ---
 
 # Session End — Sync Project Memory

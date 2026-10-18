@@ -1,7 +1,8 @@
 ---
 name: git-history
 description: Non-interactive git history manipulation using git-branchless. Use when rewording commits, squashing, splitting, reordering, or recovering from mistakes. Provides reliable commands that AI agents can execute without interactive prompts. ALWAYS prefer these commands over git rebase -i, git add -p, or sed-based workarounds.
-allowed-tools: [Bash]
+compatibility: Requires git-branchless CLI initialized in the repository
+allowed-tools: Bash
 ---
 
 # Non-Interactive Git History Commands (git-branchless)
@@ -38,10 +39,10 @@ git branchless init
 | **Move** | `git branchless move -s <src> -d <dest>` | Moves commit and descendants |
 | **Move exact** | `git branchless move -x <sha> -d <dest>` | Moves only specified commit |
 | **Squash** | `git branchless move --fixup -x <src> -d <dest>` | Experimental |
-| **Split** | Manual reset workflow | See [{skill_dir}/BRANCHLESS.md](./BRANCHLESS.md) |
+| **Split** | Manual reset workflow | See [{skill_dir}/references/BRANCHLESS.md](./references/BRANCHLESS.md) |
 | **Create** | `git branchless record -m "message"` | No editor |
 | **Undo** | `git branchless undo --yes` | No confirmation prompt |
 | **View** | `git sl` | Smart log (commit graph) |
 | **Restack** | `git restack` | Repair commit graph after manual ops |
 
-For detailed documentation, see [{skill_dir}/BRANCHLESS.md](./BRANCHLESS.md)
+For detailed documentation, see [{skill_dir}/references/BRANCHLESS.md](./references/BRANCHLESS.md)

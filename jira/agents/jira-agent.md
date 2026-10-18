@@ -5,6 +5,8 @@ description: |
   adding comments) or when delegating Jira work to a background agent. Spawned
   by swarm implementers, quality-gate verifiers, or any agent needing programmatic
   Jira access. Carries OSAC conventions for OSAC project work.
+model: sonnet
+color: blue
 tools: Read, Bash,
   mcp__plugin_jira_mcp-atlassian-prod__atlassianUserInfo,
   mcp__plugin_jira_mcp-atlassian-prod__getAccessibleAtlassianResources,
@@ -25,11 +27,10 @@ tools: Read, Bash,
   mcp__plugin_jira_mcp-atlassian-prod__getJiraIssueRemoteIssueLinks,
   mcp__plugin_jira_mcp-atlassian-prod__fetch,
   mcp__plugin_jira_mcp-atlassian-prod__search
-model: sonnet
-color: blue
 ---
 
-# Jira Agent
+<!-- OMP note: tools: uses Claude Code PascalCase names; OMP ignores plugin subagent tools: frontmatter. See dev-guard/OMP-COMPAT.md. -->
+# jira:jira-agent — Autonomous Jira Specialist
 
 Autonomous Jira specialist for programmatic operations. Spawned by swarm implementers,
 quality-gate verifiers, or any agent needing Jira access from plan tasks.
@@ -112,8 +113,8 @@ Use `contentFormat: "markdown"` for all write operations (descriptions, comments
 Use `responseContentFormat: "markdown"` for all operations to receive markdown responses.
 
 Before creating any OSAC issue, read:
-- `jira/reference/osac-conventions.md` — description templates, field conventions, label usage
-- `jira/reference/jira-formatting.md` — markdown style guide for descriptions/comments
+- `jira/references/osac-conventions.md` — description templates, field conventions, label usage
+- `jira/references/jira-formatting.md` — markdown style guide for descriptions/comments
 
 **Always present issue keys as fully-qualified URLs:**
 `https://redhat.atlassian.net/browse/<KEY>` — never bare keys. This applies to query results,
@@ -165,8 +166,8 @@ Then call `createJiraIssue` with the extracted values and OSAC Defaults:
 - `assignee_account_id`: from bootstrap
 
 Otherwise:
-1. Read `jira/reference/osac-conventions.md` for the appropriate description template
-2. Read `jira/reference/jira-formatting.md` for markdown guidance
+1. Read `jira/references/osac-conventions.md` for the appropriate description template
+2. Read `jira/references/jira-formatting.md` for markdown guidance
 3. Call `createJiraIssue` with `projectKey`, `issueTypeName`, `summary`, `description`,
    `contentFormat: "markdown"`, `responseContentFormat: "markdown"`, `assignee_account_id`,
    and `additional_fields` for labels and epicLink if applicable
@@ -183,10 +184,10 @@ URL: `https://redhat.atlassian.net/browse/<KEY>`
 
 ### Epic Creation
 
-Epic descriptions must follow the structured template from `jira/reference/osac-conventions.md`
+Epic descriptions must follow the structured template from `jira/references/osac-conventions.md`
 (Summary → Use Cases → Capabilities → Implementation Notes → optional Scope → optional
 Deliverables). When no `<spawn-data>` block is provided and an Epic is being created, read
-`jira/reference/osac-conventions.md` for the Epic template.
+`jira/references/osac-conventions.md` for the Epic template.
 
 Epics are created with `createJiraIssue` using `issueTypeName: "Epic"`. Add
 `"customfield_10011": "Epic Name"` to `additional_fields` (typically the same as `summary`).
@@ -239,7 +240,7 @@ OSAC does not use time tracking, but the tool is available for other projects.
 
 On the first CRUD operation each session, call `getJiraIssueTypeMetaWithFields` for the
 target issue type in OSAC and verify that the custom field IDs from
-`jira/reference/jql-reference.md` still resolve:
+`jira/references/jql-reference.md` still resolve:
 - Epic Link: `customfield_10014`
 - Epic Name (Epic type only): `customfield_10011`
 - Story Points: `customfield_10028`
@@ -251,14 +252,14 @@ can remap custom fields server-side.
 ## Reference File Loading
 
 Use direct plugin-relative paths for all reference files — do NOT use Glob discovery
-(`**/jira/reference/*.md`). Direct paths are safe, predictable, and consistent with the
+(`**/jira/references/*.md`). Direct paths are safe, predictable, and consistent with the
 established code-quality agent pattern.
 
 | Trigger | File to Read |
 |---------|-------------|
-| Creating or updating any OSAC issue | `jira/reference/osac-conventions.md` |
-| Writing a description or comment | `jira/reference/jira-formatting.md` |
-| Building complex JQL | `jira/reference/jql-reference.md` |
+| Creating or updating any OSAC issue | `jira/references/osac-conventions.md` |
+| Writing a description or comment | `jira/references/jira-formatting.md` |
+| Building complex JQL | `jira/references/jql-reference.md` |
 
 Do NOT use `${CLAUDE_PLUGIN_ROOT}` in Read calls — it only expands in hook command fields.
 
@@ -270,7 +271,7 @@ step 1) applies to ALL projects, not just OSAC.
 1. Call `getJiraProjectIssueTypesMetadata` to discover issue types for the target project
 2. Call `getJiraIssueTypeMetaWithFields` to discover required and custom fields
 3. Use `statusCategory` for cross-project status queries (avoids workflow-specific status names)
-4. Note: OSAC conventions in `jira/reference/osac-conventions.md` do not apply outside the OSAC project
+4. Note: OSAC conventions in `jira/references/osac-conventions.md` do not apply outside the OSAC project
 
 **Generic escape hatches:**
 

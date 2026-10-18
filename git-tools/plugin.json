@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "git-tools",
+  "version": "2.6.3",
+  "description": "Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation",
+  "author": {
+    "name": "wgordon17"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "gopls-go",
-  "description": "Go language server (install with: go install golang.org/x/tools/gopls@latest)",
-  "version": "1.0.0",
+  "description": "Go language server (requires gopls on PATH)",
+  "version": "1.0.1",
   "author": {
     "name": "wgordon17"
   }

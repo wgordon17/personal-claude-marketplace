@@ -1,10 +1,13 @@
 ---
 name: test-runner
-description: Efficient test execution patterns for pytest and pre-commit - sequential execution, targeted re-runs, and smart failure handling
-allowed-tools: [Bash, Read]
+description: Efficient test execution patterns for pytest and pre-commit — sequential execution, targeted re-runs, and smart failure handling. Use when running pytest, pre-commit, or other test suites.
+compatibility: Requires uv CLI
+allowed-tools: Bash Read
 ---
 
 # Test Execution Best Practices
+
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
 
 This skill provides comprehensive guidance for running tests efficiently. Use this when executing pytest, pre-commit, or other test workflows.
 
@@ -364,7 +367,7 @@ The agent will:
 - Execute commands sequentially
 - Parse failures intelligently
 - Report failures with specific test paths and error details
-- Track progress with TodoWrite
+- Track progress with TaskCreate/TaskUpdate
 - Return verification commands for fixing agents
 
 **Note:** The test-runner agent does NOT fix code. For fixes, spawn a bug-fixing agent with the failure report, then have the fixer spawn test-runner for verification.

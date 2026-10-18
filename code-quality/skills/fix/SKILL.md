@@ -8,7 +8,7 @@ description: |
   Auto-detects fix target (plan file, code, bugs). For plan-review Research Gaps and
   Unknown Unknowns, runs actual spikes and verification — executes the research, not just
   documents it.
-allowed-tools: [Read, Write, Edit, Bash, Agent, Skill, AskUserQuestion, WebSearch, WebFetch]
+allowed-tools: Read Write Edit Bash Agent Skill AskUserQuestion WebSearch WebFetch
 ---
 
 # Fix Skill
@@ -87,114 +87,15 @@ Actionable findings: {count}
 Normalize all findings from the detected source(s) into a common internal format. This phase
 produces a flat list of normalized findings that all subsequent phases consume.
 
-### Test Plan Discovery
-
-Before normalizing findings, discover the plan file for the current branch and load any linked
-test plan. This follows the same branch-header matching algorithm as /swarm Phase 4 and
-/quality-gate Step 0:
-
-1. Get the current branch: `git branch --show-current`
-2. Search `{memory_dir}/plans/` for plan files whose `**Branch:**` header field matches the
-   current branch. Fall back to branch-slug prefix matching if no header match is found.
-   Use the most recent by unix timestamp if multiple match. Normalize the discovered path
-   (resolve `..` components) and verify it falls within `{memory_dir}/plans/`. If the
-   normalized path escapes that directory, set `{plan_file_path_pr}` to empty string (skip
-   counter increment silently). Otherwise store as `{plan_file_path_pr}` for counter increment.
-   If no plan file is found, `{plan_file_path_pr}` is empty string.
-3. If a plan file is found and it contains a `## Test Plan` section, extract the `**Test Plan:**`
-   path annotation from that section.
-4. Normalize the path (resolve `..` components) and verify it falls within
-   `{memory_dir}/test-plans/`. If the normalized path escapes that directory, set
-   `{plan_test_plan}` to empty string and log a warning: "Warning: test plan path escapes
-   {memory_dir}/test-plans/ boundary — setting {plan_test_plan} to empty string."
-5. If the path is valid but the file does not exist, set `{plan_test_plan}` to empty string
-   (graceful fallback — no warning).
-6. If the path is valid and the file exists, read the file and store its content as
-   `{plan_test_plan}`.
-7. If no plan file is found, or no `## Test Plan` section exists, set `{plan_test_plan}` to
-   empty string.
-
-`{plan_test_plan}` is available to all subsequent phases (Phase 1 triage and Phase 2 investigator
-dispatch).
-
-### Common Finding Schema
-
-Each normalized finding tracks:
-
-- `id` — generated identifier using pattern `{source-prefix}-{category-abbrev}-{N}`:
-  - pr-review prefix: `pr` (e.g., `pr-test-1`, `pr-sec-2`, `pr-corr-3`)
-  - plan-review prefix: `pl` (e.g., `pl-feas-1`, `pl-rsch-2`, `pl-arch-3`)
-  - bug-investigation prefix: `BUG` (e.g., `BUG-001`, matching the BUGS.md entry number)
-- `source` — one of: `pr-review` | `plan-review` | `bug-investigation`
-- `classification` — always `needs-fix` (see note below on needs-input)
-- `category` — the category section heading from the upstream output (e.g., `TESTING GAPS`,
-  `RESEARCH GAPS`, `CORRECTNESS`)
-- `location` — `file:line` for code findings, plan section name for plan findings, `BUG-NNN` for
-  bug entries
-- `description` — the finding text as written in the review output
-- `evidence` — the reviewer's evidence line from the review output
-- `suggested_fix` — `null` for pr-review and plan-review (not present in terminal output);
-  the Resolution Plan checklist items for bug-investigation entries
-- `is_research_gap` — `true` if (a) the finding appears under the `RESEARCH GAPS` category section
-  OR has a `[Reviewer]` tag of `Unknown Unknowns` (plan-review — structural match on category +
-  reviewer tag, not keyword matching), or (b) the finding description contains the literal string
-  `Recommended resolution: /deep-research` (pr-review — see source-specific rule below).
-- `verifier_verdict` — `"needs_context"` if from the upstream Needs Context section, otherwise `null`
-- `spike_question` — the specific assumption to verify, extracted from the finding text.
-  Populated only when `is_research_gap == true` AND `source == plan-review`. Null for pr-review
-  research gaps (pr-review findings go to standard investigators, not spike investigators).
-  Extraction rule: if the finding contains a question sentence (ends with `?`), use it verbatim.
-  Otherwise, reformulate the finding's core assumption as a yes/no question.
-- `plan_context` — surrounding plan text (5-10 lines around the affected section). Populated
-  only when `is_research_gap == true` AND `source == plan-review`. Null for pr-review research
-  gaps (no plan exists — the finding references code, not a plan section).
-
-### Source-Specific Normalization
-
-**pr-review findings:**
-
-Categories (in display order): Testing Gaps, Correctness, Security, Architecture, Decisions Needed,
-Performance, Style & Conventions. Extract all findings from each category section. Also extract
-findings from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`.
-For Needs Context findings, map the `Investigation: {investigation_summary}` field to `evidence`
-(these use `Investigation:` instead of `Evidence:` in the upstream output).
-Skip findings in the Deferred section — these were explicitly deferred by the user during the upstream review and should not be re-processed.
-Set `is_research_gap: true` if the finding description contains the literal string
-`Recommended resolution: /deep-research`. This format is emitted by any domain reviewer's
-third-party technology gap checklist item when the gap cannot be resolved from codebase context alone.
-
-Category abbreviations for IDs: `test`, `corr`, `sec`, `arch`, `dec`, `perf`, `style`.
-
-**plan-review findings:**
-
-Categories (in display order): Research Gaps, Feasibility, Scope, Dependencies, Architecture,
-Security, Specification. Extract all findings from each category section. Also extract findings
-from the `─── Needs Context ───` section with `verifier_verdict: "needs_context"`.
-For Needs Context findings, map `Investigation: {investigation_summary}` to `evidence`.
-Set `is_research_gap: true` per the structural rules above (category = RESEARCH GAPS, OR reviewer tag =
-Unknown Unknowns) — not by scanning description text.
-Skip findings in the Deferred section — these were explicitly deferred by the user during the upstream review and should not be re-processed.
-
-Category abbreviations for IDs: `rsch`, `feas`, `scope`, `dep`, `arch`, `sec`, `spec`.
-
-**bug-investigation findings:**
-
-Read `{memory_dir}/BUGS.md` directly (do not rely on session output). Extract all `## BUG-NNN`
-entries whose `**Status:**` field is `Root Cause Found` or `Fix Ready`. All bug entries are
-`needs-fix` by definition — a bug at these statuses has a known root cause and is ready to fix.
-The `suggested_fix` field maps to the entry's `### Resolution Plan` checklist.
-
-### Note on needs-input
-
-Upstream skills (pr-review, plan-review) resolve ALL `needs-input` findings via `AskUserQuestion`
-before producing terminal output. By the time this skill runs, all findings visible in the terminal
-output are actionable. Normalize all of them as `needs-fix`. Do not re-classify or re-triage based
-on description text.
+Follow `[{skill_dir}/references/finding-normalization.md](./references/finding-normalization.md)` for:
+- **Test Plan Discovery:** Discover the branch's plan file in `{memory_dir}/plans/` (storing `{plan_file_path_pr}` for counter increment) and load any linked test plan within `{memory_dir}/test-plans/` into `{plan_test_plan}`.
+- **Common Finding Schema:** Normalize each finding (`id`, `source`, `classification: "needs-fix"`, `category`, `location`, `description`, `evidence`, `suggested_fix`, `is_research_gap`, `verifier_verdict`, `spike_question`, `plan_context`).
+- **Source-Specific Normalization:** Apply extraction rules for `pr-review`, `plan-review`, and `bug-investigation` (skipping `Deferred` items and mapping `Needs Context` items to `verifier_verdict: "needs_context"`).
 
 **Incremental workflow scoping:** When the Lead provides a `pr_boundary_files` list (during
 incremental swarm execution), the Fixer processes ONLY findings whose `file` field matches
 a file in the list. This is structural filtering by the Lead per the Fixer Protocol in
-[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md) — the Fixer does not make scoping decisions.
+`[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` — the Fixer does not make scoping decisions.
 When invoked standalone: existing behavior unchanged — process all findings.
 
 ---
@@ -242,53 +143,7 @@ exists.
 
 ### Step 1c: Triage Summary
 
-Present the triage summary to the user before proceeding:
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FIX TRIAGE — {source} — {target_description}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Direct fix ({count}):
-  {id}: {description} [{location}]
-  ...
-
-Spike execution ({count}):
-  {id}: {description} [{location}]
-  ...
-
-Research-enriched fix ({count}):
-  {id}: {description} [{location}] — /deep-research before investigation
-  ...
-
-Needs refinement ({count}):
-  {id}: {description} — will confirm approach before implementing
-  ...
-
-Needs plan ({count}):
-  {id}: {description} — recommend /incremental-planning
-  ...
-
-Out of scope ({count}):
-  {id}: {description} — outside project root, skipped
-  ...
-
-UAT validation ({count}):
-  {id}: {description} — investigator will check implementation against UAT scenarios
-  ...
-
-Unverified ({count}):
-  {id}: {description} — will attempt verification in investigation
-  ...
-
-Proceeding with {actionable_count} findings ({direct_fix_count} direct +
-{spike_count} spikes + {needs_refinement_count} needing refinement +
-{uat_count} UAT validation + {unverified_count} unverified).
-Skipping {skip_count} ({needs_plan_count} needs-plan + {oos_count} out-of-scope).
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-Omit sections with zero findings.
+Present the `FIX TRIAGE — {source} — {target_description}` summary to the user before proceeding, grouping findings by assessment category and omitting empty sections per the template in `[{skill_dir}/references/verification-and-output.md](./references/verification-and-output.md)`.
 
 ---
 
@@ -390,41 +245,7 @@ Dispatch all agents in parallel. Wait for all to complete before proceeding.
 
 ### Collecting and Routing Results
 
-After all investigators complete, route each result by verdict:
-
-| Verdict | Action |
-|---|---|
-| `resolution` | Queue for Phase 3 implementation |
-| `refinement_needed` | For each finding, present its options via `AskUserQuestion` (single-select — options are mutually exclusive). User picks an option → queue selected approach for Phase 3. User declines → record as `user-deferred`. |
-| `invalid` | Remove from fix queue; note in final report |
-| `spike_confirmed` | Queue plan update for Phase 3 |
-| `spike_partial` | Queue plan update with partial evidence for Phase 3; note evidence gaps in report |
-| `spike_invalidated` | Present to user via `AskUserQuestion` with three options: (1) Update plan with corrected information, (2) Skip — address during implementation, (3) Defer to `/incremental-planning` for replanning |
-| `uat_validated` | Route to `findings_fixed` bucket — UAT scenario confirmed |
-| `uat_mismatch` | Present mismatch to user via `AskUserQuestion` with scenario name, expected vs found. User chooses fix → `findings_fixed`; user defers → `user-deferred` |
-| Agent failure (timeout, crash, empty output, or unparseable response) | Record all findings assigned to that agent as `blocked` with reason "investigator agent failed"; note in report |
-
-**AskUserQuestion unavailable fallback:** If `AskUserQuestion` is unavailable (non-interactive
-environment), record all `refinement_needed`, `spike_invalidated`, and `uat_mismatch` findings as `user-deferred`
-with reason "non-interactive — AskUserQuestion unavailable". For `spike_invalidated` findings,
-also preserve the spike verdict and plan impact details in the reason field so they surface in
-the Phase 5 DEFERRED section.
-
-**LoE escalation:** If an investigator estimates a finding's LoE as `significant` AND returned
-verdict `refinement_needed`, include the LoE context in the AskUserQuestion presentation. If the
-investigator returned `resolution` despite `significant` LoE, proceed with the resolution — the
-investigator already determined a clear fix. Flag all `significant` LoE findings in the Phase 5
-report regardless of verdict.
-
-**Handling unverifiable findings:** If an investigator receives a finding with `verifier_verdict: "needs_context"` and cannot verify it (insufficient evidence to confirm or deny), it returns verdict `invalid` with reason "could not verify — insufficient evidence". The lead routes this to the `unverified_unresolved` bucket (not `findings_invalid`).
-
-**UAT validation verdict routing:** For UAT validation findings, investigators return one of two
-explicit verdict types:
-- `uat_validated`: The UAT scenario was verified through code inspection or test execution —
-  the implementation matches the UAT scenario expectations. Lead routes to `findings_fixed` bucket.
-- `uat_mismatch`: The implementation differs from UAT scenario expectations — present the specific
-  mismatch to the user via `AskUserQuestion` with the scenario name, what was expected, and what
-  was found.
+After all investigators complete, route each result by verdict (`resolution`, `refinement_needed`, `invalid`, `spike_confirmed`, `spike_partial`, `spike_invalidated`, `uat_validated`, `uat_mismatch`, or agent failure) per `[{skill_dir}/references/verification-and-output.md](./references/verification-and-output.md)` (Phase 2 — Collecting and Routing Investigator Verdicts), including `AskUserQuestion` prompts for `refinement_needed` / `spike_invalidated` / `uat_mismatch`, non-interactive `user-deferred` fallback, `significant` LoE escalation, and routing unverifiable `needs_context` findings to `unverified_unresolved`.
 
 ### Conflict Detection
 
@@ -493,46 +314,7 @@ Do NOT commit. Leave all changes in the working tree for user review.
 ## Phase 4 — Verification
 
 Apply the Verification Protocol from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`, extended
-with 7 outcome buckets to cover all standalone /fix outcomes.
-
-### Outcome Buckets
-
-| Bucket | What it contains |
-|---|---|
-| `total_findings_in` | All findings after Phase 0.5 normalization |
-| `findings_fixed` | Successfully implemented (including spike-resolved plan updates) |
-| `findings_invalid` | Investigator returned `invalid` verdict (finding no longer applies) |
-| `user-deferred` | User declined via refinement prompt or conflict resolution choice |
-| `needs_plan` | Recommended for `/incremental-planning` (too large for direct fix) |
-| `out_of_scope` | Outside CWD — excluded in Phase 1a |
-| `blocked` | Test failure prevented fix |
-| `unverified_unresolved` | `needs_context` findings that the investigator also could not resolve |
-
-### Category Mapping
-
-| Outcome | Bucket |
-|---|---|
-| Direct fix implemented | `findings_fixed` |
-| Spike confirmed (plan updated) | `findings_fixed` |
-| Spike partial (plan updated) | `findings_fixed` |
-| Spike invalidated (user chose plan update) | `findings_fixed` |
-| Spike invalidated (user chose replan) | `needs_plan` |
-| Spike invalidated (user chose skip) | `user-deferred` |
-| Needs refinement (implemented after guidance) | `findings_fixed` |
-| Needs refinement (user declined) | `user-deferred` |
-| Needs plan | `needs_plan` |
-| Out of scope | `out_of_scope` |
-| Investigator returned invalid (finding no longer applies) | `findings_invalid` |
-| Investigator returned invalid (could not verify — unverified finding) | `unverified_unresolved` |
-| Test failure prevented fix | `blocked` |
-| Agent failure (investigator crashed, timed out, or returned unparseable output) | `blocked` |
-| Unverified, investigator confirmed valid | route through normal triage (direct fix / needs refinement / etc.) |
-| Unverified, investigator could not resolve | `unverified_unresolved` |
-| UAT validated (`uat_validated` verdict) | `findings_fixed` |
-| UAT mismatch — user chose fix implementation | `findings_fixed` |
-| UAT mismatch — user chose defer | `user-deferred` |
-
-### Verification Check
+with the 7 outcome buckets and category mapping defined in `[{skill_dir}/references/verification-and-output.md](./references/verification-and-output.md)`:
 
 ```
 total_findings_in == findings_fixed + findings_invalid + user-deferred
@@ -545,73 +327,7 @@ If delta > 0: list the missing finding IDs as `UNACCOUNTED` in the Phase 5 repor
 
 ## Phase 5 — Terminal Output
 
-Print the structured fix report:
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FIX REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Source: {source}
-Fix target: {target_description}
-Findings: {total_in} total → {fixed} fixed (incl. {spike_count} spikes), {invalid} invalid,
-  {deferred} deferred, {plan} needs-plan, {oos} out-of-scope,
-  {blocked} blocked, {unresolved} unresolved
-
-FIXED ({count})
-  1. [{id}] {description}
-     {file}:{line_range} — {what was changed}
-
-  ── Spike Detail ({count}) ──
-  1. [{id}] {description}
-     Result: {verdict} — {evidence summary}
-     Plan updated: {section}
-     Evidence gaps: {what could not be verified} (spike_partial only)
-
-INVALID ({count})
-  1. [{id}] {description}
-     Investigator: {reason}
-
-BLOCKED ({count})
-  1. [{id}] {description}
-     Reason: {test failure}
-
-DEFERRED ({count})
-  1. [{id}] {description}
-     Reason: {why}
-
-NEEDS PLAN ({count})
-  1. [{id}] {description}
-     Recommended: /incremental-planning
-
-OUT OF SCOPE ({count})
-  1. [{id}] {description}
-     {file} — outside working directory
-
-UNRESOLVED ({count})
-  1. [{id}] {description}
-     Neither upstream verifier nor investigator could confirm — requires human judgment
-
-UNACCOUNTED ({count} — if any)
-  1. [{id}] {description}
-     WARNING: Not processed
-
-Verification: {total_in} in → {sum} accounted [PASS | FAIL]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-Omit sections with zero count.
-
-### Post-Fix Suggestion
-
-After the report, print context-appropriate suggestions (show all that apply, one per line):
-
-| Condition | Suggestion |
-|---|---|
-| Code changes were made | `Fixes applied. Consider running /quality-gate to verify.` |
-| Plan-only changes | `Plan updated. Consider running /plan-review to verify the changes.` |
-| Spikes invalidated assumptions | `Spikes invalidated {N} assumption(s). Review updated plan sections carefully — consider /plan-review to verify.` |
-| BUGS.md was updated | `Bug fixes applied. BUGS.md entries updated to 'Fix Ready'. Verify manually and update to 'Fixed' when confirmed.` |
+Print the structured `FIX REPORT` and context-appropriate Post-Fix Suggestions following the templates in `[{skill_dir}/references/verification-and-output.md](./references/verification-and-output.md)`. Omit report sections with zero count.
 
 ### Counter Increment
 
@@ -638,37 +354,3 @@ After the Post-Fix Suggestion, increment the appropriate lifecycle counter on th
    - pr-review source: use Edit to replace `- pr-fix-cycle: {N}` with
      `- pr-fix-cycle: {N+1}`, where `{N}` is the actual integer read in step 4
 7. If no `**Iterations:**` block found, skip silently
-
----
-
-## Relationship to Other Skills
-
-| Skill | Relationship |
-|---|---|
-| `code-quality:pr-review` | Produces findings that /fix acts on. Run /pr-review first, then /fix. |
-| `code-quality:plan-review` | Produces plan findings that /fix acts on. /fix edits the plan file only. For Research Gaps and Unknown Unknowns, /fix executes actual spikes to verify assumptions. |
-| `code-quality:quality-gate` | Not a source — quality-gate fixes findings inline. /fix suggests /quality-gate after code fixes for verification. |
-| `code-quality:bug-investigation` | Documents bugs with root causes and resolution plans. /fix implements resolution plans or recommends /incremental-planning for complex bugs. |
-| `code-quality:incremental-planning` | Recommended by /fix when a bug resolution requires significant scope, or when a spike invalidates a plan assumption requiring replanning. |
-| `code-quality:swarm` | Swarm has its own internal Fixer (Phase 5). /fix is the standalone equivalent for non-swarm workflows. |
-
----
-
-## Quick Reference
-
-```
-### Flow
-Phase 0: Context Detection → Phase 0.5: Normalize → Phase 1: Triage + CWD Validation →
-Phase 2: Investigate ALL findings (background, pre-implementation) →
-Conflict Detection → Phase 3: Implement (lead, sequential, file order) →
-Phase 4: Verify → Phase 5: Report
-
-### Fix Target Rules
-plan-review findings        → edit plan file ONLY (never implement code)
-plan-review Research Gaps   → RUN spikes, then update plan with resolved evidence
-pr-review findings          → edit code on PR branch
-bug-investigation findings  → implement resolution OR recommend /incremental-planning
-
-### Not Supported
-quality-gate → excluded (fixes findings inline, reports only aggregates)
-```

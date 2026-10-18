@@ -1,5 +1,6 @@
 ---
 description: AI-assisted commit review for PR readiness
+allowed-tools: Read, Bash, AskUserQuestion
 ---
 
 # Review Commits for PR Readiness

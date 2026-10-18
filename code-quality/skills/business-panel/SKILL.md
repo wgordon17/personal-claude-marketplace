@@ -4,10 +4,12 @@ description: |
   Use when user needs multi-stakeholder analysis, business impact assessment, or wants
   perspectives from different roles. Triggers on: "analyze from business perspective",
   "what would stakeholders think", "impact analysis", "business case for", "ROI of"
-allowed-tools: [Read, Bash, WebSearch, WebFetch, Skill]
+allowed-tools: Read Bash WebSearch WebFetch Agent AskUserQuestion Skill
 ---
 
 # business-panel — Multi-Stakeholder Analysis Mode
+
+> **Note:** `{skill_dir}` refers to the absolute "Skill directory" path provided in your system instructions.
 
 Simulates perspectives from different organizational roles to provide comprehensive business impact analysis.
 

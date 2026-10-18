@@ -1,5 +1,6 @@
 ---
 description: Check configured LSP servers and their status
+allowed-tools: Bash, Read, LSP
 ---
 
 # LSP Status — Check Language Server Configuration

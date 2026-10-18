@@ -1,0 +1,148 @@
+version: "0.21.0"
+strict: true
+custom-rules: []
+exclude:
+  - "skill-eval/codebases/**"
+  - "skill-eval/fixtures/**"
+
+rules:
+  agent-plugin-required:
+    enabled: true
+    severity: error
+  agent-plugin-json-valid:
+    enabled: auto
+    severity: error
+  agent-plugin-mcp-valid:
+    enabled: auto
+    severity: error
+    # chai-bot/mcp.json uses ${CHAI_BOT_BASE_URL} so the internal Red Hat host is never committed
+    exclude:
+      - "chai-bot/mcp.json"
+
+  agentskill-valid:
+    enabled: auto
+    severity: error
+  agentskill-name:
+    enabled: auto
+    severity: error
+  agentskill-description:
+    enabled: auto
+    severity: warning
+  agentskill-unreferenced-files:
+    enabled: auto
+    severity: warning
+  content-progressive-disclosure:
+    enabled: auto
+    severity: warning
+  context-budget:
+    enabled: auto
+    severity: warning
+    limits:
+      skill:
+        warn: 6000
+        error: 8000
+      command:
+        warn: 3500
+        error: 5000
+      agent:
+        warn: 3500
+        error: 5000
+      skill-description:
+        warn: 200
+        error: 500
+  content-description-routing:
+    enabled: auto
+    severity: warning
+  content-broken-internal-reference:
+    enabled: auto
+    severity: error
+  content-unclosed-fence:
+    enabled: auto
+    severity: error
+  content-mcp-tool-name:
+    enabled: true
+    severity: warning
+
+  claude-plugin-json-required:
+    enabled: true
+    severity: error
+  claude-plugin-json-valid:
+    enabled: true
+    severity: error
+  claude-plugin-naming:
+    enabled: true
+    severity: warning
+  claude-plugin-readme:
+    enabled: true
+    severity: error
+  claude-command-naming:
+    enabled: true
+    severity: warning
+  claude-command-frontmatter:
+    enabled: true
+    severity: error
+  claude-agent-frontmatter:
+    enabled: true
+    severity: error
+  claude-marketplace-json-valid:
+    enabled: auto
+    severity: error
+  claude-marketplace-registration:
+    enabled: auto
+    severity: error
+  claude-hooks-valid:
+    enabled: true
+    severity: error
+
+  codex-marketplace-json-valid:
+    enabled: auto
+    severity: error
+  codex-marketplace-registration:
+    enabled: auto
+    severity: error
+  pi-config-valid:
+    enabled: auto
+    severity: warning
+  mcp-valid-json:
+    enabled: true
+    severity: error
+  hooks-dangerous:
+    enabled: true
+    severity: error
+
+  security-invisible-unicode:
+    enabled: auto
+    severity: error
+  security-hidden-instructions:
+    enabled: auto
+    severity: warning
+  security-encoded-payload:
+    enabled: auto
+    severity: warning
+  security-dynamic-context:
+    enabled: auto
+    severity: warning
+
+  claude-command-sections:
+    enabled: false
+    severity: info
+  claude-command-name-format:
+    enabled: false
+    severity: warning
+  mcp-prohibited:
+    enabled: false
+    severity: error
+  hooks-prohibited:
+    enabled: false
+    severity: error
+
+  content-instruction-budget:
+    enabled: auto
+    severity: info
+  content-emphasis-density:
+    enabled: auto
+    severity: info
+  content-placeholder-text:
+    enabled: auto
+    severity: info
+

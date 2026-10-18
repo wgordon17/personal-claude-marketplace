@@ -1,7 +1,8 @@
 ---
 name: map-reduce
 description: Parallelized workload processing with structured chunking, mapper agents, and reducer synthesis. Use for codebase-wide analysis, bulk transformations, and large file audits (20+ files).
-allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, CronCreate, CronDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet]
+compatibility: Requires Claude Code with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for multi-agent orchestration
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion CronCreate CronDelete SendMessage TaskCreate TaskUpdate TaskList TaskGet
 ---
 
 # /map-reduce — Parallelized Workload Processing

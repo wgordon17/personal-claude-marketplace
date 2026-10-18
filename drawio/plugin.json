@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "drawio",
+  "version": "1.0.3",
+  "description": "Draw.io diagram generation skill \u2014 creates native .drawio files with optional PNG/SVG/PDF export via draw.io Desktop CLI. Vendored from jgraph/drawio-mcp (Apache 2.0).",
+  "author": {
+    "name": "wgordon17"
+  }
+}

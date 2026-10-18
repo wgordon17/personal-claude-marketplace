@@ -13,8 +13,9 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per
 ## Critical Rules
 
 - **Never edit `~/.claude/plugins/` or `~/.claude/plugins/cache/`** — those directories contain installed/cached versions. Always edit this source repository. Changes in `~/.claude/plugins/` will be lost on update and are never committed.
-- **Always bump plugin versions in both files** when modifying a plugin:
-  - `<plugin>/.claude-plugin/plugin.json`
+- **Always bump plugin versions and synchronize descriptions across all three manifest files** when modifying a plugin:
+  - `<plugin>/.claude-plugin/plugin.json` (Claude Code manifest)
+  - `<plugin>/plugin.json` (Agent Plugins v1 manifest — edit directly; `skillsaw port --to agent-plugin .` and `skillsaw fix` only generate missing root manifests on initial creation and do not overwrite existing `<plugin>/plugin.json` files on metadata drift)
   - `.claude-plugin/marketplace.json` (the plugin's entry, NOT `metadata.version`)
 - The marketplace `metadata.version` is **informational only** — it does not control update detection. Bump it only for structural marketplace changes (adding/removing plugins, schema changes), not for individual plugin version bumps.
 
@@ -26,7 +27,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per
 
 1. **Develop and test locally** — Run `make all` before committing.
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits. Show the PR link to the user.
-3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `**/*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`, `chai-bot/hooks/**`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, plugin files, `.github/workflows/**`). If no checks appear, merge after local `make all` passes.
+3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `**/*.py`, `pyproject.toml`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`, `chai-bot/hooks/**`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, `.skillsaw.yaml`, `**/mcp.json`, `.agents/**`, plugin files, `.github/workflows/**`, running `uvx skillsaw@0.21.0 lint --strict --no-custom-rules --no-plugins`). If no checks appear, merge after local `make all` passes.
 4. **Wait for user to merge** — Do NOT merge automatically. Tell the user the PR is ready for review and wait for them to confirm the merge. Only proceed to step 5 after the user says it's merged.
 5. **Update local plugin** — After merge, run these commands (do not hand them to the user).
    Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:
@@ -51,10 +52,10 @@ Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.clau
 - **fetchaller-mcp/** — Pinned MCP fetch/search server for domains that block Claude Code's built-in WebFetch/WebSearch (Reddit and 15 other sites); commit-SHA pinned, never tracks main
 - **chai-bot/** — Advisory nudge + explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server; repo-gated to osac-project remotes, VPN-dependent
 
-Each plugin has `.claude-plugin/plugin.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
+Each plugin ships dual manifests: `.claude-plugin/plugin.json` (Claude Code) and root `plugin.json` (Agent Plugins v1), registered in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 
 **OMP dual-harness bridge (standing requirement):** every plugin that ships `hooks/hooks.json` must also ship an `omp-extension.ts` + `package.json` OMP dual-harness bridge, so its hooks also work under the OMP harness (`@oh-my-pi/pi-coding-agent`), not just Claude Code. This applies to every future hooks.json-owning plugin, not just the ones already bridged (`dev-guard/`, `git-tools/`, `github-mcp/`, `chai-bot/`). See `dev-guard/omp-extension.ts` for the shell-out pattern to follow when a plugin's hooks have real logic, and `dev-guard/OMP-COMPAT.md` for confirmed OMP behaviors (stdin handling, MCP tool-name re-encoding, event mapping).
 
 ## CI
 
-GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx claudelint --strict`, plus `actionlint` for workflow YAML validation).
+GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx skillsaw@0.21.0 lint --strict --no-custom-rules --no-plugins` configured in `.skillsaw.yaml`, plus `actionlint` for workflow YAML validation).

@@ -1,7 +1,8 @@
 ---
 name: uv-python
-description: PROACTIVE skill - Use for ANY task involving Python execution or bash/shell scripts that might run Python. Triggers include creating .py files, writing bash scripts, running terminal commands, automation scripts, CI/CD configs, Makefiles, dependency management, or ANY mention of python/pip/python3. Enforces uv CLI to replace ALL python/pip usage. CRITICAL - Activate BEFORE writing scripts or commands that could invoke Python.
-allowed-tools: [Bash, Read, Write, Edit]
+description: PROACTIVE skill. Use when executing Python or writing bash/shell scripts, Makefiles, CI/CD configs, or automation scripts that invoke Python or manage dependencies. Enforces uv CLI to replace all python/pip/python3 usage.
+compatibility: Requires uv CLI
+allowed-tools: Bash Read Write Edit
 ---
 
 # uv-python

@@ -98,7 +98,7 @@ def _trust_insights(conn: sqlite3.Connection, since: str) -> None:
     for rule, count in top_asks:
         status = "trusted" if rule in trusted_rules else "not trusted"
         if status == "not trusted" and count >= 5:
-            print(f"  {rule:30s} asked {count:>4,}x — consider: /trust add {rule}")
+            print(f"  {rule:30s} asked {count:>4,}x — consider: /dev-guard:trust add {rule}")
 
 
 def _rtk_stats(conn: sqlite3.Connection, since: str) -> None:

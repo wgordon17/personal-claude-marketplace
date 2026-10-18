@@ -1,5 +1,6 @@
 ---
 description: Comprehensive project review with TODO validation and claim verification
+allowed-tools: Read, Write, Edit, Bash, LSP, AskUserQuestion
 ---
 
 # Review Project - Comprehensive TODO Validation

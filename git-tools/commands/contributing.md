@@ -1,5 +1,6 @@
 ---
 description: Generate or update CONTRIBUTING.md with Conventional Commits standards
+allowed-tools: Read, Write, Edit, Bash, AskUserQuestion
 ---
 
 # Generate or Update CONTRIBUTING.md

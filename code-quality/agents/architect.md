@@ -1,11 +1,12 @@
 ---
 name: architect
 description: Use when designing system architecture, evaluating technology choices, planning large-scale refactoring, or answering "how should I structure", "what's the best architecture for", "design the system" questions
-tools: Read, Bash, LSP, WebSearch, WebFetch
 model: opus
 color: blue
+tools: Read, Bash, LSP, WebSearch, WebFetch
 ---
 
+<!-- OMP note: tools: uses Claude Code PascalCase names; OMP ignores plugin subagent tools: frontmatter. See dev-guard/OMP-COMPAT.md. -->
 # code-quality:architect — System Architecture Specialist
 
 Note: This agent forces `model: opus` in frontmatter because architectural decisions always require maximum judgment quality. Orchestrators should not be able to downgrade this agent to sonnet — the architect's role is inherently judgment-heavy with no mechanical-only execution path.
