@@ -590,7 +590,7 @@ export default function (pi: ExtensionAPI) {
 					return { block: true, reason };
 				}
 
-				const ruleMatch = /^\[([a-z0-9-]+)\]\s/.exec(reason);
+				const ruleMatch = /^\[([a-zA-Z0-9][a-zA-Z0-9_-]*)\]\s/.exec(reason);
 				const ruleName = ruleMatch ? ruleMatch[1] : undefined;
 				const promptText =
 					claudeCodeToolName === "Bash" && typeof toolInput.command === "string"

@@ -109,6 +109,19 @@ METADATA_PREFIX = "▸dp:"
 # ── Subprocess helpers ───────────────────────────────────────────────────────
 
 
+def _isolated_guard_env(cwd: Path | None, env: dict[str, str] | None = None) -> dict[str, str]:
+    """Return a subprocess env dict with DEV_GUARD_CONFIG and GUARD_DB_PATH isolated.
+
+    Prevents tests from reading live ~/.claude/dev-guard.json or reading/writing
+    ~/.claude/logs/dev-guard.db unless the caller explicitly overrides those keys.
+    """
+    base_dir = cwd if cwd is not None else Path("/nonexistent")
+    isolated = dict(os.environ) if env is None else dict(env)
+    isolated.setdefault("DEV_GUARD_CONFIG", str(base_dir / "nonexistent-config.json"))
+    isolated.setdefault("GUARD_DB_PATH", str(base_dir / "test.db"))
+    return isolated
+
+
 def run_guard(
     payload: dict, *, cwd: Path | None = None, env: dict | None = None
 ) -> subprocess.CompletedProcess:
@@ -119,12 +132,14 @@ def run_guard(
         capture_output=True,
         text=True,
         cwd=str(cwd) if cwd is not None else None,
-        env=env,
+        env=_isolated_guard_env(cwd, env),
         timeout=30,
     )
 
 
-def run_guard_validate(payload: dict, *, cwd: Path) -> subprocess.CompletedProcess:
+def run_guard_validate(
+    payload: dict, *, cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     """Invoke tool-selection-guard.py --validate, matching the bridge's session_start call."""
     return subprocess.run(
         ["uv", "run", str(TOOL_SELECTION_GUARD), "--validate"],
@@ -132,11 +147,14 @@ def run_guard_validate(payload: dict, *, cwd: Path) -> subprocess.CompletedProce
         capture_output=True,
         text=True,
         cwd=str(cwd),
+        env=_isolated_guard_env(cwd, env),
         timeout=30,
     )
 
 
-def run_guard_session_end(payload: dict, *, cwd: Path) -> subprocess.CompletedProcess:
+def run_guard_session_end(
+    payload: dict, *, cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     """Invoke tool-selection-guard.py --session-end, matching the bridge's session_shutdown call."""
     return subprocess.run(
         ["uv", "run", str(TOOL_SELECTION_GUARD), "--session-end"],
@@ -144,6 +162,7 @@ def run_guard_session_end(payload: dict, *, cwd: Path) -> subprocess.CompletedPr
         capture_output=True,
         text=True,
         cwd=str(cwd),
+        env=_isolated_guard_env(cwd, env),
         timeout=30,
     )
 
@@ -321,12 +340,7 @@ class TestBashPreToolUsePayloadShape:
             "exit 1\n"
         )
         rtk_script.chmod(0o755)
-        env = {
-            **os.environ,
-            "PATH": f"{tmp_path}:{os.environ['PATH']}",
-            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
-            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
-        }
+        env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"}
         env.pop("RTK_DISABLED", None)
         payload = {
             "session_id": str(uuid.uuid4()),
@@ -349,7 +363,7 @@ class TestBashPreToolUsePayloadShape:
 
 
 def run_guard_trust(
-    trust_args: list[str], *, cwd: Path, env: dict[str, str]
+    trust_args: list[str], *, cwd: Path, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess:
     """Invoke tool-selection-guard.py --trust ..., matching omp-extension.ts's runGuard."""
     return subprocess.run(
@@ -358,7 +372,7 @@ def run_guard_trust(
         capture_output=True,
         text=True,
         cwd=str(cwd),
-        env=env,
+        env=_isolated_guard_env(cwd, env),
         timeout=30,
     )
 
@@ -367,18 +381,11 @@ class TestAskDecisionSignal:
     """`ask` decisions are live-reachable (e.g. a git-ask-rule like `git
     stash drop`, or an MCP fetchaller POST call) and exit 0 with a
     hookSpecificOutput JSON payload prefixed by `[{rule_name}] `.
-    omp-extension.ts parses `ruleName` via `/^\\[([a-z0-9-]+)\\]\\s/`, prompts
-    via `ctx.ui.select()`, persists session/always trust via `--trust add`,
+    omp-extension.ts parses `ruleName` via `/^\\[([a-zA-Z0-9][a-zA-Z0-9_-]*)\\]\\s/`,
+    prompts via `ctx.ui.select()`, persists session/always trust via `--trust add`,
     and re-evaluates in a bounded loop."""
 
     def test_git_stash_drop_signals_ask_not_block_or_allow(self, tmp_path):
-        # Isolate both DEV_GUARD_CONFIG and GUARD_DB_PATH so tests never
-        # read or write ~/.claude/logs/dev-guard.db.
-        env = {
-            **os.environ,
-            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
-            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
-        }
         payload = {
             "session_id": str(uuid.uuid4()),
             "tool_use_id": "tc-18",
@@ -386,7 +393,7 @@ class TestAskDecisionSignal:
             "tool_name": "Bash",
             "tool_input": {"command": "git stash drop"},
         }
-        result = run_guard(payload, cwd=tmp_path, env=env)
+        result = run_guard(payload, cwd=tmp_path)
         assert result.returncode == 0
         output = json.loads(result.stdout)
         hook = output["hookSpecificOutput"]
@@ -398,18 +405,12 @@ class TestAskDecisionSignal:
         and `--trust add <ruleName> --scope always`. Verify both CLI shapes exit 0
         (including for fetchaller-fetch-mutating-call) and that a subsequent
         PreToolUse call with that session_id returns permissionDecision == 'allow'."""
-        env = {
-            **os.environ,
-            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
-            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
-        }
         sid = str(uuid.uuid4())
 
         # Session-scoped trust for stash-drop
         trust_res = run_guard_trust(
             ["add", "stash-drop", "--scope", "session", "--session-id", sid],
             cwd=tmp_path,
-            env=env,
         )
         assert trust_res.returncode == 0, trust_res.stderr
 
@@ -421,7 +422,7 @@ class TestAskDecisionSignal:
             "tool_name": "Bash",
             "tool_input": {"command": "git stash drop"},
         }
-        result = run_guard(payload, cwd=tmp_path, env=env)
+        result = run_guard(payload, cwd=tmp_path)
         assert result.returncode == 0
         hook = json.loads(result.stdout)["hookSpecificOutput"]
         assert hook["permissionDecision"] == "allow"
@@ -431,7 +432,6 @@ class TestAskDecisionSignal:
         trust_mcp = run_guard_trust(
             ["add", "fetchaller-fetch-mutating-call", "--scope", "always"],
             cwd=tmp_path,
-            env=env,
         )
         assert trust_mcp.returncode == 0, trust_mcp.stderr
 
@@ -440,11 +440,6 @@ class TestAskDecisionSignal:
         subcommand (`git stash drop && git push --force origin main`) must
         always exit 2 ('block'), both when stash-drop is untrusted AND when
         stash-drop is trusted."""
-        env = {
-            **os.environ,
-            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
-            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
-        }
         sid = str(uuid.uuid4())
         payload = {
             "session_id": sid,
@@ -455,17 +450,16 @@ class TestAskDecisionSignal:
         }
 
         # 1. Untrusted stash-drop: block on second subcommand still exits 2
-        res_untrusted = run_guard(payload, cwd=tmp_path, env=env)
+        res_untrusted = run_guard(payload, cwd=tmp_path)
         assert res_untrusted.returncode == 2
 
         # 2. Trusted stash-drop: block on second subcommand still exits 2
         trust_res = run_guard_trust(
             ["add", "stash-drop", "--scope", "session", "--session-id", sid],
             cwd=tmp_path,
-            env=env,
         )
         assert trust_res.returncode == 0
-        res_trusted = run_guard(payload, cwd=tmp_path, env=env)
+        res_trusted = run_guard(payload, cwd=tmp_path)
         assert res_trusted.returncode == 2
 
     def test_compound_multi_ask_re_evaluates_second_rule_after_trust(self, tmp_path):
@@ -474,11 +468,6 @@ class TestAskDecisionSignal:
         remote-remove initially (surfacing stash-drop in the reason), and after
         trusting remote-remove for the session, re-evaluation returns 'ask' for
         stash-drop rather than auto-approving stash-drop."""
-        env = {
-            **os.environ,
-            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
-            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
-        }
         sid = str(uuid.uuid4())
         payload = {
             "session_id": sid,
@@ -489,7 +478,7 @@ class TestAskDecisionSignal:
         }
 
         # Round 1: ask for remote-remove, with stash-drop noted as additional confirmation
-        res1 = run_guard(payload, cwd=tmp_path, env=env)
+        res1 = run_guard(payload, cwd=tmp_path)
         assert res1.returncode == 0
         hook1 = json.loads(res1.stdout)["hookSpecificOutput"]
         assert hook1["permissionDecision"] == "ask"
@@ -500,12 +489,11 @@ class TestAskDecisionSignal:
         trust_res = run_guard_trust(
             ["add", "remote-remove", "--scope", "session", "--session-id", sid],
             cwd=tmp_path,
-            env=env,
         )
         assert trust_res.returncode == 0
 
         # Round 2: re-evaluation prompts for stash-drop
-        res2 = run_guard(payload, cwd=tmp_path, env=env)
+        res2 = run_guard(payload, cwd=tmp_path)
         assert res2.returncode == 0
         hook2 = json.loads(res2.stdout)["hookSpecificOutput"]
         assert hook2["permissionDecision"] == "ask"
@@ -515,38 +503,41 @@ class TestAskDecisionSignal:
         trust_res2 = run_guard_trust(
             ["add", "stash-drop", "--scope", "session", "--session-id", sid],
             cwd=tmp_path,
-            env=env,
         )
         assert trust_res2.returncode == 0
-        res3 = run_guard(payload, cwd=tmp_path, env=env)
+        res3 = run_guard(payload, cwd=tmp_path)
         assert res3.returncode == 0
         hook3 = json.loads(res3.stdout)["hookSpecificOutput"]
         assert hook3["permissionDecision"] == "allow"
 
     def test_compound_or_subshell_with_unreviewed_segment_does_not_emit_allow(self, tmp_path):
         """When a trusted ask subcommand is paired with an unreviewed sibling
-        subcommand (`git stash drop && rm -rf build/`), or when an unreviewed
-        outer command contains a trusted subshell (`rm -rf build/ $(uvx prek)`),
-        the guard must exit 0 without emitting permissionDecision: 'allow'."""
-        env = {
-            **os.environ,
-            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
-            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
-        }
+        subcommand, downstream pipe segment, or subshell, the guard must exit 0
+        without emitting permissionDecision: 'allow'."""
         sid = str(uuid.uuid4())
-        for rule in ("stash-drop", "prek"):
+        for rule in ("stash-drop", "prek", "amazon-blocked"):
             t_res = run_guard_trust(
                 ["add", rule, "--scope", "session", "--session-id", sid],
                 cwd=tmp_path,
-                env=env,
             )
             assert t_res.returncode == 0
 
         for cmd in (
             "git stash drop && rm -rf build/",
             "rm -rf build/ $(uvx prek)",
+            "rm -rf build/ $( git stash drop )",
+            "rm -rf build/ $(FOO=1 git stash drop)",
             "rm -rf build/ | uvx prek",
             "git stash drop $(rm -rf build/)",
+            "git stash drop $(rm -rf build/ && uvx prek)",
+            "git stash drop $(ls | wc -l)",
+            "git stash drop | rm -rf build/",
+            "uvx prek | rm -rf build/",
+            "curl https://www.amazon.com/dp/B001 | rm -rf build/",
+            "curl https://www.amazon.com/dp/B001 $(rm -rf build/)",
+            "curl https://unreviewed.example.com $(curl https://www.amazon.com/dp/B001)",
+            "curl https://www.amazon.com/dp/B001 https://unreviewed.example.com",
+            "git stash drop $(uvx prek | rm -rf build/)",
         ):
             res = run_guard(
                 {
@@ -557,19 +548,53 @@ class TestAskDecisionSignal:
                     "tool_input": {"command": cmd},
                 },
                 cwd=tmp_path,
-                env=env,
             )
             assert res.returncode == 0
             assert res.stdout.strip() == "", f"Expected passthrough (empty stdout) for {cmd!r}"
 
+    def test_piped_multi_ask_does_not_duplicate_pending_decision(self, tmp_path):
+        """A piped command where both pipe_segments[0] and pipe_segments[1] match
+        ask rules (`git stash drop | uvx prek` and `$(git stash drop | uvx prek)`)
+        must record each rule once, without duplicating `Also requires confirmation`."""
+        for cmd in ("git stash drop | uvx prek", "git stash drop $(git stash drop | uvx prek)"):
+            res = run_guard(
+                {
+                    "session_id": str(uuid.uuid4()),
+                    "tool_use_id": "tc-pipe-dedup",
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": cmd},
+                },
+                cwd=tmp_path,
+            )
+            assert res.returncode == 0
+            reason = json.loads(res.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+            if cmd == "git stash drop | uvx prek":
+                assert reason.count("Also requires confirmation: [stash-drop]") == 1
+            else:
+                # First ask is inner [stash-drop] (or prek), with only 1 additional [stash-drop]
+                assert reason.count("[stash-drop]") == 2
+
+        # Also verify untrusted subshell ask with leading space does not bleed into outer command
+        res_subshell = run_guard(
+            {
+                "session_id": str(uuid.uuid4()),
+                "tool_use_id": "tc-subshell-no-bleed",
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf build/ $( git stash drop )"},
+            },
+            cwd=tmp_path,
+        )
+        assert res_subshell.returncode == 0
+        subshell_reason = json.loads(res_subshell.stdout)["hookSpecificOutput"][
+            "permissionDecisionReason"
+        ]
+        assert subshell_reason.count("[stash-drop]") == 1
+
     def test_websearch_ask_then_block_domain_exits_2(self, tmp_path):
         """A WebSearch call whose allowed_domains contains an 'ask' domain
         followed by a 'block' domain must exit 2 ('block' beats 'ask')."""
-        env = {
-            **os.environ,
-            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
-            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
-        }
         res = run_guard(
             {
                 "session_id": str(uuid.uuid4()),
@@ -582,9 +607,117 @@ class TestAskDecisionSignal:
                 },
             },
             cwd=tmp_path,
-            env=env,
         )
         assert res.returncode == 2
+
+    def test_omp_extension_rule_regex_matches_askable_and_custom_underscore_rules(self, tmp_path):
+        """Extract the ruleMatch regex directly from omp-extension.ts and verify:
+        1. Every built-in _get_askable_rule_names() entry matches.
+        2. A custom ask rule with underscores and uppercase characters round-trips
+           through DEV_GUARD_CONFIG -> ask reason extraction -> --trust add -> allow.
+        3. Option-flag prefixes (leading '-') and whitespace are rejected."""
+        import importlib.util
+        import re
+
+        ts_source = (Path(__file__).parent.parent / "omp-extension.ts").read_text()
+        regex_match = re.search(r"const ruleMatch = /(.+)/\.exec\(reason\);", ts_source)
+        assert regex_match is not None, "Could not locate ruleMatch regex in omp-extension.ts"
+        rule_re = re.compile(regex_match.group(1))
+
+        spec = importlib.util.spec_from_file_location("guard_askable", TOOL_SELECTION_GUARD)
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for name in sorted(mod._get_askable_rule_names()):
+            m = rule_re.match(f"[{name}] Ask message")
+            assert m is not None and m.group(1) == name, (
+                f"Built-in askable rule {name!r} failed omp-extension.ts regex {rule_re.pattern!r}"
+            )
+
+        for bad in ("--help", "-flag", "has space", ""):
+            assert rule_re.match(f"[{bad}] Ask message") is None
+
+        cfg_path = tmp_path / "dev-guard.json"
+        cfg_path.write_text(
+            json.dumps(
+                {
+                    "command_rules": [
+                        {
+                            "name": "Custom_Ask_Rule_1",
+                            "pattern": r"\bmy-custom-tool\b",
+                            "message": "Confirm custom tool execution.",
+                            "action": "ask",
+                        }
+                    ],
+                    "url_rules": [
+                        {
+                            "name": "Custom_URL_Ask_1",
+                            "pattern": r"custom-ask\.example\.com",
+                            "message": "Confirm custom URL fetch.",
+                            "action": "ask",
+                        }
+                    ],
+                }
+            )
+        )
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(cfg_path),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        sid = str(uuid.uuid4())
+        payload = {
+            "session_id": sid,
+            "tool_use_id": "tc-18g",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "my-custom-tool --run"},
+        }
+        res_ask = run_guard(payload, cwd=tmp_path, env=env)
+        assert res_ask.returncode == 0
+        hook_ask = json.loads(res_ask.stdout)["hookSpecificOutput"]
+        assert hook_ask["permissionDecision"] == "ask"
+        m = rule_re.match(hook_ask["permissionDecisionReason"])
+        assert m is not None and m.group(1) == "Custom_Ask_Rule_1"
+
+        trust_res = run_guard_trust(
+            ["add", m.group(1), "--scope", "session", "--session-id", sid],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert trust_res.returncode == 0, trust_res.stderr
+
+        res_allow = run_guard(payload, cwd=tmp_path, env=env)
+        assert res_allow.returncode == 0
+        hook_allow = json.loads(res_allow.stdout)["hookSpecificOutput"]
+        assert hook_allow["permissionDecision"] == "allow"
+
+        # Also verify custom url_rules with underscores/uppercase round-trip through --trust add
+        url_payload = {
+            "session_id": sid,
+            "tool_use_id": "tc-18h",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "curl https://custom-ask.example.com/api"},
+        }
+        res_url_ask = run_guard(url_payload, cwd=tmp_path, env=env)
+        assert res_url_ask.returncode == 0
+        hook_url_ask = json.loads(res_url_ask.stdout)["hookSpecificOutput"]
+        assert hook_url_ask["permissionDecision"] == "ask"
+        m_url = rule_re.match(hook_url_ask["permissionDecisionReason"])
+        assert m_url is not None and m_url.group(1) == "Custom_URL_Ask_1"
+
+        trust_url_res = run_guard_trust(
+            ["add", m_url.group(1), "--scope", "session", "--session-id", sid],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert trust_url_res.returncode == 0, trust_url_res.stderr
+
+        res_url_allow = run_guard(url_payload, cwd=tmp_path, env=env)
+        assert res_url_allow.returncode == 0
+        hook_url_allow = json.loads(res_url_allow.stdout)["hookSpecificOutput"]
+        assert hook_url_allow["permissionDecision"] == "allow"
 
 
 # ── Write/Edit: PreToolUse translation (input passed through unchanged) ─────

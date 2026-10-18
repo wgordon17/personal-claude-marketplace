@@ -602,6 +602,57 @@ class TestResolveSkillBundle:
         assert "Sibling Ref Content" in result
         assert "Transitive Shared Content" in result
 
+    def test_circular_reference_between_hop1_files_deduplicated(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (skill_dir / "references" / "hop0.md").write_text("UNIQUE_HOP0_MARKER\n")
+        (skill_dir / "references" / "a.md").write_text(
+            "UNIQUE_A_MARKER\nSee [b](./b.md) and `references/hop0.md`.\n"
+        )
+        (skill_dir / "references" / "b.md").write_text(
+            "UNIQUE_B_MARKER\nSee [a](./a.md) and [hop0](../references/hop0.md).\n"
+        )
+        _write_skill_md(
+            skill_dir,
+            "# Skill\n"
+            "See [hop0](./references/hop0.md), [a](./references/a.md), "
+            "and [b](./references/b.md).\n",
+        )
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert result.count("UNIQUE_HOP0_MARKER") == 1
+        assert result.count("UNIQUE_A_MARKER") == 1
+        assert result.count("UNIQUE_B_MARKER") == 1
+        assert result.count("## a.md") == 1
+        assert result.count("## b.md") == 1
+        assert result.count("## hop0.md") == 1
+
+    def test_second_hop_and_non_local_hop1_not_followed(self, tmp_path):
+        repo, skill_dir = _make_repo(tmp_path)
+        (skill_dir / "references" / "hop1.md").write_text(
+            "HOP1_CONTENT\nSee `references/hop2.md`.\n"
+        )
+        (skill_dir / "references" / "hop2.md").write_text(
+            "HOP2_CONTENT\nSee `references/hop3.md`.\n"
+        )
+        (skill_dir / "references" / "hop3.md").write_text("HOP3_EXCLUDED_CONTENT\n")
+        (repo / "code-quality" / "references" / "shared.md").write_text(
+            "SHARED_PLUGIN_CONTENT\nSee `references/from-shared.md`.\n"
+        )
+        (skill_dir / "references" / "from-shared.md").write_text("FROM_SHARED_EXCLUDED_CONTENT\n")
+        _write_skill_md(
+            skill_dir,
+            "# Skill\nSee [hop1](./references/hop1.md) and [shared](../../references/shared.md).\n",
+        )
+
+        result = resolve_skill_bundle(skill_dir, repo_root=repo)
+        assert result is not None
+        assert "HOP1_CONTENT" in result
+        assert "HOP2_CONTENT" in result
+        assert "SHARED_PLUGIN_CONTENT" in result
+        assert "HOP3_EXCLUDED_CONTENT" not in result
+        assert "FROM_SHARED_EXCLUDED_CONTENT" not in result
+
     def test_markdown_link_path_traversal_outside_repo_rejected(self, tmp_path):
         repo, skill_dir = _make_repo(tmp_path)
         (tmp_path / "evil.md").write_text("EVIL_ROOT_CONTENT\n")

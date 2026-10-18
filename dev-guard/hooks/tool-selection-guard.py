@@ -1028,8 +1028,7 @@ def _check_url_rules(url: str) -> tuple[str, str, str] | None:
 def _check_fetch_command(cmd: str) -> bool:
     """Check curl/wget commands for authenticated or bot-blocked URLs. Exits on block or ask match.
 
-    Returns True if the command was a curl/wget (so caller knows to log),
-    or False if not a fetch command.
+    Returns True if a URL rule matched (or exited on block), False otherwise.
     """
     normalized = strip_env_prefix(cmd)
     if not re.match(r"^\s*(curl|wget)\b", normalized):
@@ -1040,12 +1039,14 @@ def _check_fetch_command(cmd: str) -> bool:
         urls = _extract_urls(cmd)
         for url in urls:
             _log_url_event(url, None, "bypassed", "Bash")
-        return True
+        return False
 
     urls = _extract_urls(cmd)
+    matched_count = 0
     for url in urls:
         result = _check_url_rules(url)
         if result:
+            matched_count += 1
             rule_name, guidance, action = result
             full_guidance = (
                 f"{guidance}\n"
@@ -1062,7 +1063,7 @@ def _check_fetch_command(cmd: str) -> bool:
             )
         else:
             _log_url_event(url, None, "allowed", "Bash")
-    return True
+    return bool(urls) and (matched_count == len(urls))
 
 
 # Patterns indicating authentication failure in HTTP responses
@@ -1272,11 +1273,45 @@ def extract_subshells(cmd: str) -> list[str]:
     return inner
 
 
+def strip_subshells(cmd: str) -> str:
+    """Replace top-level $(...) and `...` subshell spans with $() / ``.
+
+    Prevents already-evaluated subshell contents (such as inner pipes, URLs,
+    or unanchored git/custom rules) from bleeding into outer command and pipe
+    coverage evaluation while preserving the $ / ` markers for echo-noop.
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(cmd):
+        if cmd[i : i + 2] == "$(":
+            depth = 1
+            pos = i + 2
+            while pos < len(cmd) and depth > 0:
+                if cmd[pos] == "(":
+                    depth += 1
+                elif cmd[pos] == ")":
+                    depth -= 1
+                pos += 1
+            if depth == 0:
+                out.append("$()")
+                i = pos
+                continue
+        if cmd[i] == "`":
+            end = cmd.find("`", i + 1)
+            if end != -1:
+                out.append("``")
+                i = end + 1
+                continue
+        out.append(cmd[i])
+        i += 1
+    return "".join(out)
+
+
 def _split_respecting_quotes(
     text: str,
     is_delimiter: Callable[[str, int, list[str]], int | None],
 ) -> list[str]:
-    """Split text on unquoted delimiters while respecting single/double quotes.
+    """Split text on unquoted, top-level delimiters while respecting quotes and subshells.
 
     is_delimiter(text, i, current) -> int or None:
         Return the number of chars to skip (the delimiter width) if position i
@@ -1288,16 +1323,32 @@ def _split_respecting_quotes(
     current = []
     in_single = False
     in_double = False
+    in_backtick = False
+    subshell_depth = 0
     i = 0
     while i < len(text):
         c = text[i]
-        if c == "'" and not in_double:
+        if c == "'" and not in_double and not in_backtick:
             in_single = not in_single
             current.append(c)
         elif c == '"' and not in_single:
             in_double = not in_double
             current.append(c)
-        elif not in_single and not in_double:
+        elif not in_single and text[i : i + 2] == "$(":
+            subshell_depth += 1
+            current.append("$(")
+            i += 2
+            continue
+        elif subshell_depth > 0 and not in_single and not in_double:
+            if c == "(":
+                subshell_depth += 1
+            elif c == ")":
+                subshell_depth -= 1
+            current.append(c)
+        elif c == "`" and not in_single:
+            in_backtick = not in_backtick
+            current.append(c)
+        elif not in_single and not in_double and subshell_depth == 0 and not in_backtick:
             skip = is_delimiter(text, i, current)
             if skip is not None:
                 parts.append("".join(current).strip())
@@ -2289,8 +2340,12 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
 
 def _check_pipes(
     cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = _PIPE_SEGMENT_SKIP
-) -> None:
+) -> bool:
     """Check later pipe segments of a command for guarded patterns.
+
+    Returns True if there are no downstream pipe segments or if every segment
+    in pipe_segments[1:] matched a rule; False if any downstream pipe segment
+    had no matching rule.
 
     NOTE: _check_oc_introspection is NOT called on individual pipe segments.
     oc introspection runs on full subcommands in _check_subcmd. Pipe segments
@@ -2301,13 +2356,19 @@ def _check_pipes(
     another command downstream.
     """
     pipe_segments = split_pipes(cmd)
-    if len(pipe_segments) > 1:
-        last_idx = len(pipe_segments) - 1
-        for i, segment in enumerate(pipe_segments[1:], start=1):
-            effective_skip = skip_rules
-            if i == last_idx and skip_rules:
-                effective_skip = skip_rules - {"echo-noop", "printf-noop"}
-            _check_rules(segment, fetch_seen, skip_rules=effective_skip)
+    if len(pipe_segments) <= 1:
+        return True
+    all_covered = True
+    last_idx = len(pipe_segments) - 1
+    for i, segment in enumerate(pipe_segments[1:], start=1):
+        effective_skip = skip_rules
+        if i == last_idx and skip_rules:
+            effective_skip = skip_rules - {"echo-noop", "printf-noop"}
+        seg_matched = _check_fetch_command(segment)
+        if _check_rules(segment, fetch_seen, skip_rules=effective_skip) or seg_matched:
+            continue
+        all_covered = False
+    return all_covered
 
 
 def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
@@ -2360,42 +2421,77 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
 
     # Check pipe segments and subshells FIRST — deny/ask on dangerous segments
     # must happen before any "allow" rule on the full command can short-circuit.
+    subcmd_no_subshells = strip_subshells(subcmd)
+    pipe_segments = split_pipes(subcmd_no_subshells)
     before_pipes = len(_pending_decisions)
-    _check_pipes(subcmd, fetch_seen)
+    pipes_covered = _check_pipes(subcmd_no_subshells, fetch_seen)
     pipes_matched = len(_pending_decisions) > before_pipes
 
     subshells_covered = True
-    for inner in extract_subshells(subcmd):
-        if _FETCH_PATTERN.search(inner):
-            fetch_seen = True
-        inner_matched = _check_rules(inner, fetch_seen)
-        _check_pipes(inner, fetch_seen)
-        if not inner_matched:
-            subshells_covered = False
+    for raw_inner in extract_subshells(subcmd):
+        for inner in split_commands(raw_inner):
+            if _FETCH_PATTERN.search(inner):
+                fetch_seen = True
+            inner_no_subshells = strip_subshells(inner)
+            if inner_no_subshells != inner:
+                saved_pending = list(_pending_decisions)
+                _check_rules(inner, fetch_seen)
+                _pending_decisions[:] = saved_pending
+            inner_pipes = split_pipes(inner_no_subshells)
+            before_inner_pipes = len(_pending_decisions)
+            inner_pipes_covered = _check_pipes(inner_no_subshells, fetch_seen)
+            inner_pipes_matched = len(_pending_decisions) > before_inner_pipes
+            inner_fetch = _check_fetch_command(
+                inner_pipes[0] if inner_pipes else inner_no_subshells
+            )
+            before_inner_outer = len(_pending_decisions)
+            if len(inner_pipes) > 1 and inner_pipes_matched:
+                saved_pending = list(_pending_decisions)
+                _check_rules(inner_no_subshells, fetch_seen)
+                _pending_decisions[:] = saved_pending
+                inner_rule_matched = _check_rules(inner_pipes[0], fetch_seen)
+            else:
+                inner_rule_matched = _check_rules(inner_no_subshells, fetch_seen)
+            inner_outer_matched = (
+                inner_fetch or inner_rule_matched or (len(_pending_decisions) > before_inner_outer)
+            )
+            inner_has_explicit_allow = any(
+                d.action == "allow" for d in _pending_decisions[before_inner_outer:]
+            )
+            if not (inner_outer_matched and (inner_pipes_covered or inner_has_explicit_allow)):
+                subshells_covered = False
 
-    # Now check the full subcommand (including allow rules that exit 0).
-    # If _check_pipes already added a pending decision on a downstream pipe
-    # segment (e.g. `rm -rf build/ | uvx prek`), an unanchored rule matching
-    # only pipe_segments[1:] must not count as covering an unreviewed
-    # pipe_segments[0].
-    pipe_segments = split_pipes(subcmd)
+    # Check curl/wget on the leading segment (with subshells stripped) so piped
+    # or subshell-bearing fetches require all segments and subshells to be covered.
+    fetch_matched = _check_fetch_command(pipe_segments[0] if pipe_segments else subcmd_no_subshells)
+
+    # Ensure whole-subcommand block rules still run on the raw subcmd when
+    # subshells were stripped or when pipes_matched is True, while evaluating
+    # non-block decisions and coverage on subcmd_no_subshells / pipe_segments[0].
     before_outer = len(_pending_decisions)
-    rule_matched = _check_rules(subcmd, fetch_seen)
+    if subcmd_no_subshells != subcmd or (len(pipe_segments) > 1 and pipes_matched):
+        saved_pending = list(_pending_decisions)
+        _check_rules(subcmd, fetch_seen)
+        _pending_decisions[:] = saved_pending
+    if len(pipe_segments) > 1 and pipes_matched:
+        rule_matched = _check_rules(pipe_segments[0], fetch_seen)
+    else:
+        rule_matched = _check_rules(subcmd_no_subshells, fetch_seen)
 
     if not rule_matched:
         # oc/kubectl introspection — after user-defined rules (which take priority)
-        normalized = strip_env_prefix(strip_shell_keyword(subcmd))
+        normalized = strip_env_prefix(strip_shell_keyword(subcmd_no_subshells))
         if re.match(r"^\s*(oc|kubectl)\b", normalized):
-            _check_oc_introspection(subcmd)
+            _check_oc_introspection(subcmd_no_subshells)
 
         # Kill command guard — validate targets against Claude session process tree
         if re.match(r"^\s*(kill|killall|pkill)\b", normalized):
-            _check_kill_command(subcmd)
+            _check_kill_command(subcmd_no_subshells)
 
-    outer_matched = rule_matched or (len(_pending_decisions) > before_outer)
-    if pipes_matched and len(pipe_segments) > 1:
-        outer_matched = _check_rules(pipe_segments[0], fetch_seen, skip_rules=_PIPE_SEGMENT_SKIP)
-    return fetch_seen, (outer_matched and subshells_covered)
+    outer_matched = fetch_matched or rule_matched or (len(_pending_decisions) > before_outer)
+    has_explicit_allow = any(d.action == "allow" for d in _pending_decisions[before_outer:])
+    subcmd_covered = outer_matched and (pipes_covered or has_explicit_allow) and subshells_covered
+    return fetch_seen, subcmd_covered
 
 
 # ── Trust management ──
@@ -4146,27 +4242,26 @@ def _handle_bash_command(command: str) -> NoReturn:
     fetch_seen = False
     covered_subcmds = 0
     for subcmd in subcmds:
-        before_fetch = len(_pending_decisions)
-        # Check curl/wget commands for authenticated URLs per subcommand
-        _check_fetch_command(subcmd)
-        fetch_matched = len(_pending_decisions) > before_fetch
         fetch_seen, subcmd_covered = _check_subcmd(subcmd, fetch_seen)
-        if fetch_matched or subcmd_covered:
+        if subcmd_covered:
             covered_subcmds += 1
 
     all_subcmds_covered = bool(subcmds) and (covered_subcmds == len(subcmds))
+    had_pending = bool(_pending_decisions)
     _defer_decisions = False
     _flush_pending_decisions(all_subcmds_covered=all_subcmds_covered)
 
     # ── RTK compression: rewrite commands that passed all deny rules ──
     # Runs AFTER deny rules so blocked commands never reach RTK.
-    # Only for simple commands (single, non-piped, non-subshell).
+    # Only for simple commands (single, non-piped, non-subshell), and never
+    # when _flush_pending_decisions suppressed allow on a partially-covered command.
     if (
         len(subcmds) == 1
         and len(split_pipes(command)) == 1
         and "$(" not in command
         and "`" not in command
         and "\n" not in command
+        and not (had_pending and not all_subcmds_covered)
     ):
         rtk_cmd = _rtk_rewrite(command)
         if rtk_cmd is not None:

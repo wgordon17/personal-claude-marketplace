@@ -459,8 +459,8 @@ class TestPluginVersionParity:
 
         assert not mismatches, (
             "Plugin version mismatch between plugin.json and marketplace.json.\n"
-            "CLAUDE.md rule: 'Always bump plugin versions in both files.'\n"
-            + "\n".join(f"  - {m}" for m in mismatches)
+            "CLAUDE.md rule: 'Always bump plugin versions and synchronize descriptions "
+            "across all three manifest files'\n" + "\n".join(f"  - {m}" for m in mismatches)
         )
 
     def test_marketplace_entries_have_plugin_on_disk(self):
@@ -543,7 +543,7 @@ class TestPluginVersionParity:
 
     def test_codex_marketplace_entries_match_claude_marketplace(self):
         """Both .claude-plugin/marketplace.json and .agents/plugins/marketplace.json must
-        register the exact same 13 plugins."""
+        register the exact same 13 plugins in order, with valid source, policy, and category."""
         codex_marketplace_path = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
         assert codex_marketplace_path.exists(), f"Missing {codex_marketplace_path}"
 
@@ -556,9 +556,29 @@ class TestPluginVersionParity:
         claude_names = [entry["name"] for entry in claude_marketplace["plugins"]]
         codex_names = [entry["name"] for entry in codex_marketplace["plugins"]]
         assert len(claude_names) == 13, f"Expected 13 plugins, got {len(claude_names)}"
-        assert set(claude_names) == set(codex_names), (
+        assert codex_names == claude_names, (
             f"Marketplace registration mismatch: claude={claude_names} vs codex={codex_names}"
         )
+
+        expected_policy = {
+            "installation": "AVAILABLE",
+            "authentication": "ON_INSTALL",
+        }
+        for claude_entry, codex_entry in zip(
+            claude_marketplace["plugins"], codex_marketplace["plugins"], strict=True
+        ):
+            name = codex_entry["name"]
+            expected_source = {"source": "local", "path": f"./{name}"}
+            assert codex_entry.get("source") == expected_source, (
+                f"{name}: source={codex_entry.get('source')!r} (expected {expected_source!r})"
+            )
+            assert codex_entry.get("policy") == expected_policy, (
+                f"{name}: policy={codex_entry.get('policy')!r} (expected {expected_policy!r})"
+            )
+            assert codex_entry.get("category") == claude_entry.get("category"), (
+                f"{name}: category={codex_entry.get('category')!r} "
+                f"(expected {claude_entry.get('category')!r})"
+            )
 
     def test_all_plugins_have_readme(self):
         """Every plugin in marketplace.json must have a non-empty README.md on disk."""
@@ -636,9 +656,10 @@ class TestPluginVersionParity:
 class TestDevGuardDescriptionSync:
     """Structural test that dev-guard's description stays in sync across its three
     surfaces: hooks.json, plugin.json, and marketplace.json. All three must share the
-    same trailing capability phrase, per CLAUDE.md's 'bump plugin versions in both
-    files' rule extended to descriptions — a substring-presence grep only confirms a
-    phrase exists somewhere, not that the surfaces agree with each other."""
+    same trailing capability phrase, per CLAUDE.md's 'Always bump plugin versions and
+    synchronize descriptions across all three manifest files' rule — a
+    substring-presence grep only confirms a phrase exists somewhere, not that the
+    surfaces agree with each other."""
 
     def _trailing_phrase(self, description: str) -> str:
         return description.rsplit(",", 1)[-1].strip()

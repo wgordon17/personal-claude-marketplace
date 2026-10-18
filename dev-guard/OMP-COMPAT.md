@@ -324,7 +324,7 @@ loop:
    `_flush_pending_decisions()` so a later `"block"` subcommand always exits 2 immediately and
    untrusted `"ask"` rules always take precedence over `"allow"` or trusted `"ask"` rules.
 2. **Interactive selector (`ctx.ui.select`)**: The bridge extracts `ruleName` from `reason` via
-   `/^\[([a-z0-9-]+)\]\s/`, constructs `promptText` (appending `\nCommand: ${toolInput.command}`
+   `/^\[([a-zA-Z0-9][a-zA-Z0-9_-]*)\]\s/`, constructs `promptText` (appending `\nCommand: ${toolInput.command}`
    for `Bash` calls so the user sees the full untruncated command), and presents up to 4 options:
    - `Allow once` — approves this tool call once (`return undefined`).
    - `Allow for session` (shown when `ruleName` and `sessionId` are present) — runs
