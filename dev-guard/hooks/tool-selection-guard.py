@@ -1546,6 +1546,58 @@ def _check_cd_git_compound(subcmds: list[str], full_command: str) -> None:
 
 _PROTECTED_BRANCHES = frozenset({"main", "master"})
 
+_COMMIT_VALUE_FLAGS = frozenset(
+    {
+        "-m",
+        "-F",
+        "-c",
+        "-C",
+        "-u",
+        "--message",
+        "--file",
+        "--reuse-message",
+        "--reedit-message",
+        "--fixup",
+        "--squash",
+        "--author",
+        "--date",
+        "--untracked-files",
+        "--cleanup",
+        "--pathspec-from-file",
+        "--trailer",
+    }
+)
+
+_HOOK_CONFIG_KEY_RE = r"(?:core\.hooksPath|hook\.[^=\s'\"]+\.(?:enabled|command|event))"
+
+
+def _has_commit_short_no_verify(cmd: str) -> bool:
+    """Return True if a `git commit` command passes `-n` (short for `--no-verify`)."""
+    m = re.search(r"\bgit\b.*?\bcommit\b(.*)$", cmd, re.DOTALL)
+    if not m:
+        return False
+    # Replace quoted string arguments with placeholders so `-n` inside a commit message is ignored
+    tail = re.sub(r"""(?:'[^']*'|"(?:\\.|[^"\\])*")""", " _ARG_ ", m.group(1))
+    tokens = tail.split()
+    skip_next = False
+    for tok in tokens:
+        if skip_next:
+            skip_next = False
+            continue
+        if tok == "--":
+            break
+        if tok in _COMMIT_VALUE_FLAGS:
+            skip_next = True
+            continue
+        if tok.startswith("--"):
+            continue
+        if re.match(r"^-[a-zA-Z]*n[a-zA-Z]*$", tok):
+            if tok[-1] in {"m", "F", "c", "C"}:
+                skip_next = True
+            return True
+    return False
+
+
 # Safe start points for branch creation (no stacking risk)
 _SAFE_REMOTE_REFS = frozenset({"upstream/main", "origin/main", "upstream/master", "origin/master"})
 # NOTE: HEAD is allowed as a safe start-point. While functionally identical to
@@ -1641,49 +1693,66 @@ GIT_DENY_RULES: list[GitRule] = [
     ),
     GitRule(
         "no-verify",
-        lambda cmd: bool(re.search(r"git\s+", cmd)) and "--no-verify" in cmd,
-        "--no-verify flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
+        lambda cmd: (
+            bool(re.search(r"git\s+", cmd))
+            and ("--no-verify" in cmd or _has_commit_short_no_verify(cmd))
+        ),
+        "--no-verify / -n flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
     ),
     GitRule(
         "hookspath-c",
-        lambda cmd: bool(re.search(r"git\s+.*-c\s+['\"]?core\.hooksPath\b", cmd, re.IGNORECASE)),
-        "git -c core.hooksPath=... is FORBIDDEN. "
-        "Redirecting the hooks directory disables all git hooks.",
+        lambda cmd: bool(
+            re.search(rf"git\s+.*-c\s+['\"]?{_HOOK_CONFIG_KEY_RE}\b", cmd, re.IGNORECASE)
+        ),
+        "git -c core.hooksPath=... or hook.<name>.* is FORBIDDEN. "
+        "Overriding git hook configuration disables git hooks.",
     ),
     GitRule(
         "hookspath-config",
         lambda cmd: (
             bool(re.search(r"git\s+config\b", cmd))
-            and bool(re.search(r"\bcore\.hooksPath\b", cmd, re.IGNORECASE))
-            and not re.search(r"--(get(?:-regexp)?|unset(?:-all)?|list)\b", cmd)
+            and bool(re.search(rf"\b{_HOOK_CONFIG_KEY_RE}\b", cmd, re.IGNORECASE))
+            and not re.search(r"--(get(?:-regexp)?|unset(?:-all)?|list)\b|\s-l(\s|$)", cmd)
         ),
-        "git config core.hooksPath is FORBIDDEN. "
-        "Persistently redirecting the hooks directory disables all git hooks. "
+        "git config core.hooksPath or hook.<name>.* is FORBIDDEN. "
+        "Modifying git hook configuration disables or overrides git hooks. "
         "Use --unset to restore hooks.",
     ),
     GitRule(
         "hookspath-env",
         lambda cmd: bool(
-            re.search(r"\bGIT_CONFIG_KEY_\d+=['\"]?core\.hooksPath\b", cmd, re.IGNORECASE)
+            re.search(
+                rf"\bGIT_CONFIG_KEY_\d+=['\"]?{_HOOK_CONFIG_KEY_RE}\b",
+                cmd,
+                re.IGNORECASE,
+            )
         ),
-        "GIT_CONFIG_KEY_N=core.hooksPath is FORBIDDEN. "
-        "Setting hooksPath via GIT_CONFIG_* env vars bypasses git hook enforcement.",
+        "GIT_CONFIG_KEY_N=core.hooksPath or hook.<name>.* is FORBIDDEN. "
+        "Setting hook config via GIT_CONFIG_* env vars bypasses git hook enforcement.",
     ),
     GitRule(
         "hookspath-config-env",
         lambda cmd: bool(
-            re.search(r"git\s+.*--config-env=?['\"]?core\.hooksPath\b", cmd, re.IGNORECASE)
+            re.search(
+                rf"git\s+.*--config-env=?['\"]?{_HOOK_CONFIG_KEY_RE}\b",
+                cmd,
+                re.IGNORECASE,
+            )
         ),
-        "git --config-env=core.hooksPath=... is FORBIDDEN. "
-        "Redirecting the hooks directory via env var disables all git hooks.",
+        "git --config-env=core.hooksPath=... or hook.<name>.* is FORBIDDEN. "
+        "Overriding git hook configuration via env var disables git hooks.",
     ),
     GitRule(
         "hookspath-params-env",
         lambda cmd: bool(
-            re.search(r"\bGIT_CONFIG_PARAMETERS=.*core\.hooksPath\b", cmd, re.IGNORECASE)
+            re.search(
+                rf"\bGIT_CONFIG_PARAMETERS=.*{_HOOK_CONFIG_KEY_RE}\b",
+                cmd,
+                re.IGNORECASE,
+            )
         ),
-        "GIT_CONFIG_PARAMETERS containing core.hooksPath is FORBIDDEN. "
-        "Setting hooksPath via GIT_CONFIG_PARAMETERS bypasses git hook enforcement.",
+        "GIT_CONFIG_PARAMETERS containing core.hooksPath or hook.<name>.* is FORBIDDEN. "
+        "Setting hook config via GIT_CONFIG_PARAMETERS bypasses git hook enforcement.",
     ),
     GitRule(
         "filter-branch",

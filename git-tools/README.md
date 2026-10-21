@@ -17,9 +17,11 @@ Git workflow tools: dynamic SessionStart git instructions, history manipulation,
 
 ## Git Hook Scripts
 
-Defense-in-depth hook scripts for use with pre-commit framework:
+Defense-in-depth hook scripts for use with pre-commit framework and Git 2.54+ additive global hooks:
 - `git-hooks/pre-commit.sh` — Sets success marker after all pre-commit hooks pass
 - `git-hooks/prepare-commit-msg.sh` — Unbypassable safety validator (branch protection, conflict detection)
+- `git-hooks/betterleaks-hook.sh` — Unbypassable (`prepare-commit-msg`) Betterleaks v1/v2 staged secret scanner with `--confidence medium`, auto-recompilation across `v1.9` → `v2.0` upgrades, and 7-day non-blocking background rule sync
+- `scripts/sync-betterleaks-overlay.py` — PEP-723 `uv run` compiler that merges curated LeakTK (`leaktk/patterns`) and Google OSV-SCALIBR Veles rules with `# notsecret` line filtering into `~/.config/betterleaks/{overlay-v2,betterleaks-unified}.toml`
 
 ## Requirements
 
