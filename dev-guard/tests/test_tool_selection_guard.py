@@ -1925,9 +1925,14 @@ class TestGitSafetyDeny:
             # push origin main
             ("git push origin main", 2, "FORBIDDEN"),
             ("git push origin master", 2, "FORBIDDEN"),
-            # --no-verify
+            # --no-verify and short -n on commit
             ("git commit -m 'test' --no-verify", 2, "FORBIDDEN"),
+            ("git commit -n -m 'test'", 2, "FORBIDDEN"),
+            ("git commit -nm 'test'", 2, "FORBIDDEN"),
+            ("git commit -an -m 'test'", 2, "FORBIDDEN"),
+            ("git commit -m 'fix -n flag handling'", 0, None),
             ("git push --no-verify origin feature", 2, "FORBIDDEN"),
+            ("git push -n origin feature", 0, None),
             # add --force
             ("git add --force secret.env", 2, "FORBIDDEN"),
             ("git add -f .env", 2, "FORBIDDEN"),
@@ -1964,7 +1969,12 @@ class TestGitSafetyDeny:
             "push-origin-main",
             "push-origin-master",
             "commit-no-verify",
+            "commit-short-n",
+            "commit-short-nm-bundled",
+            "commit-short-an-bundled",
+            "commit-msg-with-n-text-allow",
             "push-no-verify",
+            "push-short-n-dry-run-allow",
             "add-force",
             "add-f-short",
             "add-file-allow",
@@ -2172,6 +2182,17 @@ class TestCoreHooksPathBypass:
                 2,
                 "FORBIDDEN",
             ),
+            # Git 2.54+ config-based hook.<name>.* bypass attempts
+            ("git -c hook.pre-commit.enabled=false commit -m 'msg'", 2, "FORBIDDEN"),
+            ("git -c hook.betterleaks.command=true commit -m 'msg'", 2, "FORBIDDEN"),
+            ("git config hook.betterleaks.enabled false", 2, "FORBIDDEN"),
+            ("git config --get-regexp '^hook\\.betterleaks\\.'", 0, None),
+            (
+                "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=hook.betterleaks.enabled "
+                "GIT_CONFIG_VALUE_0=false git commit -m 'msg'",
+                2,
+                "FORBIDDEN",
+            ),
         ],
         ids=[
             "c-hookspath-devnull",
@@ -2195,6 +2216,11 @@ class TestCoreHooksPathBypass:
             "c-hookspath-single-quoted",
             "c-hookspath-double-quoted",
             "hookspath-env-quoted-key",
+            "c-hook-event-disabled",
+            "c-hook-command-override",
+            "config-hook-enabled-write",
+            "config-hook-get-regexp-allow",
+            "hook-env-bypass",
         ],
     )
     def test_core_hookspath(self, command, expected_exit, expected_msg):
