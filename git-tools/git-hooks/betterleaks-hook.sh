@@ -20,7 +20,10 @@ if ! command -v betterleaks >/dev/null 2>&1; then
 fi
 
 CURRENT_VER="$(betterleaks --version 2>/dev/null || true)"
-STAMP_VER="$( [ -f "$STAMP_FILE" ] && tr -d '\r\n' < "$STAMP_FILE" || true )"
+STAMP_VER=""
+if [ -f "$STAMP_FILE" ]; then
+    STAMP_VER="$(tr -d '\r\n' < "$STAMP_FILE")"
+fi
 
 # Auto-recompile config in <0.3s if betterleaks was upgraded (e.g. v1.9.0 -> v2.0.0 via brew)
 if [ ! -f "$ACTIVE_CONFIG" ] || [ "$CURRENT_VER" != "$STAMP_VER" ]; then
