@@ -4,6 +4,89 @@ Detailed check tables, procedures, and terminal output format for the 6 blocking
 
 ---
 
+## Layer 1.5 & Layer 2 Dispatch Blocks
+
+```
+Spawn all 4 reviewers simultaneously:
+
+Reviewer 1 — Security (code-quality:security):
+  Agent(
+    description="Security domain review",
+    model="sonnet",
+    prompt=<see [{skill_dir}/references/subagent-prompts.md](./subagent-prompts.md), Domain Reviewer: Security>
+  )
+
+Reviewer 2 — QA (code-quality:qa):
+  Agent(
+    description="QA domain review",
+    model="sonnet",
+    prompt=<see [{skill_dir}/references/subagent-prompts.md](./subagent-prompts.md), Domain Reviewer: QA>
+  )
+
+Reviewer 3 — Performance (code-quality:performance):
+  Agent(
+    description="Performance domain review",
+    model="sonnet",
+    prompt=<see [{skill_dir}/references/subagent-prompts.md](./subagent-prompts.md), Domain Reviewer: Performance>
+  )
+
+Reviewer 4 — Code Review (code-quality:code-reviewer):
+  Agent(
+    description="Code style and maintainability review",
+    model="sonnet",
+    prompt=<see [{skill_dir}/references/subagent-prompts.md](./subagent-prompts.md), Domain Reviewer: Code-Reviewer>
+  )
+```
+
+**Subagent A: Completeness Reviewer (opus)**
+
+```
+PASS 1:
+  pass1_result = Agent(
+    description="Completeness review",
+    model="opus",
+    prompt=<see [{skill_dir}/references/subagent-prompts.md](./subagent-prompts.md), Subagent A Pass 1>
+  )
+  → Save pass1_result.agentId
+  → Fix ALL findings
+
+PASS 2 (MANDATORY — do not skip):
+  SendMessage(
+    to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
+    message="Here are the fixes I made: {summary_of_fixes}.
+             Review them. Also: what did YOU miss on your first pass?
+             You had fresh eyes but still have blind spots. Look again.",
+    summary="Pass 2 completeness re-review"
+  )
+  → WAIT for response (do not proceed to gates)
+  → Fix ALL findings from Pass 2
+```
+
+**Subagent B: Adversarial Reviewer (opus)**
+
+```
+PASS 1:
+  pass1_result = Agent(
+    description="Adversarial review",
+    model="opus",
+    prompt=<see [{skill_dir}/references/subagent-prompts.md](./subagent-prompts.md), Subagent B Pass 1>
+  )
+  → Save pass1_result.agentId
+  → Fix ALL findings
+
+PASS 2 (MANDATORY — do not skip):
+  SendMessage(
+    to=<agentId from Pass 1>,    ← MUST be agentId, not agent name
+    message="Here are the fixes: {summary_of_fixes}.
+             Verify they're correct. What else breaks in production?",
+    summary="Pass 2 adversarial re-review"
+  )
+  → WAIT for response (do not proceed to gates)
+  → Fix ALL findings from Pass 2
+```
+
+---
+
 ## Lifecycle Gate (BLOCKING)
 
 Validates artifact lifecycle counters on the plan file. Cannot proceed past this gate without
@@ -210,6 +293,22 @@ and working-tree-only changes fail this test.
 
 ---
 
+## Final Verification
+
+| Work Type | Verification |
+|-----------|-------------|
+| **Code** | Run test suite + lint. Compare against baseline. |
+| **Planning** | Re-read plan end-to-end. Walk through mentally step-by-step. |
+| **Research** | Re-read findings against original question. |
+| **Config** | Validate syntax. Verify integration. |
+
+Final check:
+```
+serena::think_about_whether_you_are_done → "Is this genuinely complete?"
+```
+
+---
+
 ## Output
 
 ```
@@ -281,3 +380,36 @@ Overall: [PASS / NEEDS WORK]
 [If NEEDS WORK: list what remains]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+---
+
+## Relationship to Other Skills
+
+| Skill | Relationship |
+|-------|-------------|
+| `code-quality:code-simplifier` | Spawned in Round 4 (Simplicity lens, BLOCKING sub-gate) for dead code, unnecessary abstractions. Uses `[{skill_dir}/../../references/simplification-checklist.md](../../../references/simplification-checklist.md)` and `[{skill_dir}/../../references/dependency-evaluation.md](../../../references/dependency-evaluation.md)`. |
+| `code-quality:plan-adherence` | Spawned in Layer 1.75 for plan file verification (planning/mixed work types). |
+| `code-quality:reflect` | Invoked for metacognitive checkpoints via Serena reflection tools. |
+| `code-quality:security` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `code-quality:qa` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `code-quality:performance` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `code-quality:code-reviewer` | Spawned as domain reviewer in Layer 1.5 (code/mixed work types). |
+| `session-end` | Complementary — quality-gate reviews accuracy; session-end does final save. |
+| `swarm` Phase 7 | Invokes quality-gate as the final validation step. |
+| `code-quality:fix` | Standalone finding fixer for non-swarm workflows. Not a source — quality-gate fixes findings inline. Suggest /quality-gate after /fix for verification. |
+| `code-quality:bug-investigation` | BUGS.md Verification Gate updates `Tracked In` field for entries created by `/bug-investigation`. |
+| `code-quality:incremental-planning` | Producer: sets `Tracked In: Plan: ...` on overlapping BUGS.md entries when a plan is created. quality-gate verifies and advances those references. |
+| `code-quality:roadmap` | Producer: sets `Tracked In: Roadmap: plans/{filename}.md (Phase N)` on overlapping BUGS.md entries during roadmap generation. quality-gate verifies and advances those references. |
+
+---
+
+## Stop Hook Safety Net
+
+A global Stop hook in `dev-guard` (`type: command`) catches premature completion claims that bypass
+this skill. It uses a two-script architecture for speed: `stop-hook.py` (stdlib-only, <200ms)
+performs deterministic triage — loop guard, transcript delta, signal detection (write tools, MCP
+writes, completion claim regex, git diff hash change) — and fast-exits for low-signal cases.
+When signals warrant deeper evaluation, it delegates to `stop-hook-llm.py` which calls
+claude-sonnet-4-6 via Vertex AI with an adaptive prompt based on work type (code, research,
+questions, planning) and trigger reasons. Fails open on any infrastructure error.
+Uses `stop_hook_active` guard to prevent infinite loops.

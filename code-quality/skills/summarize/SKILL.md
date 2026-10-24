@@ -119,15 +119,85 @@ Stop.
 
 ### Path B: No argument (auto-detect)
 
-1. **Detect memory directory** per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`. If none found, print `"No project memory directory detected. Provide a file path directly: /summarize path/to/artifact"` and stop.
-2. **Scan for artifacts:** Scan all 8 artifact locations from `[{skill_dir}/references/artifact-formats.md](./references/artifact-formats.md)` (including `done/` subdirectories). Label `(archived)` if the path contains `/done/`, the first 10 lines contain `**Status:** Archived` or `**Status:** Obsolete`, or a roadmap's first 10 lines contain `**Status:** Completed` (sets `already_archived = true` on selection). Label `(incomplete)` for swarm dirs without `swarm-report.md` or unfuck dirs without `cleanup-report.md`. Also check `gh pr list --head "$(git branch --show-current)" --json number,title --limit 5` (if on a named branch and `gh` succeeds) and list open PRs under `"Pull Requests"` with label `(PR)`. Compute lazy hints (name, date, type) from filenames without reading full files.
-3. **Present selection:** Ask the user via `AskUserQuestion` (grouped by type, up to 4 groups per question; defer all file reads until after selection).
+**Step 1 — Detect memory directory.**
+Use the convention in `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory
+Detection and Worktree Resolution sections).
+
+If no memory directory is found, print:
+> "No project memory directory detected. Provide a file path directly: `/summarize path/to/artifact`"
+
+Stop.
+
+**Step 2 — Scan for artifacts.**
+Scan for all artifact types using the location patterns from `[{skill_dir}/references/artifact-formats.md](./references/artifact-formats.md)`.
+Include `done/` subdirectories in the scan. Group by type.
+
+Detect archived artifacts using any of these signals (no file reads at scan time — check path
+and filename only where possible, read first 10 lines only when the path signal is ambiguous):
+
+1. Path contains a `/done/` component (primary — no file read needed)
+2. File contains `**Status:** Archived` or `**Status:** Obsolete` in its first 10 lines
+3. File is a roadmap AND contains `**Status:** Completed` in its first 10 lines (roadmap cleanup convention — roadmaps use `Completed` rather than `Archived`)
+
+Artifacts matching any of these signals are included in the scan but labeled "(archived)".
+When selected, `already_archived` is set and Phase 3 is skipped (same as Path A Step 3).
+
+**PR scan:** After scanning for all 8 artifact types, also check for open PRs on the current
+branch. First check if on a named branch: `git branch --show-current`. If the result is
+empty (detached HEAD), skip PR detection entirely. Otherwise:
+
+```bash
+gh pr list --head "$(git branch --show-current)" --json number,title --limit 5
+```
+
+If the current branch has open PRs, include them in the artifact selection list under a
+"Pull Requests" group with label "(PR)":
+
+```
+Pull Requests (1):
+  9. #42 — Add summarize skill redesign (PR)
+```
+
+If `gh` is not available or the command fails (not a GitHub repo, no auth), silently skip
+PR detection — do not error. PRs are additive to the existing scan.
+
+**Lazy hints:** Compute status from filename and type only (no full file reads at scan time).
+Show artifact name, creation date (from filename timestamp or file mtime), and type label.
+Example: "(plan, 2026-03-21)", "(research, 2026-04-01)". For incomplete swarm directories
+(no `swarm-report.md`) or incomplete unfuck directories (no `cleanup-report.md`), include with
+label "(incomplete)". For archived artifacts, include with label "(archived)".
+
+If no artifacts are found, print:
+> "No artifacts found in [dir]. Nothing to summarize."
+
+Stop.
+
+**Step 3 — Present selection.**
+Present an AskUserQuestion with grouped options (up to 4 groups per question; paginate if
+more groups exist):
+
+```
+AskUserQuestion: "Which artifact would you like to summarize?
+
+Plans (N):
+  1. [filename] — [creation date]
+  2. ...
+
+Swarm Reports (N):
+  3. [run-id dir] — [creation date]
+  ...
+
+Research (N): ..."
+```
+
+Defer all file reads until after the user selects an artifact.
 
 ---
 
 ## Phase 1 — Summarize
 
-Read the artifact and output a format-appropriate summary to chat immediately before Phase 2 begins:
+Read the artifact and produce a format-appropriate summary. Output to chat immediately —
+this is the primary deliverable and should appear before Phase 2 begins.
 
 ```
 ## Summary: [artifact name]
@@ -137,25 +207,86 @@ Read the artifact and output a format-appropriate summary to chat immediately be
 **Branch:** [if available from header]
 
 ### Overview
-[Answer internally first: "What was this artifact trying to accomplish, and did it succeed?" Scale to complexity: 2-3 sentences (<100 lines), 4-5 (100-300 lines), 6-8 (300+ lines).]
+[First, answer this question internally before writing: "What was this artifact trying to
+accomplish, and did it succeed?" Then write the overview based on your answer. Not just
+"what is this artifact about" — convey outcome and current relevance. Scale length to
+artifact complexity: 2-3 sentences for artifacts under 100 lines, 4-5 for 100-300 lines,
+6-8 for 300+ lines. The Key Details section should scale similarly.]
 
 ### Key Details
-[Type-specific content — see below]
+[Type-specific content — see per-type guidance below]
 
 ### Recommendations (if applicable)
 [Research: top recommendations; Plan: unresolved open questions; Swarm: deferred findings]
 ```
 
-Status is determined in Phase 3 (not Phase 1). For file-based artifacts, include only information explicitly present in the artifact — never infer or guess. Answer each type's guiding question internally before writing Overview:
-- **Plan:** Report Goal, Architecture Summary, per-task step completion ratio (highlighting 0% tasks), and unresolved open questions. *Guiding question: "Is this plan actionable, partially done, or stale?"*
-- **Swarm Report:** Identify era (1/2/3), completed phases, Phase 7 verification result, finding disposition (fixed/deferred/open), and Era 3 agent/commit counts. *Guiding question: "Did the swarm succeed, and what's left?"*
-- **Research:** Lead with executive summary, primary recommendation, top 3-5 findings by relevance, and whether recommendations were adopted. *Guiding question: "What did we learn, and what should we do about it?"*
-- **Roadmap:** Report phase-by-phase status (`not-started`/`in-progress`/`completed`), critical path, and source plan references. *Guiding question: "Where are we in the roadmap, and what's blocking progress?"*
-- **Bugs:** Count by status (`Investigating`/`Root Cause Found`/`Fix Ready`/`Fixed`) and impact (`Critical`/`High`/`Medium`/`Low`), listing all non-Fixed bugs. *Guiding question: "What's still broken, and how bad is it?"*
-- **Speculative:** Report competitors evaluated, winner, key differentiator, and whether the winner was merged (`git log --oneline --all | grep <branch-or-commit>` per `[{skill_dir}/references/artifact-formats.md](./references/artifact-formats.md)`). *Guiding question: "What did we try, what won, and why?"*
-- **Map-Reduce:** Report chunk count, reducer synthesis findings, and any `fidelity_warnings` in `reduction-result.json` (invalidation rate >20%). *Guiding question: "What did the analysis find across the codebase?"*
-- **Unfuck:** Report discovery categories, fixed vs remaining cleanup items, and blocked items. *Guiding question: "How much cleaner is the codebase, and what's still messy?"*
-- **PR:** When `artifact_type == "pr"`, fetch PR metadata (`gh pr view`) and full diff (`gh pr diff`), collapse `statusCheckRollup` CI status, and render the PR summary template per `[{skill_dir}/references/pr-workflow.md](./references/pr-workflow.md)` (Phase 1). Then proceed to Phase 2 (unless `CLOSED`; Phase 3 never runs for PRs).
+Status is NOT included in Phase 1 output — it is determined in Phase 3 after the audit
+completes. The summary should convey enough to understand the artifact without reading it,
+but must not reproduce it line-by-line. For file-based artifacts, only include information
+present in the artifact — do not infer, extrapolate, or add information not explicitly
+documented. If a field is ambiguous or absent, say so rather than guessing. (PR summaries
+have type-specific rules — see the PR section below.)
+
+**Guiding question pattern:** Each type below ends with "The summary should answer: [question]."
+Before writing the Overview, answer that question internally first — then write the Overview
+based on your answer. This intermediate reasoning step improves content selection and reduces
+omission of key information.
+
+### Plan
+
+Read the Goal and Architecture Summary for context. For each Task heading, report the title
+and step completion ratio (e.g., "Task 1: Add auth middleware — 3/5 steps"). Highlight any
+tasks with 0% completion. Surface unresolved open questions from the header. The summary
+should answer: "Is this plan actionable, partially done, or stale?"
+
+### Swarm Report
+
+Identify the era (1/2/3) to know what fields exist. Report which phases completed and
+whether Phase 7 (verification) passed. Summarize the finding disposition: how many fixed,
+deferred, open. For Era 3, include agent count and key commits. The summary should answer:
+"Did the swarm succeed, and what's left?"
+
+### Research
+
+Lead with the executive summary and primary recommendation. List the top 3-5 findings
+ranked by relevance, not document order. Note whether recommendations have been adopted
+(quick grep for key identifiers). The summary should answer: "What did we learn, and what
+should we do about it?"
+
+### Roadmap
+
+Report the phase-by-phase status with critical path highlighted. For each phase, note
+status (not-started/in-progress/completed) and source plan references. The summary should
+answer: "Where are we in the roadmap, and what's blocking progress?"
+
+### Bugs
+
+Count by status (Investigating/Root Cause Found/Fix Ready/Fixed) and by impact
+(Critical/High/Medium/Low). List all non-Fixed bugs with their title and impact. The
+summary should answer: "What's still broken, and how bad is it?"
+
+### Speculative
+
+Report competitors evaluated, the winner, and the key differentiator. Check whether the
+winning approach was merged by checking `git log --oneline --all | grep <branch-or-commit>` for the winning
+worktree's branch or commits (per `[{skill_dir}/references/artifact-formats.md](./references/artifact-formats.md)`). The summary should answer: "What
+did we try, what won, and why?"
+
+### Map-Reduce
+
+Report chunk count and key findings from the reducer synthesis. Check
+`reduction-result.json` for `fidelity_warnings` — if present (invalidation rate >20%),
+note that findings may be less reliable due to chunk boundary issues. The summary should
+answer: "What did the analysis find across the codebase?"
+
+### Unfuck
+
+Report discovery categories, cleanup items (fixed vs remaining), and blocked items. The
+summary should answer: "How much cleaner is the codebase, and what's still messy?"
+
+### PR
+
+When `artifact_type == "pr"`, fetch PR metadata (`gh pr view`) and full diff (`gh pr diff`), collapse `statusCheckRollup` CI status, and render the PR summary template per `[{skill_dir}/references/pr-workflow.md](./references/pr-workflow.md)` (Phase 1). Then proceed to Phase 2 (unless `CLOSED`; Phase 3 never runs for PRs).
 
 ---
 

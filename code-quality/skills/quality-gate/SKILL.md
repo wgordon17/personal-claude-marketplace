@@ -69,9 +69,28 @@ Determine work type from session activity:
 
 Select the lens set for the detected type (see `[{skill_dir}/references/lens-rubrics.md](./references/lens-rubrics.md)`).
 
-**Test plan discovery (Planning/Mixed/Code work types):** Search `{memory_dir}/plans/` by `**Branch:**` header match (fallback: branch slug prefix; use most recent timestamp). If found, store `{plan_file_path}` and `{plan_content}` for Layer 1.75 and the Lifecycle Gate. If the plan has a `## Test Plan` section, normalize `**Test Plan:**` (resolve `..`, strip trailing slashes) and verify it stays within `{memory_dir}/test-plans/`. If it escapes, set `{plan_test_plan}` = `""` and log a warning; if missing, set `{plan_test_plan}` = `""`; if valid and present, read into `{plan_test_plan}` for Layer 1 (Rounds 2 and 5) and Layer 2 (Subagent A).
+**Test plan discovery (Planning/Mixed/Code work types):** After classifying the work type,
+discover the plan file using branch-header matching (same algorithm as Layer
+1.75: search `{memory_dir}/plans/` for files whose `**Branch:**` header matches the current git
+branch; fallback to branch slug prefix matching; use most recent by unix timestamp if multiple
+match). If a plan file is found, store its absolute path as `{plan_file_path}` and its content
+as `{plan_content}`. These are consumed by Layer 1.75 and the Lifecycle Gate. If a plan file
+is found and it contains a `## Test Plan` section, read the `**Test Plan:**`
+path annotation from that section. Normalize the path (resolve any `..` components, strip
+trailing slashes) and verify it falls within `{memory_dir}/test-plans/`. If the path escapes
+that directory, set `{plan_test_plan}` to empty string and log a warning:
+"Warning: test plan path escapes {memory_dir}/test-plans/ boundary — setting {plan_test_plan}
+to empty string." If the path is valid but the file does not exist, set `{plan_test_plan}` to
+empty string (graceful fallback — no warning). If the path is valid and the file exists,
+read the test plan file and store its content as `{plan_test_plan}`. This
+value is available to all subsequent layers (Layer 1 Rounds 2 and 5, and Layer 2 Subagent A).
+If no plan file is found for the current branch, set `{plan_test_plan}` to empty string.
 
-**Incremental workflow scoping:** When invoked during an incremental swarm run (`pr_boundary_files` provided), scope all review passes to only the files in `pr_boundary_files`. When standalone, review all changed files.
+**Incremental workflow scoping:** When invoked during an incremental swarm run (the swarm Lead
+passes a `pr_boundary_files` list), scope all review passes to only the files in that list.
+Findings for files outside the boundary are not collected, not reviewed, and not counted.
+When invoked standalone (no `pr_boundary_files` context): existing behavior unchanged — review
+all changed files.
 
 ---
 
@@ -117,7 +136,7 @@ structured reasoning; without them, be explicit about pausing to reason through 
 
 ### Round Execution Protocol
 
-Execute this 7-step protocol for EVERY round (see `[{skill_dir}/references/lens-rubrics.md](./references/lens-rubrics.md)` for full Step 3 & Step 5 trap catalogs):
+Execute this 7-step protocol for EVERY round (see `[{skill_dir}/references/lens-rubrics.md](./references/lens-rubrics.md)` for the full verbatim 7-step Round Execution Protocol and Step 3 & Step 5 trap catalogs):
 
 1. **`serena::think_about_task_adherence`** — "Is this round's review still aligned with the original request?"
 2. **APPLY THE LENS** — Check every modified file, function, and edge case exhaustively from first principles until genuinely out of things to check.
@@ -131,56 +150,216 @@ Execute this 7-step protocol for EVERY round (see `[{skill_dir}/references/lens-
 6. **FINDING COUNT TRACKING** — Record `finding_count[round_N]`. If `N >= 3` and `finding_count[round_N] > finding_count[round_N-1]`, print oscillation warning.
 7. **`serena::think_about_whether_you_are_done`** — "Did I genuinely address everything this lens covers?"
 
-### No Early Exit, Valid Zero Findings & Adaptive Rounds 5-6
+### No Early Exit
 
-- **No Early Exit:** All 6 rounds are mandatory for Code/Mixed (Rounds 1-5 for non-Code). Never exit early because a round produced zero findings — each lens catches categorically different issues.
-- **Valid Zero Findings:** Reporting zero findings after genuine investigation is valid — do not fabricate findings.
-- **Adaptive Rounds 5-6:** If rounds 1-4 collectively produced `< 2` `needs-fix` findings, rounds 5-6 run in **scan-only mode**: apply the full lens checklist and record `[scan-only]` findings for Layer 2 verification instead of fixing immediately (unless clearly critical like security or data loss).
+**All 6 rounds are mandatory for Code and Mixed work types.** Each round uses a categorically
+different lens — a clean Round 3 says nothing about Round 4 (Simplicity catches AI slop and
+over-engineering), Round 5 (Adversarial catches what you rationalized away), and Round 6
+(Structural catches integration issues invisible to single-component review).
+
+For non-Code work types: Rounds 1-5 always run. Round 6 (Structural) is skipped since it
+targets code architecture integration.
+
+Do NOT exit early because a round "produced zero findings." Each lens catches categorically
+different issues. The next round will find what this round cannot see.
+
+### Valid Zero Findings
+
+Reporting zero findings for a round is a valid outcome — it means this lens found nothing
+wrong, not that you didn't look hard enough. Do not fabricate findings to satisfy the "do not
+exit early" instruction. "Do not exit early" means run the lens thoroughly — it does not mean
+you must find something. An honest "no issues under this lens" after genuine investigation is
+the correct result when the work is sound.
+
+### Adaptive Rounds 5-6
+
+If rounds 1-4 collectively produced fewer than 2 needs-fix findings, rounds 5-6 shift to
+**scan-only mode**: run the lens as analysis but report findings for Layer 2 subagent
+verification instead of applying "fix immediately." This respects the empirical observation that
+most improvement occurs in early rounds, while preserving lens diversity.
+
+In scan-only mode:
+- Still apply the full lens checklist — do not skip the analysis
+- Record findings with `[scan-only]` prefix
+- Do NOT apply step 4 (FIX ALL FINDINGS IMMEDIATELY) — instead, carry findings to Layer 2
+- Layer 2 subagents receive scan-only findings as additional context for verification
+- If a scan-only finding is clearly critical (security vulnerability, data loss), override
+  scan-only and fix immediately — use judgment, not a blanket rule
 
 ---
 
 ## Layer 1.5: Domain Expert Review
 
-**Applies to: Code and Mixed work types only (mandatory — never skip for code work).** Skip for Research, Planning, Config, and Question work types.
+**Applies to: Code and Mixed work types only.** Skip for Research, Planning, Config, and
+Question work types.
+
+Domain reviewers catch categories of issues that self-review lenses systematically miss:
+security vulnerabilities require dedicated adversarial security reasoning; performance issues
+require cost-model thinking; QA issues require test coverage analysis; code review issues
+require holistic style and maintainability assessment. Layer 1 cannot replicate these because
+each domain has its own expert heuristics.
+
+**Layer 1.5 is NOT optional for code work.** Do not skip it because Layer 1 "seemed thorough."
+
+### Trigger
+
+Work type is **Code** or **Mixed** (with a code component).
 
 ### Reviewer Spawning (4 in parallel)
 
-Spawn all 4 domain reviewers simultaneously (`model="sonnet"`, receiving `git diff`, verbatim user request, and `CLAUDE.md`/`CONTRIBUTING.md`) using the prompts in `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`:
-1. **Security** (`code-quality:security`) — Domain Reviewer: Security
-2. **QA** (`code-quality:qa`) — Domain Reviewer: QA
-3. **Performance** (`code-quality:performance`) — Domain Reviewer: Performance
-4. **Code Review** (`code-quality:code-reviewer`) — Domain Reviewer: Code-Reviewer
+Spawn all 4 reviewers simultaneously (`code-quality:security`, `code-quality:qa`, `code-quality:performance`, `code-quality:code-reviewer`, all `model="sonnet"`) using the exact `Agent(...)` dispatch block in `[{skill_dir}/references/gate-specifications.md](./references/gate-specifications.md)` and prompt templates in `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`.
+
+Each reviewer receives:
+- `git diff` of all changes
+- The original user request (verbatim)
+- CLAUDE.md / CONTRIBUTING.md project rules (if they exist)
 
 ### Synthesis Protocol
 
-After all 4 reviewers complete, synthesize findings per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`:
-1. Fix all `needs-fix` findings immediately.
-2. For `needs-input` findings: first apply the de-escalation test from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` (reclassify to `needs-fix` if a single correct resolution exists). Present remaining `needs-input` findings via `AskUserQuestion` (up to 4 per call, `multiSelect: false`, 2-4 mutually exclusive options + `Defer`, with `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`). Fix approved items and record `user_deferred` items. (If `AskUserQuestion` is unavailable, surface as `needs_context` in the report.)
-3. **Verification:** Verify `total_findings == findings_fixed + user_deferred` before proceeding to Layer 2.
+After all 4 reviewers complete, synthesize findings by classification
+(see `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`):
+
+1. Collect all findings across the 4 reviewers
+2. Fix all `needs-fix` findings immediately. Do not carry them forward.
+3. For `needs-input` findings: present each individually via AskUserQuestion (one question
+   per finding, batch up to 4 per call). Each question includes full context:
+   `"[{id}] {description}\n\nLoE: {loe}\nDecision needed: {input_needed}\n▸dp:file={file},line={line},cat={reviewer},skill=quality-gate"`
+   For each `needs-input` finding, the Lead first applies de-escalation (see Note below).
+   For findings that remain `needs-input` after de-escalation, present via AskUserQuestion
+   with the Lead-generated options + Defer appended as the final option. `multiSelect: false`.
+   User selects an approach or defers. Fix approved items using the selected approach —
+   record the selected option label in the finding's `suggested_fix` field per the Record
+   Decisions convention. Record deferred items with reason.
+4. Do NOT proceed to Layer 2 until all `needs-fix` items are fixed and all
+   `needs-input` items are resolved via user decision.
+
+**Note:** Quality-gate domain reviewers do not go through a Finding Verifier. When a
+domain reviewer classifies a finding as `needs-input`, the Lead applies the de-escalation
+test from `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` before presenting to the
+user. If the finding has a single correct resolution, reclassify to `needs-fix` and fix
+it. If genuine ambiguity exists, generate 2-4 concrete options per the Option Quality
+section in `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` (labels 3-7 words, include
+tradeoff in description, mutually exclusive) and present via AskUserQuestion with Defer
+appended.
+
+**Finding completion verification:** After fixing all `needs-fix` items and resolving all
+`needs-input` items, verify completeness per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`
+Verification Protocol: count total findings from all 4 reviewers vs (findings fixed +
+user-deferred items). Delta > 0 → findings were silently dropped → fix them before Layer 2.
+
+If AskUserQuestion is unavailable during synthesis, treat all `needs-input` findings as
+`needs_context` - surface them in the quality gate output report (don't hide them, don't
+block on them). Do NOT silently drop needs-input findings because the tool is unavailable.
+
+**The synthesis step is not optional.** If you find yourself writing "domain review skipped"
+or "findings noted for later," stop. Fix the needs-fix findings now.
 
 ---
 
 ## Layer 1.75: Plan Adherence Review
 
-**Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0 (if no plan file, skip with `"No plan file found — skipping plan adherence check."`). When a plan file exists, Layer 1.75 is **BLOCKING**.
+**Trigger:** Reuse `{plan_file_path}` and `{plan_content}` from Step 0. If Step 0 did not
+discover a plan file, skip Layer 1.75 with note: "No plan file found — skipping plan
+adherence check."
 
-Spawn `code-quality:plan-adherence` (`model="opus"`, prompt in `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`, Layer 1.75) with `{plan_file_path}`, `{plan_content}`, `git diff`, changed files, and user request. Wait for any `AskUserQuestion` escalations on unchecked tasks (`[SKIPPED by user]`, `[BLOCKED: reason]`, or return to implementation). Retry once on crash/timeout; if still failing, mark `[UNREVIEWED]`.
+**Gate behavior:** When a plan IS found, Layer 1.75 is BLOCKING — cannot proceed to Layer 2
+without completing plan verification. REQUIRED gate when a plan file exists.
+
+**Execution:**
+
+```
+Agent(
+  description="Plan adherence review",
+  subagent_type="code-quality:plan-adherence",
+  model="opus",
+  prompt=<see [{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md), Layer 1.75: Plan Adherence Reviewer>
+)
+```
+
+Provide: plan file path, plan file content (`{plan_content}`), `git diff`, changed file list,
+original user request. Store `{plan_content}` in context so Layer 2 Subagent A can receive it.
+
+**Escalation handling:** If the plan-adherence agent triggers AskUserQuestion for unchecked
+tasks, the quality gate waits for user responses. User can:
+- Approve skip (`[SKIPPED by user]`)
+- Mark blocked (`[BLOCKED: reason]`)
+- Request implementation (quality gate fails, returns to implementation)
+
+**Output:** Plan Adherence findings included in quality gate output report.
+
+**Failure handling:** If the agent crashes or times out, retry once. If the second attempt
+fails, mark as `[UNREVIEWED]` and proceed with note. If AskUserQuestion is unavailable, report
+unchecked tasks as `needs-fix` findings.
 
 ---
 
 ## Layer 2: Fresh-Context Subagent Reviews
 
-**Layer 2 is NEVER optional and NEVER substitutable** (prior swarm Phase 4 or Layer 1.5 reviews do not replace it — Layer 2 reviews the final post-fix state with zero anchoring using holistic Completeness and Adversarial lenses).
+Same-context review has an anchoring ceiling. Fresh-context subagents break through it by
+reviewing with no knowledge of your implementation decisions.
+
+**Layer 2 is NEVER optional and NEVER substitutable.** Do not skip it because the change "seems
+trivial" or subagents feel "disproportionate." Do not substitute it with prior review work —
+swarm Phase 4 reviewers, domain reviewer output, or any other earlier review does NOT replace Layer 2.
+
+**Why Layer 2 is distinct from all prior reviews:**
+- **Timing:** Layer 2 reviews the FINAL state — after Layer 1 fixes, after any swarm Phase 5
+  fixes, after everything. Prior reviews examined earlier, now-stale versions of the work.
+- **Lens:** Layer 2 uses holistic lenses (completeness-vs-original-request, adversarial).
+  Domain-specific reviewers (security, performance, QA) cover different ground.
+- **Context:** Layer 2 subagents have zero knowledge of your implementation decisions,
+  rationalizations, or "good enough" compromises. Prior reviewers in the same session share
+  your context ceiling.
+
+If you find yourself writing "SUBSTITUTED by" or "already covered by" for Layer 2, you are
+rationalizing. Stop. Spawn the subagents. If the change is truly trivial, the subagents
+finish quickly — that's cheap insurance, not wasted effort.
 
 ### Preparation
 
-Run `serena::think_about_collected_information` and collect: `git diff` (or artifact content), verbatim user request, Step 0 work type, `CLAUDE.md`/`CONTRIBUTING.md`, `{plan_content}` (for Subagent A; `'No plan file found.'` if skipped), and `{plan_test_plan}` (for Subagent A only; omit the `UAT TEST PLAN` section entirely when empty).
+```
+serena::think_about_collected_information
+→ "What context do the subagents need to review effectively?"
+```
+
+Collect:
+- `git diff` (for code) or artifact content (for non-code)
+- The original user request (verbatim)
+- Work type classification from Step 0
+- CLAUDE.md / CONTRIBUTING.md project rules (if they exist) — subagents need these
+  to check project convention compliance
+- `{plan_content}` — plan content discovered by Layer 1.75 (if a plan was found). Pass to
+  Subagent A (Completeness Reviewer) via the `{plan_content}` placeholder. Value is the plan
+  file content or `'No plan file found.'` if Layer 1.75 was skipped.
+- `{plan_test_plan}` — UAT test plan content loaded in Step 0. Pass to Subagent A
+  (Completeness Reviewer) only. Value is the test plan file content or empty string if Step 0
+  did not load a test plan. Subagent B does NOT receive this context.
+  When `{plan_test_plan}` is empty string, omit the `UAT TEST PLAN` section entirely from the
+  Subagent A prompt — do not render the heading, label, or empty placeholder.
 
 ### Subagent Execution (2 passes each — BOTH mandatory)
 
-Each subagent runs **2 mandatory passes** using `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`:
-- **Pass 1:** Spawn **Subagent A (Completeness Reviewer, opus)** and **Subagent B (Adversarial Reviewer, opus)** via `Agent(model="opus")`, save each `agentId`, and fix ALL Pass 1 findings.
-- **Pass 2 (MANDATORY):** Resume each Pass 1 agent via `SendMessage(to=<agentId from Pass 1>, ...)` (MUST use `agentId`, not agent name) with `{summary_of_fixes}` asking it to verify fixes and check for blind spots. **Wait for both Pass 2 responses** before proceeding to the gates (if no response within 2 minutes, perform the Pass 2 verification yourself) and fix all Pass 2 findings.
+Each subagent runs TWO passes. Pass 2 is NOT optional — it catches issues the subagent
+missed on Pass 1 and verifies your fixes didn't introduce new problems.
+
+Pass 2 resumes the Pass 1 agent via `SendMessage` using the **agent ID** (not the name).
+This preserves the agent's full conversation history from Pass 1. You MUST use the agent
+ID returned in the Pass 1 result — using the agent name routes to a team inbox instead.
+
+**CRITICAL — Pass 2 synchronization:** `SendMessage` is asynchronous — it returns immediately
+but the agent's response arrives later as a teammate notification. You MUST wait for each
+Pass 2 response before proceeding. Do NOT move to Memory Gate or any subsequent gate until
+BOTH Pass 2 responses are received and all findings are fixed. "Message sent" is not
+"response received." If the agent does not respond within 2 minutes, re-do the Pass 2 check
+yourself: re-read the files you fixed and verify the fixes are semantically correct (not just
+syntactically applied). A self-performed Pass 2 is better than a skipped one.
+
+Run **Subagent A: Completeness Reviewer (opus)** and **Subagent B: Adversarial Reviewer (opus)** across Pass 1 (`Agent(model="opus")`) and Pass 2 (`SendMessage(to=<agentId from Pass 1>, ...)`) using the exact execution blocks in `[{skill_dir}/references/gate-specifications.md](./references/gate-specifications.md)` and prompts in `[{skill_dir}/references/subagent-prompts.md](./references/subagent-prompts.md)`.
+
+**Why Pass 2 matters:** Pass 1 finds issues. You fix them. But fixes can introduce NEW
+issues, and the subagent's first pass always misses something (fresh eyes still have blind
+spots). Pass 2 catches both. Skipping it is like running tests once, making changes, and
+not re-running them.
 
 ---
 

@@ -23,15 +23,36 @@ Check for a newer artifact covering the same scope:
 
 ## Completed & Active Criteria
 
-- **Completed:** All audit items PASS (or PASS + SKIP-only) and no supersession detected. Type-specific shortcuts override the audit-based check (Phase 2 still runs and its results are still displayed):
-  - **Roadmaps:** `**Status:** Completed` in the **first 10 lines** of the document → classify as Completed regardless of audit results.
-  - **Bugs:** All `## BUG-NNN` sections have `**Status:** Fixed` → classify as Completed regardless of audit results.
-- **Active:** Any FAIL or PARTIAL items remain in audit results.
-- **Obsolete Declaration:** Only set via the `obsolete_flag` mechanism (user includes `obsolete` in `/summarize` invocation). Never auto-classified. Uses `**Status:** Obsolete (YYYY-MM-DD)` as the status header.
+**3. Superseded**
+Check for a newer artifact covering the same scope. Detection by type: (see table above).
 
----
+**4. Completed**
+All audit items PASS (or PASS + SKIP-only) and no supersession detected.
 
-## Archive Offer
+Type-specific completion shortcuts override the audit-based check, but Phase 2 still runs
+and its results are still displayed:
+- **Roadmaps:** `**Status:** Completed` in the **first 10 lines** of the document → classify
+  as Completed regardless of audit results. (Scoping to first 10 lines prevents per-phase
+  `**Status:**` blocks from triggering false completion.)
+- **Bugs:** All `## BUG-NNN` sections have `**Status:** Fixed` → classify as Completed
+  regardless of audit results.
+
+**5. Active**
+Any FAIL or PARTIAL items remain in audit results.
+
+Note: Obsolete is only set via the `obsolete_flag` mechanism in item 2. It is never auto-classified.
+
+### Obsolete Declaration
+
+The user declares an artifact Obsolete by including the word "obsolete" in the `/summarize`
+invocation (e.g., `/summarize hack/plans/old-plan.md obsolete`). Phase 0 strips the keyword
+from arguments before path validation and passes it forward as `obsolete_flag`, consumed
+in item 2 above. When declared Obsolete, treat identically to Superseded for archival
+purposes — offer the archive question with "obsolete" substituted for "completed/superseded".
+Use: `**Status:** Obsolete (YYYY-MM-DD)` as the status header (not "Archived") so the archive
+marker reflects the reason.
+
+### Archive Offer
 
 If status is Completed, Superseded, or Obsolete, present:
 
@@ -122,3 +143,54 @@ Stop. Do not leave the artifact in a half-archived state.
 **Step 4 — Confirm.**
 Print:
 > "Archived [path] → [new path]"
+
+---
+
+## Relationship to Other Skills
+
+| Skill | Relationship |
+|-------|-------------|
+| `/incremental-planning` | Consumer — summarizes and audits plan files |
+| `/swarm` | Consumer — summarizes and audits swarm report directories |
+| `/deep-research` | Consumer — summarizes and audits research documents |
+| `/roadmap` | Consumer + overlap — both can archive plans. /roadmap archives plans consumed by a roadmap; /summarize archives standalone completed/superseded plans. Both move to `plans/done/` using the same convention. |
+| `/bug-investigation` | Consumer — summarizes and audits BUGS.md |
+| `/speculative` | Consumer — summarizes and audits speculative competition reports |
+| `/map-reduce` | Consumer — summarizes and audits map-reduce reports |
+| `/unfuck` | Consumer — summarizes and audits cleanup reports |
+| `/fix` | Complementary — /summarize diagnoses (what's incomplete), /fix remedies (implements fixes). Active artifacts suggest `/fix`. |
+| `/quality-gate` | Complementary — quality-gate reviews work-in-progress; /summarize reviews completed artifacts across sessions. |
+| `/pr-review` | Complementary — /summarize produces a concise diff-focused PR summary; /pr-review performs multi-agent code review with finding verification. |
+
+---
+
+## Quick Reference
+
+```
+### Flow
+File artifacts: Phase 0 → Phase 1: Summarize (fast feedback) → Phase 2: Audit → Phase 3: Classify/Archive
+PRs:            Phase 0 → Phase 1: PR Summary → Phase 2: Plan-adherence audit (if plan found; skipped for CLOSED PRs) → Stop (Phase 3 never runs)
+Archived:       Phase 0 → Phase 1 → Phase 2 → Stop (Phase 3 skipped — lifecycle terminal)
+
+### Supported Artifact Types
+| Type | Location Pattern | Primary File |
+|------|-----------------|--------------|
+| Plan | `{memory_dir}/plans/{run-id}-*.md` | (self) |
+| Swarm | `{memory_dir}/swarm/{run-id}/` | `swarm-report.md` (fallback: `architect-plan.json`) |
+| Research | `{memory_dir}/research/{run-id}-*.md` | (self) |
+| Roadmap | `{memory_dir}/plans/{run-id}-roadmap-*.md` | (self) |
+| Bugs | `{memory_dir}/BUGS.md` | (self) |
+| Speculative | `{memory_dir}/speculative/{run-id}/` | `speculative-report.md` |
+| Map-Reduce | `{memory_dir}/map-reduce/{run-id}/` | `map-reduce-report.md` |
+| Unfuck | `{memory_dir}/unfuck/{run-id}/` | `cleanup-report.md` (fallback: `cleanup-plan.md`) |
+| PR | GitHub API via `gh pr view` | N/A (not file-based) |
+
+### Status Lifecycle
+Active → Completed → Archived
+Active → Superseded → Archived
+Active → Obsolete (user-declared) → Archived
+
+### What Goes Where
+CHAT: Summary (displayed first for fast feedback), audit checklist, classification, archive offer
+FILE: Only archive operations (status header + file move)
+```

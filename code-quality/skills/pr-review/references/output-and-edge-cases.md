@@ -117,3 +117,11 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
 | AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
 
+---
+
+## Relationship to Other Skills
+
+| Skill | Relationship |
+|-------|-------------|
+| `code-quality:fix` | Acts on findings from pr-review. Run /fix after /pr-review to implement fixes. For findings flagged with `Recommended resolution: /deep-research`, /fix invokes `/deep-research` before dispatching investigators. |
+

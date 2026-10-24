@@ -124,3 +124,16 @@ Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_
 | Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
 | AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
 
+---
+
+## Relationship to Other Skills
+
+| Skill | Relationship |
+|-------|-------------|
+| `incremental-planning` | Creates plans that plan-review reviews. Run plan-review after incremental-planning produces a plan file. |
+| `quality-gate` | Complementary: plan-review is pre-implementation (plan quality), quality-gate is post-implementation (code quality). |
+| `plan-adherence` (agent) | Complementary: plan-review checks plan quality before coding; plan-adherence agent checks implementation fidelity after coding. |
+| `swarm` | plan-review should run before `/swarm` — catch gaps in the plan before spawning parallel implementers. |
+| `roadmap` | plan-review can review individual milestone plans that roadmap generates. |
+| `code-quality:fix` | Acts on plan findings. /fix edits the plan file only — never implements code from plan-review findings. For Research Gaps / Unknown Unknowns, /fix executes actual spikes — including invoking `/deep-research` for findings that name third-party technology research gaps. |
+

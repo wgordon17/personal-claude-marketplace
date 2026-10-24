@@ -219,3 +219,37 @@ After the report, print context-appropriate suggestions (show all that apply, on
 | Spikes invalidated assumptions | `Spikes invalidated {N} assumption(s). Review updated plan sections carefully — consider /plan-review to verify.` |
 | BUGS.md was updated | `Bug fixes applied. BUGS.md entries updated to 'Fix Ready'. Verify manually and update to 'Fixed' when confirmed.` |
 
+---
+
+## Relationship to Other Skills
+
+| Skill | Relationship |
+|---|---|
+| `code-quality:pr-review` | Produces findings that /fix acts on. Run /pr-review first, then /fix. |
+| `code-quality:plan-review` | Produces plan findings that /fix acts on. /fix edits the plan file only. For Research Gaps and Unknown Unknowns, /fix executes actual spikes to verify assumptions. |
+| `code-quality:quality-gate` | Not a source — quality-gate fixes findings inline. /fix suggests /quality-gate after code fixes for verification. |
+| `code-quality:bug-investigation` | Documents bugs with root causes and resolution plans. /fix implements resolution plans or recommends /incremental-planning for complex bugs. |
+| `code-quality:incremental-planning` | Recommended by /fix when a bug resolution requires significant scope, or when a spike invalidates a plan assumption requiring replanning. |
+| `code-quality:swarm` | Swarm has its own internal Fixer (Phase 5). /fix is the standalone equivalent for non-swarm workflows. |
+
+---
+
+## Quick Reference
+
+```
+### Flow
+Phase 0: Context Detection → Phase 0.5: Normalize → Phase 1: Triage + CWD Validation →
+Phase 2: Investigate ALL findings (background, pre-implementation) →
+Conflict Detection → Phase 3: Implement (lead, sequential, file order) →
+Phase 4: Verify → Phase 5: Report
+
+### Fix Target Rules
+plan-review findings        → edit plan file ONLY (never implement code)
+plan-review Research Gaps   → RUN spikes, then update plan with resolved evidence
+pr-review findings          → edit code on PR branch
+bug-investigation findings  → implement resolution OR recommend /incremental-planning
+
+### Not Supported
+quality-gate → excluded (fixes findings inline, reports only aggregates)
+```
+

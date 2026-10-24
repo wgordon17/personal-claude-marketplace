@@ -6046,11 +6046,9 @@ class TestRTKConfig:
 
     def test_no_rtk_binary_skips_silently(self, tmp_path):
         """Without rtk on PATH, no config message is emitted."""
-        # Create a minimal PATH with only a uv symlink, no rtk
+        # Create a minimal PATH with no rtk binary
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        uv_real = subprocess.run(["which", "uv"], capture_output=True, text=True).stdout.strip()
-        (bin_dir / "uv").symlink_to(uv_real)
         env = {
             **os.environ,
             "PATH": str(bin_dir),
@@ -6059,7 +6057,7 @@ class TestRTKConfig:
         }
         env.pop("RTK_DISABLED", None)
         result = subprocess.run(
-            ["uv", "run", SCRIPT, "--validate"],
+            [sys.executable, SCRIPT, "--validate"],
             capture_output=True,
             text=True,
             env=env,

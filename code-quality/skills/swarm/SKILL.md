@@ -99,18 +99,23 @@ Run the project test suite and record the baseline. Check git status, ensure a c
 
 **Tracker Extraction & Validation:** Extract `{tracker}` from `**Tracker:**` per `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` (default `none`). Verify `{tracker}` is terminal (`github:owner/repo#N`, `jira:PROJ-N`, or `none`); if non-terminal (`github:pending`, `github:linked#N`, `jira:pending`), halt via `AskUserQuestion` until resolved.
 
-**Workflow detection:** Extract `**Workflow:**` from the plan header. If `incremental`, extract `**PR Boundaries:**` and `**PRs:**`, set `{workflow_mode}` = `incremental` and `{pr_boundaries}` = parsed mapping, and follow `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)` for checkpoint discovery, initial branch naming (`feat/{plan-slug}-pr1`), resume, and `--fresh`. If `fast` or absent, use fire-and-forget behavior.
+**Workflow detection:** After discovering the plan file, extract `**Workflow:**` from the header.
+If `incremental`:
+- Extract `**PR Boundaries:**` and parse task-to-PR mapping
+- Extract `**PRs:**` for any already-created PR numbers
+- Set `{workflow_mode}` = `incremental`, `{pr_boundaries}` = parsed mapping
+- Follow `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)` for checkpoint discovery, initial branch naming (`feat/{plan-slug}-pr1`), resume, and `--fresh`. If `fast` or absent, use fire-and-forget behavior.
 
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
-Use `AskUserQuestion` to resolve ambiguities and approve the swarm composition (core agents + auto-detected optional reviewers + Phase 3.5 BDD-Step-Writer if `**Feature Files:**` is present). After Phase 1 approval, the swarm runs autonomously except for architect blockers, max-retry escalations, or `needs-input` triage.
+Use `AskUserQuestion` to resolve ambiguities and approve the swarm composition (core agents + auto-detected optional reviewers + Phase 3.5 BDD-Step-Writer if `**Feature Files:**` is present). After Phase 1 approval, the swarm runs autonomously except for architect blockers, max-retry escalations, or `needs-input` triage (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 1).
 - **jira:jira-agent** (conditional): Spawned at Phase 7 when `{tracker}` is `jira:PROJ-N` (see `[{skill_dir}/../../../jira/agents/jira-agent.md](../../../jira/agents/jira-agent.md)`).
 
 ### Phase 2: Architect (opus)
 
 Spawn `code-quality:architect` (opus) to classify the task using the Cynefin framework (`[{skill_dir}/references/cynefin-reference.md](./references/cynefin-reference.md)`) and write `{run_dir}/architect-plan.json` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`), including `components`, `risks`, `questions`, and `documentation_impact`.
 
-After receiving `architect-plan.json`, the Lead MUST:
+After receiving `architect-plan.json`, the Lead MUST follow `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` (Phase 2):
 1. Present any `questions` and high-impact `risks` via `AskUserQuestion`
 2. Verify all requested scope is covered and validate warm-bundle fields (`[{skill_dir}/references/warm-bundle-handoff.md](./references/warm-bundle-handoff.md)`)
 3. Use `cynefin_domain` to inform Phase 2.5 skip decisions and pipeline mode
@@ -121,7 +126,7 @@ Keep the Architect active through Phase 3 for clarifications.
 ### Phase 2.5: Security Design Review (conditional)
 
 **Skip when:** Config/docs/test-only or Clear-domain tasks not touching auth, data, network, or API surfaces.
-Spawn `code-quality:security` (opus) for a STRIDE review of `architect-plan.json` → `{run_dir}/security-design-review.json` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Route `revise` (`needs-fix`) back to Architect (max 2 iterations, then `AskUserQuestion`); on `proceed`, append `security_constraints` to `architect-plan.json`.
+Spawn `code-quality:security` (opus) for a STRIDE review of `architect-plan.json` → `{run_dir}/security-design-review.json` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Route `revise` (`needs-fix`) back to Architect (max 2 iterations, then `AskUserQuestion`); on `proceed`, append `security_constraints` to `architect-plan.json` (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 2.5).
 
 ### Phase 2.7: Speculative Fork (conditional)
 
@@ -130,17 +135,18 @@ Spawn `code-quality:security` (opus) for a STRIDE review of `architect-plan.json
 ### Phase 2.8: Pre-Implementation Simplification Review
 
 **Skip when:** Config/docs/test-only changes, or architect plan modifies fewer than 3 files total.
-Spawn **Reduction Analyst** (`general-purpose`, opus, read-only) to check for removable legacy code, premature abstractions, library alternatives (`[{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`), and net complexity impact → `{run_dir}/reduction-review.json`. Integrate accepted reductions into `architect-plan.json`.
+Spawn **Reduction Analyst** (`general-purpose`, opus, read-only) to check for removable legacy code, premature abstractions, library alternatives (`[{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`), and net complexity impact → `{run_dir}/reduction-review.json`. Integrate accepted reductions into `architect-plan.json` (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Step 2.8).
 
 ### Phase 3: Pipelined Implementation
 
-Create a 60s `CronCreate` watchdog, then spawn Implementer (sonnet), Reviewer (opus), Test-Writer (sonnet), and Test-Runner (haiku). Route components through `Implementer → Reviewer → Test-Writer → Test-Runner` via typed JSON messages and `ContextAcknowledgment` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Route Reviewer rejections (max 3 iterations) and Test-Runner failures (max 2 cycles) back to Implementer. Tear down the watchdog (`CronDelete`) when Phase 3 ends or aborts. See `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)` for parallelism, backpressure, and mini-pipeline fan-out (`components.count > 3` and `independent_groups.count > 1`).
+Create a 60s `CronCreate` watchdog, then spawn Implementer (sonnet), Reviewer (opus), Test-Writer (sonnet), and Test-Runner (haiku). Route components through `Implementer → Reviewer → Test-Writer → Test-Runner` via typed JSON messages and `ContextAcknowledgment` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Route Reviewer rejections (max 3 iterations) and Test-Runner failures (max 2 cycles) back to Implementer. Tear down the watchdog (`CronDelete`) when Phase 3 ends or aborts. See `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)` and `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` (Phase 3) for parallelism, backpressure, and Parallel Mini-Pipelines (`components.count > 3` and `independent_groups.count > 1`).
 
 **PR boundary handling (incremental only):** See `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)` for the 9-step boundary stop procedure (scoped Phase 4/4.5 reviews, scoped Phase 5 Fixer, Verifier baseline check, Boundary Updater `checkpoint.json` + plan `**PRs:**` / `**Branch:**` updates, draft PR creation, issue comment, and shutdown).
 - **PR framing rules:** Never number PRs ("Part 1 of 3"), reference other PRs in the series, or describe a PR as part of a larger whole. Each PR must stand on its own.
 
 ### Phase 3.5: BDD Step Writing (conditional)
 
+(Not to be confused with /speculative's internal Phase 3.5 synthesis within Phase 2.7.)
 **Skip when:** No `## Test Plan` section, no `**Feature Files:**` path, or `{TEST_PLAN}` is empty.
 When triggered after Phase 3, follow `[{skill_dir}/references/bdd-pipeline.md](./references/bdd-pipeline.md)` (Steps 3.5.1–3.5.5) to resolve `{feature_target_dir}`, promote regular `.feature` files, install BDD dependencies if `**BDD Setup Needed:** yes`, spawn BDD-Step-Writer with `{bdd_framework_info}` and `{TEST_PLAN}`, and collect `BDDStepHandoff` for Phase 7.
 

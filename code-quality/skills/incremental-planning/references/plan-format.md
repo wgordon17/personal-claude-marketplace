@@ -4,6 +4,34 @@ This reference defines the exact plan header fields, `## File Structure` section
 
 ---
 
+## Phase 1 & Phase 3 Chat Output Examples
+
+Phase 1 chat output example:
+> "I explored the codebase. Here's what's relevant:
+>
+> - The auth system uses middleware in `src/middleware/auth.ts` with JWT strategy only
+> - `src/stores/redis.ts` has a connection pool, currently used for caching
+> - Tests in `tests/middleware/` cover JWT validation but no session tests exist
+> - PROJECT.md notes a Jan 15 decision to keep auth stateless — this would reverse that
+> - Your last session refactored the Redis connection pool, which is relevant here
+>
+> This shapes my questions."
+
+Phase 3 expert consultation chat output example:
+> "Expert agents flagged two things:
+>
+> **Architecture:** Recommends separating session middleware from JWT middleware.
+> The existing chain pattern in `src/middleware/index.ts` supports this.
+>
+> **Security:** Flags that Redis sessions need session fixation protection and
+> key expiry. Current Redis config doesn't set expiry."
+
+Then:
+
+AskUserQuestion: "Should we address session fixation in this work or note it as follow-up?"
+
+---
+
 ## 1. Write the Header
 
 Write the plan file with a header containing:
@@ -189,3 +217,117 @@ Each task includes:
 - Commit message
 
 **Chat output per task:** "Task N written: [1 sentence description]. N steps."
+
+---
+
+## 3.5 Reactive Breakpoints
+
+While writing a task, if you encounter ambiguity, apply this decision:
+
+**Scope/Architecture ambiguity** — could change the plan's shape, affect other tasks, or
+alter the file structure:
+- STOP writing the current task immediately
+- Use `AskUserQuestion` with the specific ambiguity and the context that caused it
+- Do NOT continue writing until the user answers
+- Example: "While writing Task 4, I realized the auth flow could go through middleware OR
+  a decorator pattern. This affects Tasks 5-7. Which approach?"
+
+**Implementation detail ambiguity** — resolvable during execution, doesn't change plan shape:
+- Flag inline in the task as `[ASSUMPTION: description]`
+- Continue writing
+- The assumption accumulates for Phase 6 surfacing
+- Example: `[ASSUMPTION: Redis session TTL should be 24h — adjustable during implementation]`
+
+**Classification test:** "If I'm wrong about this, would it change other tasks?"
+- YES → scope ambiguity → hard gate, stop and ask
+- NO → detail ambiguity → flag inline and continue
+
+---
+
+## 4. Checkpoint Every 2-3 Tasks
+
+After every 2-3 tasks:
+
+```
+AskUserQuestion: "I've written tasks N-M covering [summary].
+Tasks so far: 1) X, 2) Y, 3) Z.
+Any adjustments before I continue?"
+
+Options:
+- "Looks good, continue"
+- "Let me review the plan file"
+- "Adjust something"
+```
+
+If "Let me review" → wait for the user to read the file and come back.
+If "Adjust something" → discuss, rewrite just that task, continue.
+
+Mention in the checkpoint: "N assumptions flagged so far — will surface all in Phase 6."
+
+### 5. Incorporate Feedback Immediately
+
+When the user gives feedback on a specific task, rewrite ONLY that task. Don't regenerate
+the entire plan.
+
+---
+
+## Phase 5: Holistic Validation Checklist
+
+1. Re-read the complete plan file
+2. Use **sequential-thinking** MCP to check for gaps: missing error handling, untested paths,
+   dependency ordering issues
+3. Cross-reference against Phase 2 requirements: does the plan cover everything?
+4. **File structure reconciliation:** Compare the `## File Structure` section against the
+   files actually referenced in all tasks. If tasks discovered new files not in the original
+   mapping, update the File Structure section. If planned files were dropped, remove them.
+5. **PR boundary validation (incremental workflow only):**
+   - Verify every task has a `**PR:** N` field
+   - Verify PR numbers are sequential starting from 1
+   - Populate the `**PR Boundaries:**` header field from the actual task-to-PR assignments
+     (format: `PR 1: Tasks 1-3, PR 2: Tasks 4-6`). This field was left blank during header
+     writing and is now finalized.
+   - Verify `**PR Boundaries:**` header matches the actual task-to-PR mapping
+   - Verify each PR boundary's tasks form a coherent unit (all dependencies within a PR are
+     satisfied by earlier tasks in the same or previous PRs)
+   - Estimate lines changed per PR boundary (from File Structure). Flag if any boundary
+     exceeds ~500 lines with a suggestion to split further — but do not auto-split.
+6. **Documentation coverage check:** For every task whose changes match the documentation
+   triggers in `[{skill_dir}/../../references/documentation-taxonomy.md](../../../references/documentation-taxonomy.md)`, verify the task includes
+   corresponding documentation updates. Cross-reference surfaces discovered in Phase 1.
+   Check both trigger coverage (every trigger has a doc update) and surface coverage (every
+   affected surface is updated).
+7. **Collect flags for Phase 6:**
+   - Collect all `[ASSUMPTION: ...]` flags from the plan file (from Phase 4 breakpoints and
+     reviewer-detected assumptions)
+   - Collect all open questions from the plan header's "Open Questions" section marked `[human]`
+   - Build a consolidated flags report to present in Phase 6
+8. **Suggest `/test-plan` if applicable:** If this plan involves user-facing behavior changes
+   (new features, modified user workflows, UI changes), output in chat:
+   "This plan includes user-facing changes. Consider running `/test-plan` with this plan file
+   to generate UAT scenarios and acceptance criteria before implementation."
+   This suggestion is informational only — do not gate, block, or use `AskUserQuestion` for it.
+   The determination of "user-facing behavior changes" is a runtime judgment call, not a
+   structured detection.
+
+> "Validation complete. N flags collected. Proceeding to completion report."
+
+---
+
+## Quick Reference
+
+```
+### Flow
+Phase 0: Assess depth → Phase 1: Explore (findings in chat) →
+Phase 2: Clarify (min 3 questions + tracker question) → Phase 3: Consult (complex only) →
+Phase 4: Write incrementally (summaries in chat, content to file) →
+Phase 5: Validate → Phase 6: Complete (issue creation + completion report)
+
+### What Goes Where
+CHAT: Research findings, reasoning, questions, 1-sentence task summaries, checkpoints
+FILE: Plan header, task definitions, code snippets, test commands, commit messages
+NEVER IN CHAT: Full plan content, task details, code blocks from the plan
+
+### Plan File Location
+1. {memory_dir}/plans/{run-id}-<feature>.md → if memory dir exists (detect per [{skill_dir}/../../references/project-memory-reference.md](../../../references/project-memory-reference.md))
+2. ~/.claude/plans/{run-id}-<feature>.md → fallback for all other cases
+```

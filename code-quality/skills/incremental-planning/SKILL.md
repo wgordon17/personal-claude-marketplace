@@ -127,63 +127,135 @@ specific questions — not generic ones.
 
 ### Chat Output
 
-Share your findings in full (specific files, patterns, past decisions) — the user needs this context to answer Phase 2 questions accurately.
+Share your findings in full. The user needs this context to answer Phase 2 questions accurately.
+This is NOT a summary — include specific files, patterns, past decisions, and anything relevant (see the Phase 1 & Phase 3 chat output examples in `[{skill_dir}/references/plan-format.md](./references/plan-format.md)`).
 
 ## Phase 2: Clarify
 
-Ask targeted questions using `AskUserQuestion` informed by Phase 1 findings.
+Ask targeted questions using the `AskUserQuestion` tool. Questions must be informed by
+Phase 1 findings — reference specific code, files, and past decisions.
 
 ### Hard Gate
 
-**You MUST ask at least 3 rounds of `AskUserQuestion` and receive answers before writing ANY plan content to a file. No exceptions.**
+**You MUST ask at least 3 rounds of `AskUserQuestion` and receive answers before writing
+ANY plan content to a file. No exceptions.**
+
+"Simple" tasks are where unexamined assumptions cause the most wasted work. If the task is
+truly simple, the questions will be quick to answer.
 
 ### Tracker Question
 
-After the 3 clarification rounds (or after 1-2 questions for light planning), ask the user about issue tracking via `AskUserQuestion` (does NOT count toward the 3-round minimum):
-1. **Create GitHub issue** — Create a new GH issue in the detected repo
-2. **Link existing GitHub issue** — Link to an existing GH issue by number (e.g., `#42`; follow up for issue number)
-3. **Create Jira card** — Create a new Jira card via `jira-agent`
-4. **Link existing Jira card** — Link to an existing Jira card by key (e.g., `PROJ-123`; follow up for key)
-5. **None** — No external issue tracking
+After the Hard Gate minimum of 3 clarification rounds is satisfied — as the final
+question before the Exit Condition check — ask the user about issue tracking via
+`AskUserQuestion`. This question does NOT count toward the 3-round minimum.
+For light planning (1-2 questions), ask the Tracker Question after the clarification
+questions are complete, regardless of round count.
+
+Present these 5 options:
+
+1. **Create GitHub issue** — "Create a new GH issue in the detected repo with an issue summary"
+2. **Link existing GitHub issue** — "Link to an existing GH issue by number (e.g., #42)"
+3. **Create Jira card** — "Create a new Jira card via the jira-agent with an issue summary"
+4. **Link existing Jira card** — "Link to an existing Jira card by key (e.g., PROJ-123)"
+5. **None** — "No external issue tracking for this plan"
+
+If the user selects "Link existing" for either GH or Jira, follow up with an
+`AskUserQuestion` asking for the issue number/key.
 
 ### Workflow Question
 
-After the Tracker Question, detect the project's workflow mode (does NOT count toward the 3-round minimum):
-1. Check `WORK_ETHIC.md` for `**Workflow:**`, then `CLAUDE.md` for `## Workflow` (`mode: incremental` or `mode: fast`, default `fast`).
-2. Inform the user of the detected mode (`incremental` adds PR boundary markers; `fast` has no PR boundaries) and allow overriding via `AskUserQuestion` for this plan.
+After the Tracker Question, detect the project's workflow mode. This question does NOT count
+toward the 3-round minimum.
+
+1. Check WORK_ETHIC.md for `**Workflow:**` field
+2. Check project CLAUDE.md for `## Workflow` section
+3. If found and set to `incremental`, inform the user: "Detected incremental workflow mode.
+   I'll add PR boundary markers to the plan."
+4. If not found or set to `fast`, inform the user: "Using fast workflow (no PR boundaries).
+   You can override this by setting `**Workflow:** incremental` in your WORK_ETHIC.md,
+   or adding a `## Workflow` section with `mode: incremental` to your project CLAUDE.md."
+5. Allow the user to override via `AskUserQuestion` if they want to change the detected mode
+   for this specific plan.
 
 ### Exit Condition
 
-Proceed to Phase 3 (or Phase 4 for light planning) only when you can articulate ALL four:
+You can proceed to Phase 3 (or Phase 4 directly for light planning) when you can articulate ALL of:
 1. **Scope** — what the user wants built
 2. **Behavior** — how it should work
 3. **Constraints** — technical, security, compatibility requirements
 4. **Non-scope** — what's explicitly out of scope
 
+If you can't articulate all four, ask another question.
+
 ### Non-Scope Validation
 
-Verify each Non-scope item is genuinely unrelated to the user's stated goals. Items that address the user's goals but are labeled "future version," "v2," or "next iteration" are scope reduction — move them into the task list or present an explicit scope question via `AskUserQuestion`. Do not silently exclude work.
+Before finalizing the Non-scope section, verify each item is genuinely unrelated to
+the user's stated goals. Items that address the user's goals but are labeled as
+"future version," "v2," or "next iteration" are scope reduction, not scope management —
+move them into the task list or present them to the user as an explicit scope question
+via `AskUserQuestion`.
 
-### Question Design & Anti-Pattern
+The model does not decide what is in scope. If prioritization is needed, present
+options: "This plan could include [X] (adds ~N tasks) or defer it. Which do you prefer?"
+Do not silently exclude work by relabeling it as out of scope.
 
-- Include research context with each question; one primary question per `AskUserQuestion` call (**Scope**, **Approach**, **Constraints**, **Priority**).
-- **Do NOT propose "2-3 approaches" during clarification** — ask about requirements and let the approach emerge from answers.
+### Question Design
+
+- Use `AskUserQuestion` with structured options when possible (easier to answer)
+- Include research context WITH each question — don't make the user remember Phase 1 findings
+- One primary question per `AskUserQuestion` call
+- Question categories: **Scope** (multi-select), **Approach** (single-select),
+  **Constraints** (open-ended ok), **Priority** (single-select)
+
+### Anti-Pattern: Proposing Approaches Too Early
+
+Do NOT propose "2-3 approaches" during clarification. That's the brainstorming skill's pattern.
+Here, the approach **emerges from answers**. Ask about requirements, not solutions.
+
+Bad: "I see two approaches: A or B. Which do you prefer?"
+Good: "Should sessions replace JWT for web clients, or coexist alongside JWT?"
+
+The difference: the first imposes Claude's framing. The second discovers the user's intent.
 
 ## Phase 3: Consult (Conditional)
 
-**Only for complex tasks** (architecture changes, security-sensitive work, major features). Skip for light planning.
-Launch specialized agents in parallel via `Agent`:
-- **`code-quality:architect`** — key architectural considerations for Phase 1 context + Phase 2 requirements
-- **`code-quality:security`** — security implications (if auth, data, or API work)
-- **`code-quality:qa`** — testing strategy (if non-obvious)
-- **`/deep-research`** (via `Skill`) — resolve open third-party technology questions from Phase 1/2
+**Only for complex tasks** (architecture changes, security-sensitive work, major features).
+Skip this phase for light planning.
 
-Present expert findings in chat and use `AskUserQuestion` for any resulting design decisions.
+Launch specialized agents in parallel using the `Agent` tool:
+
+- **`code-quality:architect`** — "Given [Phase 1 context] and [Phase 2 requirements],
+  what are the key architectural considerations?"
+- **`code-quality:security`** — "Review these requirements for security implications"
+  (only if auth, data, or API work)
+- **`code-quality:qa`** — "What testing approach covers these requirements?"
+  (only if test strategy is non-obvious)
+- **`/deep-research`** (via `Skill` tool, not `Agent`) — "Research [specific technology/pattern
+  question] to inform the plan" (invoke when Phase 1 identified a named third-party technology
+  and Phase 2 answers did not resolve the technology choice)
+
+Present findings and decision points directly in chat. Use `AskUserQuestion` for
+decisions that came out of expert review (see `[{skill_dir}/references/plan-format.md](./references/plan-format.md)`).
 
 ## Phase 4: Write Incrementally
 
-Write one section at a time to the plan file:
-1. Detect `{memory_dir}` per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` and write to `{memory_dir}/plans/{run-id}-<feature>.md` (fallback: `~/.claude/plans/{run-id}-<feature>.md`). Do NOT create `hack/` if none exists. Announce the plan file path.
+Now write the plan. One section at a time.
+
+### Determine Plan File Location
+
+Before creating the plan file, check where it belongs:
+
+1. Detect the project memory directory using the convention in
+   `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` (Directory Detection and Worktree Resolution sections).
+2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
+   create the plan at `{memory_dir}/plans/{run-id}-<feature>.md`
+   (create the `plans/` subdirectory if it doesn't exist)
+3. **If none found:** Fall back to `~/.claude/plans/{run-id}-<feature>.md`
+   (create `~/.claude/plans/` if it doesn't exist)
+
+**Do NOT create a `hack/` directory if one doesn't exist.** That's a project-level decision.
+
+Announce the location: "Plan file: `hack/plans/feat-auth-1711388400-session-auth.md`"
 
 ### Writing Sequence
 

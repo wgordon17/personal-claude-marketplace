@@ -85,9 +85,21 @@ Read and parse the input plan file before doing anything else.
    - Tasks marked as "internal refactor" or "infrastructure" with no user-visible changes
      are noted but do not generate scenarios
 
-6. **Detect test runner and BDD infrastructure** — Search project dependency manifests (`package.json`, `pyproject.toml`, `requirements*.txt`, `go.mod`, `Cargo.toml`, `build.gradle`, `pom.xml`, `Gemfile`) using `Bash` (`rg -l` / `test -f`) or `Read` per the detection tables and priority ladder in `[{skill_dir}/references/bdd-integration.md](./references/bdd-integration.md)` (Phase 0 Step 6). Record `test_runner` (or `unknown`) and detected BDD framework (or `none`).
+6. **Detect test runner and BDD infrastructure** — Search project dependency files for both
+   the project's test runner and any existing BDD tooling. Both are needed: the test runner
+   informs Phase 3's BDD framework recommendations; the BDD detection determines whether
+   Phase 3 auto-selects or asks the user. Follow the detection tables and priority ladder in `[{skill_dir}/references/bdd-integration.md](./references/bdd-integration.md)` (Phase 0 Step 6). Record `test_runner` (or `unknown`) and detected BDD framework (or `none`) and the detected file path for Phase 5 (BDD Staging).
 
-7. **Resolve unknown test runner** — If `test_runner` is `unknown`, ask via `AskUserQuestion` ("What test framework does this project use?") and sanitize the answer before storing (strip newlines, `**`, backticks, `<!--`, `-->`, and `|`).
+7. **Resolve unknown test runner** — If `test_runner` is still `unknown` after the detection
+   tables above, ask via `AskUserQuestion` before proceeding:
+   "I couldn't detect your test runner automatically. What test framework does this project use?
+   (e.g., Vitest, Jest, pytest, go test, cargo test)"
+   Use the answer as `test_runner` for all subsequent phases. Before writing `test_runner` into
+   any annotation field, sanitize the value: collapse to a single line (strip newlines), strip
+   markdown bold markers (`**`), backtick sequences, HTML comment delimiters (`<!--`, `-->`),
+   and pipe characters (`|`). Store only the sanitized value.
+   This resolution happens once in Phase 0 so both the BDD auto-select branch (when BDD infra
+   exists) and the research branch (when no BDD infra exists) receive a known test_runner value.
 
 8. **Print ingestion summary:**
 
@@ -257,15 +269,54 @@ Determine whether to generate BDD `.feature` files in addition to the UAT docume
 
 ### Exploratory Charter Decision
 
-Ask via `AskUserQuestion` whether to include exploratory test charters (`Explore [target] with [resources] to discover [information]`) for high-uncertainty areas (external integrations, complex state machines, evolving requirements, load characteristics) and record `include_charters: true/false`.
+Ask as a follow-up (or combine with the above if Manual UAT):
+
+"Should I include exploratory test charters for any high-uncertainty areas?
+Exploratory charters are brief mission statements for manual testing sessions where
+the behavior isn't fully specified: 'Explore [target] with [resources] to discover [information]'.
+
+Answer 'yes' if any plan tasks involve:
+- New integrations with external services
+- Complex state machines or multi-step workflows
+- Areas where requirements are still evolving
+- Performance or load characteristics under real conditions
+
+(yes/no or describe the areas)"
+
+Record `include_charters: true/false` and any specified areas.
 
 ---
 
 ## Phase 4 — Test Plan Document Generation
 
-Write the primary human-readable UAT test plan document:
-1. **Determine output path:** Write to `{memory_dir}/test-plans/{run-id}.md` if `{memory_dir}` is confirmed (fallback: `~/.claude/test-plans/{run-id}.md`; never create `hack/` if none exists).
-2. **Document format:** Read scenarios from the Phase 2 staging file, write the complete test plan document (`# Test Plan: {Goal}`, `## User Personas`, `## User Journey Map`, `## Scenarios` with Gherkin blocks and manual steps, `## Traceability Matrix`, and optional `## Exploratory Charters`) to `{output_path}` using the exact template in `[{skill_dir}/references/templates.md](./references/templates.md)` (Phase 4), then delete the Phase 2 staging file.
+Write the test plan document. This is the primary artifact — a human-readable document
+that a user can print out, follow step by step, and mark pass/fail.
+
+### Determine Output Path
+
+Use the two-stage fallback:
+
+1. **If `{memory_dir}` is confirmed** (detected in Phase 0): write to
+   `{memory_dir}/test-plans/{run-id}.md`
+   (create `test-plans/` subdirectory if it doesn't exist)
+2. **If no memory dir found**: fall back to `~/.claude/test-plans/{run-id}.md`
+   (create directory if it doesn't exist)
+
+Use the `{run-id}` generated in Phase 0 Step 4.
+
+**Do NOT create a `hack/` directory if one doesn't exist.** Only write to confirmed existing
+memory directories or the `~/.claude/` fallback.
+
+**Fallback limitation:** When the `~/.claude/` fallback is used, downstream skills validate
+test plan paths against their own `{memory_dir}/test-plans/`. If the downstream skill's
+`{memory_dir}` differs from `~/.claude/`, path validation rejects the test plan (empty string
+fallback). The test plan document remains useful standalone for manual UAT reference.
+
+Print: "Writing test plan to: `{output_path}`"
+
+### Document Format
+
+Read scenarios from the Phase 2 staging file, write the complete test plan document (`# Test Plan: {Goal}`, `## User Personas`, `## User Journey Map`, `## Scenarios` with Gherkin blocks and manual steps, `## Traceability Matrix`, and optional `## Exploratory Charters`) to `{output_path}` using the exact template in `[{skill_dir}/references/templates.md](./references/templates.md)` (Phase 4), then delete the Phase 2 staging file.
 
 ---
 
