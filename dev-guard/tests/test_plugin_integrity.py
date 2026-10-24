@@ -1005,3 +1005,124 @@ class TestRoadmapBugsContractIntegrity:
             f"{ROADMAP_SKILL}: Phase 1 hold instruction appears AFTER Phase 4 write instruction. "
             "The cross-phase contract ordering is broken."
         )
+
+
+class TestSkillMigrationFidelity:
+    """Deterministic check that progressive-disclosure skill extractions preserve
+    all reference files in resolved bundles, keep every SKILL.md under 500 lines,
+    and maintain >=94.5% per-skill / >=99.0% overall line-level fidelity against
+    the pre-migration baseline commit (5b7dbebf9555c68c976d5ad906d41ec6cc374c07)."""
+
+    PRE_MIGRATION_BASE = "5b7dbebf9555c68c976d5ad906d41ec6cc374c07"
+
+    @staticmethod
+    def _norm_mechanical(line: str) -> str:
+        s = line.strip()
+        s = re.sub(r"^#{1,6}\s+", "# ", s)
+        s = s.replace("(../../../references/", "(../../references/")
+        s = s.replace("(../../../../jira/", "(../../../jira/")
+        s = s.replace("(../../incremental-planning/", "(../incremental-planning/")
+        s = s.replace("(../../fix/", "(../fix/")
+        s = s.replace("(./subagent-prompts.md", "(./references/subagent-prompts.md")
+        s = s.replace("(./communication-schema.md", "(./references/communication-schema.md")
+        s = s.replace("(./pipeline-model.md", "(./references/pipeline-model.md")
+        s = s.replace("(./orchestration-playbook.md", "(./references/orchestration-playbook.md")
+        s = s.replace("(./cynefin-reference.md", "(./references/cynefin-reference.md")
+        s = s.replace("(./artifact-formats.md", "(./references/artifact-formats.md")
+        s = s.replace("jira/references/", "jira/reference/")
+        s = s.replace("../../references/", "../../reference/")
+        s = s.replace("references/BRANCHLESS.md", "BRANCHLESS.md")
+        return s
+
+    def test_all_skills_under_500_lines_and_all_local_references_bundled(self):
+        import importlib.util
+
+        runner_path = REPO_ROOT / "skill-eval" / "skill_eval" / "runner.py"
+        spec = importlib.util.spec_from_file_location("skill_eval_runner", runner_path)
+        assert spec is not None and spec.loader is not None
+        runner_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner_mod)
+        resolve_skill_bundle = runner_mod.resolve_skill_bundle
+
+        skill_files = sorted(REPO_ROOT.glob("*/skills/*/SKILL.md"))
+        assert len(skill_files) == 24, f"Expected 24 skills, found {len(skill_files)}"
+
+        for skill_md in skill_files:
+            line_count = len(skill_md.read_text().splitlines())
+            assert line_count < 500, f"{skill_md} is {line_count} lines (must be < 500)"
+
+            skill_dir = skill_md.parent
+            bundle = resolve_skill_bundle(skill_dir, repo_root=REPO_ROOT)
+            assert bundle is not None, f"resolve_skill_bundle returned None for {skill_dir}"
+
+            refs_dir = skill_dir / "references"
+            if refs_dir.exists():
+                for ref_file in sorted(refs_dir.glob("*.md")):
+                    assert f"## {ref_file.name}\n" in bundle, (
+                        f"{skill_dir}: reference file {ref_file.name} is not included "
+                        "in resolve_skill_bundle() output"
+                    )
+
+    def test_line_level_fidelity_against_pre_migration_baseline(self):
+        import subprocess
+
+        # Skip only in shallow CI clones where the pre-migration commit is not fetched
+        check = subprocess.run(
+            ["git", "cat-file", "-e", f"{self.PRE_MIGRATION_BASE}^{{commit}}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+        )
+        if check.returncode != 0:
+            pytest.skip(f"Pre-migration commit {self.PRE_MIGRATION_BASE} not in shallow clone")
+
+        ls_out = subprocess.check_output(
+            ["git", "ls-tree", "-r", "--name-only", self.PRE_MIGRATION_BASE],
+            cwd=REPO_ROOT,
+            text=True,
+        ).splitlines()
+
+        total_base = 0
+        total_matched = 0
+        for skill_md in sorted(REPO_ROOT.glob("*/skills/*/SKILL.md")):
+            sdir = skill_md.parent.relative_to(REPO_ROOT).as_posix()
+            base_files = sorted(p for p in ls_out if p.startswith(sdir + "/") and p.endswith(".md"))
+            head_files = sorted(skill_md.parent.rglob("*.md"))
+            if sdir == "jira/skills/jira":
+                base_files += sorted(
+                    p for p in ls_out if p.startswith("jira/reference/") and p.endswith(".md")
+                )
+                head_files += sorted((REPO_ROOT / "jira" / "references").glob("*.md"))
+
+            base_text = "\n".join(
+                subprocess.check_output(
+                    ["git", "show", f"{self.PRE_MIGRATION_BASE}:{bf}"],
+                    cwd=REPO_ROOT,
+                    text=True,
+                )
+                for bf in base_files
+            )
+            head_text = "\n".join(hf.read_text() for hf in head_files)
+
+            base_lines = [
+                self._norm_mechanical(line)
+                for line in base_text.splitlines()
+                if line.strip() and not line.strip().startswith("allowed-tools:")
+            ]
+            head_set = {
+                self._norm_mechanical(line) for line in head_text.splitlines() if line.strip()
+            }
+
+            matched = sum(1 for line in base_lines if line in head_set)
+            total_base += len(base_lines)
+            total_matched += matched
+            pct = 100.0 * matched / len(base_lines)
+            assert pct >= 94.5, (
+                f"{sdir}: normalized line fidelity {pct:.2f}% ({matched}/{len(base_lines)}) "
+                "dropped below 94.5%"
+            )
+
+        overall_pct = 100.0 * total_matched / total_base
+        assert overall_pct >= 99.0, (
+            f"Overall skill migration fidelity {overall_pct:.2f}% "
+            f"({total_matched}/{total_base}) dropped below 99.0%"
+        )
