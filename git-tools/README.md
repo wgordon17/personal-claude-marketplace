@@ -1,6 +1,6 @@
 # Git Tools Plugin
 
-Git workflow tools: history manipulation, defense-in-depth hooks, commit review, and contributing guide generation.
+Git workflow tools: dynamic SessionStart git instructions, history manipulation, commit review, and CONTRIBUTING.md generation.
 
 ## Skills (1)
 

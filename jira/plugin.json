@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "jira",
+  "version": "1.4.4",
+  "description": "Jira integration for issue tracking, querying, and management \u2014 OSAC defaults with full redhat.atlassian.net support",
+  "author": {
+    "name": "wgordon17"
+  }
+}

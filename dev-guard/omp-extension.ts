@@ -544,57 +544,142 @@ export default function (pi: ExtensionAPI) {
 		if (!claudeCodeToolName) return; // no guard-relevant equivalent for this tool
 
 		const failPolicy = getFailPolicy(event.toolName);
+		const MAX_ASK_ROUNDS = 5;
+		let lastAskReason = "Confirmation required by dev-guard.";
 
-		const result = await runGuard(
-			[],
-			{
-				session_id: sessionId,
-				tool_use_id: event.toolCallId,
-				hook_event_name: "PreToolUse",
-				tool_name: claudeCodeToolName,
-				tool_input: toolInput,
-			},
-			ctx.cwd,
-		);
+		for (let askRound = 0; askRound < MAX_ASK_ROUNDS; askRound++) {
+			const result = await runGuard(
+				[],
+				{
+					session_id: sessionId,
+					tool_use_id: event.toolCallId,
+					hook_event_name: "PreToolUse",
+					tool_name: claudeCodeToolName,
+					tool_input: toolInput,
+				},
+				ctx.cwd,
+			);
 
-		// Dual block-signal handling: exit code 2 is an independent hard
-		// block, checked BEFORE stdout JSON — a bridge that only reads
-		// stdout JSON silently turns every hard git-deny block into
-		// passthrough allow (security constraint).
-		if (result.code === 2) {
-			return { block: true, reason: result.stderr.trim() || "Blocked by dev-guard." };
-		}
-
-		if (result.spawnFailed || result.timedOut) {
-			if (failPolicy === "fail-closed") {
-				return { block: true, reason: "dev-guard bridge subprocess failed — failing closed for this matcher." };
+			// Dual block-signal handling: exit code 2 is an independent hard
+			// block, checked BEFORE stdout JSON — a bridge that only reads
+			// stdout JSON silently turns every hard git-deny block into
+			// passthrough allow (security constraint).
+			if (result.code === 2) {
+				return { block: true, reason: result.stderr.trim() || "Blocked by dev-guard." };
 			}
-			return; // fail-open: no opinion, let the call proceed
-		}
 
-		const output = parseHookOutput(result.stdout);
-		if (output?.permissionDecision === "ask" || output?.permissionDecision === "deny") {
-			return { block: true, reason: output.permissionDecisionReason ?? "Blocked by dev-guard." };
-		}
-
-		// Auto-correction forwarding (e.g. _guard_claire_typo's .claire ->
-		// .claude rewrite): tool-selection-guard.py signals this as an
-		// "allow" decision with `updatedInput` carrying the corrected
-		// Claude-Code-shaped fields. ToolCallEventResult.input is OMP's
-		// equivalent replacement-input mechanism. Only translated for
-		// "read" here, where the OMP field name (`path`) is confirmed —
-		// Write/Edit's exact OMP field names were not verified in the
-		// Task 1 spike (translateToolInputForGuard passes their input
-		// through unchanged rather than guessing), so a correction to
-		// those tools' file_path is not forwarded and is a known,
-		// documented gap rather than a guessed-and-possibly-wrong mapping.
-		if (output?.permissionDecision === "allow" && output.updatedInput && claudeCodeToolName === "Read") {
-			const correctedPath = output.updatedInput.file_path;
-			if (typeof correctedPath === "string") {
-				return { input: { path: correctedPath } };
+			if (result.spawnFailed || result.timedOut) {
+				if (failPolicy === "fail-closed") {
+					return {
+						block: true,
+						reason: "dev-guard bridge subprocess failed — failing closed for this matcher.",
+					};
+				}
+				return; // fail-open: no opinion, let the call proceed
 			}
+
+			const output = parseHookOutput(result.stdout);
+			if (output?.permissionDecision === "deny") {
+				return { block: true, reason: output.permissionDecisionReason ?? "Blocked by dev-guard." };
+			}
+
+			if (output?.permissionDecision === "ask") {
+				const reason = output.permissionDecisionReason ?? "Confirmation required by dev-guard.";
+				lastAskReason = reason;
+				if (typeof ctx.ui?.select !== "function") {
+					return { block: true, reason };
+				}
+
+				const ruleMatch = /^\[([a-zA-Z0-9][a-zA-Z0-9_-]*)\]\s/.exec(reason);
+				const ruleName = ruleMatch ? ruleMatch[1] : undefined;
+				const promptText =
+					claudeCodeToolName === "Bash" && typeof toolInput.command === "string"
+						? `${reason}\nCommand: ${toolInput.command}`
+						: reason;
+
+				const options: { label: string; description: string }[] = [
+					{ label: "Allow once", description: "Approve this tool call once" },
+				];
+				if (ruleName && sessionId) {
+					options.push({
+						label: "Allow for session",
+						description: `Trust rule '${ruleName}' for the current session`,
+					});
+				}
+				if (ruleName) {
+					options.push({
+						label: "Allow always",
+						description: `Trust rule '${ruleName}' permanently across sessions`,
+					});
+				}
+				options.push({ label: "Deny", description: "Block this tool call" });
+
+				let choice: string | undefined;
+				try {
+					choice = await ctx.ui.select(promptText, options);
+				} catch {
+					return { block: true, reason };
+				}
+
+				if (choice === undefined || choice === "Deny") {
+					return { block: true, reason };
+				}
+
+				if (choice === "Allow for session" && ruleName && sessionId) {
+					const trustResult = await runGuard(
+						["--trust", "add", ruleName, "--scope", "session", "--session-id", sessionId],
+						{},
+						ctx.cwd,
+					);
+					if (trustResult.code !== 0 || trustResult.spawnFailed || trustResult.timedOut) {
+						return {
+							block: true,
+							reason: trustResult.stderr.trim() || "Failed to persist dev-guard trust rule.",
+						};
+					}
+					continue;
+				}
+
+				if (choice === "Allow always" && ruleName) {
+					const trustResult = await runGuard(
+						["--trust", "add", ruleName, "--scope", "always"],
+						{},
+						ctx.cwd,
+					);
+					if (trustResult.code !== 0 || trustResult.spawnFailed || trustResult.timedOut) {
+						return {
+							block: true,
+							reason: trustResult.stderr.trim() || "Failed to persist dev-guard trust rule.",
+						};
+					}
+					continue;
+				}
+
+				if (choice === "Allow once") {
+					return;
+				}
+
+				return { block: true, reason };
+			}
+
+			// Auto-correction / RTK rewrite forwarding: tool-selection-guard.py
+			// signals this as an "allow" decision with `updatedInput` carrying
+			// the corrected Claude-Code-shaped fields. ToolCallEventResult.input
+			// is OMP's equivalent replacement-input mechanism. Spread origInput
+			// so optional OMP fields (cwd, timeout, env) are preserved.
+			if (output?.permissionDecision === "allow" && output.updatedInput) {
+				const origInput = event.input as Record<string, unknown>;
+				if (claudeCodeToolName === "Read" && typeof output.updatedInput.file_path === "string") {
+					return { input: { ...origInput, path: output.updatedInput.file_path } };
+				}
+				if (claudeCodeToolName === "Bash" && typeof output.updatedInput.command === "string") {
+					return { input: { ...origInput, command: output.updatedInput.command } };
+				}
+			}
+			return; // allow / no opinion
 		}
-		return; // allow / no opinion
+
+		return { block: true, reason: lastAskReason };
 	});
 
 	// ─── tool_result dispatch (PostToolUse) ─────────────────────────────

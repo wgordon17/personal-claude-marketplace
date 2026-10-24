@@ -1338,6 +1338,96 @@ class TestAndonCord:
         result = run_bash("GUARD_BYPASS=1 git status\npwd")
         assert_allow_decision(result, "Multiline bypass command reviewed")
 
+    def test_andon_cord_compound_url_ask_and_block(self, tmp_path):
+        """GUARD_BYPASS=1 defers URL 'ask' decisions behind later 'block' rules
+        (both URL block and git deny), and emits 'ask' when no block matches."""
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        # 1. URL ask followed by git deny -> block (exit 2)
+        res_git_block = run_guard(
+            "Bash",
+            {
+                "command": (
+                    "GUARD_BYPASS=1 curl https://www.amazon.com/dp/B001 "
+                    "&& git push --force origin main"
+                )
+            },
+            env=env,
+        )
+        assert res_git_block.returncode == 2
+
+        # 1b. Git deny or URL block inside pipe/subshell under GUARD_BYPASS=1 -> block (exit 2)
+        for bypass_block_cmd in (
+            "GUARD_BYPASS=1 echo hi | git push --force origin main",
+            "GUARD_BYPASS=1 echo $(git push --force origin main)",
+            "GUARD_BYPASS=1 echo $(curl https://www.reddit.com/r/python)",
+        ):
+            res_sub = run_guard("Bash", {"command": bypass_block_cmd}, env=env)
+            assert res_sub.returncode == 2, f"Expected exit 2 for {bypass_block_cmd!r}"
+
+        # 2. URL ask followed by URL block -> block (exit 2)
+        res_url_block = run_guard(
+            "Bash",
+            {
+                "command": (
+                    "GUARD_BYPASS=1 curl https://www.amazon.com/dp/B001 "
+                    "&& curl https://www.reddit.com/r/python"
+                )
+            },
+            env=env,
+        )
+        assert res_url_block.returncode == 2
+
+        # 3. URL ask followed by safe command -> ask (flushed via _flush_pending_decisions)
+        res_ask = run_guard(
+            "Bash",
+            {"command": "GUARD_BYPASS=1 curl https://www.amazon.com/dp/B001 && rm -rf build/"},
+            env=env,
+        )
+        assert_ask_decision(res_ask, "amazon-blocked")
+
+    def test_andon_cord_trusted_url_ask_does_not_emit_blanket_allow(self, tmp_path):
+        """Under GUARD_BYPASS=1, all_subcmds_covered=False ensures a trusted URL 'ask'
+        rule logs 'trusted' and passes through (empty stdout) rather than emitting
+        permissionDecision: 'allow' for unreviewed bypass subcommands."""
+        env = {
+            **os.environ,
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
+        sid = "bypass-url-trust-session"
+        trust_res = subprocess.run(
+            [
+                "uv",
+                "run",
+                SCRIPT,
+                "--trust",
+                "add",
+                "amazon-blocked",
+                "--scope",
+                "session",
+                "--session-id",
+                sid,
+            ],
+            input="{}",
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert trust_res.returncode == 0
+
+        res = run_guard(
+            "Bash",
+            {"command": "GUARD_BYPASS=1 curl https://www.amazon.com/dp/B001 && rm -rf build/"},
+            env=env,
+            payload_extra={"session_id": sid},
+        )
+        assert res.returncode == 0
+        assert res.stdout.strip() == ""
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Non-Bash tools: passthrough on normal paths
@@ -3762,9 +3852,12 @@ class TestExtraURLRulesAction:
 def _run_validate(**env_overrides) -> subprocess.CompletedProcess:
     """Run the guard with --validate flag and optional env var overrides."""
     env = os.environ.copy()
-    # Clear any existing config env vars
+    # Clear any existing config env vars and isolate from ~/.claude/dev-guard.json and live DB
     env.pop("URL_GUARD_EXTRA_RULES", None)
     env.pop("COMMAND_GUARD_EXTRA_RULES", None)
+    env.pop("GIT_TRUSTED_DIRS", None)
+    env["DEV_GUARD_CONFIG"] = "/nonexistent/dev-guard.json"
+    env["GUARD_DB_PATH"] = "/nonexistent/guard.db"
     env.update(env_overrides)
     return subprocess.run(
         ["uv", "run", SCRIPT, "--validate"],
@@ -5407,27 +5500,13 @@ class TestGitTrustedDirsValidation:
         trusted.mkdir()
         dirs_file = tmp_path / "trusted.json"
         dirs_file.write_text(json.dumps([str(trusted)]))
-        env = os.environ.copy()
-        env["GIT_TRUSTED_DIRS"] = str(dirs_file)
-        result = subprocess.run(
-            ["uv", "run", SCRIPT, "--validate"],
-            capture_output=True,
-            text=True,
-            env=env,
-        )
+        result = _run_validate(GIT_TRUSTED_DIRS=str(dirs_file))
         assert result.returncode == 0
         assert "Git trusted dirs" in result.stdout
 
     def test_validate_missing_file(self, tmp_path):
         """Missing trusted dirs file fails validation."""
-        env = os.environ.copy()
-        env["GIT_TRUSTED_DIRS"] = str(tmp_path / "nonexistent.json")
-        result = subprocess.run(
-            ["uv", "run", SCRIPT, "--validate"],
-            capture_output=True,
-            text=True,
-            env=env,
-        )
+        result = _run_validate(GIT_TRUSTED_DIRS=str(tmp_path / "nonexistent.json"))
         assert result.returncode == 2
         assert "file not found" in result.stderr
 
@@ -5435,14 +5514,7 @@ class TestGitTrustedDirsValidation:
         """Trusted dirs file with nonexistent directory fails validation."""
         dirs_file = tmp_path / "trusted.json"
         dirs_file.write_text(json.dumps(["/this/dir/does/not/exist"]))
-        env = os.environ.copy()
-        env["GIT_TRUSTED_DIRS"] = str(dirs_file)
-        result = subprocess.run(
-            ["uv", "run", SCRIPT, "--validate"],
-            capture_output=True,
-            text=True,
-            env=env,
-        )
+        result = _run_validate(GIT_TRUSTED_DIRS=str(dirs_file))
         assert result.returncode == 2
         assert "does not exist" in result.stderr
 
@@ -5450,14 +5522,7 @@ class TestGitTrustedDirsValidation:
         """Trusted dirs file with non-string entry fails validation."""
         dirs_file = tmp_path / "trusted.json"
         dirs_file.write_text(json.dumps([123, "/tmp"]))
-        env = os.environ.copy()
-        env["GIT_TRUSTED_DIRS"] = str(dirs_file)
-        result = subprocess.run(
-            ["uv", "run", SCRIPT, "--validate"],
-            capture_output=True,
-            text=True,
-            env=env,
-        )
+        result = _run_validate(GIT_TRUSTED_DIRS=str(dirs_file))
         assert result.returncode == 2
         assert "expected string" in result.stderr
 
@@ -5925,6 +5990,8 @@ class TestRTKConfig:
             **os.environ,
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "RTK_CONFIG_PATH": str(config_path),
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
         }
         env.pop("RTK_DISABLED", None)
         return env, config_path
@@ -5979,15 +6046,18 @@ class TestRTKConfig:
 
     def test_no_rtk_binary_skips_silently(self, tmp_path):
         """Without rtk on PATH, no config message is emitted."""
-        # Create a minimal PATH with only a uv symlink, no rtk
+        # Create a minimal PATH with no rtk binary
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        uv_real = subprocess.run(["which", "uv"], capture_output=True, text=True).stdout.strip()
-        (bin_dir / "uv").symlink_to(uv_real)
-        env = {**os.environ, "PATH": str(bin_dir)}
+        env = {
+            **os.environ,
+            "PATH": str(bin_dir),
+            "DEV_GUARD_CONFIG": str(tmp_path / "nonexistent-config.json"),
+            "GUARD_DB_PATH": str(tmp_path / "test-guard.db"),
+        }
         env.pop("RTK_DISABLED", None)
         result = subprocess.run(
-            ["uv", "run", SCRIPT, "--validate"],
+            [sys.executable, SCRIPT, "--validate"],
             capture_output=True,
             text=True,
             env=env,

@@ -1,6 +1,6 @@
 # Code Quality Plugin
 
-Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning, roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, summarize, and test-plan.
+Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning (with issue tracking and PR boundary markers), roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, summarize, and test-plan.
 
 **Prerequisite for `/swarm` and `/unfuck`:** these skills spawn multiple named teammates that
 communicate via `SendMessage`, which requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to be set

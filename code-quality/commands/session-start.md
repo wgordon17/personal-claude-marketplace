@@ -1,5 +1,6 @@
 ---
 description: Start a session by loading project context or initializing new project
+allowed-tools: Read, Write, Edit, Bash, AskUserQuestion
 ---
 
 # Session Start — Load Context or Initialize Project

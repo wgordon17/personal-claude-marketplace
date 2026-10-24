@@ -459,8 +459,8 @@ class TestPluginVersionParity:
 
         assert not mismatches, (
             "Plugin version mismatch between plugin.json and marketplace.json.\n"
-            "CLAUDE.md rule: 'Always bump plugin versions in both files.'\n"
-            + "\n".join(f"  - {m}" for m in mismatches)
+            "CLAUDE.md rule: 'Always bump plugin versions and synchronize descriptions "
+            "across all three manifest files'\n" + "\n".join(f"  - {m}" for m in mismatches)
         )
 
     def test_marketplace_entries_have_plugin_on_disk(self):
@@ -477,13 +477,189 @@ class TestPluginVersionParity:
             f"  - {m}" for m in missing
         )
 
+    def test_all_plugin_descriptions_and_authors_match_marketplace(self):
+        """Every plugin's .claude-plugin/plugin.json and marketplace.json entry must have
+        identical description strings and author={'name': 'wgordon17'}."""
+        marketplace = json.loads(MARKETPLACE_JSON.read_text())
+        entries_by_name = {entry["name"]: entry for entry in marketplace["plugins"]}
+        mismatches = []
+
+        for name, entry in sorted(entries_by_name.items()):
+            plugin_json_path = REPO_ROOT / name / ".claude-plugin" / "plugin.json"
+            plugin_data = json.loads(plugin_json_path.read_text())
+
+            if plugin_data.get("description") != entry.get("description"):
+                mismatches.append(
+                    f"{name}: description mismatch between .claude-plugin/plugin.json "
+                    f"({plugin_data.get('description')!r}) and marketplace.json "
+                    f"({entry.get('description')!r})"
+                )
+            if plugin_data.get("author") != {"name": "wgordon17"}:
+                mismatches.append(
+                    f"{name}: .claude-plugin/plugin.json author={plugin_data.get('author')!r}"
+                )
+            if entry.get("author") != {"name": "wgordon17"}:
+                mismatches.append(f"{name}: marketplace.json author={entry.get('author')!r}")
+
+        assert not mismatches, "Plugin description/author drift:\n" + "\n".join(
+            f"  - {m}" for m in mismatches
+        )
+
+    def test_agent_plugins_v1_root_manifests_in_sync(self):
+        """Every plugin must have a root <plugin>/plugin.json (Agent Plugins v1.0.0)
+        matching <plugin>/.claude-plugin/plugin.json."""
+        marketplace = json.loads(MARKETPLACE_JSON.read_text())
+        mismatches = []
+
+        for entry in marketplace["plugins"]:
+            name = entry["name"]
+            claude_manifest = REPO_ROOT / name / ".claude-plugin" / "plugin.json"
+            agent_manifest = REPO_ROOT / name / "plugin.json"
+
+            if not agent_manifest.exists():
+                mismatches.append(f"{name}: missing root {agent_manifest}")
+                continue
+
+            claude_data = json.loads(claude_manifest.read_text())
+            agent_data = json.loads(agent_manifest.read_text())
+
+            expected_schema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+            if agent_data.get("$schema") != expected_schema:
+                mismatches.append(
+                    f"{name}/plugin.json: $schema={agent_data.get('$schema')!r} "
+                    f"(expected {expected_schema!r})"
+                )
+            for key in ("name", "version", "description", "author"):
+                if agent_data.get(key) != claude_data.get(key):
+                    mismatches.append(
+                        f"{name}: {key} mismatch between root plugin.json "
+                        f"({agent_data.get(key)!r}) and .claude-plugin/plugin.json "
+                        f"({claude_data.get(key)!r})"
+                    )
+
+        assert not mismatches, "Agent Plugins v1 root manifest drift:\n" + "\n".join(
+            f"  - {m}" for m in mismatches
+        )
+
+    def test_codex_marketplace_entries_match_claude_marketplace(self):
+        """Both .claude-plugin/marketplace.json and .agents/plugins/marketplace.json must
+        register the exact same 13 plugins in order, with valid source, policy, and category."""
+        codex_marketplace_path = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
+        assert codex_marketplace_path.exists(), f"Missing {codex_marketplace_path}"
+
+        claude_marketplace = json.loads(MARKETPLACE_JSON.read_text())
+        codex_marketplace = json.loads(codex_marketplace_path.read_text())
+        assert codex_marketplace["name"] == claude_marketplace["name"], (
+            f"Marketplace name mismatch: {codex_marketplace['name']} != "
+            f"{claude_marketplace['name']}"
+        )
+        claude_names = [entry["name"] for entry in claude_marketplace["plugins"]]
+        codex_names = [entry["name"] for entry in codex_marketplace["plugins"]]
+        assert len(claude_names) == 13, f"Expected 13 plugins, got {len(claude_names)}"
+        assert codex_names == claude_names, (
+            f"Marketplace registration mismatch: claude={claude_names} vs codex={codex_names}"
+        )
+
+        expected_policy = {
+            "installation": "AVAILABLE",
+            "authentication": "ON_INSTALL",
+        }
+        for claude_entry, codex_entry in zip(
+            claude_marketplace["plugins"], codex_marketplace["plugins"], strict=True
+        ):
+            name = codex_entry["name"]
+            expected_source = {"source": "local", "path": f"./{name}"}
+            assert codex_entry.get("source") == expected_source, (
+                f"{name}: source={codex_entry.get('source')!r} (expected {expected_source!r})"
+            )
+            assert codex_entry.get("policy") == expected_policy, (
+                f"{name}: policy={codex_entry.get('policy')!r} (expected {expected_policy!r})"
+            )
+            assert codex_entry.get("category") == claude_entry.get("category"), (
+                f"{name}: category={codex_entry.get('category')!r} "
+                f"(expected {claude_entry.get('category')!r})"
+            )
+
+    def test_all_plugins_have_readme(self):
+        """Every plugin in marketplace.json must have a non-empty README.md on disk."""
+        marketplace = json.loads(MARKETPLACE_JSON.read_text())
+        missing = []
+
+        for entry in marketplace["plugins"]:
+            name = entry["name"]
+            readme = REPO_ROOT / name / "README.md"
+            if not readme.exists() or not readme.read_text().strip():
+                missing.append(f"{name}: missing or empty {readme}")
+
+        assert not missing, "Plugins missing README.md:\n" + "\n".join(f"  - {m}" for m in missing)
+
+    def test_no_nested_command_md_files(self):
+        """No plugin may use nested commands/<name>/COMMAND.md (causes :COMMAND slug bug)."""
+        nested = [
+            str(p.relative_to(REPO_ROOT)) for p in sorted(REPO_ROOT.glob("*/commands/*/COMMAND.md"))
+        ]
+        assert not nested, (
+            "Nested COMMAND.md files found (use flat commands/<name>.md instead):\n"
+            + "\n".join(f"  - {p}" for p in nested)
+        )
+
+    def test_agent_plugins_v1_mcp_configs_in_sync(self):
+        """For all 4 MCP plugins, root <plugin>/mcp.json must match <plugin>/.mcp.json."""
+        mcp_plugins = ("jira", "fetchaller-mcp", "github-mcp", "chai-bot")
+        mismatches = []
+
+        for name in mcp_plugins:
+            dot_mcp_path = REPO_ROOT / name / ".mcp.json"
+            root_mcp_path = REPO_ROOT / name / "mcp.json"
+            if not dot_mcp_path.exists() or not root_mcp_path.exists():
+                mismatches.append(f"{name}: missing .mcp.json or mcp.json")
+                continue
+
+            dot_data = json.loads(dot_mcp_path.read_text())
+            root_data = json.loads(root_mcp_path.read_text())
+
+            expected_schema = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+            if root_data.get("$schema") != expected_schema:
+                mismatches.append(
+                    f"{name}/mcp.json: $schema={root_data.get('$schema')!r} "
+                    f"(expected {expected_schema!r})"
+                )
+
+            dot_servers = dot_data.get("mcpServers", {})
+            root_servers = root_data.get("mcpServers", {})
+            if set(dot_servers.keys()) != set(root_servers.keys()):
+                mismatches.append(
+                    f"{name}: server keys mismatch (.mcp.json={list(dot_servers)} "
+                    f"vs mcp.json={list(root_servers)})"
+                )
+                continue
+
+            for srv_name, dot_srv in dot_servers.items():
+                root_srv = root_servers[srv_name]
+                expected_type = "streamable-http" if dot_srv.get("type") == "http" else "stdio"
+                if root_srv.get("type") != expected_type:
+                    mismatches.append(
+                        f"{name} ({srv_name}): expected type={expected_type!r}, "
+                        f"got {root_srv.get('type')!r}"
+                    )
+                for field in ("command", "args", "env", "url", "headers"):
+                    if dot_srv.get(field) != root_srv.get(field):
+                        mismatches.append(
+                            f"{name} ({srv_name}): {field} mismatch between .mcp.json and mcp.json"
+                        )
+
+        assert not mismatches, "Agent Plugins v1 mcp.json drift:\n" + "\n".join(
+            f"  - {m}" for m in mismatches
+        )
+
 
 class TestDevGuardDescriptionSync:
     """Structural test that dev-guard's description stays in sync across its three
     surfaces: hooks.json, plugin.json, and marketplace.json. All three must share the
-    same trailing capability phrase, per CLAUDE.md's 'bump plugin versions in both
-    files' rule extended to descriptions — a substring-presence grep only confirms a
-    phrase exists somewhere, not that the surfaces agree with each other."""
+    same trailing capability phrase, per CLAUDE.md's 'Always bump plugin versions and
+    synchronize descriptions across all three manifest files' rule — a
+    substring-presence grep only confirms a phrase exists somewhere, not that the
+    surfaces agree with each other."""
 
     def _trailing_phrase(self, description: str) -> str:
         return description.rsplit(",", 1)[-1].strip()
@@ -512,36 +688,42 @@ class TestDevGuardDescriptionSync:
 
 
 FETCHALLER_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / ".mcp.json"
+FETCHALLER_AGENT_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / "mcp.json"
 
 
 class TestFetchallerMcpConfigSecurity:
-    """Structural guardrails on fetchaller-mcp/.mcp.json's security-critical fields."""
+    """Structural guardrails on fetchaller-mcp/.mcp.json and fetchaller-mcp/mcp.json."""
 
-    def _load_args(self) -> list[str]:
-        data = json.loads(FETCHALLER_MCP_JSON.read_text())
+    def _load_args(self, path: Path = FETCHALLER_MCP_JSON) -> list[str]:
+        data = json.loads(path.read_text())
         return data["mcpServers"]["fetchaller"]["args"]
 
-    def test_pinned_to_full_commit_sha(self):
+    @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
+    def test_pinned_to_full_commit_sha(self, mcp_path: Path):
         """The git ref must be a full 40-char commit SHA, never a branch/tag/main."""
-        args = self._load_args()
+        args = self._load_args(mcp_path)
         from_arg = args[args.index("--from") + 1]
         ref = from_arg.rsplit("@", 1)[-1]
         assert re.match(r"^[0-9a-f]{40}$", ref), (
-            f"fetchaller-mcp/.mcp.json must pin to a full 40-char commit SHA, got: {ref!r}"
+            f"{mcp_path.relative_to(REPO_ROOT)} must pin to a full 40-char commit SHA, got: {ref!r}"
         )
 
-    def test_no_http_mode_flag(self):
+    @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
+    def test_no_http_mode_flag(self, mcp_path: Path):
         """--http must never appear in args (stdio-only, per Security Flags)."""
-        args = self._load_args()
-        assert "--http" not in args, "fetchaller-mcp/.mcp.json must not enable --http hosted mode"
+        args = self._load_args(mcp_path)
+        assert "--http" not in args, (
+            f"{mcp_path.relative_to(REPO_ROOT)} must not enable --http hosted mode"
+        )
 
-    def test_wafer_py_version_pinned(self):
+    @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
+    def test_wafer_py_version_pinned(self, mcp_path: Path):
         """The wafer-py[browser] pin must stay present and exact -- guards
         against it being accidentally dropped during a future SHA bump."""
-        args = self._load_args()
+        args = self._load_args(mcp_path)
         with_index = args.index("--with")
         assert args[with_index + 1] == "wafer-py[browser]==0.4.4", (
-            "fetchaller-mcp/.mcp.json must pin 'wafer-py[browser]==0.4.4' via --with, "
+            f"{mcp_path.relative_to(REPO_ROOT)} must pin 'wafer-py[browser]==0.4.4' via --with, "
             f"got: {args[with_index + 1]!r}"
         )
 
@@ -760,15 +942,14 @@ class TestBugsTrackingIntegrity:
         )
 
     def test_quality_gate_uses_correct_mcp_tool_name(self):
-        content = QUALITY_GATE_SKILL.read_text()
-        assert "mcp__plugin_github-mcp_github__pull_request_read" in content, (
-            f"{QUALITY_GATE_SKILL} does not contain the correct MCP tool name. "
-            "Stale 'mcp__github__pull_request_read' may have been reintroduced."
+        gate_specs = QUALITY_GATE_SKILL.parent / "references" / "gate-specifications.md"
+        content = QUALITY_GATE_SKILL.read_text() + gate_specs.read_text()
+        assert "pull_request_read" in content, (
+            f"{QUALITY_GATE_SKILL} and {gate_specs} do not reference 'pull_request_read'."
         )
-        cleaned = content.replace("mcp__plugin_github-mcp_github__pull_request_read", "")
-        assert "mcp__github__pull_request_read" not in cleaned, (
-            f"{QUALITY_GATE_SKILL} contains stale 'mcp__github__pull_request_read' "
-            "reference(s) without the 'plugin_github-mcp_' qualifier."
+        assert "mcp__github__pull_request_read" not in content, (
+            f"{QUALITY_GATE_SKILL} or {gate_specs} contains stale "
+            "'mcp__github__pull_request_read' reference(s)."
         )
 
 
@@ -823,4 +1004,125 @@ class TestRoadmapBugsContractIntegrity:
         assert hold_pos < write_pos, (
             f"{ROADMAP_SKILL}: Phase 1 hold instruction appears AFTER Phase 4 write instruction. "
             "The cross-phase contract ordering is broken."
+        )
+
+
+class TestSkillMigrationFidelity:
+    """Deterministic check that progressive-disclosure skill extractions preserve
+    all reference files in resolved bundles, keep every SKILL.md under 500 lines,
+    and maintain >=94.5% per-skill / >=99.0% overall line-level fidelity against
+    the pre-migration baseline commit (5b7dbebf9555c68c976d5ad906d41ec6cc374c07)."""
+
+    PRE_MIGRATION_BASE = "5b7dbebf9555c68c976d5ad906d41ec6cc374c07"
+
+    @staticmethod
+    def _norm_mechanical(line: str) -> str:
+        s = line.strip()
+        s = re.sub(r"^#{1,6}\s+", "# ", s)
+        s = s.replace("(../../../references/", "(../../references/")
+        s = s.replace("(../../../../jira/", "(../../../jira/")
+        s = s.replace("(../../incremental-planning/", "(../incremental-planning/")
+        s = s.replace("(../../fix/", "(../fix/")
+        s = s.replace("(./subagent-prompts.md", "(./references/subagent-prompts.md")
+        s = s.replace("(./communication-schema.md", "(./references/communication-schema.md")
+        s = s.replace("(./pipeline-model.md", "(./references/pipeline-model.md")
+        s = s.replace("(./orchestration-playbook.md", "(./references/orchestration-playbook.md")
+        s = s.replace("(./cynefin-reference.md", "(./references/cynefin-reference.md")
+        s = s.replace("(./artifact-formats.md", "(./references/artifact-formats.md")
+        s = s.replace("jira/references/", "jira/reference/")
+        s = s.replace("../../references/", "../../reference/")
+        s = s.replace("references/BRANCHLESS.md", "BRANCHLESS.md")
+        return s
+
+    def test_all_skills_under_500_lines_and_all_local_references_bundled(self):
+        import importlib.util
+
+        runner_path = REPO_ROOT / "skill-eval" / "skill_eval" / "runner.py"
+        spec = importlib.util.spec_from_file_location("skill_eval_runner", runner_path)
+        assert spec is not None and spec.loader is not None
+        runner_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner_mod)
+        resolve_skill_bundle = runner_mod.resolve_skill_bundle
+
+        skill_files = sorted(REPO_ROOT.glob("*/skills/*/SKILL.md"))
+        assert len(skill_files) == 24, f"Expected 24 skills, found {len(skill_files)}"
+
+        for skill_md in skill_files:
+            line_count = len(skill_md.read_text().splitlines())
+            assert line_count < 500, f"{skill_md} is {line_count} lines (must be < 500)"
+
+            skill_dir = skill_md.parent
+            bundle = resolve_skill_bundle(skill_dir, repo_root=REPO_ROOT)
+            assert bundle is not None, f"resolve_skill_bundle returned None for {skill_dir}"
+
+            refs_dir = skill_dir / "references"
+            if refs_dir.exists():
+                for ref_file in sorted(refs_dir.glob("*.md")):
+                    assert f"## {ref_file.name}\n" in bundle, (
+                        f"{skill_dir}: reference file {ref_file.name} is not included "
+                        "in resolve_skill_bundle() output"
+                    )
+
+    def test_line_level_fidelity_against_pre_migration_baseline(self):
+        import subprocess
+
+        # Skip only in shallow CI clones where the pre-migration commit is not fetched
+        check = subprocess.run(
+            ["git", "cat-file", "-e", f"{self.PRE_MIGRATION_BASE}^{{commit}}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+        )
+        if check.returncode != 0:
+            pytest.skip(f"Pre-migration commit {self.PRE_MIGRATION_BASE} not in shallow clone")
+
+        ls_out = subprocess.check_output(
+            ["git", "ls-tree", "-r", "--name-only", self.PRE_MIGRATION_BASE],
+            cwd=REPO_ROOT,
+            text=True,
+        ).splitlines()
+
+        total_base = 0
+        total_matched = 0
+        for skill_md in sorted(REPO_ROOT.glob("*/skills/*/SKILL.md")):
+            sdir = skill_md.parent.relative_to(REPO_ROOT).as_posix()
+            base_files = sorted(p for p in ls_out if p.startswith(sdir + "/") and p.endswith(".md"))
+            head_files = sorted(skill_md.parent.rglob("*.md"))
+            if sdir == "jira/skills/jira":
+                base_files += sorted(
+                    p for p in ls_out if p.startswith("jira/reference/") and p.endswith(".md")
+                )
+                head_files += sorted((REPO_ROOT / "jira" / "references").glob("*.md"))
+
+            base_text = "\n".join(
+                subprocess.check_output(
+                    ["git", "show", f"{self.PRE_MIGRATION_BASE}:{bf}"],
+                    cwd=REPO_ROOT,
+                    text=True,
+                )
+                for bf in base_files
+            )
+            head_text = "\n".join(hf.read_text() for hf in head_files)
+
+            base_lines = [
+                self._norm_mechanical(line)
+                for line in base_text.splitlines()
+                if line.strip() and not line.strip().startswith("allowed-tools:")
+            ]
+            head_set = {
+                self._norm_mechanical(line) for line in head_text.splitlines() if line.strip()
+            }
+
+            matched = sum(1 for line in base_lines if line in head_set)
+            total_base += len(base_lines)
+            total_matched += matched
+            pct = 100.0 * matched / len(base_lines)
+            assert pct >= 94.5, (
+                f"{sdir}: normalized line fidelity {pct:.2f}% ({matched}/{len(base_lines)}) "
+                "dropped below 94.5%"
+            )
+
+        overall_pct = 100.0 * total_matched / total_base
+        assert overall_pct >= 99.0, (
+            f"Overall skill migration fidelity {overall_pct:.2f}% "
+            f"({total_matched}/{total_base}) dropped below 99.0%"
         )

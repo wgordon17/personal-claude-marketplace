@@ -1,17 +1,19 @@
 # Personal Claude Marketplace
 
-Personal Claude Code plugins: LSP servers, code quality agents, development utilities, git tools, GitHub MCP integration, and Jira issue tracking.
+Personal Claude Code and Agent Plugins v1 marketplace with 13 plugins: LSP servers, code quality agents and orchestration skills, development policy guards, git tools, GitHub MCP integration, Jira issue tracking, draw.io diagramming, Fetchaller web fetching, and Red Hat Chai Bot integration.
 
-## Dual-Harness Support (Claude Code + OMP)
+## Dual-Harness Support (Claude Code + OMP + Agent Plugins v1)
 
-Three plugins — **dev-guard**, **git-tools**, and **github-mcp** — ship an additional
+Four plugins — **dev-guard**, **git-tools**, **github-mcp**, and **chai-bot** — ship an additional
 `omp-extension.ts` bridge so their `hooks/hooks.json`-based functionality also works under
 [OMP](https://omp.sh) (`@oh-my-pi/pi-coding-agent`), without changing anything about how they
 behave under Claude Code. Each bridge shells out to the plugin's existing, unchanged
 Python/shell scripts — no enforcement or session logic is reimplemented in TypeScript. See
 [`dev-guard/OMP-COMPAT.md`](dev-guard/OMP-COMPAT.md) for the full compatibility reference
-(tool-name/field-name mapping, MCP re-encoding, event mapping, and known limitations); git-tools
-and github-mcp cover their own much simpler single-hook bridges directly in their own READMEs.
+(tool-name/field-name mapping, interactive `"ask"` trust approval, Bash `updatedInput` forwarding, MCP re-encoding, event mapping, and known limitations); git-tools,
+github-mcp, and chai-bot cover their own single-hook bridges directly in their own READMEs.
+
+All 13 plugins also ship dual manifests: Claude Code manifests in `<plugin>/.claude-plugin/plugin.json` (plus `.claude-plugin/marketplace.json`) and [Agent Plugins v1](https://agent-plugins.org) manifests in `<plugin>/plugin.json` (plus `<plugin>/mcp.json` and `.agents/plugins/marketplace.json`).
 
 ## Plugins
 
@@ -19,11 +21,11 @@ and github-mcp cover their own much simpler single-hook bridges directly in thei
 
 | Plugin | Description | Execution | Docs |
 |--------|-------------|-----------|------|
-| pyright-uvx | Python language server | `uvx` (always latest) | [Source](pyright-uvx/) |
-| vtsls-npx | TypeScript/JavaScript language server | `npx` (always latest) | [Source](vtsls-npx/) |
-| gopls-go | Go language server | system `gopls` | [Source](gopls-go/) |
-| vscode-html-css-npx | HTML/CSS language servers | `npx` (always latest) | [Source](vscode-html-css-npx/) |
-| rust-analyzer-rustup | Rust language server | `rustup` (always latest) | [Source](rust-analyzer-rustup/) |
+| pyright-uvx | Python language server (via uvx - always latest) | `uvx` (always latest) | [README](pyright-uvx/README.md) |
+| vtsls-npx | TypeScript/JavaScript language server (via npx - always latest) | `npx` (always latest) | [README](vtsls-npx/README.md) |
+| gopls-go | Go language server (requires gopls on PATH) | system `gopls` | [README](gopls-go/README.md) |
+| vscode-html-css-npx | HTML/CSS language servers (via npx - always latest) | `npx` (always latest) | [README](vscode-html-css-npx/README.md) |
+| rust-analyzer-rustup | Rust language server (requires rust-analyzer via rustup) | `rustup` (always latest) | [README](rust-analyzer-rustup/README.md) |
 
 ### Code Quality
 
@@ -109,11 +111,31 @@ Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project
 
 **Agent:** `jira:jira-agent` — Spawnable specialist for plan tasks and background Jira operations
 
+### Draw.io
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| drawio | Draw.io diagram generation skill — creates native `.drawio` files with optional PNG/SVG/PDF export via draw.io Desktop CLI | 1 skill | [README](drawio/README.md) |
+
+**Skill:** `/drawio:drawio` — Vendored from `jgraph/drawio-mcp` (Apache 2.0) and synced weekly via GitHub Actions.
+
+### Fetchaller MCP
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| fetchaller-mcp | Pinned MCP fetch/search server for domains that block Claude's built-in WebFetch/WebSearch (Reddit and 15 other sites) | MCP server (commit-SHA pinned) | [README](fetchaller-mcp/README.md) |
+
+### Chai Bot
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| chai-bot | Advisory nudge and explicit `/chai-bot` command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server | MCP server, 1 command, 2 hooks | [README](chai-bot/README.md) |
+
 ### Development Guard
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| dev-guard | Tool selection policies, commit validation, and subagent completion verification | 6 hooks | [README](dev-guard/README.md) |
+| dev-guard | Tool selection policies, commit validation, and subagent completion verification | 6 hooks, 2 commands | [README](dev-guard/README.md) |
 
 > **⚠️ Important:** Dev-guard's `"ask"` action uses Claude Code's JSON `hookSpecificOutput` protocol. This correctly overrides `permissions.allow` auto-approve rules in the CLI but is [not supported in VS Code](https://github.com/anthropics/claude-code/issues/13339). See the [dev-guard README](dev-guard/README.md#action-field) for details.
 
@@ -138,7 +160,9 @@ claude plugin install code-quality@personal-claude-marketplace
 claude plugin install git-tools@personal-claude-marketplace
 claude plugin install github-mcp@personal-claude-marketplace
 claude plugin install jira@personal-claude-marketplace
+claude plugin install drawio@personal-claude-marketplace
 claude plugin install fetchaller-mcp@personal-claude-marketplace
+claude plugin install chai-bot@personal-claude-marketplace
 
 # Install LSP plugins (pick what you need)
 claude plugin install pyright-uvx@personal-claude-marketplace
@@ -239,10 +263,12 @@ Plugins in this marketplace have external tool requirements and optional MCP ser
 
 | Tool | Required By | Purpose |
 |------|------------|---------|
-| [`uv`](https://docs.astral.sh/uv/) | **All non-LSP plugins** | dev-guard hooks (`uv run`), test-runner, uv-python enforcement, hook installation |
+| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`) |
 | [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
 | [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
 | [`pre-commit`](https://pre-commit.com/) | git-tools | Defense-in-depth git hook scripts |
+| [Chrome / Chromium](https://www.google.com/chrome/) | fetchaller-mcp | Dedicated logged-out browser (`BROWSER_EXECUTABLE_PATH`) for bot-protected site fallback |
+| [draw.io Desktop CLI](https://www.drawio.com/) | drawio (optional) | Optional PNG/SVG/PDF export from generated `.drawio` files |
 | [Node.js/npm](https://nodejs.org/) | vtsls-npx, vscode-html-css-npx | Runs LSP servers via `npx` |
 | [Go](https://go.dev/) | gopls-go | Runs gopls language server |
 | [Rust/rustup](https://rustup.rs/) | rust-analyzer-rustup | Runs rust-analyzer |
@@ -255,6 +281,8 @@ These MCP servers enhance functionality but are not required for core operation 
 |------------|--------|------------|---------|
 | **[GitHub MCP](https://github.com/github/github-mcp-server)** | github-mcp | **Hard** (plugin is the server) | Full GitHub API: PRs, issues, actions, code security, discussions, and more via `mcp__github__*` tools. |
 | **[Atlassian Rovo MCP](https://www.atlassian.com/rovo)** | jira | **Hard** (OAuth required) | Full Jira API: issue query, create, update, transitions, comments, worklogs via `mcp__plugin_jira_mcp-atlassian-prod__*` tools. |
+| **[Fetchaller MCP](fetchaller-mcp/README.md)** | fetchaller-mcp | **Hard** (plugin is the server) | Commit-SHA-pinned stdio MCP fetch/search server for Reddit and 15 other bot-blocked domains. |
+| **[Chai Bot MCP](chai-bot/README.md)** | chai-bot | **Hard** (VPN + token required) | Red Hat-internal OSAC Chai Bot (`ask_persona`) via `${CHAI_BOT_BASE_URL}` and `${CHAI_TOKEN}`. |
 | **[Context7](https://github.com/upstash/context7)** | code-quality | **Hard** (for `/file-audit` library validation) | Library usage validation — deprecated APIs, wrong signatures. Listed in `/file-audit` allowed-tools header. |
 | **[Context7](https://github.com/upstash/context7)** | git-tools | Soft | Informational reference for git-branchless documentation in `/git-history` and `/git-tools:review-commits`. |
 | **[Serena](https://github.com/Agentic-Coding/serena)** | code-quality | Soft | `get_symbols_overview` for component-level understanding in `/incremental-planning` Phase 1 and `/deep-research` Bridged mode. Alternative tools work. |
@@ -286,6 +314,9 @@ Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** =
 | **dev-guard** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **github-mcp** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 | **jira** | -- | -- | -- | -- | -- | -- | -- | -- | HARD |
+| **drawio** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **fetchaller-mcp** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **chai-bot** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.

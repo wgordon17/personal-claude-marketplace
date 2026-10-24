@@ -528,6 +528,19 @@ def _hook_output(
     return json.dumps({"hookSpecificOutput": output})
 
 
+class _PendingDecision(NamedTuple):
+    guidance: str
+    action: str
+    rule_name: str | None = None
+    matched_segment: str | None = None
+    category: str = "guard"
+    detail: dict[str, object] | None = None
+
+
+_defer_decisions: bool = False
+_pending_decisions: list[_PendingDecision] = []
+
+
 def _exit_with_decision(
     guidance: str,
     action: str,
@@ -536,6 +549,7 @@ def _exit_with_decision(
     matched_segment: str | None = None,
     category: str = "guard",
     detail: dict[str, object] | None = None,
+    updated_input: dict[str, object] | None = None,
 ) -> None:
     """Exit with guidance, using the correct mechanism for the action type.
 
@@ -545,20 +559,30 @@ def _exit_with_decision(
                permissionDecision "ask", exits 0 (prompts user for confirmation).
       "block": prints guidance to stderr, exits 2.
 
+    When _defer_decisions is True, "allow" and "ask" decisions are appended to
+    _pending_decisions instead of exiting immediately so later subcommands/segments
+    are still checked against "block" rules.
+
     category: audit log category (default "guard"; URL callers pass "url").
     detail: optional dict logged as JSON; string values are redacted via _redact_secrets.
     """
+    if _defer_decisions and action in ("allow", "ask"):
+        _pending_decisions.append(
+            _PendingDecision(guidance, action, rule_name, matched_segment, category, detail)
+        )
+        return
+
     if action == "allow":
         # Allow: log and output allow decision
         _log_event(category, "allowed", rule=rule_name, command=matched_segment, detail=detail)
-        print(_hook_output("allow", guidance))
+        print(_hook_output("allow", guidance, updated_input=updated_input))
         sys.exit(0)
     elif action == "ask":
         # Ask: check trust first
         if rule_name and _check_trust(rule_name, matched_segment, _session_id):
             _log_event(category, "trusted", rule=rule_name, command=matched_segment, detail=detail)
             reason = f"[trusted] [{rule_name}] {guidance}" if rule_name else f"[trusted] {guidance}"
-            print(_hook_output("allow", reason))
+            print(_hook_output("allow", reason, updated_input=updated_input))
             sys.exit(0)
 
         # Build enhanced reason with trust hint
@@ -577,7 +601,7 @@ def _exit_with_decision(
         if rule_name:
             sid_hint = f" --session-id {_session_id}" if _session_id else ""
             parts.append(
-                f"To trust: /dev-guard trust add {rule_name}"
+                f"To trust: /dev-guard:trust add {rule_name}"
                 f" [--match <pattern>]"
                 f" [--scope session{sid_hint}|--scope always]"
             )
@@ -592,6 +616,82 @@ def _exit_with_decision(
         _log_event(category, "blocked", rule=rule_name, command=matched_segment, detail=detail)
         print(msg, file=sys.stderr)
         sys.exit(2)
+
+
+def _flush_pending_decisions(
+    all_subcmds_covered: bool = True, *, rtk_original_cmd: str | None = None
+) -> None:
+    """Resolve and emit deferred non-block ('ask'/'allow') decisions.
+
+    Called after all subcommands/domains have been verified against 'block' rules:
+    - Any untrusted 'ask' takes precedence over 'allow' and trusted 'ask'.
+      Multiple untrusted asks are combined into a single 'ask' decision reason.
+    - When only 'allow' or trusted 'ask' decisions exist, permissionDecision: 'allow'
+      is emitted only if all_subcmds_covered is True; otherwise each event is logged
+      without emitting a blanket auto-approve for unreviewed sibling subcommands.
+    """
+    if not _pending_decisions:
+        return
+
+    decisions = list(_pending_decisions)
+    _pending_decisions.clear()
+
+    untrusted_asks: list[_PendingDecision] = []
+    allows_or_trusted: list[_PendingDecision] = []
+    for d in decisions:
+        if d.action == "ask" and not (
+            d.rule_name and _check_trust(d.rule_name, d.matched_segment, _session_id)
+        ):
+            untrusted_asks.append(d)
+        else:
+            allows_or_trusted.append(d)
+
+    if untrusted_asks:
+        first = untrusted_asks[0]
+        combined_guidance = first.guidance
+        if len(untrusted_asks) > 1:
+            extra_lines = [
+                f"Also requires confirmation: [{d.rule_name}] {d.guidance} "
+                f"(Matched: {d.matched_segment})"
+                for d in untrusted_asks[1:]
+            ]
+            combined_guidance = f"{combined_guidance}\n" + "\n".join(extra_lines)
+        _exit_with_decision(
+            combined_guidance,
+            "ask",
+            rule_name=first.rule_name,
+            matched_segment=first.matched_segment,
+            category=first.category,
+            detail=first.detail,
+        )
+    elif allows_or_trusted:
+        if all_subcmds_covered:
+            first = allows_or_trusted[0]
+            updated_input: dict[str, object] | None = None
+            if rtk_original_cmd is not None:
+                rtk_cmd = _rtk_rewrite(rtk_original_cmd)
+                if rtk_cmd is not None:
+                    _log_rtk_event("compressed", command=rtk_original_cmd, rtk_command=rtk_cmd)
+                    updated_input = {"command": rtk_cmd}
+            _exit_with_decision(
+                first.guidance,
+                first.action,
+                rule_name=first.rule_name,
+                matched_segment=first.matched_segment,
+                category=first.category,
+                detail=first.detail,
+                updated_input=updated_input,
+            )
+        else:
+            for d in allows_or_trusted:
+                outcome = "trusted" if d.action == "ask" else "allowed"
+                _log_event(
+                    d.category,
+                    outcome,
+                    rule=d.rule_name,
+                    command=d.matched_segment,
+                    detail=d.detail,
+                )
 
 
 def _exit_with_rtk_rewrite(original_cmd: str, rtk_cmd: str) -> None:
@@ -938,8 +1038,7 @@ def _check_url_rules(url: str) -> tuple[str, str, str] | None:
 def _check_fetch_command(cmd: str) -> bool:
     """Check curl/wget commands for authenticated or bot-blocked URLs. Exits on block or ask match.
 
-    Returns True if the command was a curl/wget (so caller knows to log),
-    or False if not a fetch command.
+    Returns True if a URL rule matched (or exited on block), False otherwise.
     """
     normalized = strip_env_prefix(cmd)
     if not re.match(r"^\s*(curl|wget)\b", normalized):
@@ -950,12 +1049,14 @@ def _check_fetch_command(cmd: str) -> bool:
         urls = _extract_urls(cmd)
         for url in urls:
             _log_url_event(url, None, "bypassed", "Bash")
-        return True
+        return False
 
     urls = _extract_urls(cmd)
+    matched_count = 0
     for url in urls:
         result = _check_url_rules(url)
         if result:
+            matched_count += 1
             rule_name, guidance, action = result
             full_guidance = (
                 f"{guidance}\n"
@@ -972,7 +1073,7 @@ def _check_fetch_command(cmd: str) -> bool:
             )
         else:
             _log_url_event(url, None, "allowed", "Bash")
-    return True
+    return bool(urls) and (matched_count == len(urls))
 
 
 # Patterns indicating authentication failure in HTTP responses
@@ -1182,11 +1283,45 @@ def extract_subshells(cmd: str) -> list[str]:
     return inner
 
 
+def strip_subshells(cmd: str) -> str:
+    """Replace top-level $(...) and `...` subshell spans with $() / ``.
+
+    Prevents already-evaluated subshell contents (such as inner pipes, URLs,
+    or unanchored git/custom rules) from bleeding into outer command and pipe
+    coverage evaluation while preserving the $ / ` markers for echo-noop.
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(cmd):
+        if cmd[i : i + 2] == "$(":
+            depth = 1
+            pos = i + 2
+            while pos < len(cmd) and depth > 0:
+                if cmd[pos] == "(":
+                    depth += 1
+                elif cmd[pos] == ")":
+                    depth -= 1
+                pos += 1
+            if depth == 0:
+                out.append("$()")
+                i = pos
+                continue
+        if cmd[i] == "`":
+            end = cmd.find("`", i + 1)
+            if end != -1:
+                out.append("``")
+                i = end + 1
+                continue
+        out.append(cmd[i])
+        i += 1
+    return "".join(out)
+
+
 def _split_respecting_quotes(
     text: str,
     is_delimiter: Callable[[str, int, list[str]], int | None],
 ) -> list[str]:
-    """Split text on unquoted delimiters while respecting single/double quotes.
+    """Split text on unquoted, top-level delimiters while respecting quotes and subshells.
 
     is_delimiter(text, i, current) -> int or None:
         Return the number of chars to skip (the delimiter width) if position i
@@ -1198,16 +1333,32 @@ def _split_respecting_quotes(
     current = []
     in_single = False
     in_double = False
+    in_backtick = False
+    subshell_depth = 0
     i = 0
     while i < len(text):
         c = text[i]
-        if c == "'" and not in_double:
+        if c == "'" and not in_double and not in_backtick:
             in_single = not in_single
             current.append(c)
         elif c == '"' and not in_single:
             in_double = not in_double
             current.append(c)
-        elif not in_single and not in_double:
+        elif not in_single and text[i : i + 2] == "$(":
+            subshell_depth += 1
+            current.append("$(")
+            i += 2
+            continue
+        elif subshell_depth > 0 and not in_single and not in_double:
+            if c == "(":
+                subshell_depth += 1
+            elif c == ")":
+                subshell_depth -= 1
+            current.append(c)
+        elif c == "`" and not in_single:
+            in_backtick = not in_backtick
+            current.append(c)
+        elif not in_single and not in_double and subshell_depth == 0 and not in_backtick:
             skip = is_delimiter(text, i, current)
             if skip is not None:
                 parts.append("".join(current).strip())
@@ -1853,11 +2004,15 @@ def _check_worktree_stash(cmd: str) -> None:
         )
 
 
-def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
-    """Check a command against git safety rules. Exits on block or ask match."""
+def check_git_safety(cmd: str, fetch_seen: bool = False) -> bool:
+    """Check a command against git safety rules.
+
+    Exits immediately on block match. Records or emits ask decision and returns True
+    on ask match; returns False otherwise.
+    """
     # Early exit: not a git command
     if not re.search(r"(^|\s)git\s", cmd):
-        return
+        return False
 
     # Trusted directory check (before other rules — fundamental access control)
     _check_git_trusted_dirs(cmd)
@@ -1893,6 +2048,9 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass  # If we can't determine branch, allow (fail open)
 
+    # Worktree stash safety (block) — must come before git ASK rules
+    _check_worktree_stash(cmd)
+
     # Special: branch from upstream without a preceding fetch in the command chain
     parsed = _parse_branch_creation(cmd)
     if (
@@ -1909,14 +2067,15 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> None:
             rule_name="branch-needs-fetch",
             matched_segment=cmd,
         )
-
-    # Worktree stash safety — must come before generic stash-drop ASK rule
-    _check_worktree_stash(cmd)
+        return True
 
     # ASK rules — prompt user for confirmation
     for name, check_fn, message in GIT_ASK_RULES:
         if check_fn(cmd):
             _exit_with_decision(message, "ask", rule_name=name, matched_segment=cmd)
+            return True
+
+    return False
 
 
 def _is_command_delimiter(text: str, i: int, current: list[str]) -> int | None:
@@ -2149,18 +2308,20 @@ def _guard_comment_narration(tool_name: str, tool_input: dict) -> None:
 _FETCH_PATTERN = re.compile(r"git\s+fetch\s+(upstream|origin)\b")
 
 
-def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = None) -> None:
-    """Check a command against all rules. Exits on match.
+def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = None) -> bool:
+    """Check a command against all rules.
 
-    Block rules: stderr + exit 2.
-    Ask rules: hookSpecificOutput JSON + exit 0 (prompts user).
+    Block rules: stderr + exit 2 immediately.
+    Ask/Allow rules: recorded via _exit_with_decision (exits 0 or defers when
+    _defer_decisions is True). Returns True if a non-block rule matched.
 
     skip_rules: frozenset of rule names to skip (used for pipe segments
     where native-tool alternatives don't apply to piped output).
     """
     cmd = strip_shell_keyword(cmd)
-    check_git_safety(cmd, fetch_seen=fetch_seen)
+    git_asked = check_git_safety(cmd, fetch_seen=fetch_seen)
     normalized = strip_env_prefix(cmd)
+    first_non_block: tuple[CommandRule, str] | None = None
     for rule in RULES:
         if skip_rules and rule.name in skip_rules:
             continue
@@ -2172,15 +2333,29 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
             # match because EVIL=1 is at the start of the raw command.
             if rule.exception and rule.exception.search(cmd):
                 continue
-            _exit_with_decision(
-                rule.guidance, rule.action, rule_name=rule.name, matched_segment=m.group(0)
-            )
+            if rule.action not in ("allow", "ask"):
+                _exit_with_decision(
+                    rule.guidance, rule.action, rule_name=rule.name, matched_segment=m.group(0)
+                )
+            elif not git_asked and first_non_block is None:
+                first_non_block = (rule, m.group(0))
+    if first_non_block is not None:
+        rule, matched = first_non_block
+        _exit_with_decision(
+            rule.guidance, rule.action, rule_name=rule.name, matched_segment=matched
+        )
+        return True
+    return git_asked
 
 
 def _check_pipes(
     cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None = _PIPE_SEGMENT_SKIP
-) -> None:
+) -> bool:
     """Check later pipe segments of a command for guarded patterns.
+
+    Returns True if there are no downstream pipe segments or if every segment
+    in pipe_segments[1:] matched a rule; False if any downstream pipe segment
+    had no matching rule.
 
     NOTE: _check_oc_introspection is NOT called on individual pipe segments.
     oc introspection runs on full subcommands in _check_subcmd. Pipe segments
@@ -2191,19 +2366,25 @@ def _check_pipes(
     another command downstream.
     """
     pipe_segments = split_pipes(cmd)
-    if len(pipe_segments) > 1:
-        last_idx = len(pipe_segments) - 1
-        for i, segment in enumerate(pipe_segments[1:], start=1):
-            effective_skip = skip_rules
-            if i == last_idx and skip_rules:
-                effective_skip = skip_rules - {"echo-noop", "printf-noop"}
-            _check_rules(segment, fetch_seen, skip_rules=effective_skip)
+    if len(pipe_segments) <= 1:
+        return True
+    all_covered = True
+    last_idx = len(pipe_segments) - 1
+    for i, segment in enumerate(pipe_segments[1:], start=1):
+        effective_skip = skip_rules
+        if i == last_idx and skip_rules:
+            effective_skip = skip_rules - {"echo-noop", "printf-noop"}
+        seg_matched = _check_fetch_command(segment)
+        if _check_rules(segment, fetch_seen, skip_rules=effective_skip) or seg_matched:
+            continue
+        all_covered = False
+    return all_covered
 
 
-def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
+def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
     """Analyze one subcommand: unwrap bash -c, check pipes, check subshells.
 
-    Returns updated fetch_seen.
+    Returns (updated fetch_seen, subcmd_covered).
     """
     if _FETCH_PATTERN.search(subcmd):
         fetch_seen = True
@@ -2250,27 +2431,77 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> bool:
 
     # Check pipe segments and subshells FIRST — deny/ask on dangerous segments
     # must happen before any "allow" rule on the full command can short-circuit.
-    _check_pipes(subcmd, fetch_seen)
+    subcmd_no_subshells = strip_subshells(subcmd)
+    pipe_segments = split_pipes(subcmd_no_subshells)
+    before_pipes = len(_pending_decisions)
+    pipes_covered = _check_pipes(subcmd_no_subshells, fetch_seen)
+    pipes_matched = len(_pending_decisions) > before_pipes
 
-    for inner in extract_subshells(subcmd):
-        if _FETCH_PATTERN.search(inner):
-            fetch_seen = True
-        _check_rules(inner, fetch_seen)
-        _check_pipes(inner, fetch_seen)
+    subshells_covered = True
+    for raw_inner in extract_subshells(subcmd):
+        for inner in split_commands(raw_inner):
+            if _FETCH_PATTERN.search(inner):
+                fetch_seen = True
+            inner_no_subshells = strip_subshells(inner)
+            if inner_no_subshells != inner:
+                saved_pending = list(_pending_decisions)
+                _check_rules(inner, fetch_seen)
+                _pending_decisions[:] = saved_pending
+            inner_pipes = split_pipes(inner_no_subshells)
+            before_inner_pipes = len(_pending_decisions)
+            inner_pipes_covered = _check_pipes(inner_no_subshells, fetch_seen)
+            inner_pipes_matched = len(_pending_decisions) > before_inner_pipes
+            inner_fetch = _check_fetch_command(
+                inner_pipes[0] if inner_pipes else inner_no_subshells
+            )
+            before_inner_outer = len(_pending_decisions)
+            if len(inner_pipes) > 1 and inner_pipes_matched:
+                saved_pending = list(_pending_decisions)
+                _check_rules(inner_no_subshells, fetch_seen)
+                _pending_decisions[:] = saved_pending
+                inner_rule_matched = _check_rules(inner_pipes[0], fetch_seen)
+            else:
+                inner_rule_matched = _check_rules(inner_no_subshells, fetch_seen)
+            inner_outer_matched = (
+                inner_fetch or inner_rule_matched or (len(_pending_decisions) > before_inner_outer)
+            )
+            inner_has_explicit_allow = any(
+                d.action == "allow" for d in _pending_decisions[before_inner_outer:]
+            )
+            if not (inner_outer_matched and (inner_pipes_covered or inner_has_explicit_allow)):
+                subshells_covered = False
 
-    # Now check the full subcommand (including allow rules that exit 0)
-    _check_rules(subcmd, fetch_seen)
+    # Check curl/wget on the leading segment (with subshells stripped) so piped
+    # or subshell-bearing fetches require all segments and subshells to be covered.
+    fetch_matched = _check_fetch_command(pipe_segments[0] if pipe_segments else subcmd_no_subshells)
 
-    # oc/kubectl introspection — after user-defined rules (which take priority)
-    normalized = strip_env_prefix(strip_shell_keyword(subcmd))
-    if re.match(r"^\s*(oc|kubectl)\b", normalized):
-        _check_oc_introspection(subcmd)
+    # Ensure whole-subcommand block rules still run on the raw subcmd when
+    # subshells were stripped or when pipes_matched is True, while evaluating
+    # non-block decisions and coverage on subcmd_no_subshells / pipe_segments[0].
+    before_outer = len(_pending_decisions)
+    if subcmd_no_subshells != subcmd or (len(pipe_segments) > 1 and pipes_matched):
+        saved_pending = list(_pending_decisions)
+        _check_rules(subcmd, fetch_seen)
+        _pending_decisions[:] = saved_pending
+    if len(pipe_segments) > 1 and pipes_matched:
+        rule_matched = _check_rules(pipe_segments[0], fetch_seen)
+    else:
+        rule_matched = _check_rules(subcmd_no_subshells, fetch_seen)
 
-    # Kill command guard — validate targets against Claude session process tree
-    if re.match(r"^\s*(kill|killall|pkill)\b", normalized):
-        _check_kill_command(subcmd)
+    if not rule_matched:
+        # oc/kubectl introspection — after user-defined rules (which take priority)
+        normalized = strip_env_prefix(strip_shell_keyword(subcmd_no_subshells))
+        if re.match(r"^\s*(oc|kubectl)\b", normalized):
+            _check_oc_introspection(subcmd_no_subshells)
 
-    return fetch_seen
+        # Kill command guard — validate targets against Claude session process tree
+        if re.match(r"^\s*(kill|killall|pkill)\b", normalized):
+            _check_kill_command(subcmd_no_subshells)
+
+    outer_matched = fetch_matched or rule_matched or (len(_pending_decisions) > before_outer)
+    has_explicit_allow = any(d.action == "allow" for d in _pending_decisions[before_outer:])
+    subcmd_covered = outer_matched and (pipes_covered or has_explicit_allow) and subshells_covered
+    return fetch_seen, subcmd_covered
 
 
 # ── Trust management ──
@@ -3214,6 +3445,8 @@ def _get_askable_rule_names() -> set[str]:
     names.add("kill-non-claude-process")
     # Branch-needs-fetch (dynamic git ask)
     names.add("branch-needs-fetch")
+    # MCP fetchaller mutating call ask rule
+    names.add("fetchaller-fetch-mutating-call")
     return names
 
 
@@ -3944,7 +4177,12 @@ def _handle_websearch(tool_input: dict) -> NoReturn:
     # BLOCKED_URL_RULES patterns like "(?:^|//)(?:www\.)?reddit\.com/", which
     # require a leading "^"/"//" and trailing "/" -- a plain "reddit.com"
     # string alone (no "//" prefix) never matches those patterns.
+    global _defer_decisions
+    _defer_decisions = True
+    _pending_decisions.clear()
+    covered_domains = 0
     for domain in domains:
+        before_count = len(_pending_decisions)
         result = _check_url_rules(f"//{domain.rstrip('/')}/")
         if result:
             rule_name, _guidance, action = result
@@ -3959,12 +4197,17 @@ def _handle_websearch(tool_input: dict) -> NoReturn:
                 category="url",
                 detail={"tool": "WebSearch", "phase": "pre"},
             )
+        if len(_pending_decisions) > before_count:
+            covered_domains += 1
+    _defer_decisions = False
+    _flush_pending_decisions(all_subcmds_covered=bool(domains) and covered_domains == len(domains))
     _log_url_event(tool_input.get("query", ""), None, "allowed", "WebSearch")
     sys.exit(0)
 
 
 def _handle_bash_command(command: str) -> NoReturn:
     """Process a Bash command through all guard checks. Always exits."""
+    global _defer_decisions
     if not command:
         sys.exit(0)
 
@@ -3978,13 +4221,27 @@ def _handle_bash_command(command: str) -> NoReturn:
     if command.startswith("GUARD_BYPASS=1 "):
         _log_event("bypass", "bypassed", command=command)
         real_cmd = command[len("GUARD_BYPASS=1 ") :]
-        _check_fetch_command(real_cmd)
+        _defer_decisions = True
+        _pending_decisions.clear()
         subcmds = split_commands(real_cmd)
         for subcmd in subcmds:
-            stripped = strip_env_prefix(strip_shell_keyword(subcmd))
-            for name, check_fn, message in GIT_DENY_RULES:
-                if check_fn(stripped) or check_fn(subcmd):
-                    _exit_with_decision(message, "block", rule_name=name, matched_segment=subcmd)
+            bypass_segments = [
+                subcmd,
+                *split_pipes(strip_subshells(subcmd))[1:],
+                *(
+                    inner_sub
+                    for raw_inner in extract_subshells(subcmd)
+                    for inner_sub in split_commands(raw_inner)
+                ),
+            ]
+            for seg in bypass_segments:
+                _check_fetch_command(seg)
+                stripped = strip_env_prefix(strip_shell_keyword(seg))
+                for name, check_fn, message in GIT_DENY_RULES:
+                    if check_fn(stripped) or check_fn(seg):
+                        _exit_with_decision(message, "block", rule_name=name, matched_segment=seg)
+        _defer_decisions = False
+        _flush_pending_decisions(all_subcmds_covered=False)
         # Explicit allow for multiline bypass commands (same rationale as below)
         if "\n" in real_cmd:
             _exit_with_decision(
@@ -3995,28 +4252,40 @@ def _handle_bash_command(command: str) -> NoReturn:
             )
         sys.exit(0)
 
-    # Check curl/wget commands for authenticated URLs (before rule checks)
-    _check_fetch_command(command)
-
     subcmds = split_commands(command)
 
     # Block cd && git compounds before processing individual subcommands
     _check_cd_git_compound(subcmds, command)
 
+    _defer_decisions = True
+    _pending_decisions.clear()
     fetch_seen = False
+    covered_subcmds = 0
     for subcmd in subcmds:
-        fetch_seen = _check_subcmd(subcmd, fetch_seen)
+        fetch_seen, subcmd_covered = _check_subcmd(subcmd, fetch_seen)
+        if subcmd_covered:
+            covered_subcmds += 1
 
-    # ── RTK compression: rewrite commands that passed all deny rules ──
-    # Runs AFTER deny rules so blocked commands never reach RTK.
-    # Only for simple commands (single, non-piped, non-subshell).
-    if (
+    all_subcmds_covered = bool(subcmds) and (covered_subcmds == len(subcmds))
+    had_pending = bool(_pending_decisions)
+    is_simple_cmd = (
         len(subcmds) == 1
         and len(split_pipes(command)) == 1
         and "$(" not in command
         and "`" not in command
         and "\n" not in command
-    ):
+    )
+    _defer_decisions = False
+    _flush_pending_decisions(
+        all_subcmds_covered=all_subcmds_covered,
+        rtk_original_cmd=command if is_simple_cmd else None,
+    )
+
+    # ── RTK compression: rewrite commands that passed all deny rules ──
+    # Runs AFTER deny rules so blocked commands never reach RTK.
+    # Only for simple commands (single, non-piped, non-subshell), and never
+    # when _flush_pending_decisions suppressed allow on a partially-covered command.
+    if is_simple_cmd and not (had_pending and not all_subcmds_covered):
         rtk_cmd = _rtk_rewrite(command)
         if rtk_cmd is not None:
             _exit_with_rtk_rewrite(command, rtk_cmd)

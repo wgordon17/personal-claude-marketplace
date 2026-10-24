@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "vscode-html-css-npx",
+  "version": "1.0.1",
+  "description": "HTML/CSS language servers (via npx - always latest)",
+  "author": {
+    "name": "wgordon17"
+  }
+}

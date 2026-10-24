@@ -10,8 +10,8 @@ description: >-
   checkpoint. Use when asked to "swarm this", "full team", "agent team",
   "full send", or when maximum rigor is needed on an implementation task.
   Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
-allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion,
-  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, CronCreate, CronDelete, Skill]
+compatibility: Requires Claude Code with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for multi-agent teammate messaging
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion SendMessage TaskCreate TaskUpdate TaskList TaskGet CronCreate CronDelete Skill
 ---
 
 # /swarm — Full Agent Swarm Implementation
@@ -93,697 +93,97 @@ write access and runs as a pipeline agent in Phase 3.5, not as a Phase 4 reviewe
 
 ### Phase 0: Pre-flight & Setup
 
-Run the project test suite and record the baseline (pass/fail count, any pre-existing failures).
-Check git status — ensure the working tree is clean, identify the current branch, and determine
-whether a feature branch is needed. If not already on a feature branch, create one from
-`upstream/main` or `origin/main`. Verify that auto-compaction is enabled — the /swarm skill
-depends on it for reliable agent operation (warn the user if disabled). Generate a run ID using the convention in `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`
-(Run-ID Naming Convention section) and create the audit trail directory at `{memory_dir}/swarm/{run-id}/`.
-Create all tasks upfront with `addBlockedBy` dependencies so the full task graph is visible from
-the start. The implicit team is established automatically by the first named teammate spawn in
-Phase 2 — no separate setup call is needed.
+Run the project test suite and record the baseline. Check git status, ensure a clean working tree, and create a feature branch from `upstream/main` or `origin/main` if needed. Verify auto-compaction is enabled. Generate a run ID per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)` and create `{memory_dir}/swarm/{run-id}/`. Create all tasks upfront with `addBlockedBy` dependencies; the implicit team is established by the first named teammate spawn in Phase 2. See `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` (Phase 0).
 
-**Test Plan Discovery:** After branch creation and run-ID generation, discover the plan file
-using Branch-header matching: search `{memory_dir}/plans/` for files whose `**Branch:**` header
-matches the current branch, excluding `plans/done/`. Fallback: filename slug matching against
-the current branch slug. If a plan file is found AND it contains a `## Test Plan` section:
-read the `**Test Plan:**` path from the annotation. Before reading: normalize the path (resolve
-`..` segments) and verify it falls within `{memory_dir}/test-plans/`. If the normalized path
-escapes `{memory_dir}/test-plans/`, set `{TEST_PLAN}` to empty string and log a warning. Before
-copying any staged file, verify it is a regular file (not a symlink). If the path is valid: read
-the test plan document and store as `{TEST_PLAN}` context. If `**Feature Files:**` path exists:
-normalize and validate it falls within `{memory_dir}/test-plans/`. If `**BDD Setup Needed:** yes`,
-record the install command. Store the plan file path for Phase 4 Plan Adherence and Phase 5.5
-Plan Reconciliation to reuse (both phases skip re-discovery when the path is already known).
+**Test Plan Discovery:** Search `{memory_dir}/plans/` (excluding `plans/done/`) by `**Branch:**` header match (fallback: branch slug filename match). If found with `## Test Plan`, normalize `**Test Plan:**` and `**Feature Files:**` paths, verify both stay within `{memory_dir}/test-plans/`, and check `test -f && test ! -L` before reading `{TEST_PLAN}` or copying. Record any `**BDD Setup Needed:** yes` install command and save the plan path for Phases 4 and 5.5.
 
-**Tracker Extraction:** If a plan file is found, extract `{tracker}` — the value of the
-`**Tracker:**` field from the plan file header (see
-`[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` for field values and parsing spec).
-Phase 7 references `{tracker}` without re-reading the plan file. This keeps plan file
-parsing centralized at Phase 0, consistent with the existing `{TEST_PLAN}` pattern. If
-the `**Tracker:**` field is absent from the plan file header (pre-feature plans), set
-`{tracker}` to `none`.
-
-**Tracker validation:** After extraction, verify `{tracker}` is a terminal state
-(`github:owner/repo#N`, `jira:PROJ-N`, or `none`) per `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)`
-Finalization Constraint section. If `{tracker}` is a non-terminal state (`github:pending`,
-`github:linked#N`, or `jira:pending`), warn via `AskUserQuestion`: "Plan file has unresolved
-tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or set to 'none'
-to skip issue tracking." Do not proceed to Phase 1 until the tracker is resolved or set to
-`none`.
+**Tracker Extraction & Validation:** Extract `{tracker}` from `**Tracker:**` per `[{skill_dir}/../../references/tracker-field-spec.md](../../references/tracker-field-spec.md)` (default `none`). Verify `{tracker}` is terminal (`github:owner/repo#N`, `jira:PROJ-N`, or `none`); if non-terminal (`github:pending`, `github:linked#N`, `jira:pending`), halt via `AskUserQuestion` until resolved.
 
 **Workflow detection:** After discovering the plan file, extract `**Workflow:**` from the header.
 If `incremental`:
 - Extract `**PR Boundaries:**` and parse task-to-PR mapping
 - Extract `**PRs:**` for any already-created PR numbers
 - Set `{workflow_mode}` = `incremental`, `{pr_boundaries}` = parsed mapping
-- **Checkpoint discovery:** Glob `{memory_dir}/swarm/*/checkpoint.json` for any checkpoint
-  files. For each found, read the `plan_file` field and match against the current plan file
-  path. Use the matching checkpoint (there should be at most one per plan file). This handles
-  the cross-run-ID case where the original run_dir has a different run-id than the current
-  session's run-id. Store the original `run_dir` from the checkpoint's `run_dir` field.
-- **Initial branch naming:** For the first PR boundary (no checkpoint exists), derive
-  `{plan-slug}` from the plan file path using the same algorithm as checkpoint resume:
-  extract the basename, strip the run-id prefix (`{branch-slug}-{timestamp}-`) and `.md`
-  extension, then apply the Branch Slug Sanitization Rules from `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`.
-  Rename the Phase 0-created branch to `feat/{plan-slug}-pr1` (via `git branch -m`). This
-  rename happens after the test baseline. The rename is a git-only operation that does not
-  affect the audit trail, which is keyed to the run-id independent of the branch name.
-  This establishes the naming convention that resume uses for subsequent boundaries.
-If `fast` or absent: proceed with existing fire-and-forget behavior unchanged.
-
-**Checkpoint resume (incremental only):** If checkpoint discovered via glob:
-- Read checkpoint, extract `completed_prs`, `current_pr`, `tasks_remaining`
-- **Null PR recovery:** If the most recent `completed_prs` entry has `pr_number: null`,
-  the previous session completed implementation but crashed before creating the PR. The
-  branch with the work should still exist. Before creating a PR: check if one already exists
-  for the boundary's branch (`gh pr list --head feat/{plan-slug}-pr{N} --state open --json number`).
-  If found, use that PR number. If not found, create the draft PR following the PR framing
-  rules from step 5 of the boundary stop (standalone work, no serial numbering). Check
-  branch exists via `git branch -l`, push if needed. Then update the checkpoint with the
-  PR number.
-- Verify merged PRs: for entries with non-null `pr_number`, `git fetch origin {branch_base}`
-  then confirm they are merged (primary: `gh pr view <number> --json state` checking for
-  `"state": "MERGED"`, fallback: `git branch --merged {branch_base}` — same two-method
-  strategy as roadmap SKILL.md's completion tracking section).
-- If `tasks_remaining` is empty (all boundaries completed but checkpoint was not cleaned up),
-  delete the stale checkpoint and proceed with normal completion flow (Phase 6 and 7) rather
-  than attempting resume.
-- Derive `{plan-slug}` from the checkpoint's `plan_file` path: extract the basename
-  (filename only), then strip the run-id prefix (`{branch-slug}-{timestamp}-`) and the
-  `.md` extension. Example: `hack/plans/feat-auth-1711388400-session-auth.md` → basename
-  `feat-auth-1711388400-session-auth.md` → strip prefix and extension → `session-auth`.
-  Apply the Branch Slug Sanitization Rules from `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`.
-- Create new branch for the next PR boundary: `feat/{plan-slug}-pr{N}` from
-  `origin/{branch_base}` (using the `branch_base` field from the checkpoint, typically `main`)
-- Announce: "Resuming swarm. Prior work merged. Remaining tasks: {list}."
-  Include the checkpoint's `context_summary` in the Implementer's briefing so it has context
-  about what was built in earlier boundaries.
-- **Resume Phase 0 variant:** Still run these Phase 0 steps for the new session: test
-  baseline, git status check. The new session gets its own implicit team automatically —
-  no team setup step is needed. Reuse the original run-id's `{run_dir}` (from checkpoint's `run_dir` field)
-  for audit trail continuity — do NOT generate a new run-id. Read `architect-plan.json`
-  from the original run_dir (path stored in checkpoint's `architect_plan` field) to restore
-  architectural context.
-- **Plan file discovery:** During incremental resume, do NOT rely on `**Branch:**` header
-  matching (the branch name changes per boundary). Use the checkpoint's `plan_file` path
-  directly. Pass this path to all downstream consumers (Phase 4 Plan Adherence, Phase 5.5
-  Plan Reconciliation, quality-gate) rather than relying on branch-header discovery.
-  Note: The `**Branch:**` header in the plan file is stale after boundary 1 (it was updated
-  to boundary 1's branch by the Boundary Updater). During resume, update `**Branch:**` to the
-  new boundary's branch name via the Boundary Updater at the start of Phase 3, not just at
-  boundary stop.
-- Skip Phase 1 (composition already decided), skip Phase 2 (architecture already done)
-- Jump to Phase 3 implementation with only the current PR boundary's tasks
-
-If checkpoint exists but a completed PR is NOT merged: announce the blocker and pause
-via AskUserQuestion ("PR #{X} is not yet merged. Merge it first, then re-invoke /swarm.").
-
-`--fresh` flag: If the user's invocation prompt contains the token `--fresh` (detected via
-simple string match on the initial task description), ignore any existing checkpoint and
-start a new swarm run. The old checkpoint is archived to
-`{run_dir}/checkpoint.json.abandoned-{timestamp}`.
+- Follow `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)` for checkpoint discovery, initial branch naming (`feat/{plan-slug}-pr1`), resume, and `--fresh`. If `fast` or absent, use fire-and-forget behavior.
 
 ### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
 
-Use `AskUserQuestion` to resolve any ambiguity in the task before spawning agents. Auto-detect
-optional reviewers: Glob for UI files (`*.tsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`); Grep
-for API patterns (`router`, `endpoint`, `handler`, `@api`); Grep for DB patterns (`migration`,
-`schema`, `model`, `query`). Present the proposed swarm composition to the user — list all core
-agents plus any auto-detected optional reviewers. Allow the user to add or remove reviewers.
-After the user approves the composition and confirms they understand the scope, proceed without
-further checkpoints. The user can walk away after Phase 1 approval.
-
-Announce BDD-Step-Writer as part of the composition if Phase 0 discovered a plan file with a
-`**Feature Files:**` path in its `## Test Plan` section. BDD-Step-Writer is a Phase 3.5 pipeline
-agent with write access — it is distinct from read-only optional domain reviewers and does not
-run in Phase 4. Include it in the composition count presented to the user.
-
-**jira:jira-agent** (conditional) — Spawned at Phase 7 completion when `{tracker}` contains
-`jira:PROJ-N`. Verifies card status and transitions to In Progress. Cross-plugin agent
-spawning is validated: [{skill_dir}/../../../jira/agents/jira-agent.md](../../../jira/agents/jira-agent.md) explicitly lists "swarm implementers, quality-gate
-verifiers, or any agent" as valid spawners.
+Use `AskUserQuestion` to resolve ambiguities and approve the swarm composition (core agents + auto-detected optional reviewers + Phase 3.5 BDD-Step-Writer if `**Feature Files:**` is present). After Phase 1 approval, the swarm runs autonomously except for architect blockers, max-retry escalations, or `needs-input` triage (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 1).
+- **jira:jira-agent** (conditional): Spawned at Phase 7 when `{tracker}` is `jira:PROJ-N` (see `[{skill_dir}/../../../jira/agents/jira-agent.md](../../../jira/agents/jira-agent.md)`).
 
 ### Phase 2: Architect (opus)
 
-Spawn the architect agent with the full task description, codebase context, and audit trail path.
-The architect begins by classifying the task using the Cynefin framework
-(see `[{skill_dir}/references/cynefin-reference.md](./references/cynefin-reference.md)`), then designs the solution accordingly:
+Spawn `code-quality:architect` (opus) to classify the task using the Cynefin framework (`[{skill_dir}/references/cynefin-reference.md](./references/cynefin-reference.md)`) and write `{run_dir}/architect-plan.json` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`), including `components`, `risks`, `questions`, and `documentation_impact`.
 
-- **Clear / Complicated:** Standard decomposition into independent components with dependency graph.
-- **Complex:** Probe design — experiments and signals rather than a full plan. Smaller components
-  with explicit checkpoints. Phase 2.5 Security Design Review is mandatory regardless of surface area.
-- **Chaotic:** Stabilization brief only — immediate action plan to stop the bleeding. Phase 2.5
-  is deferred until stabilization completes. Single Implementer, no pipeline parallelism.
-- **Disorder:** Investigation plan first; classify domain before committing to implementation.
+After receiving `architect-plan.json`, the Lead MUST follow `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` (Phase 2):
+1. Present any `questions` and high-impact `risks` via `AskUserQuestion`
+2. Verify all requested scope is covered and validate warm-bundle fields (`[{skill_dir}/references/warm-bundle-handoff.md](./references/warm-bundle-handoff.md)`)
+3. Use `cynefin_domain` to inform Phase 2.5 skip decisions and pipeline mode
+4. Escalate unconfirmed third-party library/API choices to `/deep-research` (External mode via `Skill`)
 
-The Cynefin classification (`cynefin_domain` and `domain_justification`) is written to
-`architect-plan.json` and is advisory — it informs how phases run, never whether mandatory phases
-run. The Lead reads the classification to inform Phase 2.5 skip decisions.
-
-Output is a structured JSON plan written to `{run_dir}/architect-plan.json`
-(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). The architect also identifies global risks,
-data model changes, API surface changes, and **documentation impact** — a `documentation_impact`
-array listing which documentation surfaces are affected and why (READMEs, manifests, registries,
-component tables, descriptions, dependency matrices, user-facing docs). This array feeds Phase 6.
-After receiving the plan, the Lead MUST:
-
-1. Read `architect-plan.json` and check the `questions` array
-2. If `questions` is non-empty, present EVERY question to the user via `AskUserQuestion`
-3. Verify scope: compare the plan's components against the original task — if any requested
-   work is missing from the plan, add it back or ask the user via `AskUserQuestion`
-4. Raise any high-impact risks to the user before proceeding
-5. Note the `cynefin_domain` — use it to inform Phase 2.5 skip decision and pipeline mode
-6. **External research escalation** — If the architect's design names third-party libraries,
-   APIs, or architectural patterns that the Lead cannot confirm are current and well-understood
-   from existing project context, invoke `/deep-research` (via the `Skill` tool) in External mode before proceeding to Phase 2.5.
-   Pass the architect's technology recommendations as the research question. Feed findings back to
-   the architect via SendMessage for plan revision if external evidence contradicts the
-   recommendation.
-
-Do NOT proceed to Phase 3 until all architect questions are resolved and scope is verified.
-The Architect remains active through Phase 3 to answer clarification questions from the
-Implementer and Reviewer.
+Keep the Architect active through Phase 3 for clarifications.
 
 ### Phase 2.5: Security Design Review (conditional)
 
-Skip this phase when: task is config-only, docs-only, or test-only AND does not touch
-authentication, authorization, data storage, network, or API surface. Clear-domain tasks
-(per `cynefin_domain` in architect-plan.json) that don't touch auth, data, network, or API
-surfaces can also skip this phase. When in doubt, run the review.
-
-Spawn the `code-quality:security` agent (opus model) with the architect's plan as input.
-The agent reviews architect-plan.json for:
-- Attack surface introduced or modified
-- STRIDE threat categories (Spoofing, Tampering, Repudiation, Information Disclosure,
-  Denial of Service, Elevation of Privilege)
-- Trust boundary violations
-- Security constraints the implementer must respect
-
-Output: SecurityDesignReview JSON written to `{run_dir}/security-design-review.json`
-(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`).
-
-**Routing:**
-- needs-fix findings requiring architect plan revision → Route back to Architect (Phase 2) with security feedback for
-  redesign. Architect revises plan, re-run Phase 2.5. Maximum 2 Architect↔Security iterations.
-- no needs-fix findings blocking implementation → Append security constraints to architect-plan.json as
-  `security_constraints` array and proceed to Phase 3.
-- If 2 iterations exhausted with unresolved findings → Escalate to human via AskUserQuestion.
+**Skip when:** Config/docs/test-only or Clear-domain tasks not touching auth, data, network, or API surfaces.
+Spawn `code-quality:security` (opus) for a STRIDE review of `architect-plan.json` → `{run_dir}/security-design-review.json` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Route `revise` (`needs-fix`) back to Architect (max 2 iterations, then `AskUserQuestion`); on `proceed`, append `security_constraints` to `architect-plan.json` (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 2.5).
 
 ### Phase 2.7: Speculative Fork (conditional)
 
-Skip this phase unless the architect's plan signals genuine implementation uncertainty — multiple
-viable approaches with real trade-offs where "try both and compare" beats guessing. The trigger
-is the architect explicitly flagging `speculative_fork_recommended: true` in
-`architect-plan.json`, OR the Lead identifying 2+ incompatible design choices in the plan that
-would significantly affect outcomes.
-
-When triggered, the Lead presents the competing approaches to the user via `AskUserQuestion`:
-"The architect identified N competing approaches for [component] (all vetted by security review).
-Want to run /speculative to compare them, or pick one directly?"
-
-If the user chooses `/speculative`, the Lead acts as the speculative orchestrator:
-
-1. Extract the contested component(s) from `architect-plan.json`
-2. Define evaluation criteria based on the architect's stated trade-offs
-3. Run `/speculative` Phases 1–3 (competitors fork in isolated worktrees, judge evaluates,
-   winning approach merged back)
-4. The winning approach is written back into `architect-plan.json` as the implementation spec
-   for that component, replacing the ambiguous description
-5. Proceed to Phase 3 with the now-resolved plan
-
-If the user picks one approach directly, skip /speculative and continue to Phase 3 as normal.
-
-**Scope:** Only the contested component(s) go through the speculative fork. Uncontested
-components proceed directly to Phase 3 without waiting (if pipeline-feasible).
-
-**Watchdog:** CronDelete the Phase 2.7 watchdog after all competitors complete (or are timed
-out/failed) and before merging the winning approach back into architect-plan.json. Delete on
-all paths including abort — never leave orphaned cron jobs at phase boundaries.
-
-**Escalation:** If the judge recommends hybrid AND the Lead agrees it's genuinely better,
-run Phase 3.5 of the speculative skill (synthesis agent) before continuing to swarm Phase 3.
-Note it in the audit trail.
-
-When the architect classifies the domain as Complex AND competing approaches exist,
-proactively recommend /speculative even if `speculative_fork_recommended` is not explicitly
-set — Complex-domain tasks benefit most from speculative execution.
-
-**Never trigger Phase 2.7 for:**
-- Clear-domain tasks where the architect chose one approach without hesitation
-- Tasks with a single component and no stated approach trade-offs
-- Tasks where the user specified an explicit implementation approach in Phase 1
+**Skip unless:** `speculative_fork_recommended: true` in `architect-plan.json`, OR 2+ incompatible design choices exist (proactively recommend for Complex-domain tasks). Never trigger for Clear-domain or single-component tasks without trade-offs. Ask via `AskUserQuestion` whether to run `/speculative` or pick directly; if `/speculative`, fork contested components in worktrees (with a 60s `CronCreate` watchdog torn down via `CronDelete` on all paths), judge with opus, and write the winner into `architect-plan.json` (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Step 2.7).
 
 ### Phase 2.8: Pre-Implementation Simplification Review
 
-Before any code is written, the Lead spawns a **Reduction Analyst** (general-purpose,
-opus model, read-only) to review the architect's plan against the existing codebase and recommend
-simplifications. This phase catches over-engineering *before* implementation, when changes are
-cheapest.
-
-The Reduction Analyst receives:
-- `architect-plan.json` (proposed components, files to create/modify)
-- The existing codebase context (key files from architect's `key_files` list)
-- Security constraints from Phase 2.5 (if any)
-
-The Reduction Analyst evaluates:
-
-1. **Existing code that can be removed:** Does the plan replace existing functionality? If so,
-   identify the old code for deletion. Implementation should prefer removing the old path over
-   adding a compatibility layer.
-
-2. **Proposed abstractions that are premature:** Does any proposed component introduce
-   an interface with one implementation, a factory for one type, or a plugin architecture with
-   one plugin? Flag these for simplification.
-
-3. **Dependency opportunities:** For each proposed custom implementation, check whether a
-   well-maintained library already solves the problem (per
-   `[{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`). Use WebSearch to verify recency and
-   popularity against today's actual date.
-
-4. **Net complexity assessment:** Will the plan result in a net increase or decrease in codebase
-   complexity? If net increase, recommend specific reductions (merge files, inline abstractions,
-   delete superseded code).
-
-Output: `{run_dir}/reduction-review.json` with:
-- `removals_recommended`: files/functions/classes to delete during implementation
-- `abstractions_flagged`: proposed abstractions to simplify or skip
-- `dependency_alternatives`: libraries that could replace custom code
-- `net_complexity_assessment`: expected impact on codebase size and complexity
-
-The Lead integrates reduction recommendations into the architect plan before Phase 3:
-- Accepted removals → added to implementation instructions ("delete X before building Y")
-- Accepted dependency alternatives → architect plan updated with library references
-- Rejected recommendations → documented in audit trail with justification
-
-**Skip conditions:** Config-only, docs-only, or test-only changes. Tasks where the architect's
-plan modifies fewer than 3 files total.
+**Skip when:** Config/docs/test-only changes, or architect plan modifies fewer than 3 files total.
+Spawn **Reduction Analyst** (`general-purpose`, opus, read-only) to check for removable legacy code, premature abstractions, library alternatives (`[{skill_dir}/../../references/dependency-evaluation.md](../../references/dependency-evaluation.md)`), and net complexity impact → `{run_dir}/reduction-review.json`. Integrate accepted reductions into `architect-plan.json` (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Step 2.8).
 
 ### Phase 3: Pipelined Implementation
 
-Before spawning pipeline agents, the Lead creates a CronCreate watchdog (60-second interval) to
-monitor agent idle status. The watchdog reports to the Lead — it never intervenes directly. The
-Lead then spawns the full pipeline team at once: Implementer, Reviewer, Test-Writer, and
-Test-Runner. The Lead routes work through the pipeline using structured JSON messages — components
-flow from Implementer to Reviewer to Test-Writer to Test-Runner, with the Implementer moving to
-the next component while earlier ones advance through the pipeline. Each agent sends a
-ContextAcknowledgment immediately upon receiving an assignment (see
-`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Each handoff uses a typed JSON message. If the Reviewer
-rejects a component, the Lead routes specific feedback back to the Implementer for targeted fixes
-and re-submission (max 3 iterations per component). If Test-Runner reports failures, the Lead
-routes the failure details back to the Implementer for fixes, then re-submits through Review and
-Test stages. The watchdog is torn down (CronDelete) when Phase 3 completes or on any abort path.
-See `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)` for full parallelism rules, backpressure handling, and
-fallback to sequential mode.
+Create a 60s `CronCreate` watchdog, then spawn Implementer (sonnet), Reviewer (opus), Test-Writer (sonnet), and Test-Runner (haiku). Route components through `Implementer → Reviewer → Test-Writer → Test-Runner` via typed JSON messages and `ContextAcknowledgment` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). Route Reviewer rejections (max 3 iterations) and Test-Runner failures (max 2 cycles) back to Implementer. Tear down the watchdog (`CronDelete`) when Phase 3 ends or aborts. See `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)` and `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` (Phase 3) for parallelism, backpressure, and Parallel Mini-Pipelines (`components.count > 3` and `independent_groups.count > 1`).
 
-#### Parallel Mini-Pipelines (when applicable)
-
-If the architect's dependency graph contains 2+ independent component groups (no shared files,
-no dependency edges between groups), the Lead SHOULD spawn parallel mini-pipelines rather than
-serializing all components through one Implementer:
-
-- Each mini-pipeline: Implementer (sonnet, worktree) → Reviewer (opus) → Test-Writer (sonnet)
-  → Test-Runner (haiku)
-- The Lead coordinates merge order based on the architect's merge priority
-- Components with dependencies between them still flow through a single pipeline sequentially
-- Each mini-pipeline's Implementer stays within context limits — no lossy handoffs needed
-
-**Decision heuristic:**
-```
-IF architect.components.count > 3 AND architect.independent_groups.count > 1:
-    Fan out independent groups to parallel mini-pipelines
-ELSE:
-    Use single pipeline (current behavior)
-```
-
-This reduces context pressure on individual Implementers and improves output quality for large
-tasks. The Lead decides based on the dependency graph — never based on cost or token concerns.
-
-**PR boundary handling (incremental only):** Each PR boundary produces a standalone,
-independently-reviewable unit of work. The PR title and body describe what THIS PR
-accomplishes — never "Part X of Y", never referencing other PRs in the series. A reviewer
-must be able to judge the PR on its own merits without knowing other PRs exist.
-
-After completing all tasks in the current PR boundary (all components for tasks in
-`**PR:** {current_pr}`):
-1. Run Phase 4 reviews scoped to the current boundary's files only. The Lead spawns the
-   same core review agents as full Phase 4 (Security, QA, Code-Reviewer, Performance, plus
-   any auto-detected domain reviewers from Phase 1) with `pr_boundary_files` — NOT via
-   /pr-review skill, which reviews existing PRs. Plan Adherence and Phase 4.5 structural
-   analysts also run at boundary stops (structural analysts receive scoped-review briefing
-   per the Phase 4.5 incremental workflow section).
-2. Run Phase 5 Fixer scoped to the current boundary's files only — the Lead passes
-   `pr_boundary_files` to the Fixer agent's prompt (same mechanism as Phase 4 reviewers).
-   Structural scoping per [{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md) Fixer Protocol.
-   Note: Phase 5.5 (Plan Reconciliation) does NOT run at non-final boundary stops — it
-   runs only at final completion, scoped to all tasks across all boundaries.
-3. Spawn Verifier agent (tests + lint) — same agent as Phase 7 but invoked inline at
-   boundary stop. Full test suite, not scoped. This is a Verifier agent invocation only,
-   NOT the full Phase 7 pipeline (Phase 6 docs run only at final completion).
-   **Boundary-scoped test failures:** Compare test results against the Phase 0 baseline.
-   Any test that was passing in baseline and now fails is a regression — blocking. Any NEW
-   test (added by the current boundary's tasks) that fails is blocking. Tests that were
-   already failing in baseline are pre-existing (handled by existing swarm convention).
-   This baseline comparison sidesteps the "which boundary owns this test" problem.
-4. **Save checkpoint and update plan file via helper agent** (the Lead has Can Edit: No):
-   Spawn a brief Boundary Updater agent (sonnet, bypassPermissions) that:
-   a. Writes checkpoint to `{run_dir}/checkpoint.json` with `completed_prs` for ALL prior
-      boundaries plus the current one (with `pr_number: null` until step 5 succeeds).
-   b. Updates `**PRs:**` field in the plan file to mark the current boundary as `pending`
-      (the real PR number is written by step 7 after PR creation).
-   c. Updates `**Branch:**` field in plan file to `feat/{plan-slug}-pr{current_pr}`.
-   The Lead provides all values; the helper agent only writes files.
-   The Boundary Updater may ONLY write to: (a) `{run_dir}/checkpoint.json`, and (b) the plan
-   file at `{plan_file}`. It must not create, modify, or delete any other files.
-   The Boundary Updater agent remains alive through step 7 — the Lead sends it a follow-up
-   message at step 7 with the PR number to write. It is shut down after step 7 completes.
-5. Create draft PR — each PR is standalone work, not "Part X of Y":
-   ```bash
-   BRANCH=$(git branch --show-current)
-   gh pr create --head "$BRANCH" --draft \
-     --title "type(scope): what this PR accomplishes" \
-     --body "## Summary
-   - [what changed and why — describe as self-contained, independently-reviewable work]"
-   ```
-   **PR framing rules:** Never number PRs ("Part 1 of 3"), reference other PRs in the
-   series, or describe a PR as part of a larger whole. Each PR must be understandable and
-   valuable on its own. If a reviewer cannot judge the PR's merit without knowing about
-   other PRs, the boundary grouping was wrong — fix the grouping, not the PR description.
-6. If tracker issue exists: add comment to the issue with the PR reference
-   (`gh issue comment {issue_number} --repo {repo} --body "PR #{pr_number}: [title]"`)
-   Sanitize the PR title before interpolation: strip backticks, dollar signs, double quotes,
-   and backslashes from any plan-derived text used in `--body` arguments to prevent shell
-   interpretation.
-7. Update checkpoint and plan file via the Boundary Updater agent: set `pr_number` for the
-   current boundary in `completed_prs` (was `null` from step 4), and update `**PRs:**` field
-   in the plan file with `#{pr_number}`.
-8. Announce: "Draft PR #{pr_number} created. Checkpoint saved.
-   After merge, invoke /swarm to continue with remaining tasks."
-9. Clean up: send `SendMessage(to="<name>", message={"type": "shutdown_request", "reason":
-   "PR boundary complete"})` to each still-active teammate (Architect, Implementer, Reviewer,
-   Test-Writer, Test-Runner, and any others not already shut down), then exit swarm gracefully
-
-If this is the LAST PR boundary: skip the boundary stop (steps 1-9 above). Instead, proceed
-with normal Phase 4 → Phase 5 → Phase 6 (docs) → Phase 7 (verification) completion flow.
-The PR is created during Phase 7 completion — follow the same standalone PR framing rules
-(no serial numbering, no "Part X of Y"). Clean up any existing checkpoint file.
+**PR boundary handling (incremental only):** See `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)` for the 9-step boundary stop procedure (scoped Phase 4/4.5 reviews, scoped Phase 5 Fixer, Verifier baseline check, Boundary Updater `checkpoint.json` + plan `**PRs:**` / `**Branch:**` updates, draft PR creation, issue comment, and shutdown).
+- **PR framing rules:** Never number PRs ("Part 1 of 3"), reference other PRs in the series, or describe a PR as part of a larger whole. Each PR must stand on its own.
 
 ### Phase 3.5: BDD Step Writing (conditional)
 
 (Not to be confused with /speculative's internal Phase 3.5 synthesis within Phase 2.7.)
-
-**Skip when:** The plan file has no `## Test Plan` section, OR the `## Test Plan` section has no
-`**Feature Files:**` path, OR the `**Feature Files:**` path fails boundary validation (path
-escapes `{memory_dir}/test-plans/`). If `{TEST_PLAN}` is empty string (failed path validation),
-skip entirely.
-
-When triggered, run the following steps after Phase 3 completes and before Phase 4 begins:
-
-**Step 3.5.1 — Determine .feature target directory:** Check for an existing `features/` directory
-in the repo root. If not found, check for `tests/acceptance/`. If neither exists, create
-`tests/acceptance/`. Record the resolved target as `{feature_target_dir}`.
-
-**Step 3.5.2 — Promote .feature files:** Copy each `.feature` file from the staging path
-(`**Feature Files:**` directory in the test plan annotation) into `{feature_target_dir}`.
-Before copying each file, verify it is a regular file and not a symlink (SEC-004). If a
-`.feature` file with the same name already exists in `{feature_target_dir}`, use
-`AskUserQuestion` to resolve the collision: offer "Overwrite", "Keep existing", or "Rename
-incoming" for each conflict. Do not overwrite silently.
-
-**Step 3.5.3 — BDD dependency installation (if needed):** If `**BDD Setup Needed:** yes`,
-run the recorded install command (from `**BDD Setup Needed:**` annotation value, e.g.,
-`uv add --dev pytest-bdd==7.x.x`) on the current feature branch. Use the version specifier
-as recorded — do not strip versions.
-
-**Step 3.5.4 — Build BDD context and spawn BDD-Step-Writer:** Construct `{bdd_framework_info}`:
-
-```json
-{
-  "framework": "<value of **BDD Framework:** from test plan annotation>",
-  "feature_dir": "<{feature_target_dir}>",
-  "step_dir": "<value of **BDD Step Dir:** from test plan annotation>",
-  "scaffold_cmd": "<value of **BDD Scaffold Command:** from test plan annotation>",
-  "test_cmd": "<value of **BDD Test Command:** from test plan annotation>",
-  "feature_files": ["<list of promoted .feature files>"]
-}
-```
-
-Spawn the BDD-Step-Writer (general-purpose, sonnet, bypassPermissions) with the full context
-bundle, `{TEST_PLAN}` content, `{bdd_framework_info}`, and the promoted `.feature` files.
-The BDD-Step-Writer generates step definition skeletons for all unimplemented steps in the
-`.feature` files. Inject `{TEST_PLAN}` into the BDD-Step-Writer prompt the same way it is
-injected into the Implementer — the BDD-Step-Writer must understand user personas and scenario
-intent to name steps correctly.
-
-**Step 3.5.5 — Collect BDDStepHandoff:** Receive the BDD-Step-Writer's completion message
-(`BDDStepHandoff` type) listing files created, step count, and any steps it could not scaffold.
-Store `{bdd_framework_info}` for Phase 7 (Verifier scope). Shut down the BDD-Step-Writer.
-
-**Phase 3.5 does NOT run BDD tests.** BDD test execution is deferred to Phase 7 — the Verifier
-runs both the unit test suite and the BDD acceptance suite when `.feature` files are present.
+**Skip when:** No `## Test Plan` section, no `**Feature Files:**` path, or `{TEST_PLAN}` is empty.
+When triggered after Phase 3, follow `[{skill_dir}/references/bdd-pipeline.md](./references/bdd-pipeline.md)` (Steps 3.5.1–3.5.5) to resolve `{feature_target_dir}`, promote regular `.feature` files, install BDD dependencies if `**BDD Setup Needed:** yes`, spawn BDD-Step-Writer with `{bdd_framework_info}` and `{TEST_PLAN}`, and collect `BDDStepHandoff` for Phase 7.
 
 ### Phase 4: Parallel Review
 
-Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, and any
-auto-detected optional reviewers (UI, API, DB). Also spawn the Plan Adherence reviewer if an
-incremental plan file is found (see below). All reviewers operate in read-only mode on the
-completed implementation. Each writes structured JSON findings to `{run_dir}/reviews/`
-(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). The Lead collects ALL findings and
-synthesizes into a consolidated view. Every finding — regardless of classification — is routed to
-Phase 5 for action. No finding is silently dropped or left unactioned in the audit trail.
+Shut down Phase 3 agents and the Architect, then spawn ALL review agents simultaneously in read-only mode: Security (opus), QA (opus), Code-Reviewer (sonnet), Performance (sonnet), auto-detected domain reviewers, and `code-quality:plan-adherence` (opus, if an incremental plan file exists). Each writes `ReviewFindings` JSON to `{run_dir}/reviews/` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`).
 
-**Plan Adherence reviewer:** If Phase 0 already discovered a plan file, reuse that path directly
-(do not re-discover). If Phase 0 did not find a plan file, search `{memory_dir}/plans/` for an
-incremental plan file whose `**Branch:**` header field matches the swarm's current feature branch.
-If no Branch header match is found, fall back to filename matching using the branch slug. If a
-plan file is found, spawn the `code-quality:plan-adherence` agent (opus model, read-only) alongside
-the other Phase 4 reviewers. Provide it: the incremental plan file path, `{run_dir}/architect-plan.json`,
-and the full diff (`git diff origin/main..HEAD`). If no incremental plan file is found, skip the
-Plan Adherence reviewer entirely — `architect-plan.json` alone is insufficient to trigger this agent.
-
-**Escalation Routing (before proceeding to Phase 5):**
-
-After synthesizing findings, classify each finding by type and route accordingly:
-
-| Finding Type | Examples | Routing |
-|---|---|---|
-| Design-level | Architecture mismatch, wrong abstraction, missing component entirely | Route back to Architect — respawn Phase 2, then re-run Phase 2.5, then re-implement Phase 3 |
-| Security design | Trust boundary violation in architecture, missing auth layer, new attack surface from design decision | Route to Phase 2.5 Security Design Review for design-level fix |
-| Scope creep | Feature implemented that was not in the plan, undiscussed behavior introduced | Escalate to human via AskUserQuestion — do not fix silently |
-| Implementation | Bugs, quality issues, code-level security vulnerabilities, performance bottlenecks | Route to Phase 5 Fixer |
-| Test coverage | Missing tests, untested paths, coverage gaps for the deliverable | Route to Phase 5 Test Coverage Agent |
-| Documentation | Missing or incorrect documentation for implemented features | Route to Phase 6 Docs agent |
-| Plan drift | Implementation diverges from plan task spec, missing tasks, unimplemented steps | Route to Phase 5 Fixer for fixable items; AskUserQuestion for scope-level deviations |
-
-**Escalation counter:** Track a `design_escalation_count` across the swarm run. Each time findings
-trigger a return to Phase 2 (design-level) or Phase 2.5 (security design), increment the counter.
-Maximum 2 total design/security escalations per swarm run — if this cap is reached with unresolved
-findings, escalate to the human via AskUserQuestion rather than re-running again. This caps
-Phase 3 re-implementations at 2 regardless of escalation type.
-
-All escalation events are recorded in `{run_dir}/escalations.json`
-(see schema in `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)` under "Escalation Events Schema").
-
-**Incremental workflow scoping:** When `{workflow_mode}` is `incremental`, reviewers receive
-only the diff for the current PR boundary's files (not the full branch diff). The Lead
-constructs the file list from the current PR boundary's tasks' `**Files:**` blocks and passes
-it to each reviewer's prompt as `pr_boundary_files`. Reviewers analyze only those files.
+**Escalation Routing (before Phase 5):** Route findings per `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Step 4.5:
+- **Design-level** → Phase 2 Architect | **Security design** → Phase 2.5 (capped at `design_escalation_count < 2` across Phases 4/4.5, logged to `{run_dir}/escalations.json`; escalate via `AskUserQuestion` at cap)
+- **Scope creep** → `AskUserQuestion` | **Implementation / Plan drift** → Phase 5 Fixer | **Test coverage** → Phase 5 Test Coverage Agent | **Documentation** → Phase 6 Docs
+- **Incremental workflow scoping:** When `{workflow_mode}` is `incremental`, scope to `pr_boundary_files` (`[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)`).
 
 ### Phase 4.5: Structural Design Review
 
-This phase always runs after Phase 4 escalation routing completes. It is not conditional on
-whether Phase 4 found issues — it is a mandatory adversarial pass that reviews the full
-implementation as a system.
+Mandatory adversarial system review after Phase 4 routing. Spawn 2 opus `general-purpose` analysts in parallel:
+- **Analyst 1: Concurrency & State** (`{run_dir}/reviews/structural-concurrency.json`)
+- **Analyst 2: Integration & Contract** (`{run_dir}/reviews/structural-integration.json`)
 
-Spawn 2 adversarial structural analysts simultaneously (both `general-purpose`, opus model):
-
-- **Analyst 1: Concurrency & State** — race conditions, state management gaps, error propagation
-  across component boundaries, dependency ordering issues, shared mutable state
-- **Analyst 2: Integration & Contract** — API contract violations, cross-component assumptions,
-  data flow integrity, failure cascading between components, contract drift from architect plan
-
-Both analysts review the entire implementation as a system, not file-by-file. They look for
-structural problems that emerge from the *combination* of components, not issues within a single
-component (those are covered by Phase 4 reviewers).
-
-Findings use the existing `ReviewFindings` schema with the `STRUCT` prefix (STRUCT-001, etc.)
-and are written to `{run_dir}/reviews/structural-concurrency.json` and
-`{run_dir}/reviews/structural-integration.json`.
-
-**Routing:**
-- STRUCT findings requiring architectural redesign follow the Phase 4 escalation routing rules
-- STRUCT escalations count toward the cumulative `design_escalation_count` cap (max 2 total
-  re-implementations before human escalation)
-- STRUCT escalation events are logged to `{run_dir}/escalations.json`
-
-If Phase 4 escalation routing triggers a return to Phase 2, Phase 4.5 runs on the re-implemented version after the next Phase 4 completes — not on the current (superseded) implementation.
-
-Phase 5 receives findings from both Phase 4 AND Phase 4.5 in its consolidated findings list.
-
-**Incremental workflow — scoped review:** At non-final PR boundaries, Phase 4.5
-structural analysts review only the current boundary's code as standalone work. The Lead
-briefs analysts: "Review this code on its own merits as a self-contained unit of work.
-Flag structural issues in THIS code. Do not flag missing integration points or incomplete
-data flows that are addressed by tasks not yet implemented — those are separate work."
-Findings about genuinely missing contracts within the current boundary are valid; findings
-about not-yet-implemented work are not.
-At the FINAL PR boundary: Phase 4.5 runs normally (full system review).
+Findings use `STRUCT` prefix (`STRUCT-001`), share `design_escalation_count`, and merge into Phase 5. Scope incremental non-final boundaries per `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)`.
 
 ### Phase 5: Fix, Test Coverage & Simplify
 
-Skip this phase only if ALL reviews (Phases 4 and 4.5) report zero findings.
-Otherwise, spawn agents in this order:
-
-**Step 5.1 — Fixer:** Spawn the Fixer with ALL consolidated findings (all classifications)
-and full context of the implementation. The Fixer processes all findings — process in file order
-per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. After the Fixer
-completes, the Lead handles user triage for `needs_input_items` and structural verification
-per Step 5.2.1. For each `user_deferred` item:
-1. Create a `TaskCreate` entry marked as blocked with the reason (visible in task list throughout)
-2. Add to the "Scope Accountability" section of `swarm-report.md` (permanent record)
-
-**Step 5.2 — Test Coverage Agent:** If ANY Phase 4 or 4.5 reviewer identified test coverage
-gaps, missing tests, or untested code paths, spawn the Test Coverage Agent (sonnet,
-bypassPermissions). This agent writes tests that Phase 3's Test-Writer could not have written —
-coverage gaps identified only after the full implementation was reviewed. The Test Coverage Agent
-receives:
-- All test-related findings from Phase 4/4.5 (coverage gaps, missing edge case tests, untested
-  components, untested error paths)
-- The full list of files modified by the swarm
-- The existing test suite location and testing conventions
-- The Phase 3 Test-Writer's TestHandoff summaries (what was already tested)
-
-The Test Coverage Agent writes the missing tests and reports a TestCoverageResult listing
-test files created, test count, and which findings were addressed. Run the test suite after
-to confirm all new tests pass.
-
-**Step 5.3 — Code-Simplifier:** Spawn the Code-Simplifier for a post-fix pass — it looks for
-over-engineering, unnecessary abstractions, and complexity introduced during implementation or
-fixing. Skip Code-Simplifier only if neither the Fixer nor the Test Coverage Agent made any
-changes. Re-run affected tests after any fixes to confirm nothing regressed.
+Skip only if Phases 4 and 4.5 report zero findings. Otherwise run sequentially (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 5):
+1. **Fixer (sonnet):** Processes all findings in file order per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. Lead triages `needs_input_items` via `AskUserQuestion`, verifies `total_findings_in == findings_fixed + user_deferred`, and records `user_deferred` via `TaskCreate` and `swarm-report.md`.
+2. **Test Coverage Agent (sonnet, conditional):** Writes tests for Phase 4/4.5 coverage gaps (`{run_dir}/test-coverage-result.json`).
+3. **Code-Simplifier (sonnet, conditional):** Simplifies modified files and re-runs affected tests.
 
 ### Phase 5.5: Plan Reconciliation
 
-If no incremental plan file exists (as determined during Phase 4 plan file discovery), skip this
-phase entirely.
-
-If a plan file was found, the Lead performs reconciliation:
-
-1. **Discover the plan file** — If Phase 0 already discovered a plan file, reuse that path
-   directly. Otherwise, use the same Branch-header matching as Phase 4: search
-   `{memory_dir}/plans/` for a file whose `**Branch:**` field matches the swarm's feature branch.
-   Fall back to branch-slug filename matching if no header match is found.
-
-2. **Cross-reference tasks against the cumulative diff** — Run `git diff origin/main..HEAD` to
-   produce the full cumulative diff. Read the plan file and extract every task (checked and
-   unchecked). For each task, determine whether the diff fully addresses it.
-
-3. **Escalate unaddressed tasks** — For any task that is not fully addressed by the diff, use
-   `AskUserQuestion` to escalate with: the task description, what was done toward it (if anything),
-   and what remains unimplemented. Do NOT silently skip unaddressed tasks.
-
-4. **Spawn a plan file updater** — After escalation decisions are made, spawn a general-purpose
-   sonnet agent (Can Edit: Yes) with the plan file path and reconciliation results. This agent:
-   - Checks off tasks that were completed (`[x]`)
-   - Marks tasks skipped by user decision as `[SKIPPED by user]`
-   - Marks tasks blocked due to unresolved issues as `[BLOCKED: reason]`
-   - Do NOT modify the `## Test Plan` section or any content below it — it is a
-     machine-readable annotation consumed by downstream skills with exact field label matching.
-
-   The Lead does NOT write to the plan file directly (Can Edit: No).
-
-**PR tracking reconciliation (incremental only):** At final completion:
-- **Scope the cumulative diff correctly:** `git diff origin/main..HEAD` only contains the
-  FINAL boundary's changes (earlier boundaries were merged via separate PRs). For step 2
-  (cross-reference tasks against diff), check only the current boundary's tasks against the
-  diff. Tasks from earlier boundaries were already completed and merged — verify them via
-  the checkpoint's `completed_prs` entries (each with `merged: true`) rather than the diff.
-- Verify the `**PRs:**` field in the plan header is fully populated (all boundaries have PR
-  numbers, no `pending` entries remain). Cross-reference against `{run_dir}/checkpoint.json`
-  `completed_prs` if available.
-- Check off all tasks from all PR boundaries (not just the final boundary's tasks).
+Skip if no incremental plan file exists (or at non-final PR boundaries). Cross-reference plan tasks against `git diff origin/main..HEAD`, escalate unaddressed tasks via `AskUserQuestion`, and spawn **Plan File Updater** (sonnet) to mark `[x]`, `[SKIPPED by user]`, or `[BLOCKED: reason]` without modifying `## Test Plan`. Reconcile incremental runs across all boundaries per `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)`.
 
 ### Phase 6: Docs & Memory
 
-Spawn the Docs agent (**sonnet model** — documentation requires judgment about what's user-facing
-and what's changed) with the full list of modified files, a summary of what changed, and the
-architect's `documentation_impact` array from `architect-plan.json`.
-
-The Docs agent performs three passes:
-
-**Pass 1: Architect-guided updates** — Work through each entry in `documentation_impact`:
-- For each affected documentation surface, read the current state and update it
-- If a new feature/skill/command/agent was added: add entries to README tables, update component
-  counts, add to plugin manifest descriptions, add to marketplace registry descriptions
-- If a feature was removed/renamed: remove or update all references across all doc surfaces
-- If dependencies changed: update dependency matrices and requirements sections
-
-**Pass 2: Discovery-based completeness check** — Independent of the architect's list:
-- Glob for all documentation surfaces (READMEs, manifests, registries, CONTRIBUTING.md)
-- Compare on-disk components against documented components (e.g., count skills in `skills/*/SKILL.md`
-  vs skills listed in README table — they must match)
-- Grep for stale references to renamed/removed features
-- Verify component counts, descriptions, and cross-references are internally consistent
-
-**Pass 3: Changed-file documentation** — For each file modified in the swarm, check if
-corresponding documentation needs updating (README behavior descriptions, API docs, config docs,
-CONTRIBUTING.md). Update only what is directly affected.
-
-The Docs agent also detects the project's memory directory (per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`,
-Directory Detection section) and updates PROJECT.md with architectural decisions, TODO.md with completed and new
-items, and SESSIONS.md with a 3-5 bullet summary.
-
-**Skip conditions for Phase 6 docs (memory updates always run):**
-Only skip documentation updates for purely internal refactors with no public API, documented
-behavior, feature, or component changes. When in doubt, run the docs pass — the cost of a
-no-op docs check is low; the cost of missing documentation is high.
-
-After the Docs agent completes, spawn a **Docs Reviewer** agent (sonnet, read-only) to verify
-the Docs agent's work. The Docs Reviewer receives:
-- The architect's `documentation_impact` array from `architect-plan.json`
-- The Docs agent's completion report (surfaces updated, counts, gaps found)
-- `git diff` of documentation changes made by the Docs agent
-- `git diff` of **implementation changes** (code, config, skills — everything NOT docs) so the
-  reviewer can verify docs against what was actually written, not just what the architect planned
-
-The Docs Reviewer checks:
-1. **Impact coverage** — Was every entry in `documentation_impact` addressed? If the architect
-   flagged a surface and the Docs agent didn't touch it, that's a finding.
-2. **Accuracy vs implementation** — Assume the docs are wrong until proven otherwise. Read the
-   implementation diff and verify every documented claim against the actual code. Do component
-   counts match on-disk reality? Do descriptions accurately describe the implemented behavior
-   (not just the planned behavior)? If a feature was implemented differently than the architect
-   planned, do the docs reflect what was actually built?
-3. **Consistency** — Do all documentation surfaces agree with each other after the Docs agent's
-   edits? (README ↔ manifest ↔ registry ↔ root README)
-4. **Completeness** — Did the Docs agent miss any documentation surface the Reviewer can
-   discover independently via Glob?
-5. **Plan drift** — Does the implementation diff reveal behavior that diverged from the
-   architect's plan? If so, do the docs follow the plan (wrong) or the code (right)?
-   Docs must always describe what the code does, never what the plan said it would do.
-
-Findings are written to `{run_dir}/reviews/docs-review.json` using the standard ReviewFindings
-schema with `DOC-R` prefix. `needs-fix` findings are routed back to the Docs agent for fixes
-(max 1 iteration — the Docs Reviewer re-reviews after fixes). `needs-input` findings are
-presented to the user via AskUserQuestion using the option-based format from
-`[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)` Fixer Protocol. All findings are recorded
-in the audit trail.
-
-After the Docs Reviewer completes (or confirms clean), spawn a separate **Lessons Extractor** agent (sonnet model). This
-agent scans the swarm run's audit trail and extracts principle-level lessons to
-`{memory_dir}/LESSONS.md` (creating the file if it does not exist, where `{memory_dir}` is the
-project memory directory detected per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`). It reads:
-- `{run_dir}/architect-plan.json` — Cynefin domain, questions raised, risks flagged
-- `{run_dir}/reviews/` — recurring finding patterns across reviewers
-- `{run_dir}/escalations.json` — escalation events (if the file exists)
-- `{run_dir}/fix-summary.json` — what the Fixer had to address (if the file exists)
-- Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
-
-Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
-format from `[{skill_dir}/../incremental-planning/references/lessons-template.md](../incremental-planning/references/lessons-template.md)`:
-`- [Category] Pattern observed → What to do differently → Why it matters (YYYY-MM-DD)`
-
-The Lessons Extractor runs after Docs completes to avoid audit trail races.
+Spawn Docs (sonnet), then Docs Reviewer (sonnet, read-only), then Lessons Extractor (sonnet) per `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 6:
+- **Docs (3 passes):** Pass 1 (`documentation_impact`), Pass 2 (discovery-based completeness), Pass 3 (changed-file docs), plus memory updates (`PROJECT.md`, `TODO.md`, `SESSIONS.md` per `[{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md)`).
+- **Docs Reviewer (5 checks):** Impact coverage, accuracy vs implementation diff, consistency, completeness, and plan drift → `{run_dir}/reviews/docs-review.json` (`DOC-R` prefix; triage `needs-input` per `[{skill_dir}/../../references/finding-classification.md](../../references/finding-classification.md)`).
+- **Lessons Extractor:** Extracts principle-level lessons from audit trail to `{memory_dir}/LESSONS.md`.
 
 ### Phase 7: Verification & Completion
 
@@ -825,286 +225,9 @@ Shut down each active teammate individually via `SendMessage(to="<name>", messag
 
 ---
 
-## Orchestration Flow Diagram
+## Orchestration, Lead Responsibilities & Scope Matching
 
-```
-User request
-     |
-     v
-Phase 0: Pre-flight
-  +-- Baseline tests
-  +-- Git branch check/create
-  +-- Generate run-ID, create {memory_dir}/swarm/{run-id}/
-  +-- Create TaskGraph (implicit team established by first named teammate spawn)
-  +-- Extract {tracker} from plan file (default: none)
-  +-- Workflow detection: extract **Workflow:** from plan header
-       |
-       +-- [incremental] Checkpoint glob: {memory_dir}/swarm/*/checkpoint.json
-       |        |
-       |        +-- [checkpoint found, PR not merged] --> AskUserQuestion (blocker)
-       |        |
-       |        +-- [checkpoint found, PRs merged] --> Resume:
-       |        |     fetch origin/main, create feat/{plan-slug}-pr{N} branch
-       |        |     skip Phase 1 + Phase 2, jump to Phase 3 (current PR boundary tasks)
-       |        |
-       |        +-- [no checkpoint] --> rename branch to feat/{plan-slug}-pr1, continue
-       |
-       +-- [fast / absent] --> existing behavior unchanged
-     |
-     v
-Phase 1: Clarify & Checkpoint <-- AskUserQuestion (ambiguity resolution)
-  +-- Auto-detect optional reviewers
-  +-- Present composition to user
-  +-- User approves -------------- FIRE-AND-FORGET AFTER THIS
-     |
-     v
-Phase 2: Architect (opus)
-  +-- Analyzes codebase
-  +-- Decomposes into components
-  +-- Writes architect-plan.json
-  +-- Lead reviews --> AskUserQuestion if risky
-     |
-     v
-Phase 2.5: Security Design Review (conditional, opus)
-  +-- Reviews architect-plan.json for threat surface
-  +-- STRIDE analysis of proposed architecture
-  +-- needs-fix findings requiring revision --> back to Architect (max 2 iterations)
-  +-- no needs-fix findings blocking implementation --> append security_constraints, proceed
-  +-- Unresolved findings after 2 iterations --> AskUserQuestion
-     |
-     v
-Phase 2.7: Speculative Fork (conditional)
-  +-- Triggered by speculative_fork_recommended: true in architect-plan.json
-  +-- OR Lead identifies 2+ incompatible design choices with real trade-offs
-  +-- Spawn N competitors (sonnet, isolated worktrees) for contested components
-  +-- CronCreate watchdog (60s interval)
-  +-- Spawn judge (opus) --> JudgmentResult selects winner
-  +-- Winning approach written back into architect-plan.json
-  +-- (optional) Phase 3.5 synthesis if hybrid recommended and approved
-     |
-     v
-Phase 2.8: Pre-Implementation Simplification Review (conditional)
-  +-- Reduction Analyst (opus, read-only): reviews plan against codebase
-  +-- Identifies: removable code, premature abstractions, dependency alternatives
-  +-- Net complexity assessment: will this increase or decrease codebase size?
-  +-- Lead integrates accepted recommendations into architect plan
-     |
-     v
-Phase 3: Pipelined Implementation
-  +-------------------------------------------------------+
-  | Implementer --> Reviewer --> Test-Writer --> Test-Runner |
-  |      |              |              |               |    |
-  | (next comp)   (feedback)     (next comp)    (results)   |
-  |      <-------- reject ----------------------------------  |
-  +-------------------------------------------------------+
-     |
-     +-- [incremental, non-final PR boundary] ---------------+
-     |   PR boundary stop:                                   |
-     |   +-- Phase 4 review (scoped to boundary files)       |
-     |   +-- Phase 5 Fixer (scoped to boundary files)        |
-     |   +-- Verifier (full test suite, baseline comparison) |
-     |   +-- Boundary Updater agent: write checkpoint.json   |
-     |   +-- gh pr create --draft feat/{slug}-pr{N}          |
-     |   +-- gh issue comment (if tracker exists)            |
-     |   +-- Boundary Updater: set pr_number in checkpoint + update plan **PRs:**   |
-     |   +-- Announce PR + checkpoint, shutdown teammates, exit |
-     |   [user merges PR, invokes /swarm again → Phase 0]    |
-     +-------------------------------------------------------+
-     |
-     v  [fast workflow OR final PR boundary]
-Phase 3.5: BDD Step Writing (conditional — only when Feature Files in Test Plan annotation)
-  +-- Promote .feature files from staging → {feature_target_dir}
-  +-- Install BDD dependency if BDD Setup Needed: yes
-  +-- BDD-Step-Writer (sonnet, bypassPermissions): generate step definition skeletons
-  +-- Collect BDDStepHandoff, store {bdd_framework_info} for Phase 7
-     |
-     v
-Phase 4: Parallel Review
-  +-- Security (opus) --------------------------------+
-  +-- QA (opus) --------------------------------------|
-  +-- Code-Reviewer (sonnet) -------------------------+--> Lead synthesizes findings
-  +-- Performance (sonnet) ---------------------------|
-  +-- Optional: UI / API / DB reviewers -------------+
-  [incremental: reviewers receive pr_boundary_files, analyze only those files]
-     |
-     v
-Phase 4.5: Structural Design Review (always runs)
-  +-- Analyst 1: Concurrency & State (opus) ---------+
-  +-- Analyst 2: Integration & Contract (opus) -------+--> Lead merges STRUCT findings
-  [incremental non-final: analysts review as standalone work — don't flag future-boundary gaps]
-     |
-     v
-Phase 5: Fix, Test Coverage & Simplify (if any findings exist)
-  +-- Fixer: ALL findings (process in file order — needs-fix first, then needs-input to Lead)
-  +-- Test Coverage Agent: coverage gaps from Phase 4/4.5
-  +-- Code-Simplifier: post-fix pass
-     |
-     v
-Phase 5.5: Plan Reconciliation (if incremental plan file found)
-  +-- Lead: discover plan file via Branch-header matching
-  +-- Lead: cross-reference tasks against git diff origin/main..HEAD
-  +-- Lead: AskUserQuestion for any unaddressed tasks
-  +-- Plan File Updater (sonnet): check off completed, mark skipped/blocked
-  [incremental: verify **PRs:** fully populated, check off tasks from ALL boundaries]
-     |
-     v
-Phase 6: Docs & Memory
-  +-- Docs agent: repo docs + hack/ updates
-  +-- Docs Reviewer: verify Docs agent's work
-  +-- Lessons Extractor: audit trail → {memory_dir}/LESSONS.md
-     |
-     v
-Phase 7: Verification & Completion
-  +-- Verifier: full test + lint
-  +-- quality-gate skill
-  +-- /unfuck sweep (if 20+ files changed)
-  +-- Issue tracking: add in-progress label (GH) or transition card (Jira)
-  +-- Generate {run_dir}/swarm-report.md
-  +-- Shutdown each active teammate individually
-```
-
----
-
-## Lead Responsibilities
-
-You are the orchestrator. You coordinate the pipeline, relay context, and make judgment calls.
-You never implement, review, or test code yourself.
-
-### Task Graph
-
-Create all tasks upfront in Phase 0 using TaskCreate with addBlockedBy dependencies. The full
-task graph should be visible from the start so the user can see the plan at any time.
-
-### Context Relay
-
-Every agent receives a structured context bundle when spawned (see schema in
-`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`). The bundle includes: project name, task description,
-current branch, key files from the architect's plan, audit trail path (`run_dir`), and the
-tool guard reminder. Never spawn an agent without the full context bundle.
-
-### Judgment Calls
-
-You decide: which review findings are critical vs. noise; when to escalate to the user; whether
-a component rejection warrants escalation vs. another iteration; whether a test failure is a
-blocker or a pre-existing issue. Lean toward escalation for ambiguous decisions.
-
-### Pipeline Coordination
-
-Monitor the pipeline flow actively. Route handoff messages between agents using the schemas in
-`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`. Detect backpressure (see `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)`)
-and throttle the Implementer when the Reviewer queue is full.
-
-### Watchdog Monitoring
-
-Create a CronCreate watchdog (60-second interval) in Phase 3 Step 3.0 before spawning pipeline
-agents. On each tick, check `TaskList` for `in_progress` tasks and cross-reference with agent
-message timestamps. If any agent has been idle for 2+ consecutive checks, alert yourself and
-trigger Silent Failure Detection (Step 3.6). Always CronDelete the watchdog when Phase 3 ends
-or on any abort path — do not leave orphaned cron jobs.
-
-### Context Health Monitoring
-
-Track `turn_count` from every agent's structured messages. Proactively recycle agents approaching
-context limits (default: 25 turns for Implementer/Test-Writer, 30 for Reviewer) using the
-HandoffRequest → HandoffSummary → shutdown → respawn protocol (see `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)`
-Step 3.6). Detect silent failures: if a teammate goes idle without completing their task or sending
-a final message, initiate recovery (status check → replacement spawn → escalate if repeated).
-
-### Feedback Loops
-
-When the Reviewer rejects a component: collect the specific issues JSON, add context about what
-the Implementer tried, and route the combined feedback back to the Implementer. Track iteration
-counts per component — after 3 failed iterations, stash the component, create a blocked task,
-and report to the user with full context.
-
-### Audit Trail
-
-Write all structured outputs to `{run_dir}/`:
-- `architect-plan.json` — architect's component plan
-- `reviews/security.json`, `reviews/qa.json`, etc. — review findings
-- `escalations.json` — escalation events for Lessons extraction
-- `swarm-report.md` — final completion report
-
-### Escalation Protocol
-
-Escalate to the user (via `AskUserQuestion`) when: the architect flags a decision point; a
-reviewer finds a security issue that might require business logic changes; a component fails
-3 iterations; the Verifier fails after 2 fix attempts; a git conflict blocks the pipeline.
-After escalation, wait for user input before proceeding.
-
-### Context Bundle Template
-
-```json
-{
-  "project": "<project name>",
-  "task": "<original task description>",
-  "branch": "<current git branch>",
-  "run_dir": "{memory_dir}/swarm/{run-id}",
-  "key_files": ["<files identified by architect as central>"],
-  "tool_guard": "Use Read/Write/Edit/Glob/Grep/Bash for file ops. No raw shell for file reads."
-}
-```
-
----
-
-## When to Skip Phases
-
-| Phase / Agent | Skip When |
-|---------------|-----------|
-| Phase 2.5: Security Design Review | Config-only, docs-only, or test-only changes that don't touch auth/data/network/API surfaces. Clear-domain tasks without auth/data/network/API involvement. |
-| Phase 2.7: Speculative Fork | Architect did NOT flag `speculative_fork_recommended: true` AND Lead does not identify 2+ incompatible approach choices. Skip for single-component tasks and tasks where the user specified an approach. |
-| Phase 2.8: Reduction Review | Config-only, docs-only, or test-only changes. Tasks where architect plan modifies fewer than 3 files total. |
-| Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
-| Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
-| Phase 3.5: BDD Step Writing | No `## Test Plan` section in plan file, OR `## Test Plan` has no `**Feature Files:**` path, OR test plan path validation failed (test plan or Feature Files path escapes `{memory_dir}/test-plans/`). |
-| Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings |
-| Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
-| Code-Simplifier | Neither Fixer nor Test Coverage Agent made any changes in Phase 5 |
-| Phase 5.5: Plan Reconciliation | No incremental plan file found in `{memory_dir}/plans/` matching the feature branch. Also skipped at non-final PR boundary stops during incremental workflow (runs only at final completion). |
-| Phase 6: Docs | Purely internal refactor with no public API or documented behavior changes |
-| /unfuck sweep | Fewer than 20 files modified and not an architectural change |
-| NEVER SKIP | Phases 0, 1, 2, core Phase 3 (Implementer + Reviewer), Phase 4, Phase 4.5, Phase 7 (Verifier) |
-
----
-
-## Scope Matching
-
-Match the tool to the task scope:
-
-| Scenario | Recommended Approach |
-|----------|----------------------|
-| Simple bug fix (1-3 files) | Single targeted subagent |
-| Medium feature (4-10 files) | 2-3 targeted subagents in sequence |
-| Large feature or architectural change | `/swarm` |
-| Codebase-wide cleanup | `/unfuck` |
-| Security audit only | `code-quality:security` directly |
-| Test coverage only | `code-quality:test-runner` directly |
-| Codebase-wide analysis or bulk transformation (20+ files) | `/map-reduce` |
-| Multiple viable approaches, need to compare | `/speculative` |
-| Architectural analysis (cross-cutting concerns) | Single agent (NOT /map-reduce) |
-
-### Model Assignment
-
-Use opus for any task requiring judgment, evaluation, or nuanced reasoning. Use sonnet for
-implementation and mechanical tasks. Use haiku for execution-only tasks. When in doubt,
-prefer opus — one strong pass beats multiple weaker passes.
-
-| Model | Used For |
-|-------|---------|
-| opus | Architect, Reduction Analyst, Reviewer, Security, QA, Structural Analysts, **Plan Adherence** — judgment-heavy tasks |
-| sonnet | Implementer, Test-Writer, Test Coverage Agent, Code-Reviewer, Performance, Fixer, Code-Simplifier, Boundary Updater, Plan File Updater, Docs, Docs Reviewer, Lessons Extractor |
-| haiku | Test-Runner, Verifier — execution-only tasks |
-
-### Work Completion Principle
-
-Never defer, skip, or reduce the scope of work to save tokens or reduce agent count.
-If the task requires an agent, spawn the agent. If a finding needs fixing, fix it.
-If tests need writing, write them. The only valid reasons to skip work are:
-(1) the user explicitly opted out, (2) the skip condition in the phase table applies,
-or (3) the work is genuinely out of scope for the current task.
-
-"It would be expensive" is NEVER a valid reason to skip work. Prefer spawning one opus
-agent that does the job right over multiple sonnet agents that require rework.
+See `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` for the full ASCII Orchestration Flow Diagram, Lead Responsibilities (Task Graph, Context Relay, Judgment Calls, Pipeline Coordination, Watchdog & Context Health Monitoring, Feedback Loops, Audit Trail, Escalation Protocol, and Context Bundle Template), When to Skip Phases table, and Scope Matching / Model Assignment / Work Completion Principle guidelines.
 
 ---
 
@@ -1112,7 +235,9 @@ agent that does the job right over multiple sonnet agents that require rework.
 
 | File | Content |
 |------|---------|
-| `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` | Complete phase-by-phase coordination guide, error handling, rollback procedures, agent roster config, and git workflow |
+| `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` | Complete phase-by-phase coordination guide, orchestration flow diagram, lead responsibilities, skip conditions, scope matching, error handling, and agent roster |
+| `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)` | Incremental workflow PR-boundary handling, checkpoint discovery and resume, scoped review rules, and PR tracking reconciliation |
+| `[{skill_dir}/references/bdd-pipeline.md](./references/bdd-pipeline.md)` | Phase 3.5 BDD step writing pipeline — `.feature` promotion, dependency setup, `bdd_framework_info` schema, and `BDDStepHandoff` collection |
 | `[{skill_dir}/references/agent-prompts.md](./references/agent-prompts.md)` | Full prompt templates for all 21+ agents — role, boundaries, communication protocol, output format |
 | `[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)` | All JSON schemas for inter-agent communication, pipeline handoffs, review findings, and audit trail formats |
 | `[{skill_dir}/references/pipeline-model.md](./references/pipeline-model.md)` | Pipeline coordination details — component decomposition, execution modes, backpressure handling, team lifecycle |

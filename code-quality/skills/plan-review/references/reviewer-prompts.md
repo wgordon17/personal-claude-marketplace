@@ -9,6 +9,34 @@ receives `{plan_open_questions}`, `{plan_trade_offs}`, and `{plan_decisions}`. T
 Completeness Reviewer and Feasibility Reviewer additionally receive `{plan_test_plan}`. The Finding
 Verifier receives `{findings_json}`, `{plan_content}`, and `{plan_file_path}`.
 
+## Placeholder Reference
+
+| Placeholder | Value | Used by |
+|-------------|-------|---------|
+| `{plan_content}` | Full plan file content | All reviewers + Verifier |
+| `{plan_file_path}` | Absolute path to plan file | All reviewers + Verifier |
+| `{plan_goal}` | Extracted goal string | All reviewers |
+| `{plan_tasks}` | Integer task count | Phase 1 skip logic + Phase 4 terminal output |
+| `{plan_files}` | Newline-separated file paths from the plan | All reviewers |
+| `{plan_files_count}` | Count of unique paths in `{plan_files}` | Phase 4 terminal output |
+| `{plan_domain}` | Extracted domain or `"Unknown"` | Phase 4 terminal output |
+| `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers |
+| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers |
+| `{project_context}` | PROJECT.md content or "No PROJECT.md found." | All reviewers |
+| `{plan_open_questions}` | Extracted open questions or empty string | Unknown Unknowns only |
+| `{plan_trade_offs}` | Extracted trade-offs or empty string | Unknown Unknowns only |
+| `{plan_decisions}` | Extracted decisions (not trade-offs) or empty string | Unknown Unknowns only |
+| `{plan_test_plan}` | Full test plan document content or empty string | Scope & Completeness + Feasibility only |
+| `{findings_json}` | JSON array of all findings | Finding Verifier only |
+| `{verification_note}` | Warning when verification JSON parse fails, or empty string | Phase 4 terminal output |
+| `{skipped_note}` | List of skipped reviewers with reasons, or empty string | Phase 4 terminal output |
+| `{reviewer_list}` | Comma-separated names of reviewers that ran | Phase 4 terminal output |
+| `{total_raw}` | Total findings reported by all reviewers before verification | Phase 4 terminal output |
+| `{verified_count}` | Count of findings with verdict `verified` | Phase 4 terminal output |
+| `{false_positive_count}` | Count of findings with verdict `false_positive` (removed) | Phase 4 terminal output |
+| `{needs_context_count}` | Count of findings with verdict `needs_context` or `unverified` | Phase 4 terminal output |
+| `{checked_areas}` | Comma-separated list of reviewer areas that ran (excludes skipped) | Phase 4 "No Findings" output |
+
 ## Classification Guidance (shared across all reviewers)
 
 See `code-quality/references/finding-classification.md` for the full classification taxonomy.

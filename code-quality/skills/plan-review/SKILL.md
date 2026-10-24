@@ -6,7 +6,7 @@ description: |
   Spawns 6 parallel specialized reviewers (feasibility, scope, dependencies, unknown unknowns,
   architect, security), verifies findings by re-reading the plan, and prints a structured
   terminal report. Designed for cross-session use: write a plan in session A, review in session B.
-allowed-tools: [Read, Edit, Bash, Agent, AskUserQuestion]
+allowed-tools: Read Edit Bash Agent AskUserQuestion
 ---
 
 # Plan Review Skill
@@ -360,121 +360,7 @@ Every `needs-input` item gets a recorded user decision, not silent deferral.
 
 ## Phase 4 — Terminal Output
 
-Print the structured report. Use `━` (U+2501) for the divider lines.
-
-### Findings Exist
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PLAN REVIEW — {plan_file_path}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Goal: {plan_goal}
-Domain: {plan_domain}
-Tasks: {plan_tasks} | Files: {plan_files_count}
-
-Findings: {verified_count} verified, {needs_context_count} needs context
-  (from {total_raw} raw findings — {false_positive_count} false positives removed)
-
-RESEARCH GAPS
-  1. [{Reviewer}] {description} [{classification}]
-     {location}
-     Evidence: {evidence}
-
-FEASIBILITY
-  ...
-
-SCOPE
-  ...
-
-DEPENDENCIES
-  ...
-
-ARCHITECTURE
-  ...
-
-SECURITY
-  ...
-
-SPECIFICATION
-  ...
-
-─── Needs Context ({needs_context_count}) ───
-  1. [{Reviewer}] {description} [{classification}]
-     {location}
-     Investigation: {investigation_summary}
-
-─── Deferred ({deferred_count}) ───
-  1. [{Reviewer}] {description} [user-deferred]
-     {location}
-
-{verification_note}
-{skipped_note}
-Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: {verified_count} | False positives removed: {false_positive_count} | Needs context: {needs_context_count} | Deferred: {deferred_count}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-`{verification_note}` — if verification JSON parsing failed, print the warning line. Otherwise omit.
-`{skipped_note}` — if any reviewers were skipped, print a line such as "Skipped: Dependency & Ordering (single-task plan)" or "Skipped: Security (no auth/security paths detected)". Otherwise omit.
-
-Category sections contain only `verified` findings. Group by category in order: RESEARCH GAPS
-(first — highest leverage to fix before implementation) → FEASIBILITY → SCOPE → DEPENDENCIES →
-ARCHITECTURE → SECURITY → SPECIFICATION. Within each category, sort by location. All findings
-in category sections are `needs-fix` at this point — either originally or promoted from
-`needs-input` via Phase 3.5 user confirmation. For the `[Reviewer]` tag, use the short
-reviewer name: Feasibility,
-Scope, Dependencies, Unknown Unknowns, Architect, Security.
-
-Omit category sections with zero verified findings.
-
-`needs_context` and `unverified` findings appear ONLY in the dedicated "Needs Context" section
-at the bottom — they do NOT appear in category sections above. These are items the verifier
-could not confirm or deny and require human judgment.
-
-Findings confirmed by the user in Phase 3.5 are promoted to `needs-fix` and placed in their
-normal category sections — they appear alongside other verified findings with no special
-treatment. User-deferred findings appear in the "Deferred" section at the bottom.
-
-### No Findings After Verification
-
-Use this path only when `verified_count == 0` AND `needs_context_count == 0` AND
-`deferred_count == 0`. If any count is > 0, use the "Findings Exist" path.
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PLAN REVIEW — {plan_file_path}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Goal: {plan_goal}
-Domain: {plan_domain}
-Tasks: {plan_tasks} | Files: {plan_files_count}
-
-No verified issues found.
-Checked for: {checked_areas}
-
-{skipped_note}
-Reviewed by: {reviewer_list}
-Total raw: {total_raw} | Verified: 0 | False positives removed: {false_positive_count} | Needs context: 0 | Deferred: 0
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### Edge Cases
-
-| Condition | Action |
-|-----------|--------|
-| No plan file path given and no memory dir | Error: "No memory directory found. Pass a plan file path explicitly: `/plan-review <path>`" |
-| No `.md` files in `{memory_dir}/plans/` | Error: "No plan files found in `{memory_dir}/plans/`. Pass a plan file path explicitly: `/plan-review <path>`" |
-| Plan file path given but file does not exist | Error: "Plan file not found: {path}" |
-| Plan file exists but is empty | Error: "Plan file is empty: {path}" |
-| Single plan file found | Auto-select with confirmation: "Using plan: {filename}" |
-| Multiple plan files found | Present via AskUserQuestion with filename, goal line, relative age |
-| `{plan_tasks}` < 2 | Skip Dependency & Ordering reviewer; include in `{skipped_note}` |
-| Security reviewer skipped | Include in `{skipped_note}`: "Security (no auth/security paths detected)" |
-| All findings false positive | Output "no findings" report format (not an error) |
-| Verification JSON parse fails | All findings get `unverified` verdict, routed to Needs Context section; `{verification_note}` warns in output |
-| Zero `needs-input` findings | Skip Phase 3.5, proceed directly to Phase 4 |
-| AskUserQuestion unavailable | Treat all `needs-input` findings as `needs_context` in Phase 4 output (surface them, don't hide them) |
+Print the structured `PLAN REVIEW — {plan_file_path}` report following the `Findings Exist` or `No Findings After Verification` template and edge-case rules in `[{skill_dir}/references/output-and-edge-cases.md](./references/output-and-edge-cases.md)`. Use `━` (U+2501) for divider lines, group verified `needs-fix` findings by category (RESEARCH GAPS → FEASIBILITY → SCOPE → DEPENDENCIES → ARCHITECTURE → SECURITY → SPECIFICATION), omit empty categories, and place `needs_context` and `user-deferred` items in their dedicated bottom sections.
 
 ### Counter Increment
 
@@ -494,47 +380,6 @@ on the plan file. This is the only plan file modification plan-review makes.
 
 ## Reviewer Prompt Templates
 
-Prompt templates are in `[{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md)`. Read that file and substitute
+Prompt templates and placeholder definitions are in `[{skill_dir}/references/reviewer-prompts.md](./references/reviewer-prompts.md)`. Read that file and substitute
 placeholders before passing to each Agent call. The templates are not executable — they are
 documentation that Claude reads and fills in.
-
-### Placeholder Reference
-
-| Placeholder | Value | Used by |
-|-------------|-------|---------|
-| `{plan_content}` | Full plan file content | All reviewers + Verifier |
-| `{plan_file_path}` | Absolute path to plan file | All reviewers + Verifier |
-| `{plan_goal}` | Extracted goal string | All reviewers |
-| `{plan_tasks}` | Integer task count | Phase 1 skip logic + Phase 4 terminal output |
-| `{plan_files}` | Newline-separated file paths from the plan | All reviewers |
-| `{plan_files_count}` | Count of unique paths in `{plan_files}` | Phase 4 terminal output |
-| `{plan_domain}` | Extracted domain or `"Unknown"` | Phase 4 terminal output |
-| `{claude_md_rules}` | CLAUDE.md content or "No CLAUDE.md found." | All reviewers |
-| `{contributing_md_rules}` | CONTRIBUTING.md content or "No CONTRIBUTING.md found." | All reviewers |
-| `{project_context}` | PROJECT.md content or "No PROJECT.md found." | All reviewers |
-| `{plan_open_questions}` | Extracted open questions or empty string | Unknown Unknowns only |
-| `{plan_trade_offs}` | Extracted trade-offs or empty string | Unknown Unknowns only |
-| `{plan_decisions}` | Extracted decisions (not trade-offs) or empty string | Unknown Unknowns only |
-| `{plan_test_plan}` | Full test plan document content or empty string | Scope & Completeness + Feasibility only |
-| `{findings_json}` | JSON array of all findings | Finding Verifier only |
-| `{verification_note}` | Warning when verification JSON parse fails, or empty string | Phase 4 terminal output |
-| `{skipped_note}` | List of skipped reviewers with reasons, or empty string | Phase 4 terminal output |
-| `{reviewer_list}` | Comma-separated names of reviewers that ran | Phase 4 terminal output |
-| `{total_raw}` | Total findings reported by all reviewers before verification | Phase 4 terminal output |
-| `{verified_count}` | Count of findings with verdict `verified` | Phase 4 terminal output |
-| `{false_positive_count}` | Count of findings with verdict `false_positive` (removed) | Phase 4 terminal output |
-| `{needs_context_count}` | Count of findings with verdict `needs_context` or `unverified` | Phase 4 terminal output |
-| `{checked_areas}` | Comma-separated list of reviewer areas that ran (excludes skipped) | Phase 4 "No Findings" output |
-
----
-
-## Relationship to Other Skills
-
-| Skill | Relationship |
-|-------|-------------|
-| `incremental-planning` | Creates plans that plan-review reviews. Run plan-review after incremental-planning produces a plan file. |
-| `quality-gate` | Complementary: plan-review is pre-implementation (plan quality), quality-gate is post-implementation (code quality). |
-| `plan-adherence` (agent) | Complementary: plan-review checks plan quality before coding; plan-adherence agent checks implementation fidelity after coding. |
-| `swarm` | plan-review should run before `/swarm` — catch gaps in the plan before spawning parallel implementers. |
-| `roadmap` | plan-review can review individual milestone plans that roadmap generates. |
-| `code-quality:fix` | Acts on plan findings. /fix edits the plan file only — never implements code from plan-review findings. For Research Gaps / Unknown Unknowns, /fix executes actual spikes — including invoking `/deep-research` for findings that name third-party technology research gaps. |

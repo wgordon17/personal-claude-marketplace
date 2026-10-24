@@ -45,6 +45,13 @@ This plugin uses the Atlassian Rovo MCP server (`mcp-atlassian-prod`).
 | **Link** | Issue linking with configurable link types |
 | **Discover** | Project metadata, issue type fields, workflow transitions |
 
+## Reference Files
+
+Shared reference documentation in `jira/references/` (consumed by both `/jira:jira` and `jira:jira-agent`):
+- `jira/references/osac-conventions.md` — OSAC project keys, issue hierarchy, workflow transitions, and custom field defaults
+- `jira/references/jql-reference.md` — Common JQL query patterns and OSAC filter recipes
+- `jira/references/jira-formatting.md` — Jira wiki/markdown formatting and description templates
+
 ## Write Tool Approval
 
 The dev-guard auto-approves Jira READ-ONLY tools. Write tools prompt for permission on each use unless you add them to `~/.claude/settings.local.json`.

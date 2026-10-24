@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "pyright-uvx",
+  "version": "1.0.1",
+  "description": "Python language server (via uvx - always latest)",
+  "author": {
+    "name": "wgordon17"
+  }
+}

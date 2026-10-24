@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "ship-help": {
+      "type": "streamable-http",
+      "url": "${CHAI_BOT_BASE_URL}/personas/osac_public/mcp",
+      "headers": {
+        "Authorization": "Bearer ${CHAI_TOKEN}"
+      }
+    }
+  }
+}

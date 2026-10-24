@@ -7,11 +7,11 @@ description: >-
   "clean everything up", "audit the codebase", "fix tech debt", "remove duplicates",
   "unify the architecture", "security review and fix", or wants a thorough, automated cleanup
   of their entire repository. Launches a full agent swarm to discover issues, plan fixes, and
-  implement changes autonomously. Combines detailed custom analysis with existing skills
-  (file-audit, code-quality:index-repo, code-quality:code-simplifier,
-  code-quality:architect, code-quality:security, code-quality:qa, code-quality:code-reviewer,
-  code-quality:test-runner) into a unified cleanup workflow.
-allowed-tools: [Read, Write, Edit, Bash, Agent, AskUserQuestion, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, LSP, Skill]
+  implement changes autonomously. Combines custom static/semantic analysis with existing
+  code-quality review, architecture, security, QA, and simplification agents into a unified
+  cleanup workflow.
+compatibility: Requires Claude Code with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for multi-agent orchestration
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion SendMessage TaskCreate TaskUpdate TaskList TaskGet LSP Skill
 ---
 
 # /unfuck — Comprehensive Repo Cleanup
