@@ -193,6 +193,112 @@ def get_base_plugin_description(
     return desc if isinstance(desc, str) else None
 
 
+def _batch_read_plugin_manifests(
+    repo_root: Path,
+    ref_sha: str,
+    plugin_names: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Read <plugin>/.claude-plugin/plugin.json for all plugin_names at ref_sha in one git call."""
+    if not plugin_names:
+        return {}
+    _validate_base_ref(ref_sha)
+    for name in plugin_names:
+        _validate_plugin_name(name)
+
+    stdin_payload = "".join(
+        f"{ref_sha}:{name}/.claude-plugin/plugin.json\n" for name in plugin_names
+    ).encode("utf-8")
+    proc = subprocess.run(
+        ["git", "cat-file", "--batch"],
+        cwd=repo_root,
+        input=stdin_payload,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return {}
+
+    raw = proc.stdout
+    pos = 0
+    total = len(raw)
+    manifests: dict[str, dict[str, Any]] = {}
+
+    for name in plugin_names:
+        nl_idx = raw.find(b"\n", pos)
+        if nl_idx == -1:
+            break
+        header = raw[pos:nl_idx]
+        pos = nl_idx + 1
+        if header.endswith(b" missing"):
+            continue
+        parts = header.split()
+        if len(parts) < 3:
+            break
+        try:
+            size = int(parts[2])
+        except ValueError:
+            break
+        content_end = pos + size
+        if content_end > total:
+            break
+        blob_bytes = raw[pos:content_end]
+        pos = content_end
+        if pos < total and raw[pos : pos + 1] == b"\n":
+            pos += 1
+        if parts[1] != b"blob":
+            continue
+        try:
+            parsed = json.loads(blob_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict):
+            manifests[name] = parsed
+
+    return manifests
+
+
+def _load_base_plugin_metadata(
+    repo_root: Path,
+    plugin_names: list[str],
+    base_ref: str = "origin/main",
+) -> tuple[dict[str, str | None], dict[str, str | None]]:
+    """Batch-load base versions (at base_ref) and base descriptions (at merge-base)."""
+    resolved_root = repo_root.resolve()
+    _validate_base_ref(base_ref)
+    for name in plugin_names:
+        _validate_plugin_name(name)
+
+    if not plugin_names:
+        return {}, {}
+
+    verify_proc = _run_git(resolved_root, ["rev-parse", "--verify", "--quiet", base_ref])
+    base_sha = verify_proc.stdout.strip()
+    if verify_proc.returncode != 0 or not base_sha:
+        empty: dict[str, str | None] = {name: None for name in plugin_names}
+        return dict(empty), dict(empty)
+
+    mb_proc = _run_git(resolved_root, ["merge-base", base_ref, "HEAD"])
+    merge_base = (
+        mb_proc.stdout.strip() if mb_proc.returncode == 0 and mb_proc.stdout.strip() else base_sha
+    )
+
+    base_manifests = _batch_read_plugin_manifests(resolved_root, base_sha, plugin_names)
+    if merge_base == base_sha:
+        mb_manifests = base_manifests
+    else:
+        mb_manifests = _batch_read_plugin_manifests(resolved_root, merge_base, plugin_names)
+
+    base_versions: dict[str, str | None] = {}
+    base_descriptions: dict[str, str | None] = {}
+    for name in plugin_names:
+        ver = base_manifests.get(name, {}).get("version")
+        base_versions[name] = ver if isinstance(ver, str) else None
+        desc = mb_manifests.get(name, {}).get("description")
+        base_descriptions[name] = desc if isinstance(desc, str) else None
+
+    return base_versions, base_descriptions
+
+
 def _update_marketplace_plugin_in_place(
     marketplace_text: str,
     plugin_name: str,
@@ -352,19 +458,24 @@ def compute_manifest_fixes(
     marketplace_data = json.loads(original_marketplace_text)
     marketplace_plugins: list[dict[str, Any]] = marketplace_data.get("plugins", [])
 
-    registered_names = {str(p["name"]) for p in marketplace_plugins if "name" in p}
+    plugin_names = [str(p["name"]) for p in marketplace_plugins if "name" in p]
+    for name in plugin_names:
+        _validate_plugin_name(name)
+    registered_names = set(plugin_names)
     unknown_bumps = explicit_bumps - registered_names
     if unknown_bumps:
         raise ValueError(f"Unknown plugin(s) in --bump-plugin: {', '.join(sorted(unknown_bumps))}")
 
     modified_plugins = get_modified_plugins(resolved_root, base_ref=base_ref)
+    base_versions, base_descriptions = _load_base_plugin_metadata(
+        resolved_root, plugin_names, base_ref=base_ref
+    )
     violations: list[ManifestViolation] = []
     fixes: dict[Path, tuple[str, str, str]] = {}
     marketplace_dirty_plugins: list[str] = []
 
     for mkt_entry in marketplace_plugins:
         plugin_name = str(mkt_entry["name"])
-        _validate_plugin_name(plugin_name)
 
         claude_path = _validate_repo_path(
             resolved_root, resolved_root / plugin_name / ".claude-plugin" / "plugin.json"
@@ -396,7 +507,7 @@ def compute_manifest_fixes(
         claude_desc = str(claude_data.get("description", ""))
         agent_desc = str(agent_data.get("description", ""))
         mkt_desc = str(mkt_entry.get("description", ""))
-        base_desc = get_base_plugin_description(resolved_root, plugin_name, base_ref=base_ref)
+        base_desc = base_descriptions.get(plugin_name)
 
         if base_desc is not None:
             if claude_desc != base_desc:
@@ -552,7 +663,7 @@ def compute_manifest_fixes(
         agent_ver = str(agent_data.get("version", claude_ver))
         mkt_ver = str(mkt_entry.get("version", claude_ver))
         target_version = max((claude_ver, agent_ver, mkt_ver), key=parse_semver)
-        base_version = get_base_plugin_version(resolved_root, plugin_name, base_ref=base_ref)
+        base_version = base_versions.get(plugin_name)
 
         reported_bump_violation = False
         if plugin_name in explicit_bumps:
@@ -838,6 +949,11 @@ class PluginManifestSyncRule(Rule):
     """Synchronize plugin version, description, author, and MCP metadata across manifests."""
 
     autofix_confidence = AutofixConfidence.SAFE
+    _last_fix_cache: tuple[Path, dict[Path, tuple[str, str, str]]] | None = None
+
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        super().__init__(config)
+        self._last_fix_cache: tuple[Path, dict[Path, tuple[str, str, str]]] | None = None
 
     @property
     def rule_id(self) -> str:
@@ -855,7 +971,8 @@ class PluginManifestSyncRule(Rule):
 
     def check(self, context: Any) -> list[RuleViolation]:
         repo_root = Path(context.root_path).resolve()
-        manifest_violations, _ = compute_manifest_fixes(repo_root)
+        manifest_violations, file_fixes = compute_manifest_fixes(repo_root)
+        self._last_fix_cache = (repo_root, file_fixes)
         return [
             self.violation(v.message, file_path=v.file_path, fixable=True)
             for v in manifest_violations
@@ -863,7 +980,12 @@ class PluginManifestSyncRule(Rule):
 
     def fix(self, context: Any, violations: list[RuleViolation]) -> list[AutofixResult]:
         repo_root = Path(context.root_path).resolve()
-        _, file_fixes = compute_manifest_fixes(repo_root)
+        if self._last_fix_cache is not None and self._last_fix_cache[0] == repo_root:
+            file_fixes = self._last_fix_cache[1]
+            self._last_fix_cache = None
+        else:
+            self._last_fix_cache = None
+            _, file_fixes = compute_manifest_fixes(repo_root)
         if not file_fixes:
             return []
 
