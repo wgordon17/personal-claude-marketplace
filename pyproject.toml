@@ -28,6 +28,6 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 quote-style = "double"
 
 [tool.pyright]
-include = ["dev-guard/hooks", "chai-bot/hooks"]
+include = ["dev-guard/hooks", "chai-bot/hooks", ".github/scripts"]
 pythonVersion = "3.13"
 typeCheckingMode = "basic"

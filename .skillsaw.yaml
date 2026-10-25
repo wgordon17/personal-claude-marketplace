@@ -1,11 +1,15 @@
 version: "0.21.0"
 strict: true
-custom-rules: []
+custom-rules:
+  - ".github/scripts/skillsaw_custom_rules.py"
 exclude:
   - "skill-eval/codebases/**"
   - "skill-eval/fixtures/**"
 
 rules:
+  plugin-manifest-sync:
+    enabled: true
+    severity: error
   agent-plugin-required:
     enabled: true
     severity: error
