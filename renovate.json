@@ -61,7 +61,7 @@
       "postUpgradeTasks": {
         "commands": [
           "khepri-verify-pypi-source '{{{packageName}}}' '{{{newVersion}}}'",
-          "python3 -I .github/scripts/skillsaw_custom_rules.py --fix"
+          "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix"
         ],
         "executionMode": "update"
       }
@@ -88,7 +88,7 @@
       ],
       "postUpgradeTasks": {
         "commands": [
-          "python3 -I .github/scripts/skillsaw_custom_rules.py --fix"
+          "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix"
         ],
         "fileFilters": [
           "*/.claude-plugin/plugin.json",

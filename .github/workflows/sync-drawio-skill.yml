@@ -87,7 +87,7 @@ jobs:
 
       - name: Bump patch version
         if: steps.diff.outputs.changed == 'true'
-        run: python3 -I .github/scripts/skillsaw_custom_rules.py --bump-plugin drawio
+        run: uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --bump-plugin drawio
 
       - name: Create PR
         if: steps.diff.outputs.changed == 'true'

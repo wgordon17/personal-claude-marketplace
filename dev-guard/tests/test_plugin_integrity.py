@@ -1265,7 +1265,7 @@ class TestRenovateConfig:
         pypi_tasks = pypi_rule["postUpgradeTasks"]
         assert pypi_tasks.get("commands") == [
             "khepri-verify-pypi-source '{{{packageName}}}' '{{{newVersion}}}'",
-            "python3 -I .github/scripts/skillsaw_custom_rules.py --fix",
+            "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix",
         ], f"Unexpected pypi postUpgradeTasks.commands: {pypi_tasks.get('commands')}"
         assert "fileFilters" not in pypi_tasks, (
             "pypi postUpgradeTasks must NOT set fileFilters so .khepri-supply-chain-blocked "
@@ -1275,7 +1275,7 @@ class TestRenovateConfig:
 
         non_pypi_tasks = non_pypi_rule["postUpgradeTasks"]
         assert non_pypi_tasks.get("commands") == [
-            "python3 -I .github/scripts/skillsaw_custom_rules.py --fix"
+            "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix"
         ]
         assert set(non_pypi_tasks.get("fileFilters", [])) == {
             "*/.claude-plugin/plugin.json",
