@@ -19,10 +19,12 @@ They guard against accidental deletion of rules and references, and against
 version drift between plugin manifests.
 """
 
+import importlib.util
 import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -650,6 +652,62 @@ class TestPluginVersionParity:
 
         assert not mismatches, "Agent Plugins v1 mcp.json drift:\n" + "\n".join(
             f"  - {m}" for m in mismatches
+        )
+
+    def test_modified_plugins_have_version_bump_vs_origin_main(self):
+        """Any plugin with non-test file changes relative to origin/main must have a bumped
+        version across .claude-plugin/plugin.json, plugin.json, and marketplace.json."""
+        verify_proc = subprocess.run(
+            ["git", "rev-parse", "--verify", "origin/main"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if verify_proc.returncode != 0:
+            pytest.skip("origin/main ref not available")
+
+        script_path = REPO_ROOT / ".github" / "scripts" / "skillsaw_custom_rules.py"
+        spec = importlib.util.spec_from_file_location("skillsaw_custom_rules", script_path)
+        assert spec is not None and spec.loader is not None
+        rules_mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = rules_mod
+        spec.loader.exec_module(rules_mod)
+
+        modified_plugins = rules_mod.get_modified_plugins(REPO_ROOT, base_ref="origin/main")
+        marketplace_versions = self._load_marketplace_versions()
+        violations = []
+
+        for plugin_name in sorted(modified_plugins):
+            base_version = rules_mod.get_base_plugin_version(
+                REPO_ROOT, plugin_name, base_ref="origin/main"
+            )
+            if base_version is None:
+                continue
+
+            base_semver = rules_mod.parse_semver(base_version)
+            claude_manifest = REPO_ROOT / plugin_name / ".claude-plugin" / "plugin.json"
+            agent_manifest = REPO_ROOT / plugin_name / "plugin.json"
+
+            claude_ver = json.loads(claude_manifest.read_text())["version"]
+            agent_ver = json.loads(agent_manifest.read_text())["version"]
+            mkt_ver = marketplace_versions[plugin_name]
+
+            for surface_label, head_ver in (
+                (f"{plugin_name}/.claude-plugin/plugin.json", claude_ver),
+                (f"{plugin_name}/plugin.json", agent_ver),
+                (f".claude-plugin/marketplace.json ({plugin_name})", mkt_ver),
+            ):
+                if rules_mod.parse_semver(head_ver) <= base_semver:
+                    violations.append(
+                        f"{surface_label}: version {head_ver!r} <= origin/main {base_version!r}"
+                    )
+
+        assert not violations, (
+            "Modified plugin(s) missing version bump relative to origin/main.\n"
+            "Run `uvx skillsaw@0.21.0 fix --no-plugins` or "
+            "`uv run .github/scripts/skillsaw_custom_rules.py --fix` to auto-bump and sync:\n"
+            + "\n".join(f"  - {v}" for v in violations)
         )
 
 

@@ -7,6 +7,10 @@ on:
       - '**.json'
       - '**.md'
       - '**.sh'
+      - '**.yaml'
+      - '**.yml'
+      - '**.py'
+      - '**.ts'
       - '**/.mcp.json'
       - '**/mcp.json'
       - '**/hooks.json'
@@ -14,7 +18,9 @@ on:
       - '**/SKILL.md'
       - '.agents/**'
       - '.skillsaw.yaml'
+      - '.github/scripts/**'
       - '.github/workflows/**'
+      - 'renovate.json'
   workflow_dispatch:
 
 permissions:
@@ -31,8 +37,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7
-      - run: uvx skillsaw@0.21.0 lint --strict --no-custom-rules --no-plugins
+      - run: git fetch origin main
+      - run: uvx skillsaw@0.21.0 lint --strict --no-plugins
 
       - name: No README in skill directories
         run: |
