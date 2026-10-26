@@ -706,8 +706,8 @@ class TestPluginVersionParity:
         assert not violations, (
             "Modified plugin(s) missing version bump relative to origin/main.\n"
             "Run `uvx skillsaw@0.21.0 fix --no-plugins` or "
-            "`uv run .github/scripts/skillsaw_custom_rules.py --fix` to auto-bump and sync:\n"
-            + "\n".join(f"  - {v}" for v in violations)
+            "`uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix` "
+            "to auto-bump and sync:\n" + "\n".join(f"  - {v}" for v in violations)
         )
 
 

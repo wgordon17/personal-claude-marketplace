@@ -100,21 +100,40 @@ def _load_registered_plugins(repo_root: Path) -> list[dict[str, Any]]:
     return plugins if isinstance(plugins, list) else []
 
 
-def get_modified_plugins(repo_root: Path, base_ref: str = "origin/main") -> set[str]:
+def _resolve_base_sha(repo_root: Path, base_ref: str) -> str | None:
+    """Resolve base_ref to a commit SHA, or return None if base_ref does not exist."""
+    verify_proc = _run_git(repo_root, ["rev-parse", "--verify", "--quiet", base_ref])
+    base_sha = verify_proc.stdout.strip()
+    if verify_proc.returncode != 0 or not base_sha:
+        return None
+    return base_sha
+
+
+def get_modified_plugins(
+    repo_root: Path,
+    base_ref: str = "origin/main",
+    *,
+    registered_plugins: set[str] | None = None,
+    base_sha: str | None = None,
+) -> set[str]:
     """Return set of marketplace plugins with non-test file changes relative to base_ref."""
     resolved_root = repo_root.resolve()
     _validate_base_ref(base_ref)
 
-    registered = {
-        str(entry["name"])
-        for entry in _load_registered_plugins(resolved_root)
-        if isinstance(entry, dict) and "name" in entry
-    }
+    registered = (
+        registered_plugins
+        if registered_plugins is not None
+        else {
+            str(entry["name"])
+            for entry in _load_registered_plugins(resolved_root)
+            if isinstance(entry, dict) and "name" in entry
+        }
+    )
     if not registered:
         return set()
 
-    verify_proc = _run_git(resolved_root, ["rev-parse", "--verify", base_ref])
-    if verify_proc.returncode != 0:
+    resolved_sha = base_sha if base_sha is not None else _resolve_base_sha(resolved_root, base_ref)
+    if not resolved_sha:
         return set()
 
     changed_paths: set[str] = set()
@@ -261,6 +280,8 @@ def _load_base_plugin_metadata(
     repo_root: Path,
     plugin_names: list[str],
     base_ref: str = "origin/main",
+    *,
+    base_sha: str | None = None,
 ) -> tuple[dict[str, str | None], dict[str, str | None]]:
     """Batch-load base versions (at base_ref) and base descriptions (at merge-base)."""
     resolved_root = repo_root.resolve()
@@ -271,19 +292,20 @@ def _load_base_plugin_metadata(
     if not plugin_names:
         return {}, {}
 
-    verify_proc = _run_git(resolved_root, ["rev-parse", "--verify", "--quiet", base_ref])
-    base_sha = verify_proc.stdout.strip()
-    if verify_proc.returncode != 0 or not base_sha:
+    resolved_sha = base_sha if base_sha is not None else _resolve_base_sha(resolved_root, base_ref)
+    if not resolved_sha:
         empty: dict[str, str | None] = {name: None for name in plugin_names}
         return dict(empty), dict(empty)
 
     mb_proc = _run_git(resolved_root, ["merge-base", base_ref, "HEAD"])
     merge_base = (
-        mb_proc.stdout.strip() if mb_proc.returncode == 0 and mb_proc.stdout.strip() else base_sha
+        mb_proc.stdout.strip()
+        if mb_proc.returncode == 0 and mb_proc.stdout.strip()
+        else resolved_sha
     )
 
-    base_manifests = _batch_read_plugin_manifests(resolved_root, base_sha, plugin_names)
-    if merge_base == base_sha:
+    base_manifests = _batch_read_plugin_manifests(resolved_root, resolved_sha, plugin_names)
+    if merge_base == resolved_sha:
         mb_manifests = base_manifests
     else:
         mb_manifests = _batch_read_plugin_manifests(resolved_root, merge_base, plugin_names)
@@ -409,29 +431,6 @@ def _build_expected_agent_mcp(dot_mcp_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _mcp_configs_match(dot_mcp_data: dict[str, Any], root_mcp_data: dict[str, Any]) -> bool:
-    """Return True if root mcp.json semantically matches .mcp.json."""
-    if root_mcp_data.get("$schema") != AGENT_MCP_SCHEMA:
-        return False
-    dot_servers = dot_mcp_data.get("mcpServers", {})
-    root_servers = root_mcp_data.get("mcpServers", {})
-    if not isinstance(dot_servers, dict) or not isinstance(root_servers, dict):
-        return False
-    if set(dot_servers.keys()) != set(root_servers.keys()):
-        return False
-    for srv_name, dot_srv in dot_servers.items():
-        root_srv = root_servers.get(srv_name)
-        if not isinstance(dot_srv, dict) or not isinstance(root_srv, dict):
-            return False
-        expected_type = "streamable-http" if dot_srv.get("type") == "http" else "stdio"
-        if root_srv.get("type") != expected_type:
-            return False
-        for field_name in MCP_SERVER_FIELDS:
-            if dot_srv.get(field_name) != root_srv.get(field_name):
-                return False
-    return True
-
-
 def compute_manifest_fixes(
     repo_root: Path,
     *,
@@ -466,9 +465,26 @@ def compute_manifest_fixes(
     if unknown_bumps:
         raise ValueError(f"Unknown plugin(s) in --bump-plugin: {', '.join(sorted(unknown_bumps))}")
 
-    modified_plugins = get_modified_plugins(resolved_root, base_ref=base_ref)
-    base_versions, base_descriptions = _load_base_plugin_metadata(
-        resolved_root, plugin_names, base_ref=base_ref
+    resolved_base_sha = _resolve_base_sha(resolved_root, base_ref)
+    modified_plugins = (
+        get_modified_plugins(
+            resolved_root,
+            base_ref=base_ref,
+            registered_plugins=registered_names,
+            base_sha=resolved_base_sha,
+        )
+        if resolved_base_sha
+        else set()
+    )
+    base_versions, base_descriptions = (
+        _load_base_plugin_metadata(
+            resolved_root,
+            plugin_names,
+            base_ref=base_ref,
+            base_sha=resolved_base_sha,
+        )
+        if resolved_base_sha
+        else ({name: None for name in plugin_names}, {name: None for name in plugin_names})
     )
     violations: list[ManifestViolation] = []
     fixes: dict[Path, tuple[str, str, str]] = {}
@@ -644,7 +660,8 @@ def compute_manifest_fixes(
                     root_mcp_path.read_text(encoding="utf-8") if root_mcp_path.exists() else ""
                 )
                 root_mcp_data = json.loads(root_mcp_orig) if root_mcp_orig else {}
-                if not _mcp_configs_match(dot_mcp_data, root_mcp_data):
+                expected_mcp = _build_expected_agent_mcp(dot_mcp_data)
+                if root_mcp_data != expected_mcp:
                     violations.append(
                         ManifestViolation(
                             root_mcp_path,
@@ -652,7 +669,6 @@ def compute_manifest_fixes(
                         )
                     )
                     surface_dirty = True
-                    expected_mcp = _build_expected_agent_mcp(dot_mcp_data)
                     fixes[root_mcp_path] = (
                         root_mcp_orig,
                         json.dumps(expected_mcp, indent=2, ensure_ascii=False) + "\n",
@@ -949,7 +965,6 @@ class PluginManifestSyncRule(Rule):
     """Synchronize plugin version, description, author, and MCP metadata across manifests."""
 
     autofix_confidence = AutofixConfidence.SAFE
-    _last_fix_cache: tuple[Path, dict[Path, tuple[str, str, str]]] | None = None
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
@@ -980,11 +995,21 @@ class PluginManifestSyncRule(Rule):
 
     def fix(self, context: Any, violations: list[RuleViolation]) -> list[AutofixResult]:
         repo_root = Path(context.root_path).resolve()
-        if self._last_fix_cache is not None and self._last_fix_cache[0] == repo_root:
-            file_fixes = self._last_fix_cache[1]
+        if (repo_root / SUPPLY_CHAIN_MARKER).exists():
             self._last_fix_cache = None
+            return []
+        cached = self._last_fix_cache
+        self._last_fix_cache = None
+        if (
+            cached is not None
+            and cached[0] == repo_root
+            and all(
+                p.exists() and p.read_text(encoding="utf-8") == orig
+                for p, (orig, _, _) in cached[1].items()
+            )
+        ):
+            file_fixes = cached[1]
         else:
-            self._last_fix_cache = None
             _, file_fixes = compute_manifest_fixes(repo_root)
         if not file_fixes:
             return []
