@@ -19,10 +19,12 @@ They guard against accidental deletion of rules and references, and against
 version drift between plugin manifests.
 """
 
+import importlib.util
 import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -652,6 +654,62 @@ class TestPluginVersionParity:
             f"  - {m}" for m in mismatches
         )
 
+    def test_modified_plugins_have_version_bump_vs_origin_main(self):
+        """Any plugin with non-test file changes relative to origin/main must have a bumped
+        version across .claude-plugin/plugin.json, plugin.json, and marketplace.json."""
+        verify_proc = subprocess.run(
+            ["git", "rev-parse", "--verify", "origin/main"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if verify_proc.returncode != 0:
+            pytest.skip("origin/main ref not available")
+
+        script_path = REPO_ROOT / ".github" / "scripts" / "skillsaw_custom_rules.py"
+        spec = importlib.util.spec_from_file_location("skillsaw_custom_rules", script_path)
+        assert spec is not None and spec.loader is not None
+        rules_mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = rules_mod
+        spec.loader.exec_module(rules_mod)
+
+        modified_plugins = rules_mod.get_modified_plugins(REPO_ROOT, base_ref="origin/main")
+        marketplace_versions = self._load_marketplace_versions()
+        violations = []
+
+        for plugin_name in sorted(modified_plugins):
+            base_version = rules_mod.get_base_plugin_version(
+                REPO_ROOT, plugin_name, base_ref="origin/main"
+            )
+            if base_version is None:
+                continue
+
+            base_semver = rules_mod.parse_semver(base_version)
+            claude_manifest = REPO_ROOT / plugin_name / ".claude-plugin" / "plugin.json"
+            agent_manifest = REPO_ROOT / plugin_name / "plugin.json"
+
+            claude_ver = json.loads(claude_manifest.read_text())["version"]
+            agent_ver = json.loads(agent_manifest.read_text())["version"]
+            mkt_ver = marketplace_versions[plugin_name]
+
+            for surface_label, head_ver in (
+                (f"{plugin_name}/.claude-plugin/plugin.json", claude_ver),
+                (f"{plugin_name}/plugin.json", agent_ver),
+                (f".claude-plugin/marketplace.json ({plugin_name})", mkt_ver),
+            ):
+                if rules_mod.parse_semver(head_ver) <= base_semver:
+                    violations.append(
+                        f"{surface_label}: version {head_ver!r} <= origin/main {base_version!r}"
+                    )
+
+        assert not violations, (
+            "Modified plugin(s) missing version bump relative to origin/main.\n"
+            "Run `uvx skillsaw@0.21.0 fix --no-plugins` or "
+            "`uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix` "
+            "to auto-bump and sync:\n" + "\n".join(f"  - {v}" for v in violations)
+        )
+
 
 class TestDevGuardDescriptionSync:
     """Structural test that dev-guard's description stays in sync across its three
@@ -1125,4 +1183,153 @@ class TestSkillMigrationFidelity:
         assert overall_pct >= 99.0, (
             f"Overall skill migration fidelity {overall_pct:.2f}% "
             f"({total_matched}/{total_base}) dropped below 99.0%"
+        )
+
+
+class TestRenovateConfig:
+    """Structural and security tests for root renovate.json configuration."""
+
+    RENOVATE_JSON = REPO_ROOT / "renovate.json"
+
+    def _load_renovate_config(self) -> dict:
+        assert self.RENOVATE_JSON.exists(), f"Missing {self.RENOVATE_JSON}"
+        return json.loads(self.RENOVATE_JSON.read_text(encoding="utf-8"))
+
+    def test_renovate_json_schema_and_ignore_paths(self):
+        """renovate.json must parse as valid JSON and exclude skill-eval/codebases/**."""
+        cfg = self._load_renovate_config()
+        assert cfg.get("$schema") == "https://docs.renovatebot.com/renovate-schema.json"
+        ignore_paths = cfg.get("ignorePaths", [])
+        assert "skill-eval/codebases/**" in ignore_paths, (
+            f"renovate.json ignorePaths missing 'skill-eval/codebases/**': {ignore_paths}"
+        )
+
+    def test_pep723_manager_file_patterns_match_all_hook_scripts(self):
+        """pep723.managerFilePatterns must match dev-guard/hooks/*.py and chai-bot/hooks/*.py."""
+        cfg = self._load_renovate_config()
+        raw_patterns = cfg.get("pep723", {}).get("managerFilePatterns", [])
+        assert raw_patterns, "renovate.json pep723.managerFilePatterns must not be empty"
+
+        compiled = [re.compile(p.strip("/")) for p in raw_patterns]
+        hook_scripts = [
+            *sorted(REPO_ROOT.glob("dev-guard/hooks/*.py")),
+            *sorted(REPO_ROOT.glob("chai-bot/hooks/*.py")),
+        ]
+        assert hook_scripts, "Expected hook Python scripts in dev-guard/hooks or chai-bot/hooks"
+
+        unmatched = []
+        for script_path in hook_scripts:
+            rel_posix = script_path.relative_to(REPO_ROOT).as_posix()
+            if not any(rx.search(rel_posix) for rx in compiled):
+                unmatched.append(rel_posix)
+
+        assert not unmatched, (
+            f"Hook scripts not matched by renovate.json pep723.managerFilePatterns: {unmatched}"
+        )
+
+    def test_all_marketplace_plugins_in_post_upgrade_tasks_and_pypi_split_invariants(self):
+        """Both pypi and non-pypi plugin packageRules must cover all 13 marketplace plugins,
+        and pypi rule must run khepri-verify-pypi-source before skillsaw_custom_rules.py --fix
+        without restricting fileFilters."""
+        cfg = self._load_renovate_config()
+        marketplace = json.loads(MARKETPLACE_JSON.read_text(encoding="utf-8"))
+        expected_globs = {f"{entry['name']}/**" for entry in marketplace["plugins"]}
+        assert len(expected_globs) == 13
+
+        package_rules = cfg.get("packageRules", [])
+        pypi_rules = [
+            r
+            for r in package_rules
+            if r.get("matchDatasources") == ["pypi"] and "postUpgradeTasks" in r
+        ]
+        non_pypi_rules = [
+            r
+            for r in package_rules
+            if r.get("excludeDatasources") == ["pypi"] and "postUpgradeTasks" in r
+        ]
+        assert len(pypi_rules) == 1, f"Expected 1 pypi postUpgradeTasks rule, got {len(pypi_rules)}"
+        assert len(non_pypi_rules) == 1, (
+            f"Expected 1 non-pypi postUpgradeTasks rule, got {len(non_pypi_rules)}"
+        )
+
+        pypi_rule = pypi_rules[0]
+        non_pypi_rule = non_pypi_rules[0]
+
+        assert set(pypi_rule.get("matchFileNames", [])) == expected_globs, (
+            "pypi postUpgradeTasks rule matchFileNames does not match all marketplace plugins"
+        )
+        assert set(non_pypi_rule.get("matchFileNames", [])) == expected_globs, (
+            "non-pypi postUpgradeTasks rule matchFileNames does not match all marketplace plugins"
+        )
+
+        pypi_tasks = pypi_rule["postUpgradeTasks"]
+        assert pypi_tasks.get("commands") == [
+            "khepri-verify-pypi-source '{{{packageName}}}' '{{{newVersion}}}'",
+            "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix",
+        ], f"Unexpected pypi postUpgradeTasks.commands: {pypi_tasks.get('commands')}"
+        assert "fileFilters" not in pypi_tasks, (
+            "pypi postUpgradeTasks must NOT set fileFilters so .khepri-supply-chain-blocked "
+            "and rolled-back package files are preserved in updatedArtifacts"
+        )
+        assert pypi_tasks.get("executionMode") == "update"
+
+        non_pypi_tasks = non_pypi_rule["postUpgradeTasks"]
+        assert non_pypi_tasks.get("commands") == [
+            "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix"
+        ]
+        assert set(non_pypi_tasks.get("fileFilters", [])) == {
+            "*/.claude-plugin/plugin.json",
+            "*/plugin.json",
+            ".claude-plugin/marketplace.json",
+            "*/mcp.json",
+            "dev-guard/hooks/hooks.json",
+        }
+        assert non_pypi_tasks.get("executionMode") == "update"
+
+    def test_skillsaw_custom_regex_manager_extracts_identical_version_across_all_4_files(self):
+        """skillsaw custom regex manager must match all 4 target files and extract the same
+        valid semver version from every occurrence."""
+        cfg = self._load_renovate_config()
+        custom_managers = [
+            m for m in cfg.get("customManagers", []) if m.get("depNameTemplate") == "skillsaw"
+        ]
+        assert len(custom_managers) == 1, "Expected 1 skillsaw custom regex manager"
+        mgr = custom_managers[0]
+        assert mgr.get("customType") == "regex"
+        assert mgr.get("datasourceTemplate") == "pypi"
+
+        file_regexes = [re.compile(p.strip("/")) for p in mgr.get("managerFilePatterns", [])]
+        match_regexes = [
+            re.compile(ms.replace("(?<currentValue>", "(?P<currentValue>"), re.MULTILINE)
+            for ms in mgr.get("matchStrings", [])
+        ]
+        assert match_regexes, "skillsaw custom manager must define matchStrings"
+
+        target_rel_paths = (
+            ".skillsaw.yaml",
+            ".pre-commit-config.yaml",
+            ".github/workflows/plugin-lint.yml",
+            "CLAUDE.md",
+        )
+        semver_re = re.compile(r"^\d+\.\d+\.\d+$")
+        all_extracted_versions: list[str] = []
+
+        for rel_path in target_rel_paths:
+            assert any(rx.search(rel_path) for rx in file_regexes), (
+                f"{rel_path} is not matched by skillsaw managerFilePatterns"
+            )
+            content = (REPO_ROOT / rel_path).read_text(encoding="utf-8")
+            file_versions: list[str] = []
+            for mrx in match_regexes:
+                for match in mrx.finditer(content):
+                    ver = match.group("currentValue")
+                    assert semver_re.match(ver), f"Invalid semver {ver!r} extracted from {rel_path}"
+                    file_versions.append(ver)
+            assert file_versions, (
+                f"skillsaw custom manager matchStrings did not match any version in {rel_path}"
+            )
+            all_extracted_versions.extend(file_versions)
+
+        assert len(set(all_extracted_versions)) == 1, (
+            f"skillsaw version drift across tracked files: {set(all_extracted_versions)}"
         )

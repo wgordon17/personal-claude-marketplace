@@ -1,0 +1,104 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Managed by khepri-deps/renovate — global config provides weekly Monday schedule, 14-day release cooldown, and vulnerability alert bypass."
+  ],
+  "ignorePaths": [
+    "skill-eval/codebases/**"
+  ],
+  "pep723": {
+    "managerFilePatterns": [
+      "/(^|/)hooks/[^/]+\\.py$/",
+      "/^\\.claude/commands/[^/]+\\.py$/"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Keep skillsaw version synchronized across config, pre-commit, CI workflow, and CLAUDE.md",
+      "managerFilePatterns": [
+        "/^\\.skillsaw\\.yaml$/",
+        "/^\\.pre-commit-config\\.yaml$/",
+        "/^\\.github/workflows/plugin-lint\\.yml$/",
+        "/^CLAUDE\\.md$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\n)version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+        "uvx\\s+skillsaw@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "skillsaw",
+      "datasourceTemplate": "pypi"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Group skillsaw version updates across config, pre-commit, CI, and docs",
+      "matchPackageNames": [
+        "skillsaw"
+      ],
+      "groupName": "skillsaw"
+    },
+    {
+      "description": "Verify PyPI source and auto-bump 3 plugin manifests when PyPI dependencies inside a plugin directory are updated",
+      "matchFileNames": [
+        "pyright-uvx/**",
+        "vtsls-npx/**",
+        "gopls-go/**",
+        "vscode-html-css-npx/**",
+        "rust-analyzer-rustup/**",
+        "dev-guard/**",
+        "code-quality/**",
+        "git-tools/**",
+        "github-mcp/**",
+        "jira/**",
+        "drawio/**",
+        "fetchaller-mcp/**",
+        "chai-bot/**"
+      ],
+      "matchDatasources": [
+        "pypi"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "khepri-verify-pypi-source '{{{packageName}}}' '{{{newVersion}}}'",
+          "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix"
+        ],
+        "executionMode": "update"
+      }
+    },
+    {
+      "description": "Auto-bump 3 plugin manifests when non-PyPI dependencies inside a plugin directory are updated",
+      "matchFileNames": [
+        "pyright-uvx/**",
+        "vtsls-npx/**",
+        "gopls-go/**",
+        "vscode-html-css-npx/**",
+        "rust-analyzer-rustup/**",
+        "dev-guard/**",
+        "code-quality/**",
+        "git-tools/**",
+        "github-mcp/**",
+        "jira/**",
+        "drawio/**",
+        "fetchaller-mcp/**",
+        "chai-bot/**"
+      ],
+      "excludeDatasources": [
+        "pypi"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix"
+        ],
+        "fileFilters": [
+          "*/.claude-plugin/plugin.json",
+          "*/plugin.json",
+          ".claude-plugin/marketplace.json",
+          "*/mcp.json",
+          "dev-guard/hooks/hooks.json"
+        ],
+        "executionMode": "update"
+      }
+    }
+  ]
+}

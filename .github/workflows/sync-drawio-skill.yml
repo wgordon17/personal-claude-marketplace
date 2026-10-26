@@ -87,18 +87,7 @@ jobs:
 
       - name: Bump patch version
         if: steps.diff.outputs.changed == 'true'
-        run: |
-          jq '.version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
-            drawio/.claude-plugin/plugin.json > "$RUNNER_TEMP/plugin.json"
-          mv "$RUNNER_TEMP/plugin.json" drawio/.claude-plugin/plugin.json
-
-          jq '.version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
-            drawio/plugin.json > "$RUNNER_TEMP/root-plugin.json"
-          mv "$RUNNER_TEMP/root-plugin.json" drawio/plugin.json
-
-          jq '(.plugins[] | select(.name == "drawio")).version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
-            .claude-plugin/marketplace.json > "$RUNNER_TEMP/marketplace.json"
-          mv "$RUNNER_TEMP/marketplace.json" .claude-plugin/marketplace.json
+        run: uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --bump-plugin drawio
 
       - name: Create PR
         if: steps.diff.outputs.changed == 'true'

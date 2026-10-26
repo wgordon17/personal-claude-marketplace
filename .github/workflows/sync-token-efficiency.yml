@@ -119,17 +119,7 @@ jobs:
             s/\| \*\*Last synced\*\* \| `[0-9]{4}-[0-9]{2}-[0-9]{2}` \|/| **Last synced** | `$ENV{TODAY}` |/;
           ' dev-guard/UPSTREAM.md
 
-          jq '.version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
-            dev-guard/.claude-plugin/plugin.json > "$RUNNER_TEMP/plugin.json"
-          mv "$RUNNER_TEMP/plugin.json" dev-guard/.claude-plugin/plugin.json
-
-          jq '.version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
-            dev-guard/plugin.json > "$RUNNER_TEMP/root-plugin.json"
-          mv "$RUNNER_TEMP/root-plugin.json" dev-guard/plugin.json
-
-          jq '(.plugins[] | select(.name == "dev-guard")).version |= (split(".") | .[2] |= (tonumber + 1 | tostring) | join("."))' \
-            .claude-plugin/marketplace.json > "$RUNNER_TEMP/marketplace.json"
-          mv "$RUNNER_TEMP/marketplace.json" .claude-plugin/marketplace.json
+          uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --bump-plugin dev-guard
 
       - name: Construct PR body
         if: steps.diff.outputs.changed == 'true'

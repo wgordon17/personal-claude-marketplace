@@ -11,9 +11,9 @@ repos:
       - id: skillsaw
         name: skillsaw
         language: system
-        entry: uvx skillsaw@0.21.0 lint --strict --no-custom-rules --no-plugins
+        entry: uvx skillsaw@0.21.0 lint --strict --no-plugins
         pass_filenames: false
-        files: \.(json|md|yaml|yml)$
+        files: \.(json|md|yaml|yml|py|sh|ts)$
 
       - id: test-llm
         name: LLM integration tests
