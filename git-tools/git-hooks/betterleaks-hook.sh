@@ -3,15 +3,15 @@
 # Runs on `prepare-commit-msg` so `git commit -n` / `--no-verify` cannot bypass it.
 set -euo pipefail
 
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.cargo/bin"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="${BETTERLEAKS_CONFIG_DIR:-$HOME/.config/betterleaks}"
 ACTIVE_CONFIG="$CONFIG_DIR/betterleaks-unified.toml"
 STAMP_FILE="$CONFIG_DIR/.compiled-for-version"
-SYNC_SCRIPT="$CONFIG_DIR/sync_overlay.py"
+SYNC_SCRIPT="$SCRIPT_DIR/../scripts/sync-betterleaks-overlay.py"
 if [ ! -f "$SYNC_SCRIPT" ]; then
-    SYNC_SCRIPT="$SCRIPT_DIR/../scripts/sync-betterleaks-overlay.py"
+    SYNC_SCRIPT="$CONFIG_DIR/sync_overlay.py"
 fi
 
 if ! command -v betterleaks >/dev/null 2>&1; then
@@ -28,13 +28,23 @@ fi
 # Auto-recompile config in <0.3s if betterleaks was upgraded (e.g. v1.9.0 -> v2.0.0 via brew)
 if [ ! -f "$ACTIVE_CONFIG" ] || [ "$CURRENT_VER" != "$STAMP_VER" ]; then
     if command -v uv >/dev/null 2>&1 && [ -f "$SYNC_SCRIPT" ]; then
-        uv run "$SYNC_SCRIPT" --offline >/dev/null 2>&1 || uv run "$SYNC_SCRIPT" >/dev/null
+        if ! uv run "$SYNC_SCRIPT" --offline >/dev/null 2>&1; then
+            uv run "$SYNC_SCRIPT" >/dev/null || true
+        fi
+    fi
+    if [ -f "$STAMP_FILE" ]; then
+        STAMP_VER="$(tr -d '\r\n' < "$STAMP_FILE")"
     fi
 elif [ -n "$(find "$ACTIVE_CONFIG" -mtime +7 2>/dev/null)" ]; then
     # Non-blocking background refresh when overlay cache is >7 days old
     if command -v uv >/dev/null 2>&1 && [ -f "$SYNC_SCRIPT" ]; then
-        (uv run "$SYNC_SCRIPT" >/dev/null 2>&1 &)
+        (uv run "$SYNC_SCRIPT" </dev/null >/dev/null 2>&1 &)
     fi
+fi
+
+if [ ! -f "$ACTIVE_CONFIG" ] || [ "$CURRENT_VER" != "$STAMP_VER" ]; then
+    echo "betterleaks: active config missing or out-of-date at $ACTIVE_CONFIG; refusing commit" >&2
+    exit 1
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"

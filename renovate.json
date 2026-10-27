@@ -9,6 +9,7 @@
   "pep723": {
     "managerFilePatterns": [
       "/(^|/)hooks/[^/]+\\.py$/",
+      "/(^|/)scripts/[^/]+\\.py$/",
       "/^\\.claude/commands/[^/]+\\.py$/"
     ]
   },

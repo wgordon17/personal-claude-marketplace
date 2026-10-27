@@ -200,6 +200,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 ### For Git Tools
 
 - **[git-branchless](https://github.com/arxanas/git-branchless)**: `brew install git-branchless` — Required by `/git-history` skill and `/git-tools:review-commits` command
+- **[betterleaks](https://github.com/betterleaks/betterleaks)**: `brew install betterleaks` — Required by `git-tools/git-hooks/betterleaks-hook.sh` and `git-tools/scripts/sync-betterleaks-overlay.py`
 - **[pre-commit](https://pre-commit.com/)**: `uv tool install pre-commit` — Required by git-tools defense-in-depth hook scripts
 
 ### Verification
@@ -266,6 +267,7 @@ Plugins in this marketplace have external tool requirements and optional MCP ser
 | [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`) |
 | [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
 | [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
+| [`betterleaks`](https://github.com/betterleaks/betterleaks) | git-tools | Global `prepare-commit-msg` secret scanner hook and rule-overlay compiler |
 | [`pre-commit`](https://pre-commit.com/) | git-tools | Defense-in-depth git hook scripts |
 | [Chrome / Chromium](https://www.google.com/chrome/) | fetchaller-mcp | Dedicated logged-out browser (`BROWSER_EXECUTABLE_PATH`) for bot-protected site fallback |
 | [draw.io Desktop CLI](https://www.drawio.com/) | drawio (optional) | Optional PNG/SVG/PDF export from generated `.drawio` files |

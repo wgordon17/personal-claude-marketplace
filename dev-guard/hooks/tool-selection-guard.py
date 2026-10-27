@@ -1258,14 +1258,34 @@ def extract_bash_c(cmd: str) -> str | None:
     return None
 
 
+_HEREDOC_SUBSHELL_RE = re.compile(
+    r"\$\(\s*cat\s*<<-?\s*['\"]?(\w+)['\"]?[ \t]*\n(?:.*?\n)?[ \t]*\1[ \t]*\n?[ \t]*\)",
+    re.DOTALL,
+)
+
+
+_HEREDOC_UNQUOTED_SUBSHELL_RE = re.compile(
+    r"\$\(\s*cat\s*<<-?\s*(\w+)[ \t]*\n((?:.*?\n)?)[ \t]*\1[ \t]*\n?[ \t]*\)",
+    re.DOTALL,
+)
+
+
 def extract_subshells(cmd: str) -> list[str]:
     """Extract commands inside $() and `` substitutions for rule checking.
 
     Returns a list of inner commands found in subshell substitutions.
     """
     inner = []
-    # $(...) — handles simple nesting by finding matched parens
+    # $(...) — handles cat <<'EOF' heredoc subshells first so inner ')' or lines
+    # inside literal heredoc bodies are not misparsed as executable commands.
+    # For unquoted <<EOF heredocs, any nested $(...) or `...` inside the heredoc
+    # body is still extracted and checked below.
+    heredoc_spans = [hm.span() for hm in _HEREDOC_SUBSHELL_RE.finditer(cmd)]
+    for um in _HEREDOC_UNQUOTED_SUBSHELL_RE.finditer(cmd):
+        inner.extend(extract_subshells(um.group(2)))
     for m in re.finditer(r"\$\(", cmd):
+        if any(hs <= m.start() < he for hs, he in heredoc_spans):
+            continue
         start = m.end()
         depth = 1
         pos = start
@@ -1277,8 +1297,18 @@ def extract_subshells(cmd: str) -> list[str]:
             pos += 1
         if depth == 0:
             inner.append(cmd[start : pos - 1].strip())
-    # `...` backticks (no nesting)
+    # `...` backticks (no nesting) — skip literal backticks inside quoted <<'EOF' heredocs
+    quoted_heredoc_spans = [
+        hm.span()
+        for hm in re.finditer(
+            r"\$\(\s*cat\s*<<-?\s*['\"](\w+)['\"][ \t]*\n(?:.*?\n)?[ \t]*\1[ \t]*\n?[ \t]*\)",
+            cmd,
+            re.DOTALL,
+        )
+    ]
     for m in re.finditer(r"`([^`]+)`", cmd):
+        if any(hs <= m.start() < he for hs, he in quoted_heredoc_spans):
+            continue
         inner.append(m.group(1).strip())
     return inner
 
@@ -1294,6 +1324,11 @@ def strip_subshells(cmd: str) -> str:
     i = 0
     while i < len(cmd):
         if cmd[i : i + 2] == "$(":
+            hm = _HEREDOC_SUBSHELL_RE.match(cmd, i)
+            if hm:
+                out.append("$()")
+                i = hm.end()
+                continue
             depth = 1
             pos = i + 2
             while pos < len(cmd) and depth > 0:
@@ -1338,6 +1373,12 @@ def _split_respecting_quotes(
     i = 0
     while i < len(text):
         c = text[i]
+        if c == "$" and not in_single and text[i : i + 2] == "$(":
+            hm = _HEREDOC_SUBSHELL_RE.match(text, i)
+            if hm:
+                current.append(hm.group(0))
+                i = hm.end()
+                continue
         if c == "'" and not in_double and not in_backtick:
             in_single = not in_single
             current.append(c)
@@ -1552,7 +1593,7 @@ _COMMIT_VALUE_FLAGS = frozenset(
         "-F",
         "-c",
         "-C",
-        "-u",
+        "-t",
         "--message",
         "--file",
         "--reuse-message",
@@ -1561,40 +1602,144 @@ _COMMIT_VALUE_FLAGS = frozenset(
         "--squash",
         "--author",
         "--date",
-        "--untracked-files",
+        "--template",
         "--cleanup",
         "--pathspec-from-file",
         "--trailer",
     }
 )
 
+_COMMIT_SHORT_VALUE_REQUIRED = frozenset({"m", "F", "c", "C", "t"})
+_COMMIT_SHORT_VALUE_OPTIONAL = frozenset({"u", "S"})
+_GIT_GLOBAL_VALUE_FLAGS = frozenset(
+    {
+        "-C",
+        "-c",
+        "--git-dir",
+        "--work-tree",
+        "--namespace",
+        "--exec-path",
+        "--super-prefix",
+        "--config-env",
+    }
+)
+
 _HOOK_CONFIG_KEY_RE = r"(?:core\.hooksPath|hook\.[^=\s'\"]+\.(?:enabled|command|event))"
+_HOOK_CONFIG_SECTION_RE = r"(?:core\.hooksPath|hook\.[^=\s'\"]+)"
+_HOOK_CONFIG_READ_UNSET_RE = re.compile(
+    r"(?:--(?:get(?:-all|-regexp)?|unset(?:-all)?|list)\b|(?<!\S)(?:get|unset|list|-l)(?!\S))"
+)
 
 
-def _has_commit_short_no_verify(cmd: str) -> bool:
-    """Return True if a `git commit` command passes `-n` (short for `--no-verify`)."""
-    m = re.search(r"\bgit\b.*?\bcommit\b(.*)$", cmd, re.DOTALL)
+def _is_hookspath_config_write(cmd: str) -> bool:
+    """Return True if a `git config` command writes or removes core.hooksPath or hook.<name>.*."""
+    if not re.search(r"\bgit\b.*\bconfig\b", cmd, re.IGNORECASE):
+        return False
+    if re.search(
+        rf"(?:--)?(?:remove|rename)-section\b.*\b{_HOOK_CONFIG_SECTION_RE}\b",
+        cmd,
+        re.IGNORECASE,
+    ):
+        return True
+    for m in re.finditer(rf"\b{_HOOK_CONFIG_KEY_RE}\b", cmd, re.IGNORECASE):
+        cfg_idx = cmd.lower().find("config")
+        prefix = cmd[cfg_idx + len("config") : m.start()] if cfg_idx != -1 else ""
+        if not _HOOK_CONFIG_READ_UNSET_RE.search(prefix):
+            return True
+    return False
+
+
+def _sanitize_git_args(cmd: str) -> str:
+    """Strip heredocs and non-flag quoted arguments from a git command."""
+    sanitized = re.sub(
+        r'"?\$\(\s*cat\s*<<-?\s*[\'"]?(\w+)[\'"]?[ \t]*\n(?:.*?\n)?[ \t]*\1[ \t]*\n?[ \t]*\)"?',
+        "_ARG_",
+        cmd,
+        flags=re.DOTALL,
+    )
+    sanitized = re.sub(
+        r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n.*?(?:\n[ \t]*\1\b|$)",
+        r" \2 ",
+        sanitized,
+        flags=re.DOTALL,
+    )
+    # Collapse partial quoting on flags (e.g. `-"n"`, `-'n'`, `--"no-verify"`)
+    sanitized = re.sub(
+        r"""(?<!\S)(--?)(?:'([a-zA-Z0-9-]+)'|"([a-zA-Z0-9-]+)")(?!\S)""",
+        lambda m_p: m_p.group(1) + (m_p.group(2) or m_p.group(3)),
+        sanitized,
+    )
+    # Replace quoted string arguments with placeholders so `-n`, `--no-verify`, or
+    # `commit` inside quoted arguments (e.g. `git log --grep="initial commit" -n 5`
+    # or `git commit -m "docs: mention --no-verify"`) is ignored, while preserving
+    # single-token quoted flags like `git commit "-n"` or `git commit "--no-verify"`.
+    return re.sub(
+        r"""(?:'[^']*'|"(?:\\.|[^"\\])*")""",
+        lambda m_q: (
+            m_q.group(0)[1:-1]
+            if re.match(r"^['\"](?:-[a-zA-Z]+|--[a-zA-Z0-9-]+)['\"]$", m_q.group(0))
+            else "_ARG_"
+        ),
+        sanitized,
+    )
+
+
+def _has_git_no_verify(cmd: str) -> bool:
+    """Return True if a `git` command passes `--no-verify` or `git commit` passes `-n`."""
+    sanitized = strip_env_prefix(strip_shell_keyword(_sanitize_git_args(cmd)))
+    m = re.match(r"^\s*git\b(.*)$", sanitized, re.DOTALL)
     if not m:
         return False
-    # Replace quoted string arguments with placeholders so `-n` inside a commit message is ignored
-    tail = re.sub(r"""(?:'[^']*'|"(?:\\.|[^"\\])*")""", " _ARG_ ", m.group(1))
-    tokens = tail.split()
+    tokens = m.group(1).split()
+    i = 0
+    subcmd_idx = None
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in _GIT_GLOBAL_VALUE_FLAGS:
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        subcmd_idx = i
+        break
+    if subcmd_idx is None:
+        return False
+    subcmd = tokens[subcmd_idx]
+    rest = tokens[subcmd_idx + 1 :]
+
+    if subcmd != "commit":
+        for tok in rest:
+            if tok == "--":
+                break
+            if tok == "--no-verify":
+                return True
+        return False
+
     skip_next = False
-    for tok in tokens:
+    for tok in rest:
         if skip_next:
             skip_next = False
             continue
         if tok == "--":
             break
+        if tok == "--no-verify":
+            return True
         if tok in _COMMIT_VALUE_FLAGS:
             skip_next = True
             continue
         if tok.startswith("--"):
             continue
-        if re.match(r"^-[a-zA-Z]*n[a-zA-Z]*$", tok):
-            if tok[-1] in {"m", "F", "c", "C"}:
-                skip_next = True
-            return True
+        if tok.startswith("-") and len(tok) > 1:
+            for idx, ch in enumerate(tok[1:], start=1):
+                if ch == "n":
+                    return True
+                if ch in _COMMIT_SHORT_VALUE_REQUIRED:
+                    if idx == len(tok) - 1:
+                        skip_next = True
+                    break
+                if ch in _COMMIT_SHORT_VALUE_OPTIONAL or not ch.isalpha():
+                    break
     return False
 
 
@@ -1693,27 +1838,20 @@ GIT_DENY_RULES: list[GitRule] = [
     ),
     GitRule(
         "no-verify",
-        lambda cmd: (
-            bool(re.search(r"git\s+", cmd))
-            and ("--no-verify" in cmd or _has_commit_short_no_verify(cmd))
-        ),
+        lambda cmd: bool(re.search(r"git\s+", cmd)) and _has_git_no_verify(cmd),
         "--no-verify / -n flag is FORBIDDEN. Git hooks must run for all commits and pushes.",
     ),
     GitRule(
         "hookspath-c",
         lambda cmd: bool(
-            re.search(rf"git\s+.*-c\s+['\"]?{_HOOK_CONFIG_KEY_RE}\b", cmd, re.IGNORECASE)
+            re.search(rf"git\s+.*(?<!\S)-c\s*['\"]?{_HOOK_CONFIG_KEY_RE}\b", cmd, re.IGNORECASE)
         ),
         "git -c core.hooksPath=... or hook.<name>.* is FORBIDDEN. "
         "Overriding git hook configuration disables git hooks.",
     ),
     GitRule(
         "hookspath-config",
-        lambda cmd: (
-            bool(re.search(r"git\s+config\b", cmd))
-            and bool(re.search(rf"\b{_HOOK_CONFIG_KEY_RE}\b", cmd, re.IGNORECASE))
-            and not re.search(r"--(get(?:-regexp)?|unset(?:-all)?|list)\b|\s-l(\s|$)", cmd)
-        ),
+        _is_hookspath_config_write,
         "git config core.hooksPath or hook.<name>.* is FORBIDDEN. "
         "Modifying git hook configuration disables or overrides git hooks. "
         "Use --unset to restore hooks.",
@@ -1726,9 +1864,18 @@ GIT_DENY_RULES: list[GitRule] = [
                 cmd,
                 re.IGNORECASE,
             )
+            or (
+                re.search(
+                    r"(?:^|\s)(?:GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_NOSYSTEM|BETTERLEAKS_CONFIG_DIR)=\S*",
+                    cmd,
+                )
+                and re.search(r"\b(?:git|export)\b", cmd)
+            )
         ),
-        "GIT_CONFIG_KEY_N=core.hooksPath or hook.<name>.* is FORBIDDEN. "
-        "Setting hook config via GIT_CONFIG_* env vars bypasses git hook enforcement.",
+        "GIT_CONFIG_KEY_N=core.hooksPath / hook.<name>.* or global git/hook config "
+        "env override (GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM, "
+        "BETTERLEAKS_CONFIG_DIR) is FORBIDDEN. "
+        "Setting hook config via environment variables bypasses git hook enforcement.",
     ),
     GitRule(
         "hookspath-config-env",
@@ -2079,8 +2226,11 @@ def check_git_safety(cmd: str, fetch_seen: bool = False) -> bool:
     Exits immediately on block match. Records or emits ask decision and returns True
     on ask match; returns False otherwise.
     """
-    # Early exit: not a git command
-    if not re.search(r"(^|\s)git\s", cmd):
+    # Early exit: not a git command and not a git/hook config env override
+    if not re.search(
+        r"(^|\s)git\s|\b(?:GIT_CONFIG_KEY_\d+|GIT_CONFIG_PARAMETERS|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_NOSYSTEM|BETTERLEAKS_CONFIG_DIR)=",
+        cmd,
+    ):
         return False
 
     # Trusted directory check (before other rules — fundamental access control)
@@ -2512,9 +2662,10 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
             if _FETCH_PATTERN.search(inner):
                 fetch_seen = True
             inner_no_subshells = strip_subshells(inner)
+            inner_skip = frozenset({"cat-heredoc"}) if ">" not in inner else None
             if inner_no_subshells != inner:
                 saved_pending = list(_pending_decisions)
-                _check_rules(inner, fetch_seen)
+                _check_rules(inner, fetch_seen, skip_rules=inner_skip)
                 _pending_decisions[:] = saved_pending
             inner_pipes = split_pipes(inner_no_subshells)
             before_inner_pipes = len(_pending_decisions)
@@ -2526,11 +2677,13 @@ def _check_subcmd(subcmd: str, fetch_seen: bool) -> tuple[bool, bool]:
             before_inner_outer = len(_pending_decisions)
             if len(inner_pipes) > 1 and inner_pipes_matched:
                 saved_pending = list(_pending_decisions)
-                _check_rules(inner_no_subshells, fetch_seen)
+                _check_rules(inner_no_subshells, fetch_seen, skip_rules=inner_skip)
                 _pending_decisions[:] = saved_pending
-                inner_rule_matched = _check_rules(inner_pipes[0], fetch_seen)
+                inner_rule_matched = _check_rules(inner_pipes[0], fetch_seen, skip_rules=inner_skip)
             else:
-                inner_rule_matched = _check_rules(inner_no_subshells, fetch_seen)
+                inner_rule_matched = _check_rules(
+                    inner_no_subshells, fetch_seen, skip_rules=inner_skip
+                )
             inner_outer_matched = (
                 inner_fetch or inner_rule_matched or (len(_pending_decisions) > before_inner_outer)
             )

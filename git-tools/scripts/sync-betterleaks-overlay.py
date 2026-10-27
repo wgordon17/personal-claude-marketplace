@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.13"
 # dependencies = [
 #   "pyyaml>=6.0.2",
 #   "tomli-w>=1.1.0",
@@ -20,8 +20,11 @@ noise, normalizes all capture groups to group 1 (so neither v1 `secretGroup` nor
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import copy
+import fcntl
 import json
+import math
 import os
 import re
 import subprocess
@@ -32,13 +35,17 @@ from typing import Any
 import tomli_w
 import yaml
 
-CONFIG_DIR = Path(
-    os.environ.get("BETTERLEAKS_CONFIG_DIR", str(Path.home() / ".config" / "betterleaks"))
-)
-CACHE_DIR = CONFIG_DIR / "cache"
-OVERLAY_V2_PATH = CONFIG_DIR / "overlay-v2.toml"
-UNIFIED_ACTIVE_PATH = CONFIG_DIR / "betterleaks-unified.toml"
-VERSION_STAMP_PATH = CONFIG_DIR / ".compiled-for-version"
+_YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def _resolve_config_dir(config_dir: Path | None = None) -> Path:
+    if config_dir is not None:
+        return config_dir
+    env_dir = os.environ.get("BETTERLEAKS_CONFIG_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return Path.home() / ".config" / "betterleaks"
+
 
 LEAKTK_PUBLIC_URL = (
     "https://raw.githubusercontent.com/leaktk/patterns/main/target/patterns/gitleaks/8.27.0"
@@ -87,25 +94,33 @@ CURATED_VELES_RULES: dict[str, list[str]] = {
     "veles.secrets/postmancollectiontoken": ["pmat-"],
 }
 
-NOTSECRET_FILTER_EXPR = r'matchesAny(finding["line"], [`(?i)\bnot[\t\x20\-_]*secret\b`])'
+NOTSECRET_FILTER_EXPR = (
+    r'matchesAny(finding["line"], [`(?i)\bnot[\t\x20\-_]*secret\b`]) || '
+    r'matchesAny(finding["secret"], [`^(?:env\.|os\.environ/)[A-Z_][A-Z0-9_]*$`])'
+)
 
 
 def _write_secure(path: Path, content: str) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
-        os.write(fd, content.encode("utf-8"))
-    finally:
-        os.close(fd)
-    os.chmod(tmp_path, 0o600)
-    os.replace(tmp_path, path)
+        try:
+            os.write(fd, content.encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def _fetch_or_cache(url: str, cache_file: Path, offline: bool = False) -> str:
-    CACHE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(CACHE_DIR, 0o700)
+    cache_dir = cache_file.parent
+    cache_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(cache_dir, 0o700)
     if not offline:
         try:
             proc = subprocess.run(
@@ -117,6 +132,7 @@ def _fetch_or_cache(url: str, cache_file: Path, offline: bool = False) -> str:
             if proc.stdout.strip():
                 _write_secure(cache_file, proc.stdout)
                 return proc.stdout
+            raise RuntimeError(f"Empty response from {url}")
         except Exception:
             if cache_file.is_file():
                 return cache_file.read_text(encoding="utf-8")
@@ -133,7 +149,12 @@ def _quote_expr_regex(pattern: str) -> str:
 def _translate_allowlist_to_v2_expr(rule: dict[str, Any]) -> str | None:
     parts: list[str] = []
     if "entropy" in rule:
-        parts.append(f'entropy(finding["secret"]) <= {float(rule["entropy"])}')
+        entropy_val = float(rule["entropy"])
+        if not math.isfinite(entropy_val):
+            raise ValueError(
+                f"Non-finite entropy value in rule {rule.get('id')!r}: {rule['entropy']!r}"
+            )
+        parts.append(f'entropy(finding["secret"]) <= {entropy_val}')
 
     als: list[dict[str, Any]] = []
     if isinstance(rule.get("allowlist"), dict):
@@ -167,15 +188,30 @@ def _translate_allowlist_to_v2_expr(rule: dict[str, Any]) -> str | None:
     return " || ".join(parts)
 
 
-def build_v2_compatible_overlay_rules(offline: bool = False) -> list[dict[str, Any]]:
+def build_v2_compatible_overlay_rules(
+    offline: bool = False,
+    config_dir: Path | None = None,
+) -> list[dict[str, Any]]:
     """Build curated LeakTK + Veles rules using only the v1+v2 intersection schema."""
-    lt_text = _fetch_or_cache(
-        LEAKTK_PUBLIC_URL, CACHE_DIR / "leaktk-public-8.27.0.toml", offline=offline
-    )
-    veles_text = _fetch_or_cache(VELES_YAML_URL, CACHE_DIR / "veles.yml", offline=offline)
+    cfg_dir = _resolve_config_dir(config_dir)
+    cache_dir = cfg_dir / "cache"
+    lt_cache = cache_dir / "leaktk-public-8.27.0.toml"
+    veles_cache = cache_dir / "veles.yml"
+
+    if offline:
+        lt_text = _fetch_or_cache(LEAKTK_PUBLIC_URL, lt_cache, offline=True)
+        veles_text = _fetch_or_cache(VELES_YAML_URL, veles_cache, offline=True)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            lt_future = pool.submit(_fetch_or_cache, LEAKTK_PUBLIC_URL, lt_cache, False)
+            veles_future = pool.submit(_fetch_or_cache, VELES_YAML_URL, veles_cache, False)
+            lt_text = lt_future.result()
+            veles_text = veles_future.result()
 
     lt_doc = tomllib.loads(lt_text)
-    veles_doc = yaml.safe_load(veles_text)
+    veles_doc = yaml.load(veles_text, Loader=_YAML_SAFE_LOADER)
+    if not isinstance(veles_doc, dict):
+        raise RuntimeError("Invalid Veles YAML structure: expected mapping at top level")
 
     overlay_rules: list[dict[str, Any]] = []
 
@@ -235,15 +271,26 @@ def build_v2_compatible_overlay_rules(offline: bool = False) -> list[dict[str, A
             ]
         overlay_rules.append(v_out)
 
+    compiled_ids = {r["id"] for r in overlay_rules}
+    missing_leaktk = sorted(set(CURATED_LEAKTK_RULE_IDS.values()) - compiled_ids)
+    missing_veles = sorted(set(CURATED_VELES_RULES.keys()) - compiled_ids)
+    if missing_leaktk or missing_veles:
+        raise RuntimeError(
+            "Curated overlay rule verification failed; "
+            f"missing LeakTK={missing_leaktk}, Veles={missing_veles}"
+        )
+
     return overlay_rules
 
 
 def _installed_betterleaks_info() -> tuple[str, bool, dict[str, Any]]:
     ver_out = subprocess.check_output(["betterleaks", "--version"], text=True).strip()
-    is_v2 = bool(re.search(r"\b2\.\d+\.\d+", ver_out))
+    is_v2 = bool(re.search(r"(?:^|[^0-9])2\.\d+\.\d+", ver_out))
+    if is_v2:
+        return ver_out, True, {}
     cfg_out = subprocess.check_output(["betterleaks", "config", "show"], text=True)
     cfg_doc = tomllib.loads(cfg_out)
-    return ver_out, is_v2, cfg_doc
+    return ver_out, False, cfg_doc
 
 
 def _validate_and_smoke_test(config_path: Path, is_v2: bool) -> None:
@@ -297,51 +344,78 @@ def _validate_and_smoke_test(config_path: Path, is_v2: bool) -> None:
         )
 
 
-def sync_all(offline: bool = False) -> dict[str, Any]:
-    ver_str, is_v2, builtin_doc = _installed_betterleaks_info()
-    overlay_rules = build_v2_compatible_overlay_rules(offline=offline)
+def sync_all(offline: bool = False, config_dir: Path | None = None) -> dict[str, Any]:
+    cfg_dir = _resolve_config_dir(config_dir)
+    cfg_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(cfg_dir, 0o700)
 
-    v2_overlay_doc: dict[str, Any] = {
-        "title": "Betterleaks v2 Unified Overlay (Curated LeakTK + Google Veles)",
-        "extend": {"useDefault": True},
-        "filter": NOTSECRET_FILTER_EXPR,
-        "rules": overlay_rules,
-    }
-    _write_secure(OVERLAY_V2_PATH, tomli_w.dumps(v2_overlay_doc, multiline_strings=True))
+    overlay_v2_path = cfg_dir / "overlay-v2.toml"
+    unified_active_path = cfg_dir / "betterleaks-unified.toml"
+    version_stamp_path = cfg_dir / ".compiled-for-version"
+    lock_path = cfg_dir / ".sync.lock"
 
-    staging_path = UNIFIED_ACTIVE_PATH.with_suffix(".toml.staging")
-    if is_v2:
-        _write_secure(staging_path, tomli_w.dumps(v2_overlay_doc, multiline_strings=True))
-    else:
-        merged_doc = copy.deepcopy(builtin_doc)
-        merged_doc["title"] = (
-            "Betterleaks Unified Config (Built-in + Curated LeakTK + Google Veles)"
+    lock_fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        ver_str, is_v2, builtin_doc = _installed_betterleaks_info()
+        overlay_rules = build_v2_compatible_overlay_rules(offline=offline, config_dir=cfg_dir)
+
+        v2_overlay_doc: dict[str, Any] = {
+            "title": "Betterleaks v2 Unified Overlay (Curated LeakTK + Google Veles)",
+            "extend": {"useDefault": True},
+            "filter": NOTSECRET_FILTER_EXPR,
+            "rules": overlay_rules,
+        }
+        v2_overlay_toml = tomli_w.dumps(v2_overlay_doc, multiline_strings=True)
+        _write_secure(overlay_v2_path, v2_overlay_toml)
+
+        staging_path = unified_active_path.with_name(
+            f"{unified_active_path.name}.{os.getpid()}.staging"
         )
-        base_filter = str(merged_doc.get("filter", "")).strip()
-        merged_doc["filter"] = (
-            f"({base_filter}) || ({NOTSECRET_FILTER_EXPR})"
-            if base_filter
-            else NOTSECRET_FILTER_EXPR
-        )
-        existing_ids = {r["id"] for r in merged_doc.get("rules", [])}
-        for r in overlay_rules:
-            if r["id"] not in existing_ids:
-                merged_doc.setdefault("rules", []).append(r)
-        _write_secure(staging_path, tomli_w.dumps(merged_doc, multiline_strings=True))
+        try:
+            if is_v2:
+                _write_secure(staging_path, v2_overlay_toml)
+            else:
+                merged_doc = copy.deepcopy(builtin_doc)
+                merged_doc["title"] = (
+                    "Betterleaks Unified Config (Built-in + Curated LeakTK + Google Veles)"
+                )
+                base_filter = str(merged_doc.get("filter", "")).strip()
+                merged_doc["filter"] = (
+                    f"({base_filter}) || ({NOTSECRET_FILTER_EXPR})"
+                    if base_filter
+                    else NOTSECRET_FILTER_EXPR
+                )
+                existing_ids = {r["id"] for r in merged_doc.get("rules", [])}
+                for r in overlay_rules:
+                    if r["id"] not in existing_ids:
+                        merged_doc.setdefault("rules", []).append(r)
+                _write_secure(staging_path, tomli_w.dumps(merged_doc, multiline_strings=True))
 
-    _validate_and_smoke_test(staging_path, is_v2=is_v2)
-    os.replace(staging_path, UNIFIED_ACTIVE_PATH)
-    _write_secure(VERSION_STAMP_PATH, ver_str + "\n")
+            _validate_and_smoke_test(staging_path, is_v2=is_v2)
+            os.replace(staging_path, unified_active_path)
+        except BaseException:
+            staging_path.unlink(missing_ok=True)
+            raise
 
-    return {
-        "installed_betterleaks": ver_str,
-        "schema_mode": "v2_extend_overlay" if is_v2 else "v1_merged_v2_ready_rules",
-        "overlay_v2_path": str(OVERLAY_V2_PATH),
-        "active_unified_path": str(UNIFIED_ACTIVE_PATH),
-        "curated_overlay_rules": len(overlay_rules),
-        "builtin_rules": len(builtin_doc.get("rules", [])),
-        "total_active_rules": len(builtin_doc.get("rules", [])) + len(overlay_rules),
-    }
+        _write_secure(version_stamp_path, ver_str + "\n")
+
+        builtin_rules_list = builtin_doc.get("rules", [])
+        builtin_ids = {r["id"] for r in builtin_rules_list if isinstance(r, dict) and "id" in r}
+        overlay_ids = {r["id"] for r in overlay_rules}
+
+        return {
+            "installed_betterleaks": ver_str,
+            "schema_mode": "v2_extend_overlay" if is_v2 else "v1_merged_v2_ready_rules",
+            "overlay_v2_path": str(overlay_v2_path),
+            "active_unified_path": str(unified_active_path),
+            "curated_overlay_rules": len(overlay_rules),
+            "builtin_rules": len(builtin_rules_list),
+            "total_active_rules": len(builtin_ids | overlay_ids),
+        }
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
 
 
 def main() -> None:
