@@ -4,6 +4,71 @@
 # Detects repo configuration and outputs tailored git instructions.
 # REPLACES Claude's built-in git instructions (set includeGitInstructions: false).
 
+install_atomic_executable() {
+    local src="$1"
+    local dst="$2"
+    local tmp="${dst}.$$.tmp"
+
+    [ -f "$src" ] || return 0
+    if [ -f "$dst" ] && [ ! -L "$dst" ] && [ -x "$dst" ] && cmp -s "$src" "$dst" 2>/dev/null; then
+        return 0
+    fi
+    if cp "$src" "$tmp" 2>/dev/null && chmod 700 "$tmp" 2>/dev/null && mv -f "$tmp" "$dst" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+}
+
+ensure_betterleaks_hook() {
+    # Skip during unrelated pytest runs unless BETTERLEAKS_CONFIG_DIR is explicitly isolated
+    if [ -n "${PYTEST_CURRENT_TEST:-}" ] && [ -z "${BETTERLEAKS_CONFIG_DIR:-}" ]; then
+        return 0
+    fi
+
+    export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.cargo/bin"
+    if ! command -v betterleaks >/dev/null 2>&1; then
+        echo "Warning: betterleaks not found in PATH — global secret-scanning hook not enabled. Install with: brew install betterleaks"
+        echo ""
+        return 0
+    fi
+
+    local script_dir plugin_root config_dir hook_src sync_src hook_dst sync_dst
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || return 0
+    plugin_root="${CLAUDE_PLUGIN_ROOT:-$(cd "$script_dir/.." 2>/dev/null && pwd)}" || return 0
+    config_dir="${BETTERLEAKS_CONFIG_DIR:-$HOME/.config/betterleaks}"
+    hook_src="$plugin_root/git-hooks/betterleaks-hook.sh"
+    sync_src="$plugin_root/scripts/sync-betterleaks-overlay.py"
+    hook_dst="$config_dir/git-hook.sh"
+    sync_dst="$config_dir/sync_overlay.py"
+
+    mkdir -p "$config_dir" 2>/dev/null || return 0
+    chmod 700 "$config_dir" 2>/dev/null || true
+
+    install_atomic_executable "$hook_src" "$hook_dst"
+    install_atomic_executable "$sync_src" "$sync_dst"
+
+    if [ "$(git config --global --get hook.betterleaks.event 2>/dev/null || true)" != "prepare-commit-msg" ]; then
+        git config --global hook.betterleaks.event prepare-commit-msg 2>/dev/null || true
+    fi
+    if [ "$(git config --global --get hook.betterleaks.parallel 2>/dev/null || true)" != "true" ]; then
+        git config --global hook.betterleaks.parallel true 2>/dev/null || true
+    fi
+    if [ "$(git config --global --get hook.betterleaks.command 2>/dev/null || true)" != "$hook_dst" ]; then
+        git config --global hook.betterleaks.command "$hook_dst" 2>/dev/null || true
+    fi
+
+    if [ -z "${PYTEST_CURRENT_TEST:-}" ] && [ -x "$sync_dst" ] && command -v uv >/dev/null 2>&1; then
+        local active_cfg="$config_dir/betterleaks-unified.toml"
+        if [ ! -f "$active_cfg" ] || [ -n "$(find "$active_cfg" -mtime +7 2>/dev/null)" ]; then
+            (uv run "$sync_dst" </dev/null >/dev/null 2>&1 &)
+        elif [ "$sync_dst" -nt "$active_cfg" ]; then
+            ({ uv run "$sync_dst" --offline || uv run "$sync_dst"; } </dev/null >/dev/null 2>&1 &)
+        fi
+    fi
+}
+
+ensure_betterleaks_hook
+
 # Early exit: not a git repo
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
     exit 0

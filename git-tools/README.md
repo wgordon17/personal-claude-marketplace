@@ -25,12 +25,10 @@ Defense-in-depth hook scripts for use with pre-commit framework and Git 2.54+ ad
 
 ### Global Betterleaks Hook Setup (Git 2.54+)
 
-```bash
-uv run git-tools/scripts/sync-betterleaks-overlay.py
-git config --global hook.betterleaks.event prepare-commit-msg
-git config --global hook.betterleaks.parallel true
-git config --global hook.betterleaks.command /path/to/git-tools/git-hooks/betterleaks-hook.sh
-```
+`scripts/git-instructions.sh` automatically installs and syncs the hook on every `SessionStart` when `betterleaks` is installed (emitting a warning and skipping `hook.betterleaks.*` wiring if `betterleaks` is missing):
+- Atomically copies `git-hooks/betterleaks-hook.sh` → `~/.config/betterleaks/git-hook.sh` and `scripts/sync-betterleaks-overlay.py` → `~/.config/betterleaks/sync_overlay.py` whenever plugin files change (avoiding dangling symlinks across versioned plugin cache updates)
+- Ensures `hook.betterleaks.event = prepare-commit-msg`, `hook.betterleaks.parallel = true`, and `hook.betterleaks.command = ~/.config/betterleaks/git-hook.sh` are set in `~/.gitconfig`
+- Pre-compiles or refreshes `~/.config/betterleaks/betterleaks-unified.toml` in the background when missing, `>7` days old, or older than `sync_overlay.py`
 
 ## Requirements
 

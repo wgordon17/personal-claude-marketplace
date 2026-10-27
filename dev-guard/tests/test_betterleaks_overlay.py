@@ -19,6 +19,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYNC_SCRIPT_PATH = REPO_ROOT / "git-tools" / "scripts" / "sync-betterleaks-overlay.py"
 HOOK_SCRIPT_PATH = REPO_ROOT / "git-tools" / "git-hooks" / "betterleaks-hook.sh"
+GIT_INSTRUCTIONS_PATH = REPO_ROOT / "git-tools" / "scripts" / "git-instructions.sh"
 
 
 def _load_sync_module():
@@ -465,3 +466,107 @@ exit 0
         assert invocations[0].endswith("sync-betterleaks-overlay.py --offline")
         assert invocations[1].endswith("sync-betterleaks-overlay.py")
         assert "sync_overlay.py" not in "\n".join(invocations)
+
+    def test_session_start_auto_installs_and_atomically_syncs_betterleaks_files(
+        self, tmp_path: Path
+    ):
+        cfg_dir = tmp_path / "betterleaks"
+        cfg_dir.mkdir()
+        # Pre-populate a symlink for git-hook.sh pointing to a victim file to verify
+        # atomic mv replaces the symlink instead of writing through it
+        victim = tmp_path / "victim.sh"
+        victim.write_text("original-victim\n", encoding="utf-8")
+        hook_dst = cfg_dir / "git-hook.sh"
+        hook_dst.symlink_to(victim)
+        # Pre-populate stale sync_overlay.py and pre-existing unified config
+        sync_dst = cfg_dir / "sync_overlay.py"
+        sync_dst.write_text("# stale\n", encoding="utf-8")
+        (cfg_dir / "betterleaks-unified.toml").write_text("rules = []\n", encoding="utf-8")
+
+        gitconfig = tmp_path / ".gitconfig"
+        gitconfig.write_text("", encoding="utf-8")
+
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_executable(bin_dir / "betterleaks", "#!/bin/sh\necho 'betterleaks 2.0.0'\n")
+
+        env = os.environ.copy()
+        env["PATH"] = f"{bin_dir}:{env.get('PATH', '/usr/bin:/bin')}"
+        env["BETTERLEAKS_CONFIG_DIR"] = str(cfg_dir)
+        env["GIT_CONFIG_GLOBAL"] = str(gitconfig)
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+
+        # Run outside a git repo (tmp_path) — ensure_betterleaks_hook still runs before early exit
+        proc = subprocess.run(
+            ["bash", str(GIT_INSTRUCTIONS_PATH)],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, proc.stderr
+
+        # Symlink replaced without clobbering victim; both files match repo source-of-truth
+        assert not hook_dst.is_symlink()
+        assert victim.read_text(encoding="utf-8") == "original-victim\n"
+        assert hook_dst.read_bytes() == HOOK_SCRIPT_PATH.read_bytes()
+        assert sync_dst.read_bytes() == SYNC_SCRIPT_PATH.read_bytes()
+        assert stat.S_IMODE(hook_dst.stat().st_mode) == 0o700
+        assert stat.S_IMODE(sync_dst.stat().st_mode) == 0o700
+
+        # Global git config wired to hook_dst
+        for key, expected in [
+            ("hook.betterleaks.event", "prepare-commit-msg"),
+            ("hook.betterleaks.parallel", "true"),
+            ("hook.betterleaks.command", str(hook_dst)),
+        ]:
+            val = subprocess.check_output(
+                ["git", "config", "--global", "--get", key],
+                env=env,
+                text=True,
+            ).strip()
+            assert val == expected
+
+        # Idempotent second run preserves inodes when content is unchanged
+        inode_before = (hook_dst.stat().st_ino, sync_dst.stat().st_ino)
+        subprocess.run(
+            ["bash", str(GIT_INSTRUCTIONS_PATH)],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        inode_after = (hook_dst.stat().st_ino, sync_dst.stat().st_ino)
+        assert inode_after == inode_before
+
+    def test_session_start_warns_and_skips_gitconfig_when_betterleaks_missing(self, tmp_path: Path):
+        script_copy = self._make_executable(
+            tmp_path / "git-instructions.sh",
+            GIT_INSTRUCTIONS_PATH.read_text(encoding="utf-8").replace(
+                ":/opt/homebrew/bin:/usr/local/bin", ""
+            ),
+        )
+        cfg_dir = tmp_path / "betterleaks"
+        gitconfig = tmp_path / ".gitconfig"
+        gitconfig.write_text("", encoding="utf-8")
+
+        env = {
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "BETTERLEAKS_CONFIG_DIR": str(cfg_dir),
+            "GIT_CONFIG_GLOBAL": str(gitconfig),
+            "GIT_CONFIG_NOSYSTEM": "1",
+        }
+        proc = subprocess.run(
+            ["bash", str(script_copy)],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "Warning: betterleaks not found in PATH" in proc.stdout
+        assert "brew install betterleaks" in proc.stdout
+        assert not (cfg_dir / "git-hook.sh").exists()
+        assert gitconfig.read_text(encoding="utf-8") == ""
