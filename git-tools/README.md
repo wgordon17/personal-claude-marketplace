@@ -17,15 +17,26 @@ Git workflow tools: dynamic SessionStart git instructions, history manipulation,
 
 ## Git Hook Scripts
 
-Defense-in-depth hook scripts for use with pre-commit framework:
+Defense-in-depth hook scripts for use with pre-commit framework and Git 2.54+ additive global hooks:
 - `git-hooks/pre-commit.sh` — Sets success marker after all pre-commit hooks pass
 - `git-hooks/prepare-commit-msg.sh` — Unbypassable safety validator (branch protection, conflict detection)
+- `git-hooks/betterleaks-hook.sh` — Unbypassable (`prepare-commit-msg`) Betterleaks v1/v2 staged secret scanner with `--confidence medium`, auto-recompilation across `v1.9` → `v2.0` upgrades, and 7-day non-blocking background rule sync
+- `scripts/sync-betterleaks-overlay.py` — PEP-723 `uv run` compiler that merges curated LeakTK (`leaktk/patterns`) and Google OSV-SCALIBR Veles rules with `# notsecret` line filtering into `~/.config/betterleaks/{overlay-v2,betterleaks-unified}.toml`
+
+### Global Betterleaks Hook Setup (Git 2.54+)
+
+`scripts/git-instructions.sh` automatically installs and syncs the hook on every `SessionStart` when `betterleaks` is installed (emitting a warning and skipping `hook.betterleaks.*` wiring if `betterleaks` is missing):
+- Atomically copies `git-hooks/betterleaks-hook.sh` → `~/.config/betterleaks/git-hook.sh` and `scripts/sync-betterleaks-overlay.py` → `~/.config/betterleaks/sync_overlay.py` whenever plugin files change (avoiding dangling symlinks across versioned plugin cache updates)
+- Ensures `hook.betterleaks.event = prepare-commit-msg`, `hook.betterleaks.parallel = true`, and `hook.betterleaks.command = ~/.config/betterleaks/git-hook.sh` are set in `~/.gitconfig`
+- Pre-compiles or refreshes `~/.config/betterleaks/betterleaks-unified.toml` in the background when missing, `>7` days old, or older than `sync_overlay.py`
 
 ## Requirements
 
 - **git-branchless**: `brew install git-branchless` — Required by `/git-history` skill and `/git-tools:review-commits` command. Without it, history manipulation and commit review are non-functional.
+- **betterleaks**: `brew install betterleaks` — Required by `git-hooks/betterleaks-hook.sh` and `scripts/sync-betterleaks-overlay.py` for staged secret scanning and rule-overlay validation.
+- **Git 2.54+**: `brew install git` — Required for additive global `hook.betterleaks.*` configuration.
 - **pre-commit**: `uv tool install pre-commit` — Required by the defense-in-depth git hook scripts.
-- **uv**: Required for pre-commit installation and hook management.
+- **uv**: Required for pre-commit installation, hook management, and running `scripts/sync-betterleaks-overlay.py`.
 
 ## Installation
 

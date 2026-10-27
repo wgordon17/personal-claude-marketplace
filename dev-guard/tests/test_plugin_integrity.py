@@ -1205,7 +1205,7 @@ class TestRenovateConfig:
         )
 
     def test_pep723_manager_file_patterns_match_all_hook_scripts(self):
-        """pep723.managerFilePatterns must match dev-guard/hooks/*.py and chai-bot/hooks/*.py."""
+        """pep723.managerFilePatterns must match all PEP-723 hook and utility scripts."""
         cfg = self._load_renovate_config()
         raw_patterns = cfg.get("pep723", {}).get("managerFilePatterns", [])
         assert raw_patterns, "renovate.json pep723.managerFilePatterns must not be empty"
@@ -1214,6 +1214,7 @@ class TestRenovateConfig:
         hook_scripts = [
             *sorted(REPO_ROOT.glob("dev-guard/hooks/*.py")),
             *sorted(REPO_ROOT.glob("chai-bot/hooks/*.py")),
+            *sorted(REPO_ROOT.glob("git-tools/scripts/*.py")),
         ]
         assert hook_scripts, "Expected hook Python scripts in dev-guard/hooks or chai-bot/hooks"
 
