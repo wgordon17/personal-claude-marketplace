@@ -177,7 +177,7 @@ Cleanup mode archives completed work to prevent plan directory clutter.
 Created if it doesn't exist.
 
 Note: Cleanup mode (Phase 0.C) is only available for project-local memory directories.
-Roadmaps in `~/.claude/plans/` do not support lifecycle operations (see SKILL.md Phase 0).
+Roadmaps in `~/.t3/hack/plans/` do not support lifecycle operations (see SKILL.md Phase 0).
 
 ### What gets archived (and when)
 
