@@ -96,7 +96,7 @@ The body describes the problem or need — not the implementation plan.
 ### Issue Sanitization
 
 **Strip (never include in issue title or body):**
-- Plan file paths (e.g., `hack/plans/...`, `~/.claude/plans/...`)
+- Plan file paths (e.g., `hack/plans/...`, `~/.t3/hack/plans/...`, `~/.claude/plans/...`)
 - Agent/subagent references (swarm, subagent, Claude, Opus, Sonnet, Haiku)
 - Internal skill names (`/fix`, `/swarm`, `/quality-gate`, `/plan-review`)
 - Hook names, guard names, plugin infrastructure

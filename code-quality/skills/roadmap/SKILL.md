@@ -43,9 +43,9 @@ Detect the project memory directory using the convention in
 
 - **If found:** Plan directory is `{memory_dir}/plans/`
 - **If none found:** **Skip Phase 0** — proceed to Phase 1. Stateful roadmap management
-  requires a project-local memory directory. `~/.claude/plans/` is shared across all projects
-  and globbing it would surface cross-project roadmaps, leading to false positives and
-  unintended mutations.
+  requires a project-local memory directory. `~/.t3/hack/plans/` is shared across all projects
+  without a repo-local memory directory and globbing it would surface cross-project roadmaps,
+  leading to false positives and unintended mutations.
 
   **Exception:** If the user's request matches a lifecycle trigger phrase (`roadmap status`,
   `update roadmap`, `roadmap cleanup`, `roadmap drift`, or similar), do NOT silently fall
@@ -273,7 +273,7 @@ Use the same logic as `/incremental-planning`:
 2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
    write to `{memory_dir}/plans/{run-id}-roadmap-<name>.md`
    (create the `plans/` subdirectory if it doesn't exist)
-3. **If none found:** Fall back to `~/.claude/plans/{run-id}-roadmap-<name>.md`
+3. **If none found:** Fall back to `~/.t3/hack/plans/{run-id}-roadmap-<name>.md`
 
 **Announce location:** "Roadmap file: `hack/plans/feat-auth-1711388400-roadmap-auth-launch.md`"
 
@@ -361,11 +361,11 @@ NEVER IN CHAT: Full roadmap content, raw table data, raw diff content from subag
 
 ```
 1. {memory_dir}/plans/{run-id}-roadmap-<name>.md → if memory dir exists (detect per [{skill_dir}/../../references/project-memory-reference.md](../../references/project-memory-reference.md))
-2. ~/.claude/plans/{run-id}-roadmap-<name>.md → fallback for all other cases
+2. ~/.t3/hack/plans/{run-id}-roadmap-<name>.md → fallback for all other cases
 ```
 
 **Phase 0 detection** only runs when a project memory dir exists (option 1 above).
-Projects using `~/.claude/plans/` skip Phase 0 and go straight to Phase 1.
+Projects using `~/.t3/hack/plans/` skip Phase 0 and go straight to Phase 1.
 
 ### Schema Reference
 

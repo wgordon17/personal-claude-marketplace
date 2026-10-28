@@ -250,8 +250,8 @@ Before creating the plan file, check where it belongs:
 2. **If found:** Generate a run ID per the Run-ID Naming Convention in that reference, then
    create the plan at `{memory_dir}/plans/{run-id}-<feature>.md`
    (create the `plans/` subdirectory if it doesn't exist)
-3. **If none found:** Fall back to `~/.claude/plans/{run-id}-<feature>.md`
-   (create `~/.claude/plans/` if it doesn't exist)
+3. **If none found:** Fall back to `~/.t3/hack/plans/{run-id}-<feature>.md`
+   (create `~/.t3/hack/plans/` if it doesn't exist)
 
 **Do NOT create a `hack/` directory if one doesn't exist.** That's a project-level decision.
 

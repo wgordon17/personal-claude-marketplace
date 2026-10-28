@@ -25,6 +25,7 @@ Skills detect the memory directory using a unified algorithm that is completely 
 
 2. **Check candidate directories:**
    For each candidate in priority order (`hack/`, `.local/`, `scratch/`, `.dev/`), check if it exists within the main worktree (e.g., `{main_worktree_path}/hack/`).
+   - **Non-git / scratch fallback:** If Step 1 determined you are **not** inside a git repository and no validated candidate directory exists in the current directory, walk up ancestor directories toward `$HOME` (for example, from `t3-projects/scratch/<session>` up to `t3-projects/hack/`) and finally check `~/.t3/hack/` (`${T3CODE_HOME:-$HOME/.t3}/hack/`). Do **not** apply this fallback when inside a git repository that lacks its own memory directory — git repositories opt in per-repo via `/session-start` or `/session-end`.
 
 3. **Validate contents:**
    Verify the candidate directory contains at least 2 of the 5 core memory files: `PROJECT.md`, `TODO.md`, `SESSIONS.md`, `NEXT.md`, `LESSONS.md`.
