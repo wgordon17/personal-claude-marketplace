@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/example-org/forked-lib/forks?sort=stargazers&per_page=5"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "commits_90d": 42,
+      "full_name": "community-org/forked-lib-next",
+      "pushed_at": "2026-10-25T00:00:00Z",
+      "stargazers_count": 800
+    }
+  ]
+}

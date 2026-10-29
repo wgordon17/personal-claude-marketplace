@@ -1,6 +1,6 @@
 # Personal Claude Marketplace
 
-Personal Claude Code and Agent Plugins v1 marketplace with 13 plugins: LSP servers, code quality agents and orchestration skills, development policy guards, git tools, GitHub MCP integration, Jira issue tracking, draw.io diagramming, Fetchaller web fetching, and Red Hat Chai Bot integration.
+Personal Claude Code and Agent Plugins v1 marketplace with 14 plugins: LSP servers, code quality agents and orchestration skills, development policy guards, git tools, GitHub MCP integration, Jira issue tracking, draw.io diagramming, Fetchaller web fetching, Red Hat Chai Bot integration, and a scheduled personal tech radar.
 
 ## Dual-Harness Support (Claude Code + OMP + Agent Plugins v1)
 
@@ -13,7 +13,7 @@ Python/shell scripts — no enforcement or session logic is reimplemented in Typ
 (tool-name/field-name mapping, interactive `"ask"` trust approval, Bash `updatedInput` forwarding, MCP re-encoding, event mapping, and known limitations); git-tools,
 github-mcp, and chai-bot cover their own single-hook bridges directly in their own READMEs.
 
-All 13 plugins also ship dual manifests: Claude Code manifests in `<plugin>/.claude-plugin/plugin.json` (plus `.claude-plugin/marketplace.json`) and [Agent Plugins v1](https://agent-plugins.org) manifests in `<plugin>/plugin.json` (plus `<plugin>/mcp.json` and `.agents/plugins/marketplace.json`).
+All 14 plugins also ship dual manifests: Claude Code manifests in `<plugin>/.claude-plugin/plugin.json` (plus `.claude-plugin/marketplace.json`) and [Agent Plugins v1](https://agent-plugins.org) manifests in `<plugin>/plugin.json` (plus `<plugin>/mcp.json` and `.agents/plugins/marketplace.json`).
 
 ## Plugins
 
@@ -131,6 +131,14 @@ Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project
 |--------|-------------|------------|------|
 | chai-bot | Advisory nudge and explicit `/chai-bot` command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server | MCP server, 1 command, 2 hooks | [README](chai-bot/README.md) |
 
+### Tech Radar
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| tech-radar | Scheduled personal tech radar: new features you could use, compromises, lifecycle risks, superior replacements and relevant new tools across your machine, projects and AI harness | 1 skill, 6 reference files, PEP 723 CLI + hourly LaunchAgent | [README](tech-radar/README.md) |
+
+**Skill:** `/tech-radar:radar` — Scheduled daily/weekly/monthly radar runs, first-time bootstrap interview, and out-of-band notification-confirmed decision/feedback staging.
+
 ### Development Guard
 
 | Plugin | Description | Components | Docs |
@@ -163,6 +171,7 @@ claude plugin install jira@personal-claude-marketplace
 claude plugin install drawio@personal-claude-marketplace
 claude plugin install fetchaller-mcp@personal-claude-marketplace
 claude plugin install chai-bot@personal-claude-marketplace
+claude plugin install tech-radar@personal-claude-marketplace
 
 # Install LSP plugins (pick what you need)
 claude plugin install pyright-uvx@personal-claude-marketplace
@@ -176,7 +185,13 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ### For All Non-LSP Plugins
 
-- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), code-quality (test-runner, uv-python), git-tools (hook installation), and fetchaller-mcp (`uvx --from git+`)
+- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), code-quality (test-runner, uv-python), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`), and tech-radar (`uv run --script --locked --isolated`)
+
+### For Tech Radar
+
+- **gh CLI**: `brew install gh` and `gh auth login` — Required for read-only GitHub API queries (`procs.gh`).
+- **Chrome for Testing**: Set `BROWSER_EXECUTABLE_PATH` in `~/.claude/settings.json`'s `env` block to a dedicated Chrome for Testing binary (`doctor` refuses `/Applications/Google Chrome.app`).
+- **Xcode Command Line Tools**: Required for `/usr/bin/python3 -I -c` in the hourly LaunchAgent verifier. See [tech-radar/README.md](tech-radar/README.md) for the full bootstrap sequence.
 
 ### For GitHub MCP
 
@@ -264,8 +279,9 @@ Plugins in this marketplace have external tool requirements and optional MCP ser
 
 | Tool | Required By | Purpose |
 |------|------------|---------|
-| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`) |
+| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`), tech-radar (`uv run --script --locked --isolated`) |
 | [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
+| [`gh`](https://cli.github.com/) | tech-radar | Read-only GitHub REST/GraphQL queries (`procs.gh`) for releases, advisories, repo metadata, and discovery |
 | [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
 | [`betterleaks`](https://github.com/betterleaks/betterleaks) | git-tools | Global `prepare-commit-msg` secret scanner hook and rule-overlay compiler |
 | [`pre-commit`](https://pre-commit.com/) | git-tools | Defense-in-depth git hook scripts |
@@ -319,6 +335,7 @@ Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** =
 | **drawio** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 | **fetchaller-mcp** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **chai-bot** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **tech-radar** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.

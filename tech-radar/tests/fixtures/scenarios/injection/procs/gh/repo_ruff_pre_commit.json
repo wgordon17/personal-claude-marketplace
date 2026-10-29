@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/astral-sh/ruff-pre-commit"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "full_name": "astral-sh/ruff-pre-commit",
+    "name": "ruff-pre-commit",
+    "private": false
+  }
+}

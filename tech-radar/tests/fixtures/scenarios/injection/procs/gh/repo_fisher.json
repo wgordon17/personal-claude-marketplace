@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/jorgebucaran/fisher"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "full_name": "jorgebucaran/fisher",
+    "name": "fisher",
+    "private": false
+  }
+}

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import config, credentials, db, http, procs
+from . import config, credentials, db, errors, http, procs
 from .errors import Refused
 from .profile import Profile
 
@@ -253,7 +253,10 @@ def _parse_now(now: datetime | str | None, *, run_id: str | None = None) -> date
             return datetime(2026, 10, 28, 12, 0, 0, tzinfo=UTC)
         return datetime.now(UTC)
     if isinstance(now, str):
-        parsed = datetime.fromisoformat(now.replace("Z", "+00:00"))
+        try:
+            parsed = datetime.fromisoformat(now.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise errors.UnsafeArg(f"Invalid ISO timestamp for --now: {now!r}") from exc
         return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
     return now if now.tzinfo is not None else now.replace(tzinfo=UTC)
 
