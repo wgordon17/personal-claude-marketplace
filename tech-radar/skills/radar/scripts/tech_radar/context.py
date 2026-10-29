@@ -242,8 +242,15 @@ class Ctx:
         return self.profile
 
 
-def _parse_now(now: datetime | str | None) -> datetime:
+def _parse_now(now: datetime | str | None, *, run_id: str | None = None) -> datetime:
     if now is None:
+        if os.environ.get("TECH_RADAR_REPLAY_DIR"):
+            if run_id and len(run_id) >= 16 and run_id[8] == "T" and run_id[15] == "Z":
+                try:
+                    return datetime.strptime(run_id[:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+                except ValueError:
+                    pass
+            return datetime(2026, 10, 28, 12, 0, 0, tzinfo=UTC)
         return datetime.now(UTC)
     if isinstance(now, str):
         parsed = datetime.fromisoformat(now.replace("Z", "+00:00"))
@@ -338,7 +345,7 @@ def build(
 
     conn = db_conn if db_conn is not None else db.connect(p.db, auto_migrate=True)
     c_conn = cache_conn if cache_conn is not None else db.connect_cache(p.cache_db)
-    resolved_now = _parse_now(now)
+    resolved_now = _parse_now(now, run_id=run_id)
     prof = Profile.load(p.sync, conn=conn)
 
     ctx_holder: list[Ctx] = []

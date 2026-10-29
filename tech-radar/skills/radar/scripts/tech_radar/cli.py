@@ -14,12 +14,14 @@ from typing import Any
 from . import (
     alerts,
     appsync,
+    bootstrap,
     brief,
     config,
     context,
     credentials,
     db,
     decisions,
+    doctor,
     errors,
     evaluate,
     exposure,
@@ -51,11 +53,13 @@ from . import (
 _CORE_MODULES = (
     alerts,
     appsync,
+    bootstrap,
     brief,
     context,
     credentials,
     db,
     decisions,
+    doctor,
     errors,
     evaluate,
     exposure,
@@ -169,6 +173,33 @@ def _terminal_not_implemented(args: argparse.Namespace, raw_argv: Sequence[str])
     if refused is not None:
         return refused
     return _not_implemented(args)
+
+
+def _handle_doctor(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    try:
+        ctx = context.build()
+        res = doctor.run_doctor(ctx)
+        code = 0 if res.get("ok") else 4
+        return emit(res, code)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_bootstrap(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    refused = require_terminal(args, raw_argv)
+    if refused is not None:
+        return refused
+    subcmd = str(getattr(args, "bootstrap_cmd", "init"))
+    try:
+        ctx = context.build()
+        if subcmd == "init":
+            return emit(bootstrap.init(ctx), 0)
+        if subcmd == "apply":
+            answers_path = str(getattr(args, "answers", "") or "")
+            return emit(bootstrap.apply_answers(ctx, answers_path), 0)
+        return emit(bootstrap.lockdown(ctx), 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
 
 
 def _handle_plan_run(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
@@ -698,7 +729,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # doctor
     p_doctor = sub.add_parser("doctor", help="Check preconditions and environment health")
-    p_doctor.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_doctor.set_defaults(_handler=_handle_doctor)
 
     # bootstrap init | apply | lockdown (all terminal-only)
     p_boot = sub.add_parser(
@@ -708,16 +739,16 @@ def build_parser() -> argparse.ArgumentParser:
     boot_sub = p_boot.add_subparsers(dest="bootstrap_cmd", required=True)
     p_boot_init = boot_sub.add_parser("init", help="Initialize dirs, DB, app copy, and inventory")
     p_boot_init.add_argument("--channel", default=None)
-    p_boot_init.set_defaults(_handler=_terminal_not_implemented)
+    p_boot_init.set_defaults(_handler=_handle_bootstrap)
 
     p_boot_apply = boot_sub.add_parser("apply", help="Ingest interview answers JSON")
     p_boot_apply.add_argument("--answers", required=True, help="Path to answers.json")
     p_boot_apply.add_argument("--channel", default=None)
-    p_boot_apply.set_defaults(_handler=_terminal_not_implemented)
+    p_boot_apply.set_defaults(_handler=_handle_bootstrap)
 
     p_boot_lock = boot_sub.add_parser("lockdown", help="Write run-project settings.json")
     p_boot_lock.add_argument("--channel", default=None)
-    p_boot_lock.set_defaults(_handler=_terminal_not_implemented)
+    p_boot_lock.set_defaults(_handler=_handle_bootstrap)
 
     # credentials status | guide NAME
     p_creds = sub.add_parser(
