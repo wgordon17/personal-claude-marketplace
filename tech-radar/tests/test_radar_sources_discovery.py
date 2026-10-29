@@ -1,4 +1,4 @@
-"""Tests for Task 7 discovery sources, enrich-only fetch_metrics, HN filters, and broken specs."""
+"""Tests for discovery sources, enrich-only fetch_metrics, HN filters, and broken specs."""
 
 from __future__ import annotations
 
@@ -359,6 +359,28 @@ def test_broken_sources_report_disabled_with_reason(
         assert row is not None
         assert str(row["skipped_reason"]) == spec.skipped_reason
         assert int(row["consecutive_failures"]) == 0
+
+    # Verify adopt_trial_public_repos includes adopt/trial + non-held watchlist and excludes hold
+    from tech_radar.sources import github as gh_mod
+
+    ctx.db.execute(
+        "INSERT INTO entities(entity_id, kind, ecosystem, name, repo, visibility, created_at) "
+        "VALUES "
+        "('gh:example-org/adopt-repo', 'repo', 'github', 'adopt-repo', "
+        "'example-org/adopt-repo', 'public', '2026-10-28T00:00:00Z'), "
+        "('gh:example-org/hold-repo', 'repo', 'github', 'hold-repo', "
+        "'example-org/hold-repo', 'public', '2026-10-28T00:00:00Z')"
+    )
+    ctx.db.execute(
+        "INSERT INTO items(item_id, entity_id, ring, state, in_use, created_at) "
+        "VALUES "
+        "('R-0101', 'gh:example-org/adopt-repo', 'adopt', 'active', 1, '2026-10-28T00:00:00Z'), "
+        "('R-0102', 'gh:example-org/hold-repo', 'hold', 'active', 1, '2026-10-28T00:00:00Z')"
+    )
+    ctx.db.commit()
+    at_repos = dict(gh_mod.adopt_trial_public_repos(ctx))
+    assert "example-org/adopt-repo" in at_repos
+    assert "example-org/hold-repo" not in at_repos
 
 
 def test_fetch_metrics_for_public_and_private_entities(

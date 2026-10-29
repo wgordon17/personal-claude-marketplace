@@ -1,4 +1,4 @@
-"""Offline end-to-end subprocess test (no LLM) and secrets-canary negative control (Step 4)."""
+"""Offline end-to-end subprocess test (no LLM) and secrets-canary negative control."""
 
 from __future__ import annotations
 
@@ -107,8 +107,7 @@ def test_offline_e2e_subprocess_pipeline_and_canary_negative_control(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Task 10 Step 4:
-    Offline end-to-end subprocess pipeline (`UV_OFFLINE=1`, `TECH_RADAR_REPLAY_DIR`,
+    """Offline end-to-end subprocess pipeline (`UV_OFFLINE=1`, `TECH_RADAR_REPLAY_DIR`,
     `TECH_RADAR_NOTIFY_SINK`, `fixture_home(scenario='compromised')`):
       bootstrap init --channel cli (PTY)
       -> bootstrap apply --channel cli (PTY)

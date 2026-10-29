@@ -18,6 +18,7 @@ from .base import (
     RawSignal,
     SourceSpec,
     infer_github_entity_hint,
+    lookback_since,
     normalize_timestamp,
     parse_feed_bytes,
 )
@@ -430,7 +431,7 @@ def parse_mcp_registry(data: bytes, meta: FetchMeta) -> list[RawSignal]:
 
 
 def _run_mcp_registry(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
-    since_iso = (ctx.now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since_iso = lookback_since(ctx, timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     url = (
         "https://registry.modelcontextprotocol.io/v0.1/servers"
         f"?updated_since={urllib.parse.quote(since_iso, safe='')}&version=latest"

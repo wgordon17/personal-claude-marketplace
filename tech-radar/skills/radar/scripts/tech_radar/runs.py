@@ -18,17 +18,7 @@ RUN_ID_RE = re.compile(r"^\d{8}T\d{6}Z-(daily|weekly|monthly)$")
 EXPECTED_MODEL = "gemini-4-argon"
 
 
-def _parse_iso(ts: str | None) -> datetime | None:
-    if not ts:
-        return None
-    clean = str(ts).strip()
-    if not clean:
-        return None
-    try:
-        dt = datetime.fromisoformat(clean.replace("Z", "+00:00"))
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-    except ValueError:
-        return None
+_parse_iso = db.parse_iso
 
 
 def validate_run_id(ctx: Ctx, run_id: str | None) -> str:

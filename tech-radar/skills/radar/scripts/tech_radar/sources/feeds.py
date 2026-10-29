@@ -1,4 +1,4 @@
-"""Curated RSS/Atom feed sources (Spec 03, Task 7 Step 1)."""
+"""Curated RSS/Atom feed sources (Spec 03)."""
 
 from __future__ import annotations
 

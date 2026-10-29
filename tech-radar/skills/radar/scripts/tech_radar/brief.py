@@ -245,7 +245,7 @@ def _used_in_for_entity(
         uctx = str(r["context"])
         if uctx.startswith("project:"):
             pkey = uctx[len("project:") :]
-            alias, _vis = proj_lookup.get(pkey, ("private-project-1", "private"))
+            alias, _ = proj_lookup.get(pkey, ("private-project-1", "private"))
             formatted = f"project:{alias}"
         else:
             formatted = uctx
@@ -274,7 +274,6 @@ def _evidence_kind(source_id: str, sig_type: str) -> str:
 
 
 def _build_common_item_object(
-    ctx: Ctx,
     *,
     ref: str,
     item_id: str | None,
@@ -399,7 +398,7 @@ def build_context_json(
     # Projects with aliases and public stack/languages only
     proj_lookup = _project_alias_lookup(ctx)
     proj_list: list[dict[str, Any]] = []
-    for pkey, (alias, _vis) in sorted(proj_lookup.items(), key=lambda x: x[1][0]):
+    for pkey, (alias, _) in sorted(proj_lookup.items(), key=lambda x: x[1][0]):
         dep_rows = ctx.db.execute(
             "SELECT e.name, e.ecosystem FROM usages u "
             "JOIN entities e ON e.entity_id = u.entity_id "
@@ -695,7 +694,6 @@ def generate(ctx: Ctx, run_id: str) -> dict[str, Any]:
             release_age_days = int(raw_rel_age) if isinstance(raw_rel_age, int | float) else 0
 
         return _build_common_item_object(
-            ctx,
             ref=iid,
             item_id=iid,
             entity_id=eid,
@@ -787,7 +785,6 @@ def generate(ctx: Ctx, run_id: str) -> dict[str, Any]:
         }
 
         return _build_common_item_object(
-            ctx,
             ref=ref,
             item_id=item_id,
             entity_id=eid or f"sig:{src_id}/{sig_id}",
@@ -1232,7 +1229,7 @@ def enrich(ctx: Ctx, run_id: str) -> dict[str, Any]:
         else:
             eid = f"skill:{resolved_repo or name}"
 
-        eid, kind, _vis = items.ensure_entity(ctx, eid, classify_visibility=False)
+        eid, kind, _ = items.ensure_entity(ctx, eid, classify_visibility=False)
         ctx.db.execute(
             "UPDATE entities SET visibility = 'public', repo = COALESCE(?, repo) "
             "WHERE entity_id = ?",
@@ -1240,7 +1237,7 @@ def enrich(ctx: Ctx, run_id: str) -> dict[str, Any]:
         )
         ctx.db.commit()
 
-        item_id, _created = items.ensure_item(
+        item_id, _ = items.ensure_item(
             ctx,
             eid,
             in_use=False,
@@ -1250,11 +1247,26 @@ def enrich(ctx: Ctx, run_id: str) -> dict[str, Any]:
         # Fetch full metrics now that public existence is confirmed
         m_data = registries.fetch_metrics(ctx, eid)
         m_data.update({k: v for k, v in init_meta.items() if k not in m_data})
-        bidir_ok = bool(
-            not repo
-            or not m_data.get("registry_repo")
-            or str(m_data.get("registry_repo")).lower() == repo.lower()
-        )
+        if eco in ("pypi", "npm", "cargo"):
+            reg_repo_val = str(m_data.get("registry_repo") or "").strip().lower()
+            expected_repo = (repo or resolved_repo or "").strip().lower()
+            manifest_name_val = str(m_data.get("manifest_name") or "").strip().lower()
+            norm_manifest = (
+                manifest_name_val.replace("_", "-") if eco == "pypi" else manifest_name_val
+            )
+            norm_pkg = name.lower().replace("_", "-") if eco == "pypi" else name.lower()
+            bidir_ok = (
+                bool(reg_repo_val)
+                and (not expected_repo or reg_repo_val == expected_repo)
+                and (not norm_manifest or norm_manifest == norm_pkg)
+                and m_data.get("bidirectional_link") is not False
+            )
+        else:
+            bidir_ok = bool(
+                not repo
+                or not m_data.get("registry_repo")
+                or str(m_data.get("registry_repo")).lower() == repo.lower()
+            )
         m_data["bidirectional_verified"] = bidir_ok
         m_data["bidirectional_link"] = bidir_ok
         db.kv_set(
@@ -1293,7 +1305,6 @@ def enrich(ctx: Ctx, run_id: str) -> dict[str, Any]:
         verified_count += 1
         enriched_entries.append(
             _build_common_item_object(
-                ctx,
                 ref=item_id,
                 item_id=item_id,
                 entity_id=eid,

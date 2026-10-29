@@ -8,7 +8,7 @@ import json
 import re
 import statistics
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from . import db, security
@@ -29,20 +29,11 @@ ACQUISITION_SUNSET_RE = re.compile(
     re.IGNORECASE,
 )
 
+_EXTRA_LIFECYCLE_TTL = timedelta(days=7)
+_MAX_ISSUE_SEARCH_CALLS = 25
+_MAX_ISSUE_COMMENT_PROBES = 5
 
-def _parse_iso_dt(raw: str | None) -> datetime | None:
-    if not raw:
-        return None
-    txt = str(raw).strip()
-    if not txt:
-        return None
-    if len(txt) == 10 and txt[4] == "-" and txt[7] == "-":
-        txt = f"{txt}T00:00:00Z"
-    try:
-        dt = datetime.fromisoformat(txt.replace("Z", "+00:00"))
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-    except ValueError:
-        return None
+_parse_iso_dt = db.parse_iso
 
 
 def _emit_lifecycle_alert(
@@ -188,27 +179,51 @@ def _check_github_extra_lifecycle(
     eid: str,
     repo: str,
     meta_payload: Mapping[str, Any],
+    *,
+    maintainer_leaving_matched: bool = False,
+    issue_search_budget: list[int] | None = None,
 ) -> list[int]:
     """Run LIFE-06, LIFE-08, LIFE-09, LIFE-12, and LIFE-14 GitHub checks."""
+    pushed_iso = str(meta_payload.get("pushed_at") or "").strip() or None
+    kv_key = f"lifecycle_gh_extra:{repo}"
+    cached_raw = db.kv_get(ctx.db, kv_key)
+    if cached_raw:
+        try:
+            cached_obj = json.loads(cached_raw)
+            if isinstance(cached_obj, Mapping):
+                checked_dt = _parse_iso_dt(str(cached_obj.get("checked_at") or ""))
+                if (
+                    checked_dt is not None
+                    and (ctx.now - checked_dt) < _EXTRA_LIFECYCLE_TTL
+                    and cached_obj.get("pushed_at") == pushed_iso
+                    and cached_obj.get("issues_checked", True) is True
+                ):
+                    return []
+        except json.JSONDecodeError:
+            pass
+
     new_ids: list[int] = []
     upstream_stars = int(meta_payload.get("stargazers_count") or 0)
 
-    # LIFE-06: default branch commit date via `repos/{o}/{r}/commits?per_page=1` or `pushed_at`
-    last_commit_iso = str(meta_payload.get("pushed_at") or "").strip() or None
-    try:
-        c_res = ctx.gh.api(f"repos/{repo}/commits?per_page=1")
-        if c_res.returncode == 0 and c_res.stdout.strip():
-            c_arr = json.loads(c_res.stdout)
-            if isinstance(c_arr, list) and c_arr and isinstance(c_arr[0], Mapping):
-                commit_obj = c_arr[0].get("commit")
-                if isinstance(commit_obj, Mapping):
-                    committer = commit_obj.get("committer") or commit_obj.get("author")
-                    if isinstance(committer, Mapping) and committer.get("date"):
-                        last_commit_iso = normalize_timestamp(committer["date"])
-    except (RadarError, json.JSONDecodeError):
-        pass
-
+    # LIFE-06: default branch commit date via `pushed_at`; probe `commits?per_page=1`
+    # only if missing or stale (>180d)
+    last_commit_iso = pushed_iso
     commit_dt = _parse_iso_dt(last_commit_iso)
+    if commit_dt is None or (ctx.now - commit_dt) > timedelta(days=180):
+        try:
+            c_res = ctx.gh.api(f"repos/{repo}/commits?per_page=1")
+            if c_res.returncode == 0 and c_res.stdout.strip():
+                c_arr = json.loads(c_res.stdout)
+                if isinstance(c_arr, list) and c_arr and isinstance(c_arr[0], Mapping):
+                    commit_obj = c_arr[0].get("commit")
+                    if isinstance(commit_obj, Mapping):
+                        committer = commit_obj.get("committer") or commit_obj.get("author")
+                        if isinstance(committer, Mapping) and committer.get("date"):
+                            last_commit_iso = normalize_timestamp(committer["date"])
+                            commit_dt = _parse_iso_dt(last_commit_iso)
+        except (RadarError, json.JSONDecodeError):
+            pass
+
     if commit_dt is not None and (ctx.now - commit_dt) > timedelta(days=180):
         aid = _emit_lifecycle_alert(
             ctx,
@@ -225,102 +240,122 @@ def _check_github_extra_lifecycle(
             new_ids.append(aid)
 
     # LIFE-08: issue/PR response collapse (`search/issues` sample of 30, median first comment > 30d)
-    since_90 = (ctx.now - timedelta(days=90)).strftime("%Y-%m-%d")
-    try:
-        iss_res = ctx.gh(
-            [
-                "api",
-                "-X",
-                "GET",
-                "search/issues",
-                "-f",
-                f"q=repo:{repo} is:issue created:>{since_90}",
-                "-f",
-                "per_page=30",
-            ]
-        )
-        if iss_res.returncode == 0 and iss_res.stdout.strip():
-            iss_obj = json.loads(iss_res.stdout)
-            items = iss_obj.get("items") if isinstance(iss_obj, Mapping) else None
-            if isinstance(items, list) and items:
-                response_days: list[float] = []
-                for issue in items[:30]:
-                    if not isinstance(issue, Mapping):
-                        continue
-                    created_dt = _parse_iso_dt(str(issue.get("created_at") or ""))
-                    if created_dt is None:
-                        continue
-                    first_comment_iso = issue.get("first_comment_at")
-                    if (
-                        not first_comment_iso
-                        and issue.get("number")
-                        and int(issue.get("comments") or 0) > 0
-                    ):
-                        num = int(issue["number"])
-                        try:
-                            cm_res = ctx.gh.api(f"repos/{repo}/issues/{num}/comments?per_page=1")
-                            if cm_res.returncode == 0 and cm_res.stdout.strip():
-                                cm_arr = json.loads(cm_res.stdout)
-                                if (
-                                    isinstance(cm_arr, list)
-                                    and cm_arr
-                                    and isinstance(cm_arr[0], Mapping)
-                                ):
-                                    first_comment_iso = cm_arr[0].get("created_at")
-                        except (RadarError, json.JSONDecodeError):
-                            pass
-                    first_dt = _parse_iso_dt(str(first_comment_iso or ""))
-                    if first_dt is not None:
-                        response_days.append(
-                            max(0.0, (first_dt - created_dt).total_seconds() / 86400.0)
-                        )
-                    else:
-                        age_days = (ctx.now - created_dt).total_seconds() / 86400.0
-                        if age_days > 30.0:
+    open_issues_cnt = int(meta_payload.get("open_issues_count", 1) or 0)
+    can_search_issues = open_issues_cnt > 0 and (
+        issue_search_budget is None or issue_search_budget[0] > 0
+    )
+    if can_search_issues:
+        if issue_search_budget is not None:
+            issue_search_budget[0] -= 1
+        since_90 = (ctx.now - timedelta(days=90)).strftime("%Y-%m-%d")
+        try:
+            iss_res = ctx.gh(
+                [
+                    "api",
+                    "-X",
+                    "GET",
+                    "search/issues",
+                    "-f",
+                    f"q=repo:{repo} is:issue created:>{since_90}",
+                    "-f",
+                    "per_page=30",
+                ]
+            )
+            if iss_res.returncode == 0 and iss_res.stdout.strip():
+                iss_obj = json.loads(iss_res.stdout)
+                items = iss_obj.get("items") if isinstance(iss_obj, Mapping) else None
+                if isinstance(items, list) and items:
+                    response_days: list[float] = []
+                    comment_probes = 0
+                    for issue in items[:30]:
+                        if not isinstance(issue, Mapping):
+                            continue
+                        created_dt = _parse_iso_dt(str(issue.get("created_at") or ""))
+                        if created_dt is None:
+                            continue
+                        age_days = max(0.0, (ctx.now - created_dt).total_seconds() / 86400.0)
+                        first_comment_iso = issue.get("first_comment_at")
+                        num_comments = int(issue.get("comments") or 0)
+                        if not first_comment_iso and num_comments > 0:
+                            updated_dt = _parse_iso_dt(str(issue.get("updated_at") or ""))
+                            if age_days <= 30.0:
+                                response_days.append(age_days)
+                                continue
+                            if updated_dt is not None and (updated_dt - created_dt) <= timedelta(
+                                days=30
+                            ):
+                                response_days.append(
+                                    max(0.0, (updated_dt - created_dt).total_seconds() / 86400.0)
+                                )
+                                continue
+                            if issue.get("number") and comment_probes < _MAX_ISSUE_COMMENT_PROBES:
+                                comment_probes += 1
+                                num = int(issue["number"])
+                                try:
+                                    cm_res = ctx.gh.api(
+                                        f"repos/{repo}/issues/{num}/comments?per_page=1"
+                                    )
+                                    if cm_res.returncode == 0 and cm_res.stdout.strip():
+                                        cm_arr = json.loads(cm_res.stdout)
+                                        if (
+                                            isinstance(cm_arr, list)
+                                            and cm_arr
+                                            and isinstance(cm_arr[0], Mapping)
+                                        ):
+                                            first_comment_iso = cm_arr[0].get("created_at")
+                                except (RadarError, json.JSONDecodeError):
+                                    pass
+                        first_dt = _parse_iso_dt(str(first_comment_iso or ""))
+                        if first_dt is not None:
+                            response_days.append(
+                                max(0.0, (first_dt - created_dt).total_seconds() / 86400.0)
+                            )
+                        elif num_comments == 0 and age_days > 30.0:
                             response_days.append(age_days)
 
-                if response_days and statistics.median(response_days) > 30.0:
-                    med = round(statistics.median(response_days), 1)
-                    aid = _emit_lifecycle_alert(
-                        ctx,
-                        rule_id="LIFE-08",
-                        tier="P2",
-                        entity_id=eid,
-                        title=f"Issue response time collapse on {repo} (median {med}d)",
-                        excerpt=(
-                            f"Median time-to-first-comment across {len(response_days)} "
-                            f"issues is {med} days."
-                        ),
-                        source_id="gh_repo_meta",
-                        url=f"https://github.com/{repo}/issues",
-                        extra_payload={"median_response_days": med},
-                    )
-                    if aid is not None:
-                        new_ids.append(aid)
-    except (RadarError, json.JSONDecodeError):
-        pass
+                    if response_days and statistics.median(response_days) > 30.0:
+                        med = round(statistics.median(response_days), 1)
+                        aid = _emit_lifecycle_alert(
+                            ctx,
+                            rule_id="LIFE-08",
+                            tier="P2",
+                            entity_id=eid,
+                            title=f"Issue response time collapse on {repo} (median {med}d)",
+                            excerpt=(
+                                f"Median time-to-first-comment across {len(response_days)} "
+                                f"issues is {med} days."
+                            ),
+                            source_id="gh_repo_meta",
+                            url=f"https://github.com/{repo}/issues",
+                            extra_payload={"median_response_days": med},
+                        )
+                        if aid is not None:
+                            new_ids.append(aid)
+        except (RadarError, json.JSONDecodeError):
+            pass
 
     # LIFE-09: maintainer-leaving notice in README / description
     readme_texts: list[str] = []
     if meta_payload.get("readme_text"):
         readme_texts.append(str(meta_payload["readme_text"]))
-    try:
-        rm_res = ctx.gh.api(f"repos/{repo}/readme")
-        if rm_res.returncode == 0 and rm_res.stdout.strip():
-            rm_obj = json.loads(rm_res.stdout)
-            if isinstance(rm_obj, Mapping):
-                raw_c = str(rm_obj.get("content") or "")
-                if rm_obj.get("encoding") == "base64" and raw_c:
-                    try:
-                        readme_texts.append(
-                            base64.b64decode(raw_c).decode("utf-8", errors="ignore")
-                        )
-                    except (binascii.Error, ValueError):
+    if not maintainer_leaving_matched and not readme_texts:
+        try:
+            rm_res = ctx.gh.api(f"repos/{repo}/readme")
+            if rm_res.returncode == 0 and rm_res.stdout.strip():
+                rm_obj = json.loads(rm_res.stdout)
+                if isinstance(rm_obj, Mapping):
+                    raw_c = str(rm_obj.get("content") or "")
+                    if rm_obj.get("encoding") == "base64" and raw_c:
+                        try:
+                            readme_texts.append(
+                                base64.b64decode(raw_c).decode("utf-8", errors="ignore")
+                            )
+                        except (binascii.Error, ValueError):
+                            readme_texts.append(raw_c)
+                    elif raw_c:
                         readme_texts.append(raw_c)
-                elif raw_c:
-                    readme_texts.append(raw_c)
-    except (RadarError, json.JSONDecodeError):
-        pass
+        except (RadarError, json.JSONDecodeError):
+            pass
 
     for r_txt in readme_texts:
         m = MAINTAINER_LEAVING_RE.search(r_txt)
@@ -341,49 +376,51 @@ def _check_github_extra_lifecycle(
             break
 
     # LIFE-12: community fork overtaking (stars > 0.5 * upstream and more commits in 90d)
-    try:
-        fk_res = ctx.gh.api(f"repos/{repo}/forks?sort=stargazers&per_page=5")
-        if fk_res.returncode == 0 and fk_res.stdout.strip():
-            fk_arr = json.loads(fk_res.stdout)
-            if isinstance(fk_arr, list):
-                upstream_commits_90d = int(meta_payload.get("commits_90d") or 0)
-                for fk in fk_arr:
-                    if not isinstance(fk, Mapping):
-                        continue
-                    fk_stars = int(fk.get("stargazers_count") or 0)
-                    fk_slug = str(fk.get("full_name") or "").strip()
-                    fk_commits_90d = int(fk.get("commits_90d") or 0)
-                    fk_pushed = _parse_iso_dt(str(fk.get("pushed_at") or ""))
-                    more_active = fk_commits_90d > upstream_commits_90d or (
-                        fk_pushed is not None
-                        and commit_dt is not None
-                        and fk_pushed > commit_dt
-                        and (ctx.now - fk_pushed) <= timedelta(days=90)
-                    )
-                    if upstream_stars > 0 and fk_stars > 0.5 * upstream_stars and more_active:
-                        aid = _emit_lifecycle_alert(
-                            ctx,
-                            rule_id="LIFE-12",
-                            tier="P2",
-                            entity_id=eid,
-                            title=f"Community fork {fk_slug} overtaking {repo}",
-                            excerpt=(
-                                f"Fork {fk_slug} has {fk_stars} stars vs "
-                                f"{upstream_stars} upstream and higher recent activity."
-                            ),
-                            source_id="gh_repo_meta",
-                            url=f"https://github.com/{fk_slug}",
-                            extra_payload={
-                                "fork": fk_slug,
-                                "fork_stars": fk_stars,
-                                "upstream_stars": upstream_stars,
-                            },
+    forks_count = int(meta_payload.get("forks_count", 1) or 0)
+    if upstream_stars > 0 and forks_count > 0:
+        try:
+            fk_res = ctx.gh.api(f"repos/{repo}/forks?sort=stargazers&per_page=5")
+            if fk_res.returncode == 0 and fk_res.stdout.strip():
+                fk_arr = json.loads(fk_res.stdout)
+                if isinstance(fk_arr, list):
+                    upstream_commits_90d = int(meta_payload.get("commits_90d") or 0)
+                    for fk in fk_arr:
+                        if not isinstance(fk, Mapping):
+                            continue
+                        fk_stars = int(fk.get("stargazers_count") or 0)
+                        fk_slug = str(fk.get("full_name") or "").strip()
+                        fk_commits_90d = int(fk.get("commits_90d") or 0)
+                        fk_pushed = _parse_iso_dt(str(fk.get("pushed_at") or ""))
+                        more_active = fk_commits_90d > upstream_commits_90d or (
+                            fk_pushed is not None
+                            and commit_dt is not None
+                            and fk_pushed > commit_dt
+                            and (ctx.now - fk_pushed) <= timedelta(days=90)
                         )
-                        if aid is not None:
-                            new_ids.append(aid)
-                        break
-    except (RadarError, json.JSONDecodeError):
-        pass
+                        if upstream_stars > 0 and fk_stars > 0.5 * upstream_stars and more_active:
+                            aid = _emit_lifecycle_alert(
+                                ctx,
+                                rule_id="LIFE-12",
+                                tier="P2",
+                                entity_id=eid,
+                                title=f"Community fork {fk_slug} overtaking {repo}",
+                                excerpt=(
+                                    f"Fork {fk_slug} has {fk_stars} stars vs "
+                                    f"{upstream_stars} upstream and higher recent activity."
+                                ),
+                                source_id="gh_repo_meta",
+                                url=f"https://github.com/{fk_slug}",
+                                extra_payload={
+                                    "fork": fk_slug,
+                                    "fork_stars": fk_stars,
+                                    "upstream_stars": upstream_stars,
+                                },
+                            )
+                            if aid is not None:
+                                new_ids.append(aid)
+                            break
+        except (RadarError, json.JSONDecodeError):
+            pass
 
     # LIFE-14: top maintainer inactive 90d
     try:
@@ -432,6 +469,18 @@ def _check_github_extra_lifecycle(
     except (RadarError, json.JSONDecodeError):
         pass
 
+    db.kv_set(
+        ctx.db,
+        kv_key,
+        json.dumps(
+            {
+                "checked_at": ctx.now_iso,
+                "pushed_at": pushed_iso,
+                "issues_checked": bool(open_issues_cnt == 0 or can_search_issues),
+            },
+            separators=(",", ":"),
+        ),
+    )
     return new_ids
 
 
@@ -520,17 +569,22 @@ def evaluate(
                 target = repo_to_eid.get(target[len("gh:") :].lower(), target)
             releases_by_entity.setdefault(target, []).append(sig)
 
+    issue_search_budget = [_MAX_ISSUE_SEARCH_CALLS]
+
     for sig in all_signals:
         eid = sig.entity_hint
         if eid and eid not in covered and eid.startswith("gh:"):
             eid = repo_to_eid.get(eid[len("gh:") :].lower(), eid)
 
         payload = sig.payload
+        if (not eid or eid not in covered) and isinstance(payload.get("repo"), str):
+            eid = repo_to_eid.get(str(payload["repo"]).lower(), eid)
 
         # LIFE-01, LIFE-06, LIFE-08, LIFE-09, LIFE-12, LIFE-14 via gh_repo_meta
         if sig.source_id == "gh_repo_meta" and eid and eid in covered:
             repo_slug = str(payload.get("repo") or covered[eid].get("repo") or "").lower()
-            if payload.get("archived") is True:
+            is_archived = payload.get("archived") is True
+            if is_archived:
                 aid = _emit_lifecycle_alert(
                     ctx,
                     rule_id="LIFE-01",
@@ -545,7 +599,8 @@ def evaluate(
                 if aid is not None:
                     new_alert_ids.append(aid)
 
-            if MAINTAINER_LEAVING_RE.search(sig.untrusted_excerpt):
+            leaving_matched = bool(MAINTAINER_LEAVING_RE.search(sig.untrusted_excerpt))
+            if leaving_matched:
                 aid = _emit_lifecycle_alert(
                     ctx,
                     rule_id="LIFE-09",
@@ -559,8 +614,37 @@ def evaluate(
                 if aid is not None:
                     new_alert_ids.append(aid)
 
-            if repo_slug:
-                new_alert_ids.extend(_check_github_extra_lifecycle(ctx, eid, repo_slug, payload))
+            if repo_slug and not is_archived:
+                new_alert_ids.extend(
+                    _check_github_extra_lifecycle(
+                        ctx,
+                        eid,
+                        repo_slug,
+                        payload,
+                        maintainer_leaving_matched=leaving_matched,
+                        issue_search_budget=issue_search_budget,
+                    )
+                )
+
+        # LIFE-09 via gh_discussions_announce (Spec 03 SRC-CODE-13, Spec 07 §3)
+        elif sig.source_id == "gh_discussions_announce" and eid and eid in covered:
+            repo_slug = str(payload.get("repo") or covered[eid].get("repo") or "").lower()
+            disc_text = f"{sig.title}\n{sig.untrusted_excerpt}\n{payload.get('body') or ''}"
+            m = MAINTAINER_LEAVING_RE.search(disc_text)
+            if m:
+                aid = _emit_lifecycle_alert(
+                    ctx,
+                    rule_id="LIFE-09",
+                    tier="P1",
+                    entity_id=eid,
+                    title=f"Maintainer-leaving notice on {repo_slug or eid}: '{m.group(0)}'",
+                    excerpt=sig.untrusted_excerpt or sig.title,
+                    source_id="gh_discussions_announce",
+                    url=sig.url,
+                    extra_payload={"matched_phrase": m.group(0)},
+                )
+                if aid is not None:
+                    new_alert_ids.append(aid)
 
         # LIFE-02: npm deprecated (with INTEG-01 Renovate suppression)
         elif sig.source_id == "npm_registry_meta" and eid and eid in covered:

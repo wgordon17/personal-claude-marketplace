@@ -45,19 +45,7 @@ _RING_ORDER: dict[str, int] = {
 }
 
 
-def _parse_iso(ts: str | None) -> datetime | None:
-    if not ts:
-        return None
-    clean = str(ts).strip()
-    if not clean:
-        return None
-    if len(clean) == 10 and clean[4] == "-" and clean[7] == "-":
-        clean = f"{clean}T00:00:00Z"
-    try:
-        dt = datetime.fromisoformat(clean.replace("Z", "+00:00"))
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-    except ValueError:
-        return None
+_parse_iso = db.parse_iso
 
 
 def _days_between(now: datetime, earlier_iso: str | None) -> float | None:

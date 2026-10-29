@@ -728,13 +728,34 @@ def _collect_t3(ctx: Ctx, out: HarnessInventoryOutput) -> None:
             _record_t3_skipped(ctx, "t3 schema not recognized")
             return
 
+        # Spec 12 A19: deduplicate T3 threads that already have a Claude JSONL transcript
+        claude_transcript_ids: set[str] = set()
+        projects_dir = ctx.paths.home / ".claude" / "projects"
+        if projects_dir.is_dir():
+            for jsonl_path in projects_dir.glob("*/*.jsonl"):
+                claude_transcript_ids.add(jsonl_path.stem)
+
+        active_col = (
+            "active_provider_thread_id"
+            if "active_provider_thread_id" in thread_cols
+            else "NULL AS active_provider_thread_id"
+        )
         rows = t3_conn.execute(
-            "SELECT default_provider, "
+            f"SELECT thread_id, default_provider, {active_col}, "
             "json_extract(payload_json, '$.modelSelection.model') AS model "
             "FROM orchestration_v2_projection_threads "
             "WHERE deleted_at IS NULL"
         ).fetchall()
+        deduped_t3_threads: set[str] = set()
         for r in rows:
+            tid = str(r["thread_id"] or "").strip()
+            active_ptid = str(r["active_provider_thread_id"] or "").strip()
+            if (tid and tid in claude_transcript_ids) or (
+                active_ptid and active_ptid in claude_transcript_ids
+            ):
+                if tid:
+                    deduped_t3_threads.add(tid)
+                continue
             prov = str(r["default_provider"] or "t3").strip()
             mid = str(r["model"] or "").strip()
             if mid:
@@ -766,10 +787,17 @@ def _collect_t3(ctx: Ctx, out: HarnessInventoryOutput) -> None:
 
         if "orchestration_v2_projection_provider_sessions" in present_tables:
             sess_rows = t3_conn.execute(
-                "SELECT provider, model FROM orchestration_v2_projection_provider_sessions "
+                "SELECT provider_session_id, thread_id, provider, model "
+                "FROM orchestration_v2_projection_provider_sessions "
                 "WHERE model IS NOT NULL"
             ).fetchall()
             for sr in sess_rows:
+                psid = str(sr["provider_session_id"] or "").strip()
+                stid = str(sr["thread_id"] or "").strip()
+                if psid in claude_transcript_ids or stid in deduped_t3_threads:
+                    if stid:
+                        deduped_t3_threads.add(stid)
+                    continue
                 mid = str(sr["model"] or "").strip()
                 if mid:
                     out.fingerprints.append(
@@ -781,10 +809,15 @@ def _collect_t3(ctx: Ctx, out: HarnessInventoryOutput) -> None:
                     )
 
         item_rows = t3_conn.execute(
-            "SELECT type, json_extract(payload_json, '$.toolName') AS tool_name, status "
+            "SELECT thread_id, provider_thread_id, type, "
+            "json_extract(payload_json, '$.toolName') AS tool_name, status "
             "FROM orchestration_v2_projection_turn_items"
         ).fetchall()
         for ir in item_rows:
+            it_tid = str(ir["thread_id"] or "").strip()
+            it_ptid = str(ir["provider_thread_id"] or "").strip()
+            if it_tid in deduped_t3_threads or it_ptid in claude_transcript_ids:
+                continue
             tname = str(ir["tool_name"] or ir["type"] or "").strip()
             if tname:
                 out.fingerprints.append(
@@ -794,6 +827,55 @@ def _collect_t3(ctx: Ctx, out: HarnessInventoryOutput) -> None:
                         token=tname,
                     )
                 )
+
+        # Spec 04 [AIH-07]: scheduled tasks (never read prompt/webhook_token/webhook_secret)
+        if "scheduled_tasks" in present_tables:
+            sched_cols = {
+                str(r["name"])
+                for r in t3_conn.execute("PRAGMA table_info(scheduled_tasks)").fetchall()
+            }
+            if {"task_id", "title", "enabled"}.issubset(sched_cols):
+                model_expr = (
+                    "json_extract(model_selection_json, '$.model') AS sched_model"
+                    if "model_selection_json" in sched_cols
+                    else "NULL AS sched_model"
+                )
+                sched_rows = t3_conn.execute(
+                    f"SELECT task_id, title, enabled, {model_expr} "
+                    "FROM scheduled_tasks WHERE enabled = 1"
+                ).fetchall()
+                for st_row in sched_rows:
+                    task_id = str(st_row["task_id"] or "").strip()
+                    title_raw = str(st_row["title"] or task_id).strip()
+                    safe_title = sanitize.clean(redact.scrub(title_raw), limit=80).strip()
+                    if task_id:
+                        sched_eid = f"svc:t3-schedule/{task_id}"
+                        out.entities.append(
+                            EntityRecord(
+                                entity_id=sched_eid,
+                                kind="svc",
+                                ecosystem="t3",
+                                name=safe_title or task_id,
+                                visibility="public",
+                            )
+                        )
+                        out.usages.append(
+                            UsageRecord(
+                                entity_id=sched_eid,
+                                context="harness:t3",
+                                version=None,
+                                direct=1,
+                            )
+                        )
+                    s_mid = str(st_row["sched_model"] or "").strip()
+                    if s_mid:
+                        out.fingerprints.append(
+                            fp.FingerprintRecord(
+                                context="harness:t3",
+                                kind="model_id",
+                                token=s_mid,
+                            )
+                        )
 
         ctx.db.execute(
             "INSERT INTO source_health("

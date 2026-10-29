@@ -1,4 +1,4 @@
-"""Tests for appsync.py and launchd.py (Task 6 Step 5, Spec 07 §7, §9, Spec 12 A25)."""
+"""Tests for appsync.py and launchd.py (Spec 07 §7, §9, Spec 12 A25)."""
 
 from __future__ import annotations
 
@@ -374,3 +374,26 @@ def test_launchd_install_uninstall_status_and_tty_gate(
         assert cli.main(["app", "sync", "--from", str(SCRIPTS_DIR), "--channel", "cli"]) == 0
     sync_cli_out = json.loads(capsys.readouterr().out.strip())
     assert sync_cli_out["ok"] is True
+
+    # verify_app.main strips arbitrary UV_* / TECH_RADAR_* vars when TECH_RADAR_REPLAY_DIR is unset
+    manifest_bytes = (ctx.paths.app / "MANIFEST.sha256").read_bytes()
+    manifest_sha = verify_app.hashlib.sha256(manifest_bytes).hexdigest()
+    captured_env: dict[str, str] = {}
+
+    def _capture_execve(_path: str, _argv: list[str], env: dict[str, str]) -> None:
+        captured_env.update(env)
+
+    monkeypatch.delenv("TECH_RADAR_REPLAY_DIR", raising=False)
+    monkeypatch.setenv("UV_INDEX_URL", "https://evil.example/simple")
+    monkeypatch.setenv("TECH_RADAR_CUSTOM_INJECT", "bad")
+    assert (
+        verify_app.main(
+            [manifest_sha, str(ctx.paths.app), "/opt/homebrew/bin/uv"],
+            execve=_capture_execve,
+        )
+        == 0
+    )
+    assert "UV_INDEX_URL" not in captured_env
+    assert "TECH_RADAR_CUSTOM_INJECT" not in captured_env
+    assert captured_env["UV_MALWARE_CHECK"] == "1"
+    assert captured_env["PYTHONDONTWRITEBYTECODE"] == "1"

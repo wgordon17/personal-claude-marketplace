@@ -1,4 +1,4 @@
-"""Tests for fixture_home builder and end-to-end inventory.collect (Task 4 Steps 2 & 7)."""
+"""Tests for fixture_home builder and end-to-end inventory.collect."""
 
 from __future__ import annotations
 

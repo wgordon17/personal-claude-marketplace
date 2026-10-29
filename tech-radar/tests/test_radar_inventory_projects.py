@@ -1,4 +1,4 @@
-"""Tests for project inventory collector (Task 4 Step 4, Spec 04, Spec 12 A8, A27)."""
+"""Tests for project inventory collector (Spec 04, Spec 12 A8, A27)."""
 
 from __future__ import annotations
 

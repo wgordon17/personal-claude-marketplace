@@ -4,21 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from . import ai, base, community, feeds, github, registries, security_feeds
+from . import ai, community, feeds, github, registries, security_feeds
 from .base import SourceResult, SourceSpec, run_source
 
 if TYPE_CHECKING:
     from ..context import Ctx
-
-_STATIC_SOURCE_MODULES = (
-    ai,
-    base,
-    community,
-    feeds,
-    github,
-    registries,
-    security_feeds,
-)
 
 SOURCES: tuple[SourceSpec, ...] = (
     *security_feeds.SECURITY_FEED_SPECS,

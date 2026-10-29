@@ -172,18 +172,17 @@ def _citation_verified(
     if host not in http.EGRESS_ALLOWLIST and host != "github.com":
         return False
 
-    if host == "github.com":
-        segments = [seg for seg in parsed.path.split("/") if seg]
-        url_repo = f"{segments[0]}/{segments[1]}".lower() if len(segments) >= 2 else ""
-        if url_repo and ref_repo and url_repo == ref_repo:
-            return True
-
     try:
         resp = ctx.http.fetch(clean_url, ttl_hours=24)
         return 200 <= resp.status < 300
     except errors.RadarError as exc:
         is_replay = procs.is_replay_mode() or isinstance(ctx.http.transport, http.ReplayHttp)
         if is_replay and "missing HTTP replay fixture" in str(exc):
+            if host == "github.com":
+                segments = [seg for seg in parsed.path.split("/") if seg]
+                url_repo = f"{segments[0]}/{segments[1]}".lower() if len(segments) >= 2 else ""
+                if url_repo and ref_repo and url_repo == ref_repo:
+                    return True
             return bool(ref_info and ref_info.get("entity_id"))
         return False
 
@@ -543,9 +542,11 @@ def _check_t10_verification_gate(
     elif eco in ("pypi", "npm", "cargo"):
         reg_repo = str(gate_inputs.get("registry_repo") or "").strip().lower()
         manifest_name = str(gate_inputs.get("manifest_name") or name).strip().lower()
+        norm_manifest = manifest_name.replace("_", "-") if eco == "pypi" else manifest_name
+        norm_name = name.lower().replace("_", "-") if eco == "pypi" else name.lower()
         if not reg_repo or (repo and reg_repo != repo):
             reasons.append("T10: registry<->repo link mismatch")
-        elif manifest_name != name.lower():
+        elif norm_manifest != norm_name:
             reasons.append("T10: repo manifest name != package name")
 
     # 5. Typosquat check (Damerau-Levenshtein <= 1 against top names)
@@ -583,7 +584,7 @@ def _populate_verdict_reported(
         reported["effort"] = str(v_item["effort"])
     if v_item.get("adoption_snippet"):
         reported["adoption_snippet"] = redact.scrub(
-            sanitize.clean(str(v_item["adoption_snippet"]), limit=400)
+            sanitize.clean(str(v_item["adoption_snippet"]), limit=600)
         )
     if citations:
         reported["citations"] = citations
@@ -755,7 +756,7 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
                         pay_obj = {}
                 if v_item.get("adoption_snippet"):
                     pay_obj["adoption_snippet"] = redact.scrub(
-                        sanitize.clean(str(v_item["adoption_snippet"]), limit=400)
+                        sanitize.clean(str(v_item["adoption_snippet"]), limit=600)
                     )
                 if v_item.get("effort"):
                     pay_obj["effort"] = str(v_item["effort"])
@@ -860,8 +861,9 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
         ctx.db.commit()
         applied_items.append(fin)
 
-    if applied_items:
+    if applied_items or not all_errors:
         db.kv_set(ctx.db, f"verdict_applied:{run_id}", ctx.now_iso)
+        ctx.db.commit()
 
     if all_errors:
         msg = (

@@ -1,4 +1,4 @@
-"""Tests for Profile loader, visibility classification, and seeds (Task 4 Steps 1 & 6)."""
+"""Tests for Profile loader, visibility classification, and seeds."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for exposure.py and `radar.py exposure` CLI handler (Task 5 Step 4, Spec 07 §2, A2)."""
+"""Tests for exposure.py and `radar.py exposure` CLI handler (Spec 07 §2, A2)."""
 
 from __future__ import annotations
 
@@ -91,3 +91,30 @@ def test_exposure_check_lockfile_history_pth_and_confinement(
     assert out_obj["ok"] is True
     assert out_obj["report_path"] == str(rep.report_path)
     assert out_obj["exists"] is True
+
+    # 6. Verify _lockfile_names_for_purl, _commit_lockfile_matches_pkg_version, and
+    #    _scan_git_lockfile_history pre-check when pkg_name is absent from working lockfile
+    assert exposure._lockfile_names_for_purl("pkg:npm/react")[0] == "package-lock.json"
+    assert exposure._lockfile_names_for_purl("pkg:cargo/serde")[0] == "Cargo.lock"
+    assert exposure._lockfile_names_for_purl("pkg:golang/foo")[0] == "go.sum"
+
+    sample_uv_lock = (
+        '[[package]]\nname = "other-pkg"\nversion = "1.107.0"\n\n'
+        '[[package]]\nname = "my_pkg"\nversion = "2.0.0"\n'
+    )
+    assert (
+        exposure._commit_lockfile_matches_pkg_version(sample_uv_lock, "my-pkg", "1.107.0") is False
+    )
+    assert exposure._commit_lockfile_matches_pkg_version(sample_uv_lock, "my-pkg", "2.0.0") is True
+
+    # Package never present in repo_a's uv.lock -> pre-check skips per-version scans and returns []
+    absent_commits = exposure._scan_git_lockfile_history(
+        ctx,
+        "https://github.com/example-org/public-app",
+        repo_a,
+        repo_a / "uv.lock",
+        ["1.107.0"],
+        pkg_name="never-existed-pkg-xyz",
+        purl="pkg:pypi/never-existed-pkg-xyz",
+    )
+    assert absent_commits == []

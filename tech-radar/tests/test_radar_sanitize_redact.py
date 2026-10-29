@@ -1,4 +1,4 @@
-"""Tests for sanitize.py and redact.py (Task 3 Step 2)."""
+"""Tests for sanitize.py and redact.py."""
 
 from __future__ import annotations
 

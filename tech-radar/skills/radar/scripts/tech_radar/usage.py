@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,18 +14,7 @@ from . import db, errors, fsguard
 if TYPE_CHECKING:
     from .context import Ctx
 
-
-def _parse_iso(ts: str | None) -> datetime | None:
-    if not ts:
-        return None
-    clean = str(ts).strip()
-    if not clean:
-        return None
-    try:
-        dt = datetime.fromisoformat(clean.replace("Z", "+00:00"))
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-    except ValueError:
-        return None
+_parse_iso = db.parse_iso
 
 
 def _parse_transcript_jsonl_lines(

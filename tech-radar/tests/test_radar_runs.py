@@ -1,4 +1,4 @@
-"""Tests for runs.py, plan-run, usage.py, --run validation, and FTS5 search (Task 8 Step 6)."""
+"""Tests for runs.py, plan-run, usage.py, --run validation, and FTS5 search."""
 
 from __future__ import annotations
 
@@ -460,10 +460,24 @@ def test_t3_model_resolution_decisions_staging_usage_and_fts_search_aliasing(
     assert run2_u["output_tokens"] == 250
     assert run2_u["turns"] == 3
 
-    # 5. STRUCT-002: format_run_id bumps by +1s when a run row with the same timestamp+mode exists
+    # 5. format_run_id bumps by +1s when a run row with the same timestamp+mode exists
     ctx.now = datetime(2026, 10, 29, 7, 0, tzinfo=UTC)
     bumped_id = runlog.format_run_id(ctx, "daily")
     assert bumped_id == "20261029T070001Z-daily"
+
+    # 6. SCHED-10: lookback_since widens query window when catch_up=True is active on a run
+    from datetime import timedelta
+
+    from tech_radar.sources.base import lookback_since
+
+    runlog.finish_run(ctx, res2["run_id"], "ok")
+    ctx.now = datetime(2026, 10, 30, 23, 0, tzinfo=UTC)  # 40h after 2026-10-29T07:00:00Z
+    res_catchup = runs.plan_run(ctx, requested="daily")
+    assert res_catchup["catch_up"] is True
+    ctx.run_id = res_catchup["run_id"]
+    widened = lookback_since(ctx, timedelta(days=1))
+    assert widened == datetime(2026, 10, 29, 7, 0, tzinfo=UTC)
+    lock.release(res_catchup["run_id"], state_dir=ctx.paths.state)
 
 
 def test_collect_degraded_source_returns_exit_code_3(
@@ -471,7 +485,7 @@ def test_collect_degraded_source_returns_exit_code_3(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """API-001: _handle_collect returns exit code 3 when a source fails (not skipped)."""
+    """_handle_collect returns exit code 3 when a source fails (not skipped)."""
     _ = fixture_home
     from tech_radar import sources
     from tech_radar.sources.base import SourceResult

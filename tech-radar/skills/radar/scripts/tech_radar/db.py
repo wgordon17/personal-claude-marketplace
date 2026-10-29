@@ -116,6 +116,22 @@ def migrate(
     return get_user_version(conn)
 
 
+def parse_iso(ts: str | None) -> datetime | None:
+    """Parse an ISO-8601 timestamp or YYYY-MM-DD date string into a timezone-aware UTC datetime."""
+    if not ts:
+        return None
+    clean = str(ts).strip()
+    if not clean:
+        return None
+    if len(clean) == 10 and clean[4] == "-" and clean[7] == "-":
+        clean = f"{clean}T00:00:00Z"
+    try:
+        dt = datetime.fromisoformat(clean.replace("Z", "+00:00"))
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
 def scrub_text(value: str | None) -> str | None:
     """Scrub secret patterns from a nullable string before writing to SQLite."""
     if value is None:

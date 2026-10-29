@@ -13,10 +13,21 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from . import db, exposure, fsguard
 from .errors import RadarError
-from .sources.base import RawSignal, SourceResult, persist_raw_signal, record_source_skipped
+from .sources.base import (
+    RawSignal,
+    SourceResult,
+    persist_raw_signal,
+    record_source_error,
+    record_source_ok,
+    record_source_skipped,
+)
 from .sources.security_feeds import (
+    OSV_CHUNK_SIZE,
+    _fetch_osv_vuln_detail,
+    chunk_osv_queries,
     entity_id_from_osv_package,
     is_mal_advisory,
+    is_stub_worth_fetching_in_hourly,
     osv_ecosystem,
 )
 
@@ -435,11 +446,8 @@ def _query_package_level_osv_incidents(
     ctx: Ctx,
     direct_public_deps: Sequence[Mapping[str, Any]],
 ) -> list[RawSignal]:
-    """Query OSV `POST /v1/query` by package (no version) for direct public deps (Spec 12 A1).
-
-    In replay mode, silently skips packages without a `/v1/query` fixture.
-    """
-    out: list[RawSignal] = []
+    """Query OSV `POST /v1/querybatch` by package (no version, 24h cache) for direct public deps."""
+    pkg_items: list[dict[str, Any]] = []
     seen_eids: set[str] = set()
     for dep in direct_public_deps:
         eid = str(dep["entity_id"])
@@ -450,70 +458,101 @@ def _query_package_level_osv_incidents(
         name = str(dep.get("name") or "").strip()
         if not eco or not name:
             continue
+        pkg_items.append({"entity_id": eid, "ecosystem": eco, "name": name})
 
+    if not pkg_items:
+        return []
+    pkg_items.sort(key=lambda item: (item["ecosystem"], item["name"], item["entity_id"]))
+
+    out: list[RawSignal] = []
+    for chunk in chunk_osv_queries(pkg_items, OSV_CHUNK_SIZE):
+        payload_queries = [
+            {"package": {"ecosystem": item["ecosystem"], "name": item["name"]}} for item in chunk
+        ]
         body_bytes = json.dumps(
-            {"package": {"ecosystem": eco, "name": name}},
+            {"queries": payload_queries},
             separators=(",", ":"),
         ).encode("utf-8")
         try:
             resp = ctx.http.fetch(
-                "https://api.osv.dev/v1/query",
+                "https://api.osv.dev/v1/querybatch",
                 method="POST",
                 body=body_bytes,
                 ttl_hours=24,
             )
-        except RadarError:
+            batch_obj = json.loads(resp.body.decode("utf-8"))
+        except (RadarError, UnicodeDecodeError, json.JSONDecodeError):
             continue
 
-        try:
-            obj = json.loads(resp.body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        results_list = batch_obj.get("results") if isinstance(batch_obj, Mapping) else None
+        if not isinstance(results_list, list):
             continue
-        if not isinstance(obj, Mapping):
-            continue
-        for vuln in obj.get("vulns") or []:
-            if not isinstance(vuln, Mapping) or not is_mal_advisory(vuln):
-                continue
-            vid = str(vuln.get("id") or "").strip()
-            if not vid:
-                continue
-            aff_vers: list[str] = []
-            aff_ranges: list[dict[str, Any]] = []
-            for aff in vuln.get("affected") or []:
-                if isinstance(aff, Mapping):
-                    for v in aff.get("versions") or []:
-                        if v and str(v) not in aff_vers:
-                            aff_vers.append(str(v))
-                    for r in aff.get("ranges") or []:
-                        if isinstance(r, Mapping):
-                            aff_ranges.append(dict(r))
 
-            pub = str(vuln.get("published") or vuln.get("modified") or ctx.now_iso)
-            mod = str(vuln.get("modified") or pub)
-            out.append(
-                RawSignal(
-                    source_id="osv_batch",
-                    type="compromise",
-                    external_id=vid,
-                    title=str(vuln.get("summary") or f"OSV MAL {vid}"),
-                    url=f"https://osv.dev/vulnerability/{vid}",
-                    published_at=pub,
-                    untrusted_excerpt=str(vuln.get("details") or vuln.get("summary") or vid),
-                    entity_hint=eid,
-                    confidence="confirmed",
-                    payload={
-                        "advisory_id": vid,
-                        "is_mal": True,
-                        "published": pub,
-                        "modified": mod,
-                        "withdrawn": vuln.get("withdrawn"),
-                        "affected_versions": aff_vers,
-                        "affected_ranges": aff_ranges,
-                    },
-                    dedupe_key=f"osv_query|compromise|{eid}|{vid}",
-                    withdrawn=1 if vuln.get("withdrawn") else 0,
+        for pkg_item, res_item in zip(chunk, results_list, strict=False):
+            if not isinstance(res_item, Mapping):
+                continue
+            eid = str(pkg_item["entity_id"])
+            for stub in res_item.get("vulns") or []:
+                if not isinstance(stub, Mapping):
+                    continue
+                if "summary" in stub or "affected" in stub or "database_specific" in stub:
+                    vuln: Mapping[str, Any] | None = stub
+                else:
+                    if not is_stub_worth_fetching_in_hourly(stub, is_direct=True):
+                        continue
+                    vid_stub = str(stub.get("id") or "").strip()
+                    if not vid_stub:
+                        continue
+                    try:
+                        vuln = _fetch_osv_vuln_detail(
+                            ctx,
+                            vid_stub,
+                            str(stub.get("modified") or "") or None,
+                        )
+                    except RadarError:
+                        continue
+                if not isinstance(vuln, Mapping) or not is_mal_advisory(vuln):
+                    continue
+                vid = str(vuln.get("id") or "").strip()
+                if not vid:
+                    continue
+                aff_vers: list[str] = []
+                aff_ranges: list[dict[str, Any]] = []
+                for aff in vuln.get("affected") or []:
+                    if isinstance(aff, Mapping):
+                        for v in aff.get("versions") or []:
+                            if v and str(v) not in aff_vers:
+                                aff_vers.append(str(v))
+                        for r in aff.get("ranges") or []:
+                            if isinstance(r, Mapping):
+                                aff_ranges.append(dict(r))
+
+                pub = str(vuln.get("published") or vuln.get("modified") or ctx.now_iso)
+                mod = str(vuln.get("modified") or pub)
+                out.append(
+                    RawSignal(
+                        source_id="osv_batch",
+                        type="compromise",
+                        external_id=vid,
+                        title=str(vuln.get("summary") or f"OSV MAL {vid}"),
+                        url=f"https://osv.dev/vulnerability/{vid}",
+                        published_at=pub,
+                        untrusted_excerpt=str(vuln.get("details") or vuln.get("summary") or vid),
+                        entity_hint=eid,
+                        confidence="confirmed",
+                        payload={
+                            "advisory_id": vid,
+                            "is_mal": True,
+                            "published": pub,
+                            "modified": mod,
+                            "withdrawn": vuln.get("withdrawn"),
+                            "affected_versions": aff_vers,
+                            "affected_ranges": aff_ranges,
+                        },
+                        dedupe_key=f"osv_query|compromise|{eid}|{vid}",
+                        withdrawn=1 if vuln.get("withdrawn") else 0,
+                    )
                 )
-            )
     return out
 
 
@@ -562,6 +601,10 @@ def _run_daily_scanners(
     ).fetchall()
 
     private_skipped = False
+    uv_audit_ran = False
+    uv_audit_signals_count = 0
+    uv_audit_errors: list[str] = []
+
     for prow in proj_rows:
         proj_key = str(prow["project_key"])
         proj_vis = str(prow["visibility"] or "unknown")
@@ -629,12 +672,20 @@ def _run_daily_scanners(
                         cwd=audit_dir,
                         env=audit_env,
                     )
-                    if res.stdout.strip():
-                        scanner_signals.extend(
-                            _parse_uv_audit_output(res.stdout, proj_key, ctx.now_iso)
-                        )
-                except RadarError:
-                    pass
+                    parsed_uv = _parse_uv_audit_output(
+                        res.stdout,
+                        proj_key,
+                        ctx.now_iso,
+                        strict=True,
+                        stderr=res.stderr,
+                    )
+                    scanner_signals.extend(parsed_uv)
+                    uv_audit_signals_count += len(parsed_uv)
+                    uv_audit_ran = True
+                except (RadarError, ValueError) as exc:
+                    uv_audit_errors.append(str(exc).strip() or "uv audit failed")
+                    if "uv audit failed" not in coverage_notes:
+                        coverage_notes.append("uv audit failed")
 
         for non_py_lock in ("package-lock.json", "Cargo.lock", "go.mod"):
             lf_path = proj_dir / non_py_lock
@@ -663,6 +714,12 @@ def _run_daily_scanners(
             except RadarError:
                 pass
 
+    if UV_AUDIT_ENABLED:
+        if uv_audit_errors:
+            record_source_error(ctx, "uv_audit", "; ".join(uv_audit_errors))
+        elif uv_audit_ran:
+            record_source_ok(ctx, "uv_audit", uv_audit_signals_count)
+
     if private_skipped:
         record_source_skipped(ctx, "scanners_private", "scanner skipped: private dependencies")
         coverage_notes.append("scanner skipped: private dependencies")
@@ -681,12 +738,25 @@ def _parse_uv_audit_output(
     stdout: str,
     project_key: str,
     fetched_at: str,
+    *,
+    strict: bool = False,
+    stderr: str = "",
 ) -> list[RawSignal]:
     try:
         obj = json.loads(stdout)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        if strict:
+            detail = stderr.strip() or f"invalid uv audit JSON: {exc}"
+            raise ValueError(detail) from exc
         return []
-    if not isinstance(obj, Mapping):
+    if not isinstance(obj, Mapping) or (
+        strict
+        and "vulnerabilities" not in obj
+        and "adverse_statuses" not in obj
+        and "summary" not in obj
+    ):
+        if strict:
+            raise ValueError(stderr.strip() or "uv audit JSON missing expected keys")
         return []
 
     out: list[RawSignal] = []
@@ -840,109 +910,181 @@ def _evaluate_integrity_regressions(
     """Check SEC-10, SEC-11, SEC-12 integrity regressions on direct dependencies."""
     new_alert_ids: list[int] = []
 
+    release_tags_by_repo: dict[str, set[str]] = {}
+    for s in signals:
+        if s.source_id == "gh_releases":
+            r_slug = str(s.payload.get("repo") or "").strip().lower()
+            if not r_slug and s.entity_hint and s.entity_hint.startswith("gh:"):
+                r_slug = s.entity_hint[len("gh:") :].strip().lower()
+            tag = str(s.payload.get("tag_name") or "").strip()
+            if r_slug and tag:
+                release_tags_by_repo.setdefault(r_slug, set()).update({tag, tag.lstrip("vV")})
+
     for sig in signals:
-        if sig.source_id not in ("pypi_meta", "npm_registry_meta"):
-            continue
-        eid = sig.entity_hint
-        if not eid or eid not in usage_by_entity:
-            continue
-        usages = usage_by_entity[eid]
-        if not any(int(u.get("direct") or 0) > 0 for u in usages):
+        if sig.source_id not in ("pypi_meta", "npm_registry_meta", "gh_repo_meta", "gh_releases"):
             continue
 
-        payload = sig.payload
-        reasons: list[str] = []
+        target_eids: list[str] = []
+        if sig.entity_hint and sig.entity_hint in usage_by_entity:
+            target_eids.append(sig.entity_hint)
+        elif sig.entity_hint and sig.entity_hint.startswith("gh:"):
+            r_slug = sig.entity_hint[len("gh:") :].strip().lower()
+            for cand_eid, u_list in usage_by_entity.items():
+                if any(str(u.get("repo") or "").strip().lower() == r_slug for u in u_list):
+                    target_eids.append(cand_eid)
+        if not target_eids:
+            continue
 
-        # SEC-10: provenance present in previous release, absent in latest
-        prov_map = payload.get("provenance_by_version") or payload.get("attestations_by_version")
-        latest_ver = str(payload.get("latest_version") or "").strip()
-        if isinstance(prov_map, Mapping) and latest_ver and latest_ver in prov_map:
-            latest_has_prov = bool(prov_map[latest_ver])
-            prior_had_prov = any(
-                bool(val) for ver_k, val in prov_map.items() if str(ver_k) != latest_ver
+        for eid in target_eids:
+            usages = usage_by_entity[eid]
+            if not any(int(u.get("direct") or 0) > 0 for u in usages):
+                continue
+
+            payload = sig.payload
+            reasons: list[str] = []
+
+            # SEC-10: provenance present in previous release, absent in latest
+            prov_map = payload.get("provenance_by_version") or payload.get(
+                "attestations_by_version"
             )
-            if prior_had_prov and not latest_has_prov:
-                reasons.append("SEC-10: provenance/trusted publishing dropped in latest release")
+            latest_ver = str(payload.get("latest_version") or payload.get("tag_name") or "").strip()
+            if isinstance(prov_map, Mapping) and latest_ver and latest_ver in prov_map:
+                latest_has_prov = bool(prov_map[latest_ver])
+                prior_had_prov = any(
+                    bool(val) for ver_k, val in prov_map.items() if str(ver_k) != latest_ver
+                )
+                if prior_had_prov and not latest_has_prov:
+                    reasons.append(
+                        "SEC-10: provenance/trusted publishing dropped in latest release"
+                    )
 
-        # SEC-10: repository URL changed between releases
-        prev_repo = payload.get("previous_repository")
-        cur_repo = payload.get("repository")
-        if prev_repo and cur_repo and str(prev_repo).lower() != str(cur_repo).lower():
-            reasons.append(f"SEC-10: repository changed from {prev_repo} to {cur_repo}")
+            # SEC-10: repository URL changed between releases (or across repo_by_version)
+            prev_repo = payload.get("previous_repository")
+            cur_repo = payload.get("repository") or payload.get("repo")
+            repo_by_ver = payload.get("repo_by_version")
+            if not prev_repo and isinstance(repo_by_ver, Mapping) and latest_ver:
+                cur_ver_repo = repo_by_ver.get(latest_ver) or cur_repo
+                prior_repos = [
+                    str(r)
+                    for ver_k, r in repo_by_ver.items()
+                    if str(ver_k) != latest_ver
+                    and r
+                    and str(r).lower() != str(cur_ver_repo or "").lower()
+                ]
+                if prior_repos and cur_ver_repo:
+                    prev_repo = prior_repos[-1]
+                    cur_repo = cur_ver_repo
+            if prev_repo and cur_repo and str(prev_repo).lower() != str(cur_repo).lower():
+                reasons.append(f"SEC-10: repository changed from {prev_repo} to {cur_repo}")
 
-        # SEC-11: maintainer set changed
-        prev_maint = payload.get("previous_maintainers")
-        cur_maint = payload.get("maintainers")
-        if (
-            isinstance(prev_maint, list)
-            and prev_maint
-            and isinstance(cur_maint, list)
-            and cur_maint
-            and set(map(str, prev_maint)) != set(map(str, cur_maint))
-        ):
-            reasons.append("SEC-11: publisher/maintainer set changed")
+            # SEC-10: new release with no matching git tag on declared repo
+            if payload.get("tag_missing") is True or payload.get("has_matching_tag") is False:
+                ver_label = latest_ver or "latest"
+                reasons.append(f"SEC-10: release {ver_label} has no matching git tag on repository")
+            elif (
+                sig.source_id in ("pypi_meta", "npm_registry_meta")
+                and cur_repo
+                and latest_ver
+                and str(cur_repo).lower() in release_tags_by_repo
+            ):
+                known_tags = release_tags_by_repo[str(cur_repo).lower()]
+                if (
+                    known_tags
+                    and latest_ver not in known_tags
+                    and latest_ver.lstrip("vV") not in known_tags
+                ):
+                    reasons.append(
+                        f"SEC-10: release {latest_ver} has no matching git tag on {cur_repo}"
+                    )
 
-        # SEC-12: new install-time execution (preinstall/install/postinstall, .pth, sdist-only)
-        scripts_map = payload.get("install_script_versions")
-        if isinstance(scripts_map, Mapping) and latest_ver and latest_ver in scripts_map:
-            prior_had_scripts = any(
-                bool(val) for ver_k, val in scripts_map.items() if str(ver_k) != latest_ver
-            )
-            if not prior_had_scripts:
+            # SEC-11: maintainer set changed or repository ownership transferred
+            prev_maint = payload.get("previous_maintainers")
+            cur_maint = payload.get("maintainers")
+            if (
+                isinstance(prev_maint, list)
+                and prev_maint
+                and isinstance(cur_maint, list)
+                and cur_maint
+                and set(map(str, prev_maint)) != set(map(str, cur_maint))
+            ):
+                reasons.append("SEC-11: publisher/maintainer set changed")
+
+            prev_owner = payload.get("previous_owner_login")
+            cur_owner = payload.get("owner_login")
+            if (
+                prev_owner
+                and cur_owner
+                and str(prev_owner).strip().lower() != str(cur_owner).strip().lower()
+            ):
+                reasons.append(f"SEC-11: repository owner changed from {prev_owner} to {cur_owner}")
+
+            # SEC-12: new install-time execution (preinstall/install/postinstall, .pth, sdist-only)
+            scripts_map = payload.get("install_script_versions")
+            if isinstance(scripts_map, Mapping) and latest_ver and latest_ver in scripts_map:
+                prior_had_scripts = any(
+                    bool(val) for ver_k, val in scripts_map.items() if str(ver_k) != latest_ver
+                )
+                if not prior_had_scripts:
+                    reasons.append(
+                        f"SEC-12: install scripts added in {latest_ver} ({scripts_map[latest_ver]})"
+                    )
+
+            pth_vers = payload.get("pth_or_sitecustomize_versions")
+            if isinstance(pth_vers, list) and pth_vers:
+                reasons.append(f"SEC-12: wheel contains startup .pth/sitecustomize ({pth_vers[0]})")
+
+            sdist_only = payload.get("sdist_only_versions")
+            wheel_vers = payload.get("wheel_versions")
+            if (
+                isinstance(sdist_only, list)
+                and isinstance(wheel_vers, list)
+                and latest_ver
+                and latest_ver in sdist_only
+                and len(wheel_vers) > 0
+            ):
                 reasons.append(
-                    f"SEC-12: install scripts added in {latest_ver} ({scripts_map[latest_ver]})"
+                    f"SEC-12: {latest_ver} is sdist-only where wheels previously existed"
                 )
 
-        pth_vers = payload.get("pth_or_sitecustomize_versions")
-        if isinstance(pth_vers, list) and pth_vers:
-            reasons.append(f"SEC-12: wheel contains startup .pth/sitecustomize ({pth_vers[0]})")
-
-        sdist_only = payload.get("sdist_only_versions")
-        wheel_vers = payload.get("wheel_versions")
-        if (
-            isinstance(sdist_only, list)
-            and isinstance(wheel_vers, list)
-            and latest_ver
-            and latest_ver in sdist_only
-            and len(wheel_vers) > 0
-        ):
-            reasons.append(f"SEC-12: {latest_ver} is sdist-only where wheels previously existed")
-
-        for reason in reasons:
-            rule_code = reason.split(":", 1)[0].strip()
-            sig_id = persist_raw_signal(
-                ctx,
-                RawSignal(
-                    source_id=sig.source_id,
-                    type="compromise",
-                    external_id=f"integrity:{eid}:{rule_code}:{latest_ver or 'latest'}",
-                    title=f"Integrity regression on {eid}: {reason}",
-                    url=sig.url,
-                    published_at=ctx.now_iso,
-                    untrusted_excerpt=reason,
-                    entity_hint=eid,
+            for reason in reasons:
+                rule_code = reason.split(":", 1)[0].strip()
+                reason_hash = hashlib.sha256(reason.encode("utf-8")).hexdigest()[:8]
+                dedupe = f"integrity|{eid}|{rule_code}:{reason_hash}|{latest_ver or 'latest'}"
+                sig_id = persist_raw_signal(
+                    ctx,
+                    RawSignal(
+                        source_id=sig.source_id,
+                        type="compromise",
+                        external_id=(
+                            f"integrity:{eid}:{rule_code}:{reason_hash}:{latest_ver or 'latest'}"
+                        ),
+                        title=f"Integrity regression on {eid}: {reason}",
+                        url=sig.url,
+                        published_at=ctx.now_iso,
+                        untrusted_excerpt=reason,
+                        entity_hint=eid,
+                        confidence="confirmed",
+                        payload={"reason": reason, "version": latest_ver},
+                        dedupe_key=dedupe,
+                    ),
+                )
+                aid, is_new = upsert_alert(
+                    ctx,
+                    tier="P1",
+                    kind="integrity",
                     confidence="confirmed",
-                    payload={"reason": reason, "version": latest_ver},
-                    dedupe_key=f"integrity|{eid}|{rule_code}|{latest_ver or 'latest'}",
-                ),
-            )
-            aid, is_new = upsert_alert(
-                ctx,
-                tier="P1",
-                kind="integrity",
-                confidence="confirmed",
-                entity_id=eid,
-                signal_id=sig_id,
-                dedupe_key=f"integrity|{eid}|{rule_code}|{latest_ver or 'latest'}",
-                payload={
-                    "advisory_id": rule_code,
-                    "entity_id": eid,
-                    "version": latest_ver or None,
-                    "reason": reason,
-                },
-            )
-            if is_new:
-                new_alert_ids.append(aid)
+                    entity_id=eid,
+                    signal_id=sig_id,
+                    dedupe_key=dedupe,
+                    payload={
+                        "advisory_id": rule_code,
+                        "entity_id": eid,
+                        "version": latest_ver or None,
+                        "reason": reason,
+                    },
+                )
+                if is_new:
+                    new_alert_ids.append(aid)
 
     return new_alert_ids
 
@@ -1246,6 +1388,18 @@ def evaluate(
                     {str(u["version"]) for u in affected_usages if u.get("version")}
                 )
                 ver_key = matched_vers[0] if matched_vers else "any"
+                epss_val = payload.get("epss")
+                if epss_val is None and isinstance(sig.metrics, Mapping):
+                    epss_val = sig.metrics.get("epss")
+                if isinstance(epss_val, int | float):
+                    sig.metrics["epss"] = float(epss_val)
+                    ctx.db.execute(
+                        "INSERT INTO metrics(entity_id, metric, value, observed_at) "
+                        "VALUES (?, 'epss', ?, ?) "
+                        "ON CONFLICT(entity_id, metric, observed_at) DO UPDATE SET "
+                        "value = excluded.value",
+                        (eid, float(epss_val), ctx.now_iso),
+                    )
                 sig_id = persist_raw_signal(ctx, sig, fetched_at=ctx.now_iso)
                 dedupe = f"kev|{eid}|{cve_id}|{ver_key}"
                 aid, is_new = upsert_alert(
@@ -1262,7 +1416,7 @@ def evaluate(
                         "cve_id": cve_id,
                         "entity_id": eid,
                         "version": ver_key,
-                        "epss": payload.get("epss"),
+                        "epss": epss_val,
                     },
                 )
                 if is_new:

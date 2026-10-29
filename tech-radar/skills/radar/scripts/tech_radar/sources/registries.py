@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
+import tomllib
 import urllib.parse
 from collections.abc import Mapping
 from datetime import timedelta
@@ -17,6 +19,7 @@ from .base import (
     RawSignal,
     SourceSpec,
     infer_github_entity_hint,
+    lookback_since,
     normalize_timestamp,
 )
 from .security_feeds import is_mal_advisory
@@ -82,10 +85,17 @@ def parse_npm_registry_meta(data: bytes, meta: FetchMeta) -> list[RawSignal]:
     time_tbl = obj.get("time") if isinstance(obj.get("time"), Mapping) else {}
 
     installed_ver = str(meta.params.get("installed_version") or "").strip()
+    raw_inst_vers = meta.params.get("installed_versions")
+    installed_vers: list[str] = (
+        [str(v).strip() for v in raw_inst_vers if str(v).strip()]
+        if isinstance(raw_inst_vers, list)
+        else ([installed_ver] if installed_ver else [])
+    )
     deprecated_versions: dict[str, str] = {}
     install_script_versions: dict[str, list[str]] = {}
     attestations_by_version: dict[str, bool] = {}
     repo_by_version: dict[str, str] = {}
+    maintainers_by_version: dict[str, list[str]] = {}
 
     if isinstance(versions_tbl, Mapping):
         for ver_key, ver_meta in versions_tbl.items():
@@ -113,16 +123,54 @@ def parse_npm_registry_meta(data: bytes, meta: FetchMeta) -> list[RawSignal]:
             if v_repo:
                 repo_by_version[v_str] = v_repo
 
+            v_maint: list[str] = []
+            for vm_item in ver_meta.get("maintainers") or []:
+                if isinstance(vm_item, Mapping) and vm_item.get("name"):
+                    v_maint.append(str(vm_item["name"]))
+                elif isinstance(vm_item, str):
+                    v_maint.append(vm_item)
+            if v_maint:
+                maintainers_by_version[v_str] = sorted(set(v_maint))
+
     top_maintainers: list[str] = []
     for m_item in obj.get("maintainers") or []:
         if isinstance(m_item, Mapping) and m_item.get("name"):
             top_maintainers.append(str(m_item["name"]))
         elif isinstance(m_item, str):
             top_maintainers.append(m_item)
+    cur_maintainers = sorted(set(top_maintainers))
 
     top_repo = _extract_repo_slug(obj.get("repository"))
+    if not top_repo and latest_ver and latest_ver in repo_by_version:
+        top_repo = repo_by_version[latest_ver]
+
+    prev_repo = obj.get("previous_repository")
+    if not prev_repo and latest_ver and repo_by_version:
+        cur_ver_repo = repo_by_version.get(latest_ver) or top_repo
+        prior_repos = [
+            r
+            for k, r in repo_by_version.items()
+            if k != latest_ver and r and r.lower() != str(cur_ver_repo or "").lower()
+        ]
+        if prior_repos:
+            prev_repo = prior_repos[-1]
+
+    prev_maintainers = obj.get("previous_maintainers")
+    if not prev_maintainers and latest_ver and maintainers_by_version:
+        cur_ver_maint = maintainers_by_version.get(latest_ver) or cur_maintainers
+        prior_maints = [
+            m
+            for k, m in maintainers_by_version.items()
+            if k != latest_ver and m and set(m) != set(cur_ver_maint)
+        ]
+        if prior_maints:
+            prev_maintainers = prior_maints[-1]
+
     latest_deprecated = deprecated_versions.get(latest_ver) if latest_ver else None
-    installed_deprecated = deprecated_versions.get(installed_ver) if installed_ver else None
+    installed_deprecated = next(
+        (deprecated_versions[v] for v in installed_vers if v in deprecated_versions),
+        None,
+    )
     top_deprecated = str(obj.get("deprecated") or "") or latest_deprecated or installed_deprecated
 
     pub_at = (
@@ -139,11 +187,12 @@ def parse_npm_registry_meta(data: bytes, meta: FetchMeta) -> list[RawSignal]:
         "installed_version": installed_ver or None,
         "deprecated": top_deprecated,
         "deprecated_versions": deprecated_versions,
-        "maintainers": sorted(set(top_maintainers)),
-        "previous_maintainers": obj.get("previous_maintainers"),
+        "maintainers": cur_maintainers,
+        "previous_maintainers": prev_maintainers,
         "install_script_versions": install_script_versions,
         "attestations_by_version": attestations_by_version,
         "repository": top_repo,
+        "previous_repository": prev_repo,
         "repo_by_version": repo_by_version,
     }
 
@@ -178,13 +227,20 @@ def _run_npm_registry_meta(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
         "AND e.visibility = 'public' "
         "AND (u.direct = 1 OR u.context = 'interest:watchlist')"
     ).fetchall()
-    out: list[RawSignal] = []
+    grouped: dict[str, tuple[str, list[str]]] = {}
     for row in rows:
         eid = str(row["entity_id"])
         name = str(row["name"] or eid[len("pkg:npm/") :]).strip()
         ver = str(row["version"] or "").strip()
         if not name:
             continue
+        if eid not in grouped:
+            grouped[eid] = (name, [ver] if ver else [])
+        elif ver and ver not in grouped[eid][1]:
+            grouped[eid][1].append(ver)
+
+    out: list[RawSignal] = []
+    for eid, (name, vers) in grouped.items():
         url = f"https://registry.npmjs.org/{name}"
         try:
             resp = ctx.http.fetch(url, ttl_hours=spec.ttl_hours)
@@ -195,7 +251,10 @@ def _run_npm_registry_meta(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
             fetched_at=ctx.now_iso,
             status=resp.status,
             headers=resp.headers,
-            params={"installed_version": ver},
+            params={
+                "installed_version": vers[0] if vers else "",
+                "installed_versions": vers,
+            },
             source_id=spec.id,
             entity_id=eid,
         )
@@ -213,6 +272,10 @@ def parse_pypi_meta(data: bytes, meta: FetchMeta) -> list[RawSignal]:
     if not isinstance(obj, Mapping):
         raise FetchError("PyPI metadata payload must be a JSON object")
 
+    return _parse_pypi_meta_obj(obj, meta)
+
+
+def _parse_pypi_meta_obj(obj: Mapping[str, Any], meta: FetchMeta) -> list[RawSignal]:
     info = obj.get("info") if isinstance(obj.get("info"), Mapping) else {}
     pkg_name = (
         str(obj.get("name") or (info.get("name") if isinstance(info, Mapping) else "") or "")
@@ -348,14 +411,20 @@ def _run_pypi_meta(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
         "AND e.visibility = 'public' "
         "AND (u.direct = 1 OR u.context = 'interest:watchlist')"
     ).fetchall()
-    out: list[RawSignal] = []
+    grouped: dict[str, tuple[str, list[str]]] = {}
     for row in rows:
         eid = str(row["entity_id"])
         name = str(row["name"] or eid[len("pkg:pypi/") :]).strip().lower()
         ver = str(row["version"] or "").strip()
         if not name:
             continue
+        if eid not in grouped:
+            grouped[eid] = (name, [ver] if ver else [])
+        elif ver and ver not in grouped[eid][1]:
+            grouped[eid][1].append(ver)
 
+    out: list[RawSignal] = []
+    for eid, (name, vers) in grouped.items():
         combined_obj: dict[str, Any] = {"name": name}
         got_any = False
 
@@ -390,16 +459,14 @@ def _run_pypi_meta(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
             url=json_url,
             fetched_at=ctx.now_iso,
             status=200,
-            params={"installed_version": ver},
+            params={
+                "installed_version": vers[0] if vers else "",
+                "installed_versions": vers,
+            },
             source_id=spec.id,
             entity_id=eid,
         )
-        out.extend(
-            parse_pypi_meta(
-                json.dumps(combined_obj).encode("utf-8"),
-                meta,
-            )
-        )
+        out.extend(_parse_pypi_meta_obj(combined_obj, meta))
     return out
 
 
@@ -937,7 +1004,7 @@ def parse_brew_new_formulae(data: bytes, meta: FetchMeta) -> list[RawSignal]:
 
 
 def _run_brew_new_formulae(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
-    since_iso = (ctx.now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since_iso = lookback_since(ctx, timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     endpoint = f"repos/Homebrew/homebrew-core/commits?since={since_iso}&per_page=10"
     res = ctx.gh.api(endpoint)
     if res.returncode != 0:
@@ -1116,6 +1183,112 @@ def _check_npm_macos_arm64(ver_meta: Mapping[str, Any]) -> str:
         ):
             return "fail"
     return "pass"
+
+
+def _is_unpatched_high_or_crit_osv(
+    vuln: Mapping[str, Any],
+    latest_version: str | None = None,
+) -> bool:
+    """Return True if an OSV advisory is Critical/High and unpatched on `latest_version`."""
+    if vuln.get("withdrawn"):
+        return False
+
+    is_high_or_crit = False
+    for spec_key in ("database_specific", "ecosystem_specific"):
+        spec_obj = vuln.get(spec_key)
+        if isinstance(spec_obj, Mapping):
+            sev_str = str(spec_obj.get("severity") or "").strip().upper()
+            if sev_str in ("CRITICAL", "HIGH"):
+                is_high_or_crit = True
+
+    sev_list = vuln.get("severity")
+    if isinstance(sev_list, list):
+        for s_item in sev_list:
+            if not isinstance(s_item, Mapping):
+                continue
+            score_raw = str(s_item.get("score") or "").strip().upper()
+            if score_raw in ("CRITICAL", "HIGH"):
+                is_high_or_crit = True
+                break
+            with_num = re.search(r"^\d+(?:\.\d+)?$", score_raw)
+            if with_num and float(score_raw) >= 7.0:
+                is_high_or_crit = True
+                break
+
+    if not is_high_or_crit:
+        return False
+
+    affected = vuln.get("affected")
+    if not isinstance(affected, list) or not affected:
+        return True
+
+    has_any_fixed = False
+    for aff in affected:
+        if not isinstance(aff, Mapping):
+            continue
+        vers = aff.get("versions")
+        if latest_version and isinstance(vers, list) and latest_version in [str(v) for v in vers]:
+            return True
+        ranges = aff.get("ranges")
+        if isinstance(ranges, list):
+            for r_obj in ranges:
+                if not isinstance(r_obj, Mapping):
+                    continue
+                events = r_obj.get("events")
+                if isinstance(events, list):
+                    for ev in events:
+                        if isinstance(ev, Mapping) and ev.get("fixed"):
+                            has_any_fixed = True
+    return not has_any_fixed
+
+
+def _extract_manifest_package_name(eco: str, raw_stdout: str) -> str | None:
+    """Extract the declared package name from a GitHub `/contents/<manifest>` response."""
+    if not raw_stdout.strip():
+        return None
+    try:
+        obj = json.loads(raw_stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, Mapping):
+        return None
+
+    content_b64 = obj.get("content")
+    if isinstance(content_b64, str) and content_b64.strip():
+        try:
+            decoded = base64.b64decode(content_b64).decode("utf-8", errors="ignore")
+        except (ValueError, UnicodeDecodeError):
+            return None
+    else:
+        return None
+
+    if eco == "npm":
+        try:
+            pkg_json = json.loads(decoded)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(pkg_json, Mapping) and isinstance(pkg_json.get("name"), str):
+            return pkg_json["name"].strip() or None
+        return None
+
+    if eco in ("pypi", "cargo"):
+        try:
+            toml_obj = tomllib.loads(decoded)
+        except tomllib.TOMLDecodeError:
+            return None
+        if eco == "pypi":
+            proj = toml_obj.get("project")
+            if isinstance(proj, Mapping) and isinstance(proj.get("name"), str):
+                return proj["name"].strip() or None
+            tool = toml_obj.get("tool")
+            poetry = tool.get("poetry") if isinstance(tool, Mapping) else None
+            if isinstance(poetry, Mapping) and isinstance(poetry.get("name"), str):
+                return poetry["name"].strip() or None
+        elif eco == "cargo":
+            pkg = toml_obj.get("package")
+            if isinstance(pkg, Mapping) and isinstance(pkg.get("name"), str):
+                return pkg["name"].strip() or None
+    return None
 
 
 def fetch_metrics(
@@ -1378,7 +1551,7 @@ def fetch_metrics(
                     "https://api.osv.dev/v1/query",
                     method="POST",
                     body=q_body,
-                    use_cache=False,
+                    ttl_hours=ttl_hours,
                 )
             except RadarError:
                 q_item: dict[str, Any] = {"package": {"ecosystem": osv_eco, "name": name}}
@@ -1389,7 +1562,7 @@ def fetch_metrics(
                     "https://api.osv.dev/v1/querybatch",
                     method="POST",
                     body=json.dumps({"queries": [q_item]}, separators=(",", ":")).encode("utf-8"),
-                    use_cache=False,
+                    ttl_hours=ttl_hours,
                 )
             osv_obj = json.loads(resp_osv.body.decode("utf-8"))
             metrics_out["osv_available"] = True
@@ -1408,9 +1581,13 @@ def fetch_metrics(
                     )
                     vulns = first_res.get("vulns") if first_res is not None else []
             if isinstance(vulns, list):
+                latest_ver_str = str(metrics_out.get("latest_version") or "").strip() or None
                 for v in vulns:
-                    if isinstance(v, Mapping) and is_mal_advisory(v):
-                        metrics_out["has_mal_advisory"] = True
+                    if isinstance(v, Mapping):
+                        if is_mal_advisory(v):
+                            metrics_out["has_mal_advisory"] = True
+                        elif _is_unpatched_high_or_crit_osv(v, latest_ver_str):
+                            metrics_out["has_unpatched_high_crit"] = True
         except (RadarError, UnicodeDecodeError, json.JSONDecodeError):
             pass
 
@@ -1434,6 +1611,36 @@ def fetch_metrics(
                         metrics_out.setdefault("license", lic_obj["spdx_id"])
 
                     # Sub-endpoints after confirming private == false
+                    manifest_file_map = {
+                        "pypi": "pyproject.toml",
+                        "npm": "package.json",
+                        "cargo": "Cargo.toml",
+                    }
+                    manifest_rel = manifest_file_map.get(eco)
+                    if manifest_rel:
+                        try:
+                            res_mf = ctx.gh.api(f"repos/{repo}/contents/{manifest_rel}")
+                            if res_mf.returncode == 0 and res_mf.stdout.strip():
+                                mf_name = _extract_manifest_package_name(eco, res_mf.stdout)
+                                if mf_name:
+                                    metrics_out["manifest_name"] = mf_name
+                                    norm_mf = (
+                                        mf_name.lower().replace("_", "-")
+                                        if eco == "pypi"
+                                        else mf_name.lower()
+                                    )
+                                    norm_pkg = (
+                                        name.lower().replace("_", "-")
+                                        if eco == "pypi"
+                                        else name.lower()
+                                    )
+                                    reg_r = str(metrics_out.get("registry_repo") or "").lower()
+                                    metrics_out["bidirectional_link"] = bool(
+                                        reg_r and reg_r == repo.lower() and norm_mf == norm_pkg
+                                    )
+                        except RadarError:
+                            pass
+
                     res_commits = ctx.gh.api(f"repos/{repo}/commits?per_page=1")
                     if res_commits.returncode == 0 and res_commits.stdout.strip():
                         c_arr = json.loads(res_commits.stdout)

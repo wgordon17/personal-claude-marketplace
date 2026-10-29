@@ -70,6 +70,20 @@ def _parse_iso_dt(raw: str | None, fallback: datetime) -> datetime:
         return fallback
 
 
+_LOCKFILES_BY_ECOSYSTEM: dict[str, tuple[str, ...]] = {
+    "pypi": ("uv.lock", "pyproject.toml"),
+    "npm": ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "package.json"),
+    "cargo": ("Cargo.lock", "Cargo.toml"),
+    "golang": ("go.sum", "go.mod"),
+}
+_DEFAULT_LOCKFILES: tuple[str, ...] = (
+    "uv.lock",
+    "package-lock.json",
+    "Cargo.lock",
+    "pyproject.toml",
+)
+
+
 def _purl_package_name(purl: str) -> str:
     raw = purl.strip()
     if "/" in raw:
@@ -79,6 +93,47 @@ def _purl_package_name(purl: str) -> str:
     return raw
 
 
+def _lockfile_names_for_purl(purl: str) -> tuple[str, ...]:
+    raw = purl.strip().lower()
+    if raw.startswith("pkg:"):
+        eco = raw[4:].split("/", 1)[0]
+        if eco in _LOCKFILES_BY_ECOSYSTEM:
+            return _LOCKFILES_BY_ECOSYSTEM[eco]
+    return _DEFAULT_LOCKFILES
+
+
+def _pkg_name_variants(pkg_name: str) -> tuple[str, ...]:
+    low = pkg_name.strip().lower()
+    if not low:
+        return ()
+    variants = {low, re.sub(r"[-_.]+", "-", low), re.sub(r"[-_.]+", "_", low)}
+    return tuple(sorted(variants))
+
+
+def _lockfile_mentions_pkg(text: str, pkg_name: str) -> bool:
+    if not pkg_name:
+        return True
+    low_text = text.lower()
+    return any(v in low_text for v in _pkg_name_variants(pkg_name))
+
+
+def _commit_lockfile_matches_pkg_version(blob_text: str, pkg_name: str, clean_ver: str) -> bool:
+    if not pkg_name:
+        return clean_ver in blob_text
+    variants = _pkg_name_variants(pkg_name)
+    low_ver = clean_ver.lower()
+    if "[[package]]" in blob_text:
+        for block in blob_text.split("[[package]]")[1:]:
+            lines = {ln.strip() for ln in block.lower().splitlines()}
+            if any(f'name = "{v}"' in lines or f"name = '{v}'" in lines for v in variants) and (
+                f'version = "{low_ver}"' in lines or f"version = '{low_ver}'" in lines
+            ):
+                return True
+        return False
+    low_text = blob_text.lower()
+    return any(v in low_text for v in variants) and low_ver in low_text
+
+
 def _candidate_project_dirs_and_lockfiles(
     ctx: Ctx,
     purl: str,
@@ -86,6 +141,7 @@ def _candidate_project_dirs_and_lockfiles(
     """Return `(project_key, project_dir, lockfile_path)` tuples for projects using `purl`."""
     out: list[tuple[str, Path, Path | None]] = []
     seen_dirs: set[str] = set()
+    ecosystem_lockfiles = _lockfile_names_for_purl(purl)
 
     usage_rows = ctx.db.execute(
         "SELECT context, attrs_json FROM usages WHERE entity_id = ?",
@@ -155,7 +211,7 @@ def _candidate_project_dirs_and_lockfiles(
         key_s = str(cand.resolve())
         if key_s in seen_dirs:
             continue
-        for lock_name in ("uv.lock", "package-lock.json", "Cargo.lock", "pyproject.toml"):
+        for lock_name in ecosystem_lockfiles:
             lf = cand / lock_name
             if lf.is_file():
                 seen_dirs.add(key_s)
@@ -171,12 +227,15 @@ def _scan_git_lockfile_history(
     proj_dir: Path,
     lockfile: Path | None,
     versions: Sequence[str],
+    *,
+    pkg_name: str = "",
+    purl: str = "",
 ) -> list[dict[str, str]]:
     if not (proj_dir / ".git").exists():
         return []
     target_lock = lockfile
     if target_lock is None or not target_lock.is_file():
-        for name in ("uv.lock", "package-lock.json", "Cargo.lock", "pyproject.toml"):
+        for name in _lockfile_names_for_purl(purl):
             cand = proj_dir / name
             if cand.is_file():
                 target_lock = cand
@@ -192,8 +251,29 @@ def _scan_git_lockfile_history(
     if not procs.is_safe_arg(rel_lock):
         return []
 
+    # Fast pre-check: skip per-version pickaxe scans if pkg_name is neither in the working
+    # lockfile nor ever added/removed in the lockfile's git history.
+    if pkg_name:
+        try:
+            current_text = target_lock.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            current_text = ""
+        if not _lockfile_mentions_pkg(current_text, pkg_name):
+            if not procs.is_safe_arg(pkg_name):
+                return []
+            try:
+                pkg_hist = ctx.procs.git(
+                    ["log", f"-S{pkg_name}", "--format=%H", "--", rel_lock],
+                    proj_dir,
+                )
+            except RadarError:
+                return []
+            if pkg_hist.returncode != 0 or not pkg_hist.stdout.strip():
+                return []
+
     commits: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
+    blob_cache: dict[str, str] = {}
     for ver in versions:
         clean_ver = ver.strip()
         if not clean_ver or not procs.is_safe_arg(clean_ver):
@@ -213,17 +293,31 @@ def _scan_git_lockfile_history(
                 continue
             sha = parts[0].strip()
             committed_at = parts[1].strip() if len(parts) > 1 else ""
-            if (sha, clean_ver) not in seen:
-                seen.add((sha, clean_ver))
-                commits.append(
-                    {
-                        "project_key": proj_key,
-                        "commit": sha,
-                        "committed_at": committed_at,
-                        "version": clean_ver,
-                        "lockfile": rel_lock,
-                    }
-                )
+            if (sha, clean_ver) in seen:
+                continue
+            if pkg_name and procs.is_safe_arg(f"{sha}:{rel_lock}"):
+                blob_text = blob_cache.get(sha)
+                if blob_text is None:
+                    try:
+                        show_res = ctx.procs.git(["show", f"{sha}:{rel_lock}"], proj_dir)
+                        blob_text = show_res.stdout if show_res.returncode == 0 else ""
+                    except RadarError:
+                        blob_text = ""
+                    blob_cache[sha] = blob_text
+                if blob_text and not _commit_lockfile_matches_pkg_version(
+                    blob_text, pkg_name, clean_ver
+                ):
+                    continue
+            seen.add((sha, clean_ver))
+            commits.append(
+                {
+                    "project_key": proj_key,
+                    "commit": sha,
+                    "committed_at": committed_at,
+                    "version": clean_ver,
+                    "lockfile": rel_lock,
+                }
+            )
     return commits
 
 
@@ -420,7 +514,15 @@ def check(
         proj_dirs.append(proj_dir)
         if clean_versions:
             commits.extend(
-                _scan_git_lockfile_history(ctx, proj_key, proj_dir, lockfile, clean_versions)
+                _scan_git_lockfile_history(
+                    ctx,
+                    proj_key,
+                    proj_dir,
+                    lockfile,
+                    clean_versions,
+                    pkg_name=pkg_name,
+                    purl=clean_purl,
+                )
             )
 
     cached_wheels = _scan_wheel_cache(ctx, pkg_name, clean_versions)

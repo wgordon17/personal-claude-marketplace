@@ -1,4 +1,4 @@
-"""Tests for egress-controlled HTTP client, replay/recording, and caching (Task 3 Step 4)."""
+"""Tests for egress-controlled HTTP client, replay/recording, and caching."""
 
 from __future__ import annotations
 
@@ -328,6 +328,62 @@ def test_second_fetch_with_fresh_etag_uses_cache() -> None:
         assert third.body == b'{"v":1}'
         assert len(fake.calls) == 2
         assert fake.calls[1][3].get("If-None-Match") == '"etag-123"'
+
+        # POST caching when ttl_hours > 0, body-differentiated keys, and ttl_hours=0 bypass
+        post_url = "https://api.osv.dev/v1/querybatch"
+        fake_post = _FakeTransport(
+            [
+                (200, {"Content-Type": "application/json"}, b'{"results":[1]}'),
+                (200, {"Content-Type": "application/json"}, b'{"results":[2]}'),
+                (200, {"Content-Type": "application/json"}, b'{"results":[3]}'),
+            ]
+        )
+        p1 = http.fetch(
+            post_url,
+            method="POST",
+            body=b'{"queries":[{"package":{"ecosystem":"PyPI","name":"a"}}]}',
+            transport=fake_post,
+            cache_conn=cache_conn,
+            ttl_hours=24,
+            now="2026-10-28T07:00:00Z",
+        )
+        assert p1.from_cache is False
+        p1_cached = http.fetch(
+            post_url,
+            method="POST",
+            body=b'{"queries":[{"package":{"ecosystem":"PyPI","name":"a"}}]}',
+            transport=fake_post,
+            cache_conn=cache_conn,
+            ttl_hours=24,
+            now="2026-10-28T08:00:00Z",
+        )
+        assert p1_cached.from_cache is True
+        assert p1_cached.body == b'{"results":[1]}'
+        assert len(fake_post.calls) == 1
+
+        # Different POST body misses cache; ttl_hours=0 bypasses caching
+        p2 = http.fetch(
+            post_url,
+            method="POST",
+            body=b'{"queries":[{"package":{"ecosystem":"PyPI","name":"b"}}]}',
+            transport=fake_post,
+            cache_conn=cache_conn,
+            ttl_hours=0,
+            now="2026-10-28T08:00:00Z",
+        )
+        assert p2.from_cache is False
+        assert p2.body == b'{"results":[2]}'
+        p3 = http.fetch(
+            post_url,
+            method="POST",
+            body=b'{"queries":[{"package":{"ecosystem":"PyPI","name":"b"}}]}',
+            transport=fake_post,
+            cache_conn=cache_conn,
+            ttl_hours=0,
+            now="2026-10-28T08:00:00Z",
+        )
+        assert p3.from_cache is False
+        assert p3.body == b'{"results":[3]}'
     finally:
         cache_conn.close()
 

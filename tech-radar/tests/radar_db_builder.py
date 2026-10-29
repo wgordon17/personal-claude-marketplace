@@ -1,4 +1,4 @@
-"""Deterministic SQLite DB state builder for rendering and security tests (Task 9, Task 12)."""
+"""Deterministic SQLite DB state builder for rendering and security tests."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for isolated S/reddit_pull.py and community.reddit_top (Task 7 Step 3)."""
+"""Tests for isolated S/reddit_pull.py and community.reddit_top."""
 
 from __future__ import annotations
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shlex
 import sys
 from collections.abc import Sequence
@@ -22,11 +21,8 @@ from . import (
     decisions,
     doctor,
     errors,
-    evaluate,
     exposure,
     features,
-    fsguard,
-    http,
     inventory,
     items,
     launchd,
@@ -34,60 +30,16 @@ from . import (
     lock,
     notify,
     pending,
-    procs,
     profile,
-    redact,
     render,
     runlog,
     runs,
-    sanitize,
     security,
-    snapshot,
     sources,
-    topnames,
     usage,
     verdict,
 )
 
-_CORE_MODULES = (
-    alerts,
-    appsync,
-    bootstrap,
-    brief,
-    context,
-    credentials,
-    db,
-    decisions,
-    doctor,
-    errors,
-    evaluate,
-    exposure,
-    features,
-    fsguard,
-    http,
-    inventory,
-    items,
-    launchd,
-    lifecycle,
-    lock,
-    notify,
-    pending,
-    procs,
-    profile,
-    redact,
-    render,
-    runlog,
-    runs,
-    sanitize,
-    security,
-    snapshot,
-    sources,
-    topnames,
-    usage,
-    verdict,
-)
-
-RUN_ID_RE = re.compile(r"^\d{8}T\d{6}Z-(daily|weekly|monthly)$")
 DECIDE_VERBS = ("adopt", "trial", "assess", "hold", "reject", "snooze")
 FEEDBACK_VERBS = ("useful", "not_useful", "acted")
 ALERT_VERBS = ("ack", "resolve", "false-positive")

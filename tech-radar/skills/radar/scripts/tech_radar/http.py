@@ -535,12 +535,7 @@ class RecordingHttp:
         return status, resp_headers, resp_body
 
 
-def _parse_iso(ts: str) -> datetime | None:
-    try:
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-    except ValueError:
-        return None
+_parse_iso = db.parse_iso
 
 
 def fetch(
@@ -582,7 +577,7 @@ def fetch(
 
     cache_key = replay_key(current_method, current_url, current_body)
     cached_row: dict[str, Any] | None = None
-    if current_method == "GET" and cache_conn is not None:
+    if current_method in ("GET", "POST") and cache_conn is not None:
         cached_row = db.cache_get(cache_conn, cache_key)
         if cached_row is not None and ttl_hours > 0:
             fetched_dt = _parse_iso(cached_row["fetched_at"])
@@ -601,7 +596,7 @@ def fetch(
                     url=current_url,
                     from_cache=True,
                 )
-        if cached_row is not None:
+        if current_method == "GET" and cached_row is not None:
             if cached_row.get("etag") and "If-None-Match" not in req_headers:
                 req_headers["If-None-Match"] = str(cached_row["etag"])
             if cached_row.get("last_modified") and "If-Modified-Since" not in req_headers:
@@ -655,7 +650,12 @@ def fetch(
         if status >= 400:
             raise FetchError(f"HTTP {status} for {current_url}", status=status)
 
-        if current_method == "GET" and cache_conn is not None and status == 200:
+        if (
+            current_method in ("GET", "POST")
+            and cache_conn is not None
+            and status == 200
+            and (current_method == "GET" or ttl_hours > 0)
+        ):
             db.cache_put(
                 cache_conn,
                 key=cache_key,

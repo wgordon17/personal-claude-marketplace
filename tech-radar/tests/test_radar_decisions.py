@@ -72,6 +72,7 @@ def _seed_item(
 
 
 def test_decision_supersession_expiry_and_wake_triggers(
+    monkeypatch: pytest.MonkeyPatch,
     replay_http: Callable[..., Any],
     replay_gh: Callable[..., Any],
     replay_procs: Callable[..., Any],
@@ -90,8 +91,10 @@ def test_decision_supersession_expiry_and_wake_triggers(
     # Second decision: reject 90d via confirm -> obsoletes first decision and sets expires_at
     pending.stage_decision(ctx, item_id, "reject", ttl="90d", reason="Not needed now")
     sink_file = ctx.paths.state.parent / "notify_sink.log"
-    os.environ["TECH_RADAR_REPLAY_DIR"] = str(REPO_ROOT / "tech-radar" / "tests" / "fixtures")
-    os.environ["TECH_RADAR_NOTIFY_SINK"] = str(sink_file)
+    monkeypatch.setenv(
+        "TECH_RADAR_REPLAY_DIR", str(REPO_ROOT / "tech-radar" / "tests" / "fixtures")
+    )
+    monkeypatch.setenv("TECH_RADAR_NOTIFY_SINK", str(sink_file))
     pending.request_confirm(ctx)
     sink_line = sink_file.read_text(encoding="utf-8").strip().splitlines()[-1]
     code = sink_line.split("tech-radar code ", 1)[1].split(":", 1)[0].strip()
@@ -179,6 +182,7 @@ def test_decision_supersession_expiry_and_wake_triggers(
 
 
 def test_decisions_md_staging_confirm_malformed_and_pty_apply(
+    monkeypatch: pytest.MonkeyPatch,
     isolated_radar_env: dict[str, Path],
     replay_http: Callable[..., Any],
     replay_gh: Callable[..., Any],
@@ -216,8 +220,10 @@ def test_decisions_md_staging_confirm_malformed_and_pty_apply(
 
     # Confirm applies the staged DECISIONS.md edit
     sink_file = isolated_radar_env["state"].parent / "sink_dec.log"
-    os.environ["TECH_RADAR_REPLAY_DIR"] = str(REPO_ROOT / "tech-radar" / "tests" / "fixtures")
-    os.environ["TECH_RADAR_NOTIFY_SINK"] = str(sink_file)
+    monkeypatch.setenv(
+        "TECH_RADAR_REPLAY_DIR", str(REPO_ROOT / "tech-radar" / "tests" / "fixtures")
+    )
+    monkeypatch.setenv("TECH_RADAR_NOTIFY_SINK", str(sink_file))
     pending.request_confirm(ctx)
     code = (
         sink_file.read_text(encoding="utf-8")

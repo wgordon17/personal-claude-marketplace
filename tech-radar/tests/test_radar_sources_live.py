@@ -1,4 +1,4 @@
-"""Opt-in live smoke tests parametrized over SOURCES (Task 7 Step 5, Spec 01, Spec 12 A23)."""
+"""Opt-in live smoke tests parametrized over SOURCES (Spec 01, Spec 12 A23)."""
 
 from __future__ import annotations
 

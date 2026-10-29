@@ -1,4 +1,4 @@
-"""Tests for lock.py, runlog.py, notify.py, and hourly compromise check (Task 6 Steps 1-3)."""
+"""Tests for lock.py, runlog.py, notify.py, and hourly compromise check."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def test_lock_cross_process_persistence_stale_breaking_and_hourly_independence(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Step 1: run.lock survives subprocess exit, checks owner, breaks stale, hourly separate."""
+    """run.lock survives subprocess exit, checks owner, breaks stale, hourly separate."""
     p = config.paths(ensure_dirs=True)
 
     # 1. Acquire run.lock in a separate subprocess that exits immediately
@@ -135,7 +135,7 @@ def test_runlog_start_and_finish_run_hourly(
     replay_gh: Callable[..., procs.ReplayProcs],
     replay_procs: Callable[..., procs.ReplayProcs],
 ) -> None:
-    """Step 1: start_run and finish_run write and finalize a runs row with mode 'hourly'."""
+    """start_run and finish_run write and finalize a runs row with mode 'hourly'."""
     ctx = _make_ctx(replay_http, replay_gh, replay_procs)
     rid = runlog.start_run(ctx, mode="hourly", requested_mode="hourly")
     assert rid == "20261028T120000Z-hourly"
@@ -168,7 +168,7 @@ def test_notify_injection_policy_retries_and_sink_gating(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Step 2: injection summary stripped, non-notifiable kinds skipped, retry cap, sink gated."""
+    """Injection summary stripped, non-notifiable kinds skipped, retry cap, sink gated."""
     _ = fixture_home
     ctx = _make_ctx(replay_http, replay_gh, replay_procs)
     inventory.collect(ctx)
@@ -370,7 +370,7 @@ def test_hourly_skip_rules_compromised_replay_a27_refresh_and_schema_guard(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Step 3: skip rules, litellm replay, A27 version bump & new dep, schema guard."""
+    """Skip rules, litellm replay, A27 version bump & new dep, schema guard."""
     # 1. Empty usages -> skipped: no inventory yet
     monkeypatch.setenv("TECH_RADAR_REPLAY_DIR", str(FIXTURES_DIR))
     assert cli.main(["hourly"]) == 0
@@ -540,7 +540,7 @@ def test_hourly_subprocess_offline_with_replay_and_sink(
     replay_procs: Callable[..., procs.ReplayProcs],
     tmp_path: Path,
 ) -> None:
-    """Step 3: subprocess `radar.py hourly` with UV_OFFLINE=1 and replay/sink env exits 0."""
+    """Subprocess `radar.py hourly` with UV_OFFLINE=1 and replay/sink env exits 0."""
     if not warm_uv_script_cache:
         pytest.skip("uv script cache warm-up unavailable on cold machine")
 

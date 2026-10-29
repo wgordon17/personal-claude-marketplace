@@ -1956,7 +1956,7 @@ class TestCommentNarrationGuard:
 
     @pytest.mark.parametrize("ext", [".json", ".jsonl", ".JSON", ".JSONL"])
     def test_write_and_edit_json_and_jsonl_not_blocked(self, ext):
-        url = "https://example.com/release"
+        url = "https://example.com/release#notes"
         narrative = " ".join(
             ["Super" + "sedes v1 and", "replaces the" + " old runner in", "Pha" + "se 2"]
         )

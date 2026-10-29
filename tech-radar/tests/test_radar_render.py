@@ -1,10 +1,9 @@
-"""Tests for radar_db_builder.py, render.py, and snapshot.py (Task 9 Steps 1–5)."""
+"""Tests for radar_db_builder.py, render.py, and snapshot.py."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import sqlite3
 import stat
@@ -67,7 +66,7 @@ def _assert_fenced_only(markdown: str, needle: str) -> None:
 
 
 def test_builder_deterministic_iterdump_and_state_completeness(tmp_path: Path) -> None:
-    """Step 1: building twice yields byte-identical DB dumps (iterdump) across all states."""
+    """Building twice yields byte-identical DB dumps (iterdump) across all states."""
     for state_name in ("daily", "weekly", "monthly", "quiet", "partial"):
         db_a = radar_db_builder.build(tmp_path / f"a_{state_name}", state=state_name)  # type: ignore[arg-type]
         db_b = radar_db_builder.build(tmp_path / f"b_{state_name}", state=state_name)  # type: ignore[arg-type]
@@ -171,7 +170,7 @@ def test_builder_deterministic_iterdump_and_state_completeness(tmp_path: Path) -
 
 
 def test_digest_goldens_changed_since_fenced_injection_and_privacy(tmp_path: Path) -> None:
-    """Step 2: daily/weekly/monthly/quiet equal goldens; unchanged item omitted; injection
+    """Daily/weekly/monthly/quiet equal goldens; unchanged item omitted; injection
     text only inside fenced blocks; digest under run_root contains private-project-1 but
     not real private project/package names or paths; exposure reports referenced by alert id only.
     """
@@ -294,11 +293,12 @@ def test_digest_goldens_changed_since_fenced_injection_and_privacy(tmp_path: Pat
 
 def test_projections_goldens_privacy_inventory_project_alerts_and_decisions_roundtrip(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     replay_http: Callable[..., Any],
     replay_gh: Callable[..., Any],
     replay_procs: Callable[..., Any],
 ) -> None:
-    """Step 3: TECH_RADAR/DECISIONS equal goldens; TECH_RADAR.md has no private name;
+    """TECH_RADAR/DECISIONS equal goldens; TECH_RADAR.md has no private name;
     INVENTORY.md has 4 context sections and maps private-project-1 to its display path;
     project-alerts.json uses normalized remote URLs and script-composed titles only (A24);
     DECISIONS.md round-trip stages on plan-run, applies on confirm, and re-renders.
@@ -397,8 +397,8 @@ def test_projections_goldens_privacy_inventory_project_alerts_and_decisions_roun
     assert plan_res["decisions_staged"] == 1
 
     sink_file = tmp_path / "proj" / "notify_sink.log"
-    os.environ["TECH_RADAR_REPLAY_DIR"] = str(TESTS_DIR / "fixtures")
-    os.environ["TECH_RADAR_NOTIFY_SINK"] = str(sink_file)
+    monkeypatch.setenv("TECH_RADAR_REPLAY_DIR", str(TESTS_DIR / "fixtures"))
+    monkeypatch.setenv("TECH_RADAR_NOTIFY_SINK", str(sink_file))
     pending.request_confirm(ctx_next)
     sink_text = sink_file.read_text(encoding="utf-8").strip().splitlines()[-1]
     code = sink_text.split("tech-radar code ", 1)[1].split(":", 1)[0].strip()
@@ -412,7 +412,7 @@ def test_projections_goldens_privacy_inventory_project_alerts_and_decisions_roun
 
 
 def test_exports_byor_json_and_self_contained_html(tmp_path: Path) -> None:
-    """Step 4: BYOR objects have exact keys name, ring, quadrant, isNew, description;
+    """BYOR objects have exact keys name, ring, quadrant, isNew, description;
     HTML parses with html.parser, contains no <script, <link, src=, or url(;
     every <a> has rel='noreferrer'; run_root copy contains no private name.
     """
@@ -473,7 +473,7 @@ def test_snapshot_partial_run_sync_unavailable_and_secret_bytescan(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Step 5:
+    """Snapshot, partial run, sync unavailable, and secret byte scan:
     - snapshot opens as SQLite, mode 0600, no http_cache, sha in kv;
     - partial state renders (security/lifecycle sections present), run status degraded,
       run.lock removed;
@@ -599,3 +599,20 @@ def test_snapshot_partial_run_sync_unavailable_and_secret_bytescan(
     ).fetchone()
     assert ns_db_row is not None
     assert "sync dir unavailable" in str(ns_db_row["markdown"])
+
+    # 4. Sync dir initially available but snapshot fails mid-render -> digest re-rendered with
+    #    'sync dir unavailable' in Coverage and status finalized as degraded
+    ctx_midfail, run_midfail = radar_db_builder.build_ctx(tmp_path / "midfail", state="daily")
+    orig_create_snap = snapshot.create_snapshot
+
+    def _fail_snapshot(*_a: Any, **_kw: Any) -> tuple[Path, str]:
+        raise OSError("disk full during snapshot")
+
+    snapshot.create_snapshot = _fail_snapshot  # type: ignore[assignment]
+    try:
+        res_mf = render.render_run(ctx_midfail, run_midfail)
+    finally:
+        snapshot.create_snapshot = orig_create_snap  # type: ignore[assignment]
+    assert res_mf["status"] == "degraded"
+    assert res_mf["sync_available"] is False
+    assert "sync dir unavailable" in Path(res_mf["digest_path"]).read_text(encoding="utf-8")

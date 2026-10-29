@@ -20,6 +20,7 @@ import yaml
 
 from .. import fsguard, redact
 from ..errors import RadarError
+from . import classify
 from . import fingerprint as fp
 from .system import DiscoveredRoot, EntityRecord, UsageRecord
 
@@ -1181,17 +1182,6 @@ def _is_commit_within_days(commit_iso: str | None, now: datetime, days: int = 18
         return False
 
 
-def _matches_private_scope(slug_or_name: str, private_scopes: Sequence[str]) -> bool:
-    low = slug_or_name.lower().lstrip("@")
-    for raw_scope in private_scopes:
-        scope = raw_scope.strip().lower().lstrip("@").rstrip("/*")
-        if not scope:
-            continue
-        if low == scope or low.startswith(f"{scope}/") or low.startswith(f"{scope}-"):
-            return True
-    return False
-
-
 def _classify_project_visibility_and_alias(
     ctx: Ctx,
     project_key: str,
@@ -1207,9 +1197,9 @@ def _classify_project_visibility_and_alias(
         owner = gh_match.group(1).lower()
         repo = gh_match.group(2).lower()
         slug = f"{owner}/{repo}"
-        if not _matches_private_scope(
+        if not classify.matches_private_scope(
             slug, ctx.profile.private_scopes
-        ) and not _matches_private_scope(owner, ctx.profile.private_scopes):
+        ) and not classify.matches_private_scope(owner, ctx.profile.private_scopes):
             try:
                 res = ctx.gh(["api", f"repos/{owner}/{repo}"])
                 if res.returncode == 0 and res.stdout.strip():
@@ -1552,7 +1542,6 @@ def refresh_manifests(ctx: Ctx) -> list[UsageRecord]:
     updated and newly added usages; and runs inline `classify.visibility` on new entities.
     """
     from .. import db
-    from . import classify
 
     refreshed: list[UsageRecord] = []
     now_iso = ctx.now_iso

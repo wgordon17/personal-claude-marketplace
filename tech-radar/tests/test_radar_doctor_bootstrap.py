@@ -1,4 +1,4 @@
-"""Tests for doctor.py, bootstrap.py, and profile private-scopes (Task 10 Steps 1 & 2)."""
+"""Tests for doctor.py, bootstrap.py, and profile private-scopes."""
 
 from __future__ import annotations
 

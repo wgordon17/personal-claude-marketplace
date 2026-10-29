@@ -1,4 +1,4 @@
-"""Integration tests for Task 11: session-start alerts and dev-guard compatibility."""
+"""Integration tests for session-start alerts and dev-guard compatibility."""
 
 from __future__ import annotations
 

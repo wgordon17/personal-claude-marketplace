@@ -1,4 +1,4 @@
-"""Opt-in live privacy leak test for committed fixtures (Spec 12 A29, Task 12 Step 1)."""
+"""Opt-in live privacy leak test for committed fixtures (Spec 12 A29)."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ import pytest
 
 FIXTURES_ROOT = Path(__file__).resolve().parent / "fixtures"
 
-# Generic English/schema terms or plan-mandated synthetic fixture tokens (Task 4 Step 2
-# specifies `<home>/.config/llm-gateway`, digest Coverage uses `renovate`, GitHub API uses
+# Generic English/schema terms or synthetic fixture tokens (`fixture_home` specifies
+# `<home>/.config/llm-gateway`, digest Coverage uses `renovate`, GitHub API uses
 # `assets_url`, and feeds use `release notes`) that can coincide with a bare repo shortname;
 # their `<owner>/<name>` slugs are still checked unconditionally.
 GENERIC_OR_PLAN_MANDATED_SHORTNAMES = frozenset({"notes", "assets", "renovate", "llm-gateway"})

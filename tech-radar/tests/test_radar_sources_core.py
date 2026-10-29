@@ -1,4 +1,4 @@
-"""Tests for source framework, core Task 5 source parsers, osv_batch chunking, and collect union."""
+"""Tests for source framework, core source parsers, osv_batch chunking, and collect union."""
 
 from __future__ import annotations
 

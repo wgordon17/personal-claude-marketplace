@@ -19,6 +19,7 @@ from .base import (
     RawSignal,
     SourceSpec,
     infer_github_entity_hint,
+    lookback_since,
     normalize_timestamp,
 )
 
@@ -65,6 +66,32 @@ def covered_public_repos(ctx: Ctx) -> list[tuple[str, str]]:
         "WHERE e.visibility = 'public' "
         "AND ((u.context NOT LIKE 'interest:%' AND u.direct = 1) "
         "OR u.context = 'interest:watchlist')"
+    ).fetchall()
+    seen: dict[str, str] = {}
+    for row in rows:
+        eid = str(row["entity_id"])
+        repo = str(row["repo"] or "").strip().lower()
+        if not repo and eid.startswith("gh:"):
+            repo = eid[len("gh:") :].strip().lower()
+        if "/" in repo and repo not in seen:
+            seen[repo] = eid
+    return sorted(seen.items())
+
+
+def adopt_trial_public_repos(ctx: Ctx) -> list[tuple[str, str]]:
+    """Return sorted `(repo_slug, entity_id)` for ADOPT/TRIAL public items + watchlist."""
+    rows = ctx.db.execute(
+        "SELECT DISTINCT e.entity_id, e.repo "
+        "FROM entities e "
+        "LEFT JOIN items i ON i.entity_id = e.entity_id "
+        "LEFT JOIN usages u ON u.entity_id = e.entity_id "
+        "WHERE e.visibility = 'public' "
+        "AND ("
+        "(i.ring IN ('adopt', 'trial') AND i.state != 'rejected') "
+        "OR (u.context = 'interest:watchlist' "
+        "AND COALESCE(i.ring, '') != 'hold' "
+        "AND COALESCE(i.state, '') != 'rejected')"
+        ")"
     ).fetchall()
     seen: dict[str, str] = {}
     for row in rows:
@@ -737,6 +764,13 @@ _DISCUSSIONS_GRAPHQL_QUERY = (
     "} } }"
 )
 
+_DISCUSSION_LIFECYCLE_RE = re.compile(
+    r"(?:unmaintained|looking for (?:new )?maintainers"
+    r"|no longer maintained|deprecated in favou?r of"
+    r"|\b(?:acquired|sunset|shutting down|end of life)\b)",
+    re.IGNORECASE,
+)
+
 
 def parse_gh_discussions_announce(data: bytes, meta: FetchMeta) -> list[RawSignal]:
     """Parse GitHub GraphQL `repository.discussions` JSON into feature/lifecycle `RawSignal`s."""
@@ -778,10 +812,11 @@ def parse_gh_discussions_announce(data: bytes, meta: FetchMeta) -> list[RawSigna
             if m:
                 resolved_repo = m.group(1).lower()
         entity_hint = meta.entity_id or (f"gh:{resolved_repo}" if resolved_repo else None)
+        sig_type = "lifecycle" if _DISCUSSION_LIFECYCLE_RE.search(f"{title}\n{body}") else "feature"
         out.append(
             RawSignal(
                 source_id="gh_discussions_announce",
-                type="feature",
+                type=sig_type,
                 external_id=disc_id,
                 title=title,
                 url=url,
@@ -790,7 +825,7 @@ def parse_gh_discussions_announce(data: bytes, meta: FetchMeta) -> list[RawSigna
                 entity_hint=entity_hint,
                 confidence="confirmed",
                 payload={"repo": resolved_repo, "body": sanitize.clean(body, limit=2000)},
-                dedupe_key=f"gh_discussions_announce|feature|{disc_id}",
+                dedupe_key=f"gh_discussions_announce|{sig_type}|{disc_id}",
             )
         )
     return out
@@ -798,7 +833,7 @@ def parse_gh_discussions_announce(data: bytes, meta: FetchMeta) -> list[RawSigna
 
 def _run_gh_discussions_announce(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
     out: list[RawSignal] = []
-    for repo_slug, eid in covered_public_repos(ctx):
+    for repo_slug, eid in adopt_trial_public_repos(ctx):
         if "/" not in repo_slug:
             continue
         owner, name = repo_slug.split("/", 1)
@@ -902,7 +937,7 @@ def parse_awesome_diffs(data: bytes, meta: FetchMeta) -> list[RawSignal]:
 
 
 def _run_awesome_diffs(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
-    since_iso = (ctx.now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since_iso = lookback_since(ctx, timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     repos = spec.params.get("repos") or AWESOME_REPOS
     out: list[RawSignal] = []
     errors: list[str] = []
@@ -941,7 +976,7 @@ def parse_anthropic_skills(data: bytes, meta: FetchMeta) -> list[RawSignal]:
 
 
 def _run_anthropic_skills(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
-    since_iso = (ctx.now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since_iso = lookback_since(ctx, timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     endpoint = f"repos/anthropics/skills/commits?since={since_iso}&per_page=10"
     res = ctx.gh.api(endpoint)
     if res.returncode != 0:

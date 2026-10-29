@@ -1,4 +1,4 @@
-"""Tests for features.py and pricing signals (Task 5 Step 6, Spec 07 §4, §5, §9)."""
+"""Tests for features.py and pricing signals (Spec 07 §4, §5, §9)."""
 
 from __future__ import annotations
 
@@ -181,3 +181,76 @@ def test_features_consolidation_feat09_life15_and_a12_flag_and_pricing(
     ).fetchall()
     assert len(pricing_rows) >= 1
     assert any("weekly limit" in str(r["untrusted_excerpt"]).lower() for r in pricing_rows)
+
+    # Verify hold-ring item is excluded from FEAT-13 feature extraction while
+    # gh_discussions_announce on a covered entity extracts matching features
+    ctx.db.execute(
+        "INSERT INTO items(item_id, entity_id, ring, state, in_use, created_at) "
+        "VALUES ('R-0099', 'gh:cli/cli', 'hold', 'active', 1, ?)",
+        (ctx.now_iso,),
+    )
+    ctx.db.commit()
+    gh_hold_rel = RawSignal(
+        source_id="gh_releases",
+        type="feature",
+        external_id="cli/cli:v2.61.0",
+        title="cli/cli v2.61.0",
+        published_at="2026-10-26T12:00:00Z",
+        entity_hint="gh:cli/cli",
+        payload={
+            "repo": "cli/cli",
+            "tag_name": "v2.61.0",
+            "body": "- Add `--hold-ignored` flag to `gh pr` workflows\n",
+        },
+    )
+    uv_disc = RawSignal(
+        source_id="gh_discussions_announce",
+        type="feature",
+        external_id="disc-uv-1",
+        title="uv 0.15 announcement",
+        published_at="2026-10-27T12:00:00Z",
+        entity_hint="gh:astral-sh/uv",
+        payload={
+            "repo": "astral-sh/uv",
+            "body": "- Support `--locked-hashes` flag in `uv sync` workflows\n",
+        },
+    )
+    features.evaluate(
+        ctx,
+        [
+            SourceResult(source_id="gh_releases", signals=[gh_hold_rel]),
+            SourceResult(source_id="gh_discussions_announce", signals=[uv_disc]),
+        ],
+    )
+    feat_rows_after = ctx.db.execute(
+        "SELECT untrusted_excerpt FROM signals WHERE type = 'feature'"
+    ).fetchall()
+    assert not any("--hold-ignored" in str(r["untrusted_excerpt"]) for r in feat_rows_after)
+    assert any("--locked-hashes" in str(r["untrusted_excerpt"]) for r in feat_rows_after)
+
+    # Verify FEAT-13 top-40 fingerprint ranking cap and config_key / module scoring
+    for idx in range(45):
+        eid = f"pkg:pypi/extra-tool-{idx:02d}"
+        ctx.db.execute(
+            "INSERT INTO entities(entity_id, kind, ecosystem, name, visibility, created_at) "
+            "VALUES (?, 'package', 'pypi', ?, 'public', ?)",
+            (eid, f"extra-tool-{idx:02d}", ctx.now_iso),
+        )
+        ctx.db.execute(
+            "INSERT INTO usages(entity_id, context, version, direct, first_seen, last_seen) "
+            "VALUES (?, 'project:https://github.com/example-org/public-app', '1.0.0', 1, ?, ?)",
+            (eid, ctx.now_iso, ctx.now_iso),
+        )
+    ctx.db.execute(
+        "INSERT INTO fingerprints(context, kind, token, count, last_seen) "
+        "VALUES "
+        "('project:https://github.com/example-org/public-app', 'config_key', "
+        "'tool.extra-tool-44.strict', 10, ?), "
+        "('project:https://github.com/example-org/public-app', 'import', 'extra_tool_43', 9, ?)",
+        (ctx.now_iso, ctx.now_iso),
+    )
+    ctx.db.commit()
+    dom = features._load_fingerprint_domain(ctx)
+    assert "pkg:pypi/extra-tool-44" in dom["covered_entities"]
+    assert "pkg:pypi/extra-tool-43" in dom["covered_entities"]
+    assert "pkg:pypi/extra-tool-42" not in dom["covered_entities"]

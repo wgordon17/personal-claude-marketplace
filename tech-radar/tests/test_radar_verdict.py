@@ -1,4 +1,4 @@
-"""Tests for brief.py, topnames.py, enrich, and verdict.py (Task 8 Steps 3, 4, and 5)."""
+"""Tests for brief.py, topnames.py, enrich, and verdict.py."""
 
 from __future__ import annotations
 
@@ -426,7 +426,7 @@ def test_verdict_validation_fixtures_t10_gates_and_forged_enriched_rejection(
     replay_procs: Callable[..., Any],
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """verdict apply over all Task 8 fixtures:
+    """verdict apply over all verdict fixtures:
     - valid.json applies;
     - unknown_ref.json -> error;
     - generic_citation.json -> error;
@@ -802,4 +802,65 @@ def test_verdict_validation_fixtures_t10_gates_and_forged_enriched_rejection(
             {"ref": "R-0001", "entity_id": "pkg:pypi/fasttool"},
         )
         is True
+    )
+
+    # 10. Empty valid verdicts.json marks verdict_applied:{run_id}; 600-char adoption_snippet kept;
+    # and OSV high/crit + manifest extraction helpers work as specified
+    from tech_radar.sources import registries as reg_mod
+
+    quiet_run_id = "20261030T070000Z-daily"
+    runlog.start_run(ctx, mode="daily", requested_mode="daily", run_id=quiet_run_id)
+    quiet_dir = ctx.paths.run_dir(quiet_run_id)
+    quiet_dir.mkdir(parents=True, exist_ok=True)
+    (quiet_dir / "verdicts.json").write_text(
+        json.dumps({"run_id": quiet_run_id, "items": [], "tldr": None}),
+        encoding="utf-8",
+    )
+    res_quiet = verdict.apply_verdicts(ctx, quiet_run_id)
+    assert res_quiet["ok"] is True
+    assert db.kv_get(ctx.db, f"verdict_applied:{quiet_run_id}") == FIXED_NOW
+
+    long_snip = "x" * 550
+    v_long = json.loads((VERDICTS_FIXTURES_DIR / "valid.json").read_text(encoding="utf-8"))
+    v_long["items"][0]["adoption_snippet"] = long_snip
+    (run_dir / "verdicts.json").write_text(json.dumps(v_long), encoding="utf-8")
+    verdict.apply_verdicts(ctx, run_id)
+    r1_long_rep = json.loads(
+        str(
+            ctx.db.execute("SELECT reported_json FROM items WHERE item_id = 'R-0001'").fetchone()[
+                "reported_json"
+            ]
+        )
+    )
+    assert len(r1_long_rep["adoption_snippet"]) == 550
+
+    assert (
+        reg_mod._is_unpatched_high_or_crit_osv(
+            {
+                "database_specific": {"severity": "CRITICAL"},
+                "affected": [{"ranges": [{"events": [{"introduced": "0"}]}]}],
+            },
+            "1.2.0",
+        )
+        is True
+    )
+    assert (
+        reg_mod._is_unpatched_high_or_crit_osv(
+            {
+                "database_specific": {"severity": "HIGH"},
+                "affected": [{"ranges": [{"events": [{"introduced": "0"}, {"fixed": "1.1.0"}]}]}],
+            },
+            "1.2.0",
+        )
+        is False
+    )
+    import base64
+
+    b64_pyproj = base64.b64encode(b'[project]\nname = "fast_tool"\n').decode("ascii")
+    assert (
+        reg_mod._extract_manifest_package_name(
+            "pypi",
+            json.dumps({"encoding": "base64", "content": b64_pyproj}),
+        )
+        == "fast_tool"
     )

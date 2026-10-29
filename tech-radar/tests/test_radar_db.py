@@ -1,4 +1,4 @@
-"""Tests for SQLite schema, migrations, FTS5 triggers, cache, and SQL safety (Task 3 Step 3)."""
+"""Tests for SQLite schema, migrations, FTS5 triggers, cache, and SQL safety."""
 
 from __future__ import annotations
 

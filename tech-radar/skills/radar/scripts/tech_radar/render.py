@@ -10,7 +10,7 @@ import math
 import os
 import urllib.parse
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +18,7 @@ from . import (
     brief,
     db,
     decisions,
+    doctor,
     errors,
     fsguard,
     items,
@@ -55,21 +56,6 @@ QUADRANT_LABELS: dict[str, str] = {
     "platforms-services": "Platforms & Services",
     "techniques": "Techniques",
 }
-
-
-def _parse_iso(ts: str | None) -> datetime | None:
-    if not ts:
-        return None
-    clean = str(ts).strip()
-    if not clean:
-        return None
-    if len(clean) == 10 and clean[4] == "-" and clean[7] == "-":
-        clean = f"{clean}T00:00:00Z"
-    try:
-        dt = datetime.fromisoformat(clean.replace("Z", "+00:00"))
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-    except ValueError:
-        return None
 
 
 def _safe_agent_str(text: str | None, priv_map: Mapping[str, str], *, limit: int = 400) -> str:
@@ -190,32 +176,8 @@ def _entity_display_for_agent(
 
 def _check_settings_prefix_mismatch(ctx: Ctx) -> bool:
     """Return True if `{run_root}/.claude/settings.json` prefix disagrees with `RADAR_CMD` (A25)."""
-    settings_path = ctx.paths.run_root / ".claude" / "settings.json"
-    radar_cmd_path = ctx.paths.radar_cmd
-    if not settings_path.is_file() or not radar_cmd_path.is_file():
-        return False
-    try:
-        radar_cmd = radar_cmd_path.read_text(encoding="utf-8").strip()
-        settings_obj = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return True
-    if not radar_cmd or not isinstance(settings_obj, Mapping):
-        return True
-    perms = settings_obj.get("permissions")
-    if not isinstance(perms, Mapping):
-        return True
-    allow_list = perms.get("allow")
-    if not isinstance(allow_list, list):
-        return True
-    expected_prefix = f"Bash({radar_cmd} "
-    bash_radar_rules = [
-        str(r)
-        for r in allow_list
-        if isinstance(r, str) and r.startswith("Bash(") and "radar.py" in r
-    ]
-    if not bash_radar_rules:
-        return True
-    return any(not r.startswith(expected_prefix) for r in bash_radar_rules)
+    _settings_present, prefix_matches, _reason = doctor.check_settings_prefix(ctx)
+    return not prefix_matches
 
 
 def _select_changed_alerts(
@@ -1950,8 +1912,6 @@ def _verdict_was_applied(ctx: Ctx, run_id: str) -> bool:
 def render_run(
     ctx: Ctx,
     run_id: str,
-    *,
-    ensure_sync: bool = False,
 ) -> dict[str, Any]:
     """Execute `radar.py render --run ID`: render digest, projections, exports, and snapshot.
 
@@ -2009,6 +1969,11 @@ def render_run(
                 snapshot_path, snapshot_sha = snapshot.create_snapshot(ctx)
             except (OSError, errors.RadarError):
                 sync_ok = False
+                digest_md, digest_path, is_quiet = render_digest(
+                    ctx,
+                    run_id,
+                    sync_available=False,
+                )
 
         final_status = "ok" if (sync_ok and verdict_ok) else "degraded"
         runlog.finish_run(

@@ -1217,6 +1217,7 @@ class TestRenovateConfig:
             *sorted(REPO_ROOT.glob("dev-guard/hooks/*.py")),
             *sorted(REPO_ROOT.glob("chai-bot/hooks/*.py")),
             *sorted(REPO_ROOT.glob("git-tools/scripts/*.py")),
+            *sorted(REPO_ROOT.glob("tech-radar/skills/radar/scripts/*.py")),
         ]
         assert hook_scripts, "Expected hook Python scripts in dev-guard/hooks or chai-bot/hooks"
 
@@ -1231,7 +1232,7 @@ class TestRenovateConfig:
         )
 
     def test_all_marketplace_plugins_in_post_upgrade_tasks_and_pypi_split_invariants(self):
-        """Both pypi and non-pypi plugin packageRules must cover all 13 marketplace plugins,
+        """Both pypi and non-pypi plugin packageRules must cover all 14 marketplace plugins,
         and pypi rule must run khepri-verify-pypi-source before skillsaw_custom_rules.py --fix
         without restricting fileFilters."""
         cfg = self._load_renovate_config()

@@ -6,7 +6,7 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, Literal
 from xml.etree.ElementTree import Element
@@ -71,7 +71,7 @@ class RawSignal:
     dedupe_key: str | None = None
     withdrawn: int = 0
     _persisted_signal_id: int | None = field(default=None, init=False, repr=False, compare=False)
-    _persisted_key: tuple[int, str, int] | None = field(
+    _persisted_key: tuple[int, str, int, str | None] | None = field(
         default=None, init=False, repr=False, compare=False
     )
 
@@ -142,6 +142,47 @@ def normalize_timestamp(raw: str | int | float | None) -> str | None:
         return dt2.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     except (TypeError, ValueError):
         return text
+
+
+def lookback_since(ctx: Ctx, default_delta: timedelta) -> datetime:
+    """Return `ctx.now - default_delta`, widened to prior `ok|degraded` run when `catch_up=True`."""
+    default_since = ctx.now - default_delta
+    if ctx.run_id:
+        run_row = ctx.db.execute(
+            "SELECT counts_json FROM runs WHERE run_id = ?",
+            (ctx.run_id,),
+        ).fetchone()
+    else:
+        run_row = ctx.db.execute(
+            "SELECT counts_json FROM runs "
+            "WHERE mode IN ('daily', 'weekly', 'monthly') AND status = 'running' "
+            "ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+
+    if run_row is None or not run_row["counts_json"]:
+        return default_since
+
+    try:
+        counts_obj = json.loads(str(run_row["counts_json"]))
+    except (TypeError, ValueError):
+        return default_since
+
+    if not isinstance(counts_obj, Mapping) or not counts_obj.get("catch_up"):
+        return default_since
+
+    prior_row = ctx.db.execute(
+        "SELECT MAX(started_at) AS last_started FROM runs "
+        "WHERE mode IN ('daily', 'weekly', 'monthly') AND status IN ('ok', 'degraded')"
+    ).fetchone()
+    if prior_row is None or not prior_row["last_started"]:
+        return default_since
+
+    iso_str = normalize_timestamp(str(prior_row["last_started"]))
+    prior_dt = db.parse_iso(iso_str)
+    if prior_dt is None:
+        return default_since
+
+    return prior_dt if prior_dt < default_since else default_since
 
 
 def infer_github_entity_hint(*texts: str | None) -> str | None:
@@ -268,16 +309,20 @@ def make_feed_parser(
 def persist_raw_signal(ctx: Ctx, sig: RawSignal, *, fetched_at: str | None = None) -> int:
     """Insert or update a RawSignal in the SQLite `signals` table and return `signal_id`."""
     ts = fetched_at or ctx.now_iso
-    cache_key = (id(ctx.db), ts, sig.withdrawn)
-    if sig._persisted_signal_id is not None and sig._persisted_key == cache_key:
-        return sig._persisted_signal_id
     dedupe = sig.dedupe_key or f"{sig.source_id}|{sig.type}|{sig.external_id}"
     payload_dict: dict[str, Any] = dict(sig.payload) if sig.payload else {}
     if sig.metrics:
         payload_dict.setdefault("metrics", sig.metrics)
-    payload_str = (
+    initial_payload_str = (
         json.dumps(payload_dict, separators=(",", ":"), sort_keys=True) if payload_dict else None
     )
+    if sig._persisted_signal_id is not None and sig._persisted_key == (
+        id(ctx.db),
+        ts,
+        sig.withdrawn,
+        initial_payload_str,
+    ):
+        return sig._persisted_signal_id
 
     entity_id: str | None = None
     if sig.entity_hint:
@@ -294,6 +339,67 @@ def persist_raw_signal(ctx: Ctx, sig: RawSignal, *, fetched_at: str | None = Non
             ).fetchone()
             if alias_row is not None:
                 entity_id = str(alias_row["entity_id"])
+
+    if sig.source_id in ("pypi_meta", "npm_registry_meta", "gh_repo_meta") and sig.entity_hint:
+        prior_row = ctx.db.execute(
+            "SELECT dedupe_key, payload_json FROM signals "
+            "WHERE source_id = ? AND ("
+            "entity_id = ? OR dedupe_key = ? OR dedupe_key LIKE ?"
+            ") ORDER BY signal_id DESC LIMIT 1",
+            (
+                sig.source_id,
+                entity_id or sig.entity_hint,
+                dedupe,
+                f"{sig.source_id}|lifecycle|{sig.entity_hint}|%",
+            ),
+        ).fetchone()
+        if prior_row is not None and prior_row["payload_json"]:
+            try:
+                prior_payload = json.loads(str(prior_row["payload_json"]))
+            except json.JSONDecodeError:
+                prior_payload = None
+            if isinstance(prior_payload, Mapping):
+                same_version_row = str(prior_row["dedupe_key"] or "") == dedupe and (
+                    sig.source_id != "gh_repo_meta"
+                    or prior_payload.get("owner_login") == payload_dict.get("owner_login")
+                )
+                for cur_k, prev_k in (
+                    ("repository", "previous_repository"),
+                    ("maintainers", "previous_maintainers"),
+                    ("owner_login", "previous_owner_login"),
+                ):
+                    if payload_dict.get(prev_k) is None:
+                        carried = (
+                            prior_payload.get(prev_k)
+                            if same_version_row
+                            else (prior_payload.get(cur_k) or prior_payload.get(prev_k))
+                        )
+                        if carried:
+                            payload_dict[prev_k] = carried
+                            sig.payload[prev_k] = carried
+                for map_k in (
+                    "provenance_by_version",
+                    "attestations_by_version",
+                    "install_script_versions",
+                ):
+                    cur_m = payload_dict.get(map_k)
+                    prev_m = prior_payload.get(map_k)
+                    if isinstance(cur_m, Mapping) and isinstance(prev_m, Mapping):
+                        merged_m = {**dict(prev_m), **dict(cur_m)}
+                        payload_dict[map_k] = merged_m
+                        sig.payload[map_k] = merged_m
+                cur_wheels = payload_dict.get("wheel_versions")
+                prev_wheels = prior_payload.get("wheel_versions")
+                if isinstance(cur_wheels, list) and isinstance(prev_wheels, list):
+                    merged_wheels = sorted(
+                        {*(str(v) for v in prev_wheels), *(str(v) for v in cur_wheels)}
+                    )
+                    payload_dict["wheel_versions"] = merged_wheels
+                    sig.payload["wheel_versions"] = merged_wheels
+
+    payload_str = (
+        json.dumps(payload_dict, separators=(",", ":"), sort_keys=True) if payload_dict else None
+    )
 
     row_id = db.insert_signal(
         ctx.db,
@@ -312,7 +418,7 @@ def persist_raw_signal(ctx: Ctx, sig: RawSignal, *, fetched_at: str | None = Non
         withdrawn=sig.withdrawn,
     )
     sig._persisted_signal_id = row_id
-    sig._persisted_key = cache_key
+    sig._persisted_key = (id(ctx.db), ts, sig.withdrawn, payload_str)
     return row_id
 
 

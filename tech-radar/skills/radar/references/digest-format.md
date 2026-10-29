@@ -9,13 +9,13 @@
   - **Alerts:** Open alerts whose state changed or that were raised after the previous digest's run start.
   - **Items:** Items with a `ring_history` entry after the previous digest's run start, newly promoted items passing the threshold, or items with a verdict applied this run (`action = "surface"`) and no prior `digest_items` row.
   - **Signals:** Signals with `last_surfaced_at IS NULL` or a new `dedupe_key`.
-- **Quiet run (`[NOTIF-TIER-08]`):** If nothing notable changed in any section, `$R render` outputs a 3-line quiet-run summary (`# Tech Radar — {date} ({mode})`, `Quiet run — no new security, lifecycle, feature, contender, horizon, pricing, or decision-due items since the last digest.`, and the single-line coverage summary) with no macOS notification.
+- **Quiet run (`[NOTIF-TIER-08]`):** If nothing notable changed in any section, `$R render` outputs a 3-line quiet-run summary (`# Tech Radar — {date} ({mode})`, `Quiet run: no new security alerts, lifecycle warnings, or radar movements since the last digest.`, and the single-line coverage summary) with no macOS notification.
 
 ## 2. Section Order (`[FMT-03]`)
 
 When non-empty, sections appear in this exact order:
 
-1. **`# Tech Radar — {date} ({mode})`** followed by **`## TL;DR`** with ≤5 bullets (`[FMT-01]`), ordered highest priority tier first (`P0` security → `P1` security/lifecycle → high-score contenders/features).
+1. **`# Tech Radar — {date} ({mode})`** followed by **`**TL;DR**`** with ≤5 bullets (`[FMT-01]`), ordered highest priority tier first (`P0` security → `P1` security/lifecycle → high-score contenders/features).
 2. **`## Security`** (`[NOTIF-TIER-01..03]`, tier `P0`/`P1`): `compromise`, `incident`, `kev`, `integrity`, and `app_integrity` alerts plus unconfirmed `chatter` alerts (explicitly labelled `unconfirmed`), showing alert ID (`A-nn`), kind, advisory ID, affected projects by alias (`example-org/public-app`, `private-project-1`), exposure-report terminal pointer (`radar.py exposure --show <alert_id>`), and credential/dependency rotation checklist.
 3. **`## Lifecycle`** (`[NOTIF-TIER-04]`): archival, deprecation, EOL, license-change, or replacement alerts on in-use and watchlist entities.
 4. **`## Features you could use`** (`[NOTIF-TIER-05]`): per item — feature summary, which repo/alias or config it applies to, fenced adoption snippet, and specific release/changelog URL.

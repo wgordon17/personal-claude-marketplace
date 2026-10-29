@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -105,6 +105,7 @@ def _record_visibility(
     vis: str,
     *,
     cache_check: bool,
+    commit: bool = True,
 ) -> str:
     ctx.db.execute(
         "UPDATE entities SET visibility = ? WHERE entity_id = ?",
@@ -118,14 +119,20 @@ def _record_visibility(
             "ON CONFLICT(entity_id, metric, observed_at) DO UPDATE SET value = excluded.value",
             (entity_id, val, ctx.now_iso),
         )
-    ctx.db.commit()
+    if commit:
+        ctx.db.commit()
     return vis
 
 
-def _check_registry_http(ctx: Ctx, url: str) -> tuple[str, bool]:
+def _check_registry_http(
+    ctx: Ctx,
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> tuple[str, bool]:
     """Return (visibility, should_cache) from an HTTP GET registry check."""
     try:
-        resp = ctx.http.fetch(url, method="GET", ttl_hours=24 * CACHE_TTL_DAYS)
+        resp = ctx.http.fetch(url, method="GET", headers=headers, ttl_hours=24 * CACHE_TTL_DAYS)
         if resp.status == 200:
             return "public", True
         return "private", True
@@ -165,10 +172,15 @@ def visibility(
     entity_id: str,
     *,
     force_refresh: bool = False,
+    private_scopes: Sequence[str] | None = None,
+    commit: bool = True,
 ) -> str:
     """Classify an entity's visibility as 'public' or 'private' (fail closed on errors)."""
-    scopes = profile_mod.load_private_scopes(ctx.db)
-    ctx.profile.private_scopes = scopes
+    if private_scopes is None:
+        scopes = profile_mod.load_private_scopes(ctx.db)
+        ctx.profile.private_scopes = scopes
+    else:
+        scopes = list(private_scopes)
 
     ent_row = ctx.db.execute(
         "SELECT name, repo, kind, ecosystem FROM entities WHERE entity_id = ?",
@@ -182,10 +194,10 @@ def visibility(
         or matches_private_scope(name, scopes)
         or (repo and matches_private_scope(repo, scopes))
     ):
-        return _record_visibility(ctx, entity_id, "private", cache_check=True)
+        return _record_visibility(ctx, entity_id, "private", cache_check=True, commit=commit)
 
     if _has_private_usage_marker(ctx, entity_id):
-        return _record_visibility(ctx, entity_id, "private", cache_check=True)
+        return _record_visibility(ctx, entity_id, "private", cache_check=True, commit=commit)
 
     if not force_refresh:
         cached = _has_fresh_visibility_cache(ctx, entity_id)
@@ -195,31 +207,35 @@ def visibility(
     if entity_id.startswith("pkg:pypi/"):
         pkg = entity_id[len("pkg:pypi/") :].strip().lower()
         vis, cache_ok = _check_registry_http(ctx, f"https://pypi.org/simple/{pkg}/")
-        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok)
+        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok, commit=commit)
 
     if entity_id.startswith("pkg:npm/"):
         pkg = entity_id[len("pkg:npm/") :].strip()
-        vis, cache_ok = _check_registry_http(ctx, f"https://registry.npmjs.org/{pkg}")
-        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok)
+        vis, cache_ok = _check_registry_http(
+            ctx,
+            f"https://registry.npmjs.org/{pkg}",
+            headers={"Accept": "application/vnd.npm.install-v1+json"},
+        )
+        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok, commit=commit)
 
     if entity_id.startswith("pkg:cargo/"):
         crate = entity_id[len("pkg:cargo/") :].strip()
         vis, cache_ok = _check_registry_http(ctx, f"https://crates.io/api/v1/crates/{crate}")
-        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok)
+        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok, commit=commit)
 
     if entity_id.startswith("gh:"):
         slug = entity_id[len("gh:") :].strip().lower()
         vis, cache_ok = _check_github_repo(ctx, slug)
-        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok)
+        return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok, commit=commit)
 
     if entity_id.startswith("bin:"):
         if repo:
             vis, cache_ok = _check_github_repo(ctx, repo)
-            return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok)
-        return _record_visibility(ctx, entity_id, "private", cache_check=True)
+            return _record_visibility(ctx, entity_id, vis, cache_check=cache_ok, commit=commit)
+        return _record_visibility(ctx, entity_id, "private", cache_check=True, commit=commit)
 
     if entity_id.startswith("svc:"):
-        return _record_visibility(ctx, entity_id, "private", cache_check=True)
+        return _record_visibility(ctx, entity_id, "private", cache_check=True, commit=commit)
 
     if entity_id.startswith(
         (
@@ -243,18 +259,27 @@ def visibility(
             "harness:tool/",
         )
     ):
-        return _record_visibility(ctx, entity_id, "public", cache_check=True)
+        return _record_visibility(ctx, entity_id, "public", cache_check=True, commit=commit)
 
-    return _record_visibility(ctx, entity_id, "private", cache_check=False)
+    return _record_visibility(ctx, entity_id, "private", cache_check=False, commit=commit)
 
 
 def classify_all(ctx: Ctx, *, force_refresh: bool = False) -> dict[str, str]:
     """Classify every entity in radar.db and return {entity_id: visibility}."""
+    scopes = profile_mod.load_private_scopes(ctx.db)
+    ctx.profile.private_scopes = scopes
     rows = ctx.db.execute("SELECT entity_id FROM entities ORDER BY entity_id").fetchall()
     results: dict[str, str] = {}
     for row in rows:
         eid = str(row["entity_id"])
-        results[eid] = visibility(ctx, eid, force_refresh=force_refresh)
+        results[eid] = visibility(
+            ctx,
+            eid,
+            force_refresh=force_refresh,
+            private_scopes=scopes,
+            commit=False,
+        )
+    ctx.db.commit()
     return results
 
 

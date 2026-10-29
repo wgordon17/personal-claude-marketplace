@@ -76,8 +76,40 @@ def _extract_bullets(text: str) -> list[str]:
     return bullets
 
 
+def _fingerprint_score_for_entity(
+    fp_rows: Sequence[Mapping[str, Any]],
+    *,
+    short_name: str,
+    repo_short: str,
+) -> int:
+    mod_name = short_name.replace("-", "_")
+    names = {n for n in (short_name, mod_name, repo_short) if n}
+    if not names:
+        return 0
+    total = 0
+    for r in fp_rows:
+        kind = str(r["kind"])
+        tok = str(r["token"]).strip().lower()
+        cnt = int(r["count"] or 0)
+        if not tok or cnt <= 0:
+            continue
+        if (
+            (kind in ("cmd", "import", "tool_name", "api") and tok in names)
+            or (kind == "subcommand" and tok.split()[0] in names)
+            or (
+                kind == "config_key"
+                and any(
+                    tok == f"tool.{n}" or tok.startswith(f"tool.{n}.") or tok.startswith(f"{n}.")
+                    for n in names
+                )
+            )
+        ):
+            total += cnt
+    return total
+
+
 def _load_fingerprint_domain(ctx: Ctx) -> dict[str, Any]:
-    """Load the user's fingerprint tokens and inventoried tool names from SQLite."""
+    """Load the user's fingerprint tokens, FEAT-13 covered entities, and inventoried tools."""
     fp_rows = ctx.db.execute("SELECT context, kind, token, count FROM fingerprints").fetchall()
 
     cmds: set[str] = set()
@@ -108,6 +140,73 @@ def _load_fingerprint_domain(ctx: Ctx) -> dict[str, Any]:
         elif kind == "api":
             apis.add(tok)
 
+    excluded_entities: set[str] = set()
+    excl_rows = ctx.db.execute(
+        "SELECT i.entity_id, e.repo FROM items i "
+        "LEFT JOIN entities e ON e.entity_id = i.entity_id "
+        "WHERE i.ring = 'hold' OR i.state = 'rejected'"
+    ).fetchall()
+    for r in excl_rows:
+        excluded_entities.add(str(r["entity_id"]))
+        repo = str(r["repo"] or "").strip().lower()
+        if repo:
+            excluded_entities.add(f"gh:{repo}")
+
+    covered_entities: set[str] = set()
+    adopt_rows = ctx.db.execute(
+        "SELECT e.entity_id, e.repo FROM items i "
+        "JOIN entities e ON e.entity_id = i.entity_id "
+        "WHERE i.ring = 'adopt' AND i.state != 'rejected' AND e.visibility = 'public'"
+    ).fetchall()
+    for r in adopt_rows:
+        eid = str(r["entity_id"])
+        covered_entities.add(eid)
+        repo = str(r["repo"] or "").strip().lower()
+        if repo:
+            covered_entities.add(f"gh:{repo}")
+
+    watchlist_rows = ctx.db.execute(
+        "SELECT e.entity_id, e.repo FROM entities e "
+        "JOIN usages u ON u.entity_id = e.entity_id "
+        "WHERE e.visibility = 'public' AND u.context = 'interest:watchlist'"
+    ).fetchall()
+    for r in watchlist_rows:
+        eid = str(r["entity_id"])
+        if eid in excluded_entities:
+            continue
+        covered_entities.add(eid)
+        repo = str(r["repo"] or "").strip().lower()
+        if repo:
+            covered_entities.add(f"gh:{repo}")
+
+    used_rows = ctx.db.execute(
+        "SELECT e.entity_id, e.name, e.kind, e.repo, COUNT(DISTINCT u.context) AS u_cnt "
+        "FROM entities e JOIN usages u ON u.entity_id = e.entity_id "
+        "WHERE e.visibility = 'public' AND u.direct = 1 AND u.context NOT LIKE 'interest:%' "
+        "GROUP BY e.entity_id"
+    ).fetchall()
+    ranked_used: list[tuple[int, int, str, str]] = []
+    for er in used_rows:
+        eid = str(er["entity_id"])
+        if eid in excluded_entities:
+            continue
+        ename = str(er["name"] or "").strip().lower()
+        short_name = ename.split("/")[-1] if ename else ""
+        repo = str(er["repo"] or "").strip().lower()
+        repo_short = repo.split("/")[-1] if repo else ""
+        fp_score = _fingerprint_score_for_entity(
+            fp_rows,
+            short_name=short_name,
+            repo_short=repo_short,
+        )
+        ranked_used.append((-fp_score, -int(er["u_cnt"] or 0), eid, repo))
+
+    ranked_used.sort()
+    for _neg_fp, _neg_u, eid, repo in ranked_used[:40]:
+        covered_entities.add(eid)
+        if repo:
+            covered_entities.add(f"gh:{repo}")
+
     ent_rows = ctx.db.execute(
         "SELECT e.entity_id, e.name, e.kind, e.repo, e.visibility "
         "FROM entities e JOIN usages u ON u.entity_id = e.entity_id "
@@ -117,6 +216,8 @@ def _load_fingerprint_domain(ctx: Ctx) -> dict[str, Any]:
     inventoried_tools: dict[str, str] = {}
     for er in ent_rows:
         eid = str(er["entity_id"])
+        if eid in excluded_entities:
+            continue
         ename = str(er["name"] or "").strip().lower()
         if ename:
             inventoried_tools.setdefault(ename, eid)
@@ -135,6 +236,8 @@ def _load_fingerprint_domain(ctx: Ctx) -> dict[str, Any]:
         "apis": apis,
         "all_tokens": all_tokens,
         "inventoried_tools": inventoried_tools,
+        "covered_entities": covered_entities,
+        "excluded_entities": excluded_entities,
     }
 
 
@@ -303,6 +406,8 @@ def evaluate(
     """Evaluate feature (§4) and pricing (§5) signals from `results`."""
     domain = _load_fingerprint_domain(ctx)
     inventoried_tools: Mapping[str, str] = domain["inventoried_tools"]
+    covered_entities: set[str] = domain["covered_entities"]
+    excluded_entities: set[str] = domain["excluded_entities"]
 
     all_signals: list[RawSignal] = []
     for res in results:
@@ -348,6 +453,7 @@ def evaluate(
         if sig.source_id not in (
             "gh_releases",
             "gh_changelog_file",
+            "gh_discussions_announce",
             "claude_code_changelog",
             "anthropic_news",
             "harness_changelogs",
@@ -366,6 +472,17 @@ def evaluate(
         entity_name = (
             str(sig.payload.get("repo") or entity_hint or sig.source_id).split(":")[-1].strip()
         )
+        repo_key = f"gh:{entity_name.lower()}" if "/" in entity_name else ""
+        if (entity_hint and entity_hint in excluded_entities) or (
+            repo_key and repo_key in excluded_entities
+        ):
+            continue
+        if (
+            sig.source_id in ("gh_releases", "gh_changelog_file", "gh_discussions_announce")
+            and (not entity_hint or entity_hint not in covered_entities)
+            and (not repo_key or repo_key not in covered_entities)
+        ):
+            continue
 
         for idx, bullet in enumerate(_extract_bullets(body_text)):
             if is_pricing_text(bullet) and sig.source_id in (

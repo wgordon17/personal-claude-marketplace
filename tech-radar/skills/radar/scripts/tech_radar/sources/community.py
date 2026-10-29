@@ -21,6 +21,7 @@ from .base import (
     RawSignal,
     SourceSpec,
     infer_github_entity_hint,
+    lookback_since,
     normalize_timestamp,
 )
 
@@ -182,7 +183,7 @@ def parse_hn_algolia(data: bytes, meta: FetchMeta) -> list[RawSignal]:
 
 def _run_hn_algolia(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
     """Issue one plain-word query per public term (Spec 12 A42)."""
-    since_epoch = int((ctx.now - timedelta(days=7)).timestamp())
+    since_epoch = int(lookback_since(ctx, timedelta(days=7)).timestamp())
     terms = _plain_algolia_terms(ctx)
     seen_ids: set[str] = set()
     signals: list[RawSignal] = []
@@ -277,7 +278,7 @@ def parse_hn_pricing(data: bytes, meta: FetchMeta) -> list[RawSignal]:
 
 def _run_hn_pricing(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
     """Issue one HN Algolia request per pricing phrase and filter locally (Spec 12 A15, A42)."""
-    since_epoch = int((ctx.now - timedelta(days=1)).timestamp())
+    since_epoch = int(lookback_since(ctx, timedelta(days=1)).timestamp())
     seen_ids: set[str] = set()
     signals: list[RawSignal] = []
     errors: list[str] = []

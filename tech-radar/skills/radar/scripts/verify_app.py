@@ -165,7 +165,7 @@ def main(
     raw_state = os.environ.get("TECH_RADAR_STATE")
     state_dir = Path(raw_state) if raw_state else app_dir.parent
 
-    ok, _reason = verify_tree(app_dir, expected_manifest_sha=manifest_sha)
+    ok, _ = verify_tree(app_dir, expected_manifest_sha=manifest_sha)
     if not ok:
         _alert_once(state_dir, manifest_sha, notify)
         return 4
@@ -176,8 +176,26 @@ def main(
         return 4
 
     env: dict[str, str] = {}
+    replay_active = bool(os.environ.get("TECH_RADAR_REPLAY_DIR"))
+    allowed_passthrough = {"PATH", "HOME", "TMPDIR", "USER", "LANG"}
+    if replay_active:
+        allowed_passthrough.update(
+            {
+                "TECH_RADAR_HOME",
+                "TECH_RADAR_RUN_ROOT",
+                "TECH_RADAR_SYNC",
+                "TECH_RADAR_LOGS",
+                "TECH_RADAR_PROJECT_ROOTS",
+                "TECH_RADAR_REPLAY_DIR",
+                "TECH_RADAR_NOTIFY_SINK",
+                "UV_OFFLINE",
+                "UV_CACHE_DIR",
+                "UV_TOOL_DIR",
+                "UV_PYTHON_INSTALL_DIR",
+            }
+        )
     for k, v in os.environ.items():
-        if k.startswith(("TECH_RADAR_", "UV_")) or k in ("PATH", "HOME", "TMPDIR", "USER", "LANG"):
+        if k in allowed_passthrough:
             env[k] = v
     env["PATH"] = os.environ.get("PATH", "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin")
     env["HOME"] = os.environ.get("HOME", str(Path.home()))

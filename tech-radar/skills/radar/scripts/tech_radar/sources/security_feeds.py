@@ -14,6 +14,7 @@ from .base import (
     FetchMeta,
     RawSignal,
     SourceSpec,
+    lookback_since,
     make_feed_parser,
     normalize_timestamp,
     parse_feed_bytes,
@@ -622,7 +623,7 @@ def parse_ghsa_malware(data: bytes, meta: FetchMeta) -> list[RawSignal]:
 
 
 def _run_ghsa_malware(spec: SourceSpec, ctx: Ctx) -> list[RawSignal]:
-    since_date = (ctx.now - timedelta(days=7)).strftime("%Y-%m-%d")
+    since_date = lookback_since(ctx, timedelta(days=7)).strftime("%Y-%m-%d")
     endpoint = f"advisories?type=malware&updated=>={since_date}&per_page=100"
     try:
         res = ctx.gh.api(endpoint)

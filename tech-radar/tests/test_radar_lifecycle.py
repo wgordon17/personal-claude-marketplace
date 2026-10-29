@@ -346,6 +346,52 @@ def test_life_08_issue_response_collapse(
         for i in ids
     )
 
+    # Also verify LIFE-09 fires on gh_discussions_announce maintainer-leaving announcement
+    disc_sig = RawSignal(
+        source_id="gh_discussions_announce",
+        type="lifecycle",
+        external_id="disc-leaving-1",
+        title="Project status update",
+        untrusted_excerpt="This project is looking for new maintainers.",
+        entity_hint="gh:example-org/slow-issues",
+        payload={"repo": "example-org/slow-issues"},
+    )
+    disc_ids = lifecycle.evaluate(
+        ctx,
+        [SourceResult(source_id="gh_discussions_announce", signals=[disc_sig])],
+    )
+    assert any(
+        "LIFE-09"
+        in str(
+            ctx.db.execute("SELECT dedupe_key FROM alerts WHERE alert_id = ?", (i,)).fetchone()[0]
+        )
+        for i in disc_ids
+    )
+
+    # Verify 7-day KV cache hit on second evaluate with same pushed_at makes zero gh calls,
+    # and changing pushed_at invalidates the cache
+    ctx.gh.transport.calls.clear()  # type: ignore[attr-defined]
+    lifecycle.evaluate(ctx, [SourceResult(source_id="gh_repo_meta", signals=[sig])])
+    assert ctx.gh.transport.calls == []  # type: ignore[attr-defined]
+
+    sig_updated_push = RawSignal(
+        source_id="gh_repo_meta",
+        type="lifecycle",
+        external_id="gh_repo_meta:example-org/slow-issues",
+        title="slow-issues",
+        entity_hint="gh:example-org/slow-issues",
+        payload={
+            "repo": "example-org/slow-issues",
+            "archived": False,
+            "pushed_at": "2026-10-25T00:00:00Z",
+            "open_issues_count": 0,
+            "forks_count": 0,
+        },
+    )
+    lifecycle.evaluate(ctx, [SourceResult(source_id="gh_repo_meta", signals=[sig_updated_push])])
+    assert len(ctx.gh.transport.calls) >= 1  # type: ignore[attr-defined]
+    assert not any("search/issues" in " ".join(argv) for argv, _ in ctx.gh.transport.calls)  # type: ignore[attr-defined]
+
 
 def test_life_09_maintainer_leaving_notice(
     replay_http: Callable[..., http.ReplayHttp],

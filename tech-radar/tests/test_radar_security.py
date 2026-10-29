@@ -448,3 +448,249 @@ def test_uv_audit_toggle_isolated_copy_private_skip_and_hourly_skip(
     assert uv_sig is not None
     assert str(uv_sig["confidence"]) == "confirmed"
     assert str(uv_sig["external_id"]) == "MAL-2026-9999"
+
+    # Verify uv_audit source_health recorded ok on success, and records error on failure
+    sh_ok = ctx.db.execute(
+        "SELECT consecutive_failures, last_error FROM source_health WHERE source_id = 'uv_audit'"
+    ).fetchone()
+    assert sh_ok is not None
+    assert int(sh_ok["consecutive_failures"]) == 0
+    assert sh_ok["last_error"] is None
+
+    def _raise_uv_audit_error(*_args: Any, **_kwargs: Any) -> Any:
+        raise procs.CommandDenied("simulated uv audit failure")
+
+    monkeypatch.setattr(ctx.procs, "run", _raise_uv_audit_error)
+    security.evaluate(ctx, [], mode="daily")
+    sh_err = ctx.db.execute(
+        "SELECT consecutive_failures, last_error FROM source_health WHERE source_id = 'uv_audit'"
+    ).fetchone()
+    assert sh_err is not None
+    assert int(sh_err["consecutive_failures"]) >= 1
+    assert "simulated uv audit failure" in str(sh_err["last_error"])
+    cov_after_fail = json.loads(db.kv_get(ctx.db, "last_scanner_coverage_json") or "[]")
+    assert "uv audit failed" in cov_after_fail
+
+    # 4. Unit tests for _parse_uv_audit_output(strict=True) error branches and adverse_statuses
+    import pytest
+
+    with pytest.raises(ValueError, match="not json"):
+        security._parse_uv_audit_output(
+            "<<<invalid>>>", "proj", ctx.now_iso, strict=True, stderr="not json"
+        )
+    with pytest.raises(ValueError, match="missing expected keys"):
+        security._parse_uv_audit_output("{}", "proj", ctx.now_iso, strict=True)
+    adv_sigs = security._parse_uv_audit_output(
+        json.dumps(
+            {
+                "adverse_statuses": [
+                    {
+                        "dependency": {"name": "litellm", "version": "1.107.0"},
+                        "status": "quarantined",
+                        "reason": "Malicious credential stealer",
+                    }
+                ]
+            }
+        ),
+        "https://github.com/example-org/public-app",
+        ctx.now_iso,
+        strict=True,
+    )
+    assert len(adv_sigs) == 1
+    assert adv_sigs[0].entity_hint == "pkg:pypi/litellm"
+
+
+def test_integrity_regressions_sec10_sec11_sec12_and_package_level_osv_incident(
+    replay_http: Callable[..., http.ReplayHttp],
+    replay_gh: Callable[..., procs.ReplayProcs],
+    replay_procs: Callable[..., procs.ReplayProcs],
+    tmp_path: Path,
+) -> None:
+    """SEC-10, SEC-11, SEC-12 integrity alerts, signal carry-forward, and versionless querybatch."""
+    from tech_radar.sources.base import persist_raw_signal
+
+    extra_http = tmp_path / "extra_http"
+    extra_http.mkdir(parents=True, exist_ok=True)
+    # Versionless querybatch fixture for pkg:pypi/acme-lib (installed 1.0.0, MAL affects 2.0.0)
+    (extra_http / "querybatch_pkg_incident.json").write_text(
+        json.dumps(
+            {
+                "queries": [["PyPI", "acme-lib", ""], ["npm", "acme-js", ""]],
+                "status": 200,
+                "headers": {"content-type": "application/json"},
+                "body": {
+                    "results": [
+                        {"vulns": [{"id": "MAL-2026-4444", "modified": "2026-10-27T10:00:00Z"}]},
+                        {"vulns": []},
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    vuln_key = http.replay_key("GET", "https://api.osv.dev/v1/vulns/MAL-2026-4444")
+    (extra_http / f"{vuln_key}.json").write_text(
+        json.dumps(
+            {
+                "status": 200,
+                "headers": {"content-type": "application/json"},
+                "body": {
+                    "id": "MAL-2026-4444",
+                    "summary": "Malicious release in acme-lib 2.0.0",
+                    "details": "Compromised 2.0.0 release",
+                    "published": "2026-10-27T10:00:00Z",
+                    "modified": "2026-10-27T10:00:00Z",
+                    "affected": [
+                        {
+                            "package": {"ecosystem": "PyPI", "name": "acme-lib"},
+                            "versions": ["2.0.0"],
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ctx = context.build(
+        transports={
+            "http": replay_http(extra_roots=[extra_http]),
+            "gh": replay_gh(),
+            "procs": replay_procs(),
+        },
+        now=FIXED_NOW,
+    )
+    ctx.db.execute(
+        "INSERT INTO entities(entity_id, kind, ecosystem, name, repo, visibility, created_at) "
+        "VALUES "
+        "('pkg:pypi/acme-lib', 'package', 'pypi', 'acme-lib', 'acme-org/acme-lib', 'public', ?), "
+        "('pkg:npm/acme-js', 'package', 'npm', 'acme-js', 'acme-org/acme-js', 'public', ?)",
+        (ctx.now_iso, ctx.now_iso),
+    )
+    ctx.db.execute(
+        "INSERT INTO usages(entity_id, context, version, direct, first_seen, last_seen) "
+        "VALUES "
+        "('pkg:pypi/acme-lib', "
+        "'project:https://github.com/example-org/public-app', '1.0.0', 1, ?, ?), "
+        "('pkg:npm/acme-js', "
+        "'project:https://github.com/example-org/public-app', '1.0.0', 1, ?, ?)",
+        (ctx.now_iso, ctx.now_iso, ctx.now_iso, ctx.now_iso),
+    )
+    ctx.db.commit()
+
+    # 1. Persist baseline signals for pypi_meta and gh_repo_meta, then persist updated signals
+    #    to verify persist_raw_signal carries forward previous_repository, previous_maintainers,
+    #    previous_owner_login, and provenance_by_version.
+    base_pypi = RawSignal(
+        source_id="pypi_meta",
+        type="lifecycle",
+        external_id="pypi:acme-lib:1.0.0",
+        title="acme-lib 1.0.0",
+        entity_hint="pkg:pypi/acme-lib",
+        payload={
+            "name": "acme-lib",
+            "latest_version": "1.0.0",
+            "repository": "acme-org/acme-lib",
+            "maintainers": ["alice"],
+            "provenance_by_version": {"1.0.0": True},
+        },
+        dedupe_key="pypi_meta|lifecycle|pkg:pypi/acme-lib|1.0.0",
+    )
+    persist_raw_signal(ctx, base_pypi)
+
+    base_gh_meta = RawSignal(
+        source_id="gh_repo_meta",
+        type="lifecycle",
+        external_id="gh_repo_meta:acme-org/acme-lib",
+        title="acme-org/acme-lib",
+        entity_hint="gh:acme-org/acme-lib",
+        payload={"repo": "acme-org/acme-lib", "owner_login": "acme-org"},
+        dedupe_key="gh_repo_meta|lifecycle|gh:acme-org/acme-lib",
+    )
+    persist_raw_signal(ctx, base_gh_meta)
+
+    next_pypi = RawSignal(
+        source_id="pypi_meta",
+        type="lifecycle",
+        external_id="pypi:acme-lib:2.0.0",
+        title="acme-lib 2.0.0",
+        entity_hint="pkg:pypi/acme-lib",
+        payload={
+            "name": "acme-lib",
+            "latest_version": "2.0.0",
+            "repository": "evil-org/acme-lib",
+            "maintainers": ["mallory"],
+            "provenance_by_version": {"2.0.0": False},
+            "pth_or_sitecustomize_versions": ["2.0.0"],
+            "sdist_only_versions": ["2.0.0"],
+            "wheel_versions": ["1.0.0"],
+        },
+        dedupe_key="pypi_meta|lifecycle|pkg:pypi/acme-lib|2.0.0",
+    )
+    next_gh_meta = RawSignal(
+        source_id="gh_repo_meta",
+        type="lifecycle",
+        external_id="gh_repo_meta:acme-org/acme-lib",
+        title="acme-org/acme-lib",
+        entity_hint="gh:acme-org/acme-lib",
+        payload={"repo": "acme-org/acme-lib", "owner_login": "new-buyer-org"},
+        dedupe_key="gh_repo_meta|lifecycle|gh:acme-org/acme-lib",
+    )
+    gh_rel_tag_sig = RawSignal(
+        source_id="gh_releases",
+        type="feature",
+        external_id="evil-org/acme-lib:v1.0.0",
+        title="v1.0.0",
+        entity_hint="gh:evil-org/acme-lib",
+        payload={"repo": "evil-org/acme-lib", "tag_name": "v1.0.0"},
+        dedupe_key="gh_releases|feature|evil-org/acme-lib|v1.0.0",
+    )
+    npm_sig = RawSignal(
+        source_id="npm_registry_meta",
+        type="lifecycle",
+        external_id="npm:acme-js:2.0.0",
+        title="acme-js 2.0.0",
+        entity_hint="pkg:npm/acme-js",
+        payload={
+            "name": "acme-js",
+            "latest_version": "2.0.0",
+            "repository": "evil-org/acme-js",
+            "repo_by_version": {"1.0.0": "acme-org/acme-js", "2.0.0": "evil-org/acme-js"},
+            "install_script_versions": {"1.0.0": [], "2.0.0": ["postinstall"]},
+        },
+        dedupe_key="npm_registry_meta|lifecycle|pkg:npm/acme-js|2.0.0",
+    )
+
+    security.evaluate(
+        ctx,
+        [
+            SourceResult(source_id="pypi_meta", signals=[next_pypi]),
+            SourceResult(source_id="gh_repo_meta", signals=[next_gh_meta]),
+            SourceResult(source_id="gh_releases", signals=[gh_rel_tag_sig]),
+            SourceResult(source_id="npm_registry_meta", signals=[npm_sig]),
+        ],
+        mode="daily",
+    )
+
+    alert_rows = ctx.db.execute("SELECT kind, tier, entity_id, payload_json FROM alerts").fetchall()
+    integ_reasons = [
+        str(json.loads(str(r["payload_json"])).get("reason") or "")
+        for r in alert_rows
+        if str(r["kind"]) == "integrity"
+    ]
+    assert any("SEC-10: provenance/trusted publishing dropped" in r for r in integ_reasons)
+    assert any("SEC-10: repository changed" in r for r in integ_reasons)
+    assert any("SEC-10: release 2.0.0 has no matching git tag" in r for r in integ_reasons)
+    assert any("SEC-11: publisher/maintainer set changed" in r for r in integ_reasons)
+    assert any("SEC-11: repository owner changed" in r for r in integ_reasons)
+    assert any("SEC-12: install scripts added" in r for r in integ_reasons)
+    assert any("SEC-12: wheel contains startup .pth" in r for r in integ_reasons)
+    assert any("SEC-12: 2.0.0 is sdist-only" in r for r in integ_reasons)
+
+    # Also verify _query_package_level_osv_incidents created a P1 incident alert for acme-lib
+    inc_rows = [
+        r
+        for r in alert_rows
+        if str(r["kind"]) == "incident" and str(r["entity_id"]) == "pkg:pypi/acme-lib"
+    ]
+    assert len(inc_rows) == 1

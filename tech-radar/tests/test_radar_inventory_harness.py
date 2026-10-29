@@ -1,4 +1,4 @@
-"""Tests for AI harness inventory and CLI/code fingerprints (Task 4 Step 5, Spec 04, A12, A13)."""
+"""Tests for AI harness inventory and CLI/code fingerprints (Spec 04, A12, A13)."""
 
 from __future__ import annotations
 
@@ -111,3 +111,54 @@ def test_t3_db_handle_is_read_only_and_unknown_schema_records_skipped_reason(
     ).fetchone()
     assert row is not None
     assert row["skipped_reason"] == "t3 schema not recognized"
+
+
+def test_t3_scheduled_tasks_and_claude_transcript_dedupe(
+    fixture_home: Path,
+    replay_http: Callable[..., http.ReplayHttp],
+    replay_gh: Callable[..., procs.ReplayProcs],
+    replay_procs: Callable[..., procs.ReplayProcs],
+) -> None:
+    t3_db = fixture_home / ".t3" / "userdata" / "statev2.sqlite"
+    conn = sqlite3.connect(str(t3_db))
+    try:
+        conn.execute(
+            "INSERT INTO scheduled_tasks("
+            "task_id, title, prompt, enabled, schedule_json, project_id, "
+            "workspace_strategy_json, model_selection_json, runtime_mode, interaction_mode, "
+            "created_by, creation_source, created_at, updated_at, last_run_status, "
+            "run_count, webhook_secret"
+            ") VALUES (?, ?, ?, 1, '{}', 'proj-radar-1', '{}', ?, 'auto', 'default', "
+            "'user', 'ui', '2026-10-20T00:00:00Z', '2026-10-20T00:00:00Z', 'ok', 3, ?)",
+            (
+                "sched-daily-radar",
+                "Daily Tech Radar",
+                "SECRET_PROMPT_DO_NOT_RECORD",
+                '{"model":"claude-opus-5-5"}',
+                "SECRET_WEBHOOK_TOKEN_DO_NOT_RECORD",
+            ),
+        )
+        # Create a matching Claude transcript file for thread:project:proj-radar-1:0003's session
+        claude_proj = fixture_home / ".claude" / "projects" / "test-proj"
+        claude_proj.mkdir(parents=True, exist_ok=True)
+        (claude_proj / "sess-1.jsonl").write_text('{"type":"user"}\n', encoding="utf-8")
+        conn.execute(
+            "UPDATE orchestration_v2_projection_threads "
+            "SET active_provider_thread_id = 'sess-1' "
+            "WHERE thread_id = 'thread:project:proj-radar-1:0003'"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    ctx = _make_ctx(replay_http, replay_gh, replay_procs)
+    out = inventory.harness.collect(ctx)
+    ent_ids = {e.entity_id for e in out.entities}
+    assert "svc:t3-schedule/sched-daily-radar" in ent_ids
+    tokens = {(f.context, f.kind, f.token) for f in out.fingerprints}
+    assert ("harness:t3", "model_id", "claude-opus-5-5") in tokens
+    # Turn items on the deduped thread (thread:project:proj-radar-1:0003) are skipped in harness:t3
+    assert ("harness:t3", "tool_name", "Bash") not in tokens
+    dump = repr(out)
+    assert "SECRET_PROMPT_DO_NOT_RECORD" not in dump
+    assert "SECRET_WEBHOOK_TOKEN_DO_NOT_RECORD" not in dump

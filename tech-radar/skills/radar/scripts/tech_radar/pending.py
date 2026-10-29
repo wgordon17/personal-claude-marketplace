@@ -137,7 +137,7 @@ def taste_diff(ctx: Ctx) -> dict[str, Any]:
 
 
 def stage_taste(ctx: Ctx, *, channel: str = "thread") -> dict[str, Any]:
-    """Stage the current content and sha256 of `TASTE_PROFILE.proposed.md` (Spec 12 A41, T1.6)."""
+    """Stage the current content and sha256 of `TASTE_PROFILE.proposed.md` (Spec 12 A41)."""
     proposed_path = ctx.paths.sync / "TASTE_PROFILE.proposed.md"
     if not proposed_path.is_file():
         raise errors.Refused("TASTE_PROFILE.proposed.md not found in sync dir")

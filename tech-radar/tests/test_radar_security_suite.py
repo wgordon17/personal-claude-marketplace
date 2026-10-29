@@ -1,4 +1,4 @@
-"""Cross-cutting security suite for tech-radar (Spec 06, Spec 12, Task 12 Step 1)."""
+"""Cross-cutting security suite for tech-radar (Spec 06, Spec 12)."""
 
 from __future__ import annotations
 
@@ -399,7 +399,7 @@ def test_a_canary_corpus_end_to_end(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Task 12 Step 1(a):
+    """Injection scenario verification across all sources and end-to-end pipeline:
     - For every source id in `SOURCES`, an injection variant fixture exists under
       `tests/fixtures/scenarios/injection/` (fails on any missing variant) and parses with
       tags/controls stripped and canary text confined to `untrusted_excerpt` / `title`.
@@ -651,8 +651,7 @@ def test_b_egress_and_run_root_private_isolation(
     isolated_radar_env: dict[str, Path],
     tmp_path: Path,
 ) -> None:
-    """Task 12 Step 1(b):
-    Seeded private canary names (projects, packages, and `kv['private_scopes']`) never appear
+    """Seeded private canary names (projects, packages, and `kv['private_scopes']`) never appear
     in any recorded outbound URL/body nor in any file under `run_root`.
     """
     fixture_home(scenario="baseline")
@@ -794,8 +793,7 @@ def test_b_egress_and_run_root_private_isolation(
 def test_c_structural_settings_and_skill_allowed_tools(
     isolated_radar_env: dict[str, Path],
 ) -> None:
-    """Task 12 Step 1(c):
-    `P/templates/run-project-settings.json` equals the Spec 12 A25 allow/deny/`defaultMode` lists
+    """`P/templates/run-project-settings.json` equals the Spec 12 A25 allow/deny/`defaultMode` lists
     (omitting the 7 bootstrap-only T3 MCP tools) and `SKILL.md` `allowed-tools` equals the Spec 08
     set (including the 7 bootstrap-only T3 MCP tools), both as finalised by
     `spike-results.md ## T3 enforcement` (checked regardless of `ENFORCEMENT_HONOURED`).
@@ -876,8 +874,7 @@ def test_d_script_dependencies_locks_and_isolation(
     replay_gh: Callable[..., procs.ReplayProcs],
     replay_procs: Callable[..., procs.ReplayProcs],
 ) -> None:
-    """Task 12 Step 1(d):
-    `S/radar.py` and `S/reddit_pull.py` deps all `==`, `exclude-newer` set,
+    """`S/radar.py` and `S/reddit_pull.py` deps all `==`, `exclude-newer` set,
     `S/radar.py.lock` and `S/reddit_pull.py.lock` exist, `reddit_pull.py` imports nothing from
     `tech_radar` and is invoked with `timeout=600` and minimal env keys.
     """
@@ -966,8 +963,7 @@ def test_e_t9_cli_fuzz_and_db_integrity(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Task 12 Step 1(e):
-    Spec 06 T9 fuzz strings passed through every CLI argument that accepts data ->
+    """Spec 06 T9 fuzz strings passed through every CLI argument that accepts data ->
     no command execution, no SQL table loss, `PRAGMA integrity_check` == 'ok'.
     """
     ctx, _run_id = radar_db_builder.build_ctx(tmp_path / "fuzz_env", state="daily")
@@ -1042,8 +1038,7 @@ def test_f_confirmation_codes_and_terminal_only_refusal(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Task 12 Step 1(f):
-    After a pending/confirm cycle, a Python byte scan of state, `run_root`, sync, and logs
+    """After a pending/confirm cycle, a Python byte scan of state, `run_root`, sync, and logs
     finds no confirmation code, and every terminal-only subcommand refuses without a TTY.
     """
     base = tmp_path / "confirm_env"
@@ -1212,9 +1207,7 @@ def test_f_confirmation_codes_and_terminal_only_refusal(
 
 
 def test_docs_and_traceability_contracts() -> None:
-    """Task 12 Steps 2 & 3:
-    Verify `tech-radar/README.md`, root `README.md`, and `specs/10-traceability.md` contracts.
-    """
+    """Verify `tech-radar/README.md`, root `README.md`, and `specs/10-traceability.md` contracts."""
     root_readme = (_REPO_ROOT / "README.md").read_text(encoding="utf-8")
     assert "14 plugins" in root_readme
     assert "13 plugins" not in root_readme

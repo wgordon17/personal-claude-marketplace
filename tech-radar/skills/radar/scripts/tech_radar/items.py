@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -329,6 +330,68 @@ def _extract_signal_metrics(row: Mapping[str, Any]) -> dict[str, float]:
     return out
 
 
+_WATCH_TAG_RE = re.compile(r"\[watch-[a-z0-9-]+\]")
+_TOKEN_SPLIT_RE = re.compile(r"[^a-z0-9+#-]+")
+_ANTI_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "with",
+        "from",
+        "that",
+        "this",
+        "tools",
+        "tool",
+        "only",
+        "apps",
+        "wrappers",
+        "heavy",
+        "unmaintained",
+    }
+)
+_CAT_STOPWORDS: frozenset[str] = frozenset({"and", "the", "for", "tools", "dev"})
+
+
+@functools.lru_cache(maxsize=64)
+def _compile_word_boundary_re(terms: frozenset[str], min_len: int = 1) -> re.Pattern[str] | None:
+    escaped = sorted(
+        (re.escape(t) for t in terms if len(t) >= min_len),
+        key=len,
+        reverse=True,
+    )
+    if not escaped:
+        return None
+    return re.compile(rf"\b(?:{'|'.join(escaped)})\b")
+
+
+def _prepare_anti_interest_matcher(
+    profile_anti: Sequence[str],
+) -> tuple[tuple[str, ...], re.Pattern[str] | None]:
+    phrases: list[str] = []
+    tokens: set[str] = set()
+    for entry in profile_anti:
+        clean = entry.strip().lower()
+        if not clean:
+            continue
+        clean = _WATCH_TAG_RE.sub("", clean).strip()
+        if not clean:
+            continue
+        phrases.append(clean)
+        for tok in _TOKEN_SPLIT_RE.split(clean):
+            if len(tok) >= 4 and tok not in _ANTI_STOPWORDS:
+                tokens.add(tok)
+    return tuple(phrases), _compile_word_boundary_re(frozenset(tokens), min_len=4)
+
+
+def _category_parts(category_terms: Iterable[str]) -> frozenset[str]:
+    parts: set[str] = set()
+    for cat in category_terms:
+        if not cat:
+            continue
+        for part in _TOKEN_SPLIT_RE.split(cat):
+            if len(part) >= 3 and part not in _CAT_STOPWORDS:
+                parts.add(part)
+    return frozenset(parts)
+
+
 def _matches_anti_interest(
     profile_anti: Sequence[str],
     *,
@@ -336,42 +399,17 @@ def _matches_anti_interest(
     title: str,
     excerpt: str,
     quadrant: str,
+    compiled_anti: tuple[tuple[str, ...], re.Pattern[str] | None] | None = None,
 ) -> bool:
     if not profile_anti:
         return False
     combined = f"{entity_hint} {title} {excerpt} {quadrant}".lower()
-    for entry in profile_anti:
-        clean = entry.strip().lower()
-        if not clean:
-            continue
-        # Remove bracketed watch IDs like [WATCH-AI-14] if present
-        clean = re.sub(r"\[watch-[a-z0-9-]+\]", "", clean).strip()
-        if not clean:
-            continue
-        if clean in combined:
-            return True
-        tokens = [
-            t
-            for t in re.split(r"[^a-z0-9+#-]+", clean)
-            if len(t) >= 4
-            and t
-            not in {
-                "with",
-                "from",
-                "that",
-                "this",
-                "tools",
-                "tool",
-                "only",
-                "apps",
-                "wrappers",
-                "heavy",
-                "unmaintained",
-            }
-        ]
-        if tokens and any(re.search(rf"\b{re.escape(tok)}\b", combined) for tok in tokens):
-            return True
-    return False
+    phrases, token_re = (
+        compiled_anti if compiled_anti is not None else _prepare_anti_interest_matcher(profile_anti)
+    )
+    if any(phrase in combined for phrase in phrases):
+        return True
+    return bool(token_re is not None and token_re.search(combined))
 
 
 def _matches_relevance_criteria(
@@ -387,11 +425,16 @@ def _matches_relevance_criteria(
     relevance_terms: set[str],
     in_use_names: set[str],
     category_terms: set[str],
+    cat_parts: frozenset[str] | None = None,
+    cat_part_re: re.Pattern[str] | None = None,
+    relevance_re: re.Pattern[str] | None = None,
+    in_use_re: re.Pattern[str] | None = None,
 ) -> bool:
     """Return True if candidate matches A5 relevance criteria:
     (quadrant/category matches profile.categories OR entity matches watchlist/starred/taste-maker
     OR signal names an in-use public entity as the thing it replaces/competes with).
     """
+    _ = (ctx, sig_type)
     if source_id == "gh_tastemaker_stars":
         return True
 
@@ -400,26 +443,31 @@ def _matches_relevance_criteria(
 
     # 1. Category / quadrant match against profile.categories
     for cat in category_terms:
-        if not cat:
-            continue
-        if cat == quad_low or cat in quad_low or cat in combined:
+        if cat and (cat == quad_low or cat in quad_low or cat in combined):
             return True
-        for part in re.split(r"[^a-z0-9+#-]+", cat):
-            if (
-                len(part) >= 3
-                and part not in {"and", "the", "for", "tools", "dev"}
-                and (part in quad_low or re.search(rf"\b{re.escape(part)}\b", combined))
-            ):
-                return True
+    resolved_cat_parts = cat_parts if cat_parts is not None else _category_parts(category_terms)
+    if any(part in quad_low for part in resolved_cat_parts):
+        return True
+    resolved_cat_re = (
+        cat_part_re
+        if cat_part_re is not None or not resolved_cat_parts
+        else _compile_word_boundary_re(resolved_cat_parts, min_len=3)
+    )
+    if resolved_cat_re is not None and resolved_cat_re.search(combined):
+        return True
 
     # 2. Watchlist / starred / taste-maker term match
     hint_low = entity_hint.lower()
     hint_tail = hint_low.split("/", 1)[-1] if "/" in hint_low else hint_low.split(":", 1)[-1]
     if hint_low in relevance_terms or hint_tail in relevance_terms:
         return True
-    for r_term in relevance_terms:
-        if len(r_term) >= 3 and re.search(rf"\b{re.escape(r_term)}\b", combined):
-            return True
+    resolved_rel_re = (
+        relevance_re
+        if relevance_re is not None or not relevance_terms
+        else _compile_word_boundary_re(frozenset(relevance_terms), min_len=3)
+    )
+    if resolved_rel_re is not None and resolved_rel_re.search(combined):
+        return True
 
     # 3. Names an in-use public entity (contender / replacement / mentions in-use tool)
     replaces_val = (
@@ -429,11 +477,12 @@ def _matches_relevance_criteria(
         replaces_val in in_use_names or replaces_val.split("/")[-1] in in_use_names
     ):
         return True
-    for u_name in in_use_names:
-        if len(u_name) >= 2 and re.search(rf"\b{re.escape(u_name)}\b", combined):
-            return True
-
-    return False
+    resolved_in_use_re = (
+        in_use_re
+        if in_use_re is not None or not in_use_names
+        else _compile_word_boundary_re(frozenset(in_use_names), min_len=2)
+    )
+    return bool(resolved_in_use_re is not None and resolved_in_use_re.search(combined))
 
 
 def _build_relevance_sets(ctx: Ctx) -> tuple[set[str], set[str], set[str]]:
@@ -595,6 +644,11 @@ def promote(
     ).fetchall()
 
     category_terms, relevance_terms, in_use_names = _build_relevance_sets(ctx)
+    compiled_anti = _prepare_anti_interest_matcher(ctx.profile.anti_interests)
+    cat_parts = _category_parts(category_terms)
+    cat_part_re = _compile_word_boundary_re(cat_parts, min_len=3)
+    relevance_re = _compile_word_boundary_re(frozenset(relevance_terms), min_len=3)
+    in_use_re = _compile_word_boundary_re(frozenset(in_use_names), min_len=2)
     cutoff_seen = (
         (ctx.now - timedelta(days=SEEN_WINDOW_DAYS)).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     )
@@ -633,6 +687,7 @@ def promote(
             title=title,
             excerpt=excerpt,
             quadrant=quad,
+            compiled_anti=compiled_anti,
         ):
             suppressed["anti_interest"] += 1
             continue
@@ -659,6 +714,10 @@ def promote(
             relevance_terms=relevance_terms,
             in_use_names=in_use_names,
             category_terms=category_terms,
+            cat_parts=cat_parts,
+            cat_part_re=cat_part_re,
+            relevance_re=relevance_re,
+            in_use_re=in_use_re,
         ):
             suppressed["not_relevant"] += 1
             continue

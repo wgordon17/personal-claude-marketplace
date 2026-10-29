@@ -1,4 +1,4 @@
-"""Tests for hardened subprocess execution, gh/git wrappers, and ReplayProcs (Task 3 Step 5)."""
+"""Tests for hardened subprocess execution, gh/git wrappers, and ReplayProcs."""
 
 from __future__ import annotations
 

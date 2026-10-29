@@ -1,4 +1,4 @@
-"""Tests for verify_app.py pinned inline verifier (Task 6 Step 4, Spec 07 §7, §9, A25, A30)."""
+"""Tests for verify_app.py pinned inline verifier (Spec 07 §7, §9, A25, A30)."""
 
 from __future__ import annotations
 
