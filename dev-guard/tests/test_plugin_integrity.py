@@ -557,7 +557,7 @@ class TestPluginVersionParity:
         )
         claude_names = [entry["name"] for entry in claude_marketplace["plugins"]]
         codex_names = [entry["name"] for entry in codex_marketplace["plugins"]]
-        assert len(claude_names) == 13, f"Expected 13 plugins, got {len(claude_names)}"
+        assert len(claude_names) == 14, f"Expected 14 plugins, got {len(claude_names)}"
         assert codex_names == claude_names, (
             f"Marketplace registration mismatch: claude={claude_names} vs codex={codex_names}"
         )
@@ -1103,7 +1103,7 @@ class TestSkillMigrationFidelity:
         resolve_skill_bundle = runner_mod.resolve_skill_bundle
 
         skill_files = sorted(REPO_ROOT.glob("*/skills/*/SKILL.md"))
-        assert len(skill_files) == 24, f"Expected 24 skills, found {len(skill_files)}"
+        assert len(skill_files) == 25, f"Expected 25 skills, found {len(skill_files)}"
 
         for skill_md in skill_files:
             line_count = len(skill_md.read_text().splitlines())
@@ -1173,6 +1173,8 @@ class TestSkillMigrationFidelity:
             matched = sum(1 for line in base_lines if line in head_set)
             total_base += len(base_lines)
             total_matched += matched
+            if not base_lines:
+                continue
             pct = 100.0 * matched / len(base_lines)
             assert pct >= 94.5, (
                 f"{sdir}: normalized line fidelity {pct:.2f}% ({matched}/{len(base_lines)}) "
@@ -1235,7 +1237,7 @@ class TestRenovateConfig:
         cfg = self._load_renovate_config()
         marketplace = json.loads(MARKETPLACE_JSON.read_text(encoding="utf-8"))
         expected_globs = {f"{entry['name']}/**" for entry in marketplace["plugins"]}
-        assert len(expected_globs) == 13
+        assert len(expected_globs) == 14
 
         package_rules = cfg.get("packageRules", [])
         pypi_rules = [

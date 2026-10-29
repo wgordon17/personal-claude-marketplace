@@ -11,11 +11,12 @@ dev = [
     "pyright>=1.1.408",
     "pyyaml>=6.0.2",
     "tomli-w>=1.1.0",
+    "defusedxml>=0.7.1",
 ]
 llm = ["anthropic[vertex]>=0.59.0"]
 
 [tool.pytest.ini_options]
-testpaths = ["dev-guard/tests", "chai-bot/tests"]
+testpaths = ["dev-guard/tests", "chai-bot/tests", "tech-radar/tests"]
 addopts = "-v --tb=short -n4"
 markers = [
     "llm: marks tests that make real LLM API calls (deselect with '-m \"not llm\"')",
@@ -35,6 +36,6 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 quote-style = "double"
 
 [tool.pyright]
-include = ["dev-guard/hooks", "chai-bot/hooks", ".github/scripts", "git-tools/scripts"]
+include = ["dev-guard/hooks", "chai-bot/hooks", ".github/scripts", "git-tools/scripts", "tech-radar/skills/radar/scripts"]
 pythonVersion = "3.13"
 typeCheckingMode = "basic"

@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "3.6.0"
+    "version": "3.7.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -146,6 +146,15 @@
       "description": "Advisory nudge and explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server",
       "category": "productivity",
       "tags": ["mcp", "osac", "advisory", "ship-help"],
+      "author": { "name": "wgordon17" }
+    },
+    {
+      "name": "tech-radar",
+      "version": "0.1.0",
+      "source": "./tech-radar",
+      "description": "Scheduled personal tech radar: new features you could use, compromises, lifecycle risks, superior replacements and relevant new tools across your machine, projects and AI harness",
+      "category": "productivity",
+      "tags": ["tech-radar", "dependencies", "security", "discovery"],
       "author": { "name": "wgordon17" }
     }
   ]
