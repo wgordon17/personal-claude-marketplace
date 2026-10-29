@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "osv-scanner",
+    "scan",
+    "--lockfile={HOME}/SynologyDrive/ActiveProjects/public-app/package-lock.json",
+    "--format=json"
+  ],
+  "returncode": 1,
+  "stderr": "",
+  "stdout": {
+    "results": [
+      {
+        "packages": [
+          {
+            "package": {
+              "ecosystem": "npm",
+              "name": "evil-npm-pkg",
+              "version": "1.0.0"
+            },
+            "vulnerabilities": [
+              {
+                "id": "MAL-2026-8888",
+                "modified": "2026-10-27T12:00:00Z",
+                "published": "2026-10-27T10:00:00Z",
+                "summary": "Malicious Package in evil-npm-pkg"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

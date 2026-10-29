@@ -1,0 +1,16 @@
+{
+  "body": {
+    "content": "IyAyLjEuMTc4CgotIEFkZGVkIG5ldyBgY2xhdWRlIHBsdWdpbmAgc3ViY29tbWFuZHMKLSBVcGRhdGVkIENsYXVkZSBNYXggcGxhbiB3ZWVrbHkgbGltaXQgYW5kIHJhdGUgbGltaXQgcXVvdGEgcmVwb3J0aW5nCg==",
+    "encoding": "base64",
+    "html_url": "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md",
+    "name": "CHANGELOG.md",
+    "path": "CHANGELOG.md",
+    "sha": "f1e2d3c4b5a69876543210fedcba9876543210fe",
+    "size": 124,
+    "type": "file"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

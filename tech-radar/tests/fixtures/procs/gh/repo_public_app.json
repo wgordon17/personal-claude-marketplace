@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/example-org/public-app"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "full_name": "example-org/public-app",
+    "name": "public-app",
+    "private": false
+  }
+}

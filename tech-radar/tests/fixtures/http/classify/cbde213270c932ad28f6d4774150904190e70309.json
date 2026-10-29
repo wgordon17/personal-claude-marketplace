@@ -1,0 +1,9 @@
+{
+  "body": {
+    "name": "starlette"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

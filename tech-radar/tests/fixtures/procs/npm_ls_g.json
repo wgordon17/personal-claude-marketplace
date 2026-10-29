@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "npm",
+    "ls",
+    "-g",
+    "--json",
+    "--depth=0"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "dependencies": {
+      "typescript": {
+        "version": "5.6.3"
+      }
+    },
+    "name": "lib"
+  }
+}

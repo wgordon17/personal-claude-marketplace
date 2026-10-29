@@ -10,7 +10,54 @@ import sys
 from collections.abc import Sequence
 from typing import Any
 
-from . import config
+from . import (
+    appsync,
+    config,
+    context,
+    credentials,
+    db,
+    errors,
+    exposure,
+    features,
+    fsguard,
+    http,
+    inventory,
+    launchd,
+    lifecycle,
+    lock,
+    notify,
+    procs,
+    profile,
+    redact,
+    runlog,
+    sanitize,
+    security,
+    sources,
+)
+
+_CORE_MODULES = (
+    appsync,
+    context,
+    credentials,
+    db,
+    errors,
+    exposure,
+    features,
+    fsguard,
+    http,
+    inventory,
+    launchd,
+    lifecycle,
+    lock,
+    notify,
+    procs,
+    profile,
+    redact,
+    runlog,
+    sanitize,
+    security,
+    sources,
+)
 
 RUN_ID_RE = re.compile(r"^\d{8}T\d{6}Z-(daily|weekly|monthly)$")
 DECIDE_VERBS = ("adopt", "trial", "assess", "hold", "reject", "snooze")
@@ -103,7 +150,236 @@ def _handle_app(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
         refused = require_terminal(args, raw_argv)
         if refused is not None:
             return refused
-    return _not_implemented(args)
+    try:
+        ctx = context.build()
+        res = appsync.sync(ctx, from_path=getattr(args, "from_path", None))
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+
+    if not res.ok:
+        code = 4 if res.status == "refused" else 1
+        return emit(
+            {
+                "ok": False,
+                "status": res.status,
+                "error": res.reason or "app sync failed",
+                "alert_id": res.alert_id,
+                "warning": res.coverage_warning,
+            },
+            code,
+        )
+    return emit(
+        {
+            "ok": True,
+            "status": res.status,
+            "manifest_sha": res.manifest_sha,
+            "tree_sha": res.tree_sha,
+            "warning": res.coverage_warning,
+        },
+        0,
+    )
+
+
+def _handle_launchd(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    refused = require_terminal(args, raw_argv)
+    if refused is not None:
+        return refused
+    action = str(getattr(args, "action", "status"))
+    try:
+        ctx = context.build()
+        if action == "install":
+            return emit(launchd.install(ctx), 0)
+        if action == "uninstall":
+            return emit(launchd.uninstall(ctx), 0)
+        return emit(launchd.status(ctx), 0)
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+
+
+def _handle_notify_test(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    try:
+        ctx = context.build()
+        ok, err_msg = notify.notify_test(ctx)
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+    if not ok:
+        return emit({"ok": False, "error": err_msg or "notify-test failed"}, 1)
+    return emit({"ok": True, "notified": True}, 0)
+
+
+def _handle_hourly(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    try:
+        ctx = context.build()
+        user_ver = db.get_user_version(ctx.db)
+        if user_ver > db.SCHEMA_VERSION:
+            notify.notify_schema_guard_once(ctx, user_ver)
+            return emit(
+                {
+                    "ok": False,
+                    "error": f"schema version {user_ver} exceeds supported {db.SCHEMA_VERSION}",
+                },
+                4,
+            )
+
+        hourly_lock = lock.acquire(
+            "hourly",
+            mode="hourly",
+            state_dir=ctx.paths.state,
+            now=ctx.now,
+        )
+        if hourly_lock is None:
+            return emit({"ok": True, "skipped": "hourly in progress"}, 0)
+
+        try:
+            usage_cnt = int(
+                ctx.db.execute(
+                    "SELECT COUNT(*) FROM usages WHERE context NOT LIKE 'interest:%'"
+                ).fetchone()[0]
+            )
+            if usage_cnt == 0:
+                return emit({"ok": True, "skipped": "no inventory yet"}, 0)
+
+            run_id = runlog.start_run(ctx, mode="hourly", requested_mode="hourly")
+            refreshed = inventory.projects.refresh_manifests(ctx)
+            hourly_specs = sources.by_cadence("hourly")
+            source_results = [sources.run_source(spec, ctx) for spec in hourly_specs]
+            new_alerts = security.evaluate(ctx, source_results, mode="hourly")
+            notified = notify.deliver_pending(ctx)
+            counts = {
+                "refreshed": len(refreshed),
+                "sources_run": len(source_results),
+                "new_alerts": len(new_alerts),
+                "notified": notified,
+            }
+            db.kv_set(ctx.db, "last_hourly_at", ctx.now_iso)
+            runlog.finish_run(ctx, run_id, "ok", counts=counts)
+            return emit(
+                {
+                    "ok": True,
+                    "run_id": run_id,
+                    **counts,
+                },
+                0,
+            )
+        finally:
+            lock.release(hourly_lock)
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+
+
+def _handle_collect(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    run_id = getattr(args, "run_id", None)
+    if run_id is not None and not RUN_ID_RE.match(str(run_id)):
+        return emit(
+            {"ok": False, "error": f"invalid run_id: {run_id}"},
+            2,
+        )
+    inv_only = bool(getattr(args, "inventory_only", False))
+    try:
+        ctx = context.build(run_id=run_id)
+        if run_id is not None and not inv_only:
+            run_row = ctx.db.execute(
+                "SELECT 1 FROM runs WHERE run_id = ?",
+                (str(run_id),),
+            ).fetchone()
+            if run_row is None and not procs.is_replay_mode():
+                return emit(
+                    {"ok": False, "error": f"run_id not found: {run_id}"},
+                    2,
+                )
+        inv_res = inventory.collect(ctx)
+        if inv_only:
+            return emit(
+                {
+                    "ok": True,
+                    "run_id": run_id,
+                    "inventory_only": True,
+                    "added": len(inv_res.added),
+                    "removed": len(inv_res.removed),
+                    "counts": inv_res.counts,
+                },
+                0,
+            )
+
+        was_baseline = security.is_baseline_collect(ctx)
+        source_results = sources.run_collect_sources(ctx)
+        sec_alerts = security.evaluate(ctx, source_results, mode="daily")
+        life_alerts = lifecycle.evaluate(ctx, source_results)
+        feat_out = features.evaluate(ctx, source_results)
+        if was_baseline and source_results:
+            db.kv_set(ctx.db, "baseline_done", ctx.now_iso)
+        notified = notify.deliver_pending(ctx)
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+
+    return emit(
+        {
+            "ok": True,
+            "run_id": run_id,
+            "inventory_only": False,
+            "added": len(inv_res.added),
+            "removed": len(inv_res.removed),
+            "sources_run": len(source_results),
+            "security_alerts": len(sec_alerts),
+            "lifecycle_alerts": len(life_alerts),
+            "feature_signals": len(feat_out["features"]),
+            "pricing_signals": len(feat_out["pricing"]),
+            "notified": notified,
+            "counts": inv_res.counts,
+        },
+        0,
+    )
+
+
+def _handle_exposure(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    show_id = getattr(args, "show_alert_id", None)
+    purl = getattr(args, "purl", None)
+    raw_versions = getattr(args, "versions", None)
+    try:
+        ctx = context.build()
+        if show_id is not None:
+            return emit(exposure.show(ctx, show_id), 0)
+        if not purl:
+            return emit({"ok": False, "error": "exposure requires PURL or --show ALERT_ID"}, 2)
+        ver_list = (
+            [v.strip() for v in str(raw_versions).split(",") if v.strip()] if raw_versions else []
+        )
+        rep = exposure.check(ctx, str(purl), versions=ver_list)
+        return emit(
+            {
+                "ok": True,
+                "purl": rep.purl,
+                "versions": rep.versions,
+                "report_path": str(rep.report_path),
+                "commits": len(rep.commits),
+                "pth_files": len(rep.pth_files),
+            },
+            0,
+        )
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+
+
+def _handle_private_scopes(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    refused = require_terminal(args, raw_argv)
+    if refused is not None:
+        return refused
+    try:
+        ctx = context.build()
+        current = profile.load_private_scopes(ctx.db)
+        action = str(getattr(args, "action", "list"))
+        incoming = [str(s) for s in (getattr(args, "scopes", None) or []) if str(s).strip()]
+        if action == "add":
+            updated = profile.save_private_scopes(ctx.db, [*current, *incoming])
+        elif action == "remove":
+            remove_set = {s.strip() for s in incoming}
+            kept = [s for s in current if s not in remove_set]
+            updated = profile.save_private_scopes(ctx.db, kept)
+        else:
+            updated = current
+        return emit({"ok": True, "action": action, "scopes": updated}, 0)
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -204,7 +480,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run inventory and item promotion only",
     )
-    p_collect.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_collect.set_defaults(_handler=_handle_collect)
 
     # enrich
     p_enrich = sub.add_parser(
@@ -297,7 +573,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_priv.add_argument("action", choices=PRIVATE_SCOPE_VERBS, help="Action to perform")
     p_priv.add_argument("scopes", nargs="*", help="Scope values")
     p_priv.add_argument("--channel", default=None)
-    p_priv.set_defaults(_handler=_terminal_not_implemented)
+    p_priv.set_defaults(_handler=_handle_private_scopes)
 
     # confirm CODE
     p_confirm = sub.add_parser("confirm", help="Apply a staged batch using a confirmation code")
@@ -334,11 +610,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_exposure.add_argument(
         "--show", dest="show_alert_id", default=None, help="Alert ID to display"
     )
-    p_exposure.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_exposure.set_defaults(_handler=_handle_exposure)
 
     # hourly
     p_hourly = sub.add_parser("hourly", help="Run LLM-free hourly compromise check")
-    p_hourly.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_hourly.set_defaults(_handler=_handle_hourly)
 
     # launchd install|uninstall|status (terminal-only)
     p_launchd = sub.add_parser(
@@ -347,7 +623,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_launchd.add_argument("action", choices=LAUNCHD_VERBS, help="launchd action")
     p_launchd.add_argument("--channel", default=None)
-    p_launchd.set_defaults(_handler=_terminal_not_implemented)
+    p_launchd.set_defaults(_handler=_handle_launchd)
 
     # app sync
     p_app = sub.add_parser("app", help="Manage verified app copy: app sync")
@@ -359,7 +635,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # notify-test
     p_notify = sub.add_parser("notify-test", help="Fire one test macOS notification")
-    p_notify.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_notify.set_defaults(_handler=_handle_notify_test)
 
     # sources list|check [--live]
     p_sources = sub.add_parser("sources", help="List or check sources: sources list, sources check")

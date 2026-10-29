@@ -1,0 +1,41 @@
+{
+  "argv": [
+    "uv",
+    "audit",
+    "--frozen",
+    "--output-format",
+    "json"
+  ],
+  "returncode": 1,
+  "stderr": "",
+  "stdout": {
+    "adverse_statuses": [],
+    "schema": {
+      "version": "preview"
+    },
+    "summary": {
+      "adverse_statuses": 0,
+      "audited_packages": 6,
+      "vulnerabilities": 1
+    },
+    "vulnerabilities": [
+      {
+        "aliases": [
+          "GHSA-0000-0000-0001"
+        ],
+        "dependency": {
+          "name": "litellm",
+          "version": "1.107.0"
+        },
+        "description": "Malicious Package in litellm 1.107.0.",
+        "display_id": "MAL-2026-9999",
+        "fix_versions": [],
+        "id": "MAL-2026-9999",
+        "link": "https://osv.dev/vulnerability/MAL-2026-9999",
+        "modified": "2026-10-27T12:00:00Z",
+        "published": "2026-10-27T10:00:00Z",
+        "summary": "Malicious Package in litellm"
+      }
+    ]
+  }
+}

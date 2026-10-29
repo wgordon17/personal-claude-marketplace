@@ -1,0 +1,9 @@
+{
+  "body": {
+    "message": "Not Found"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}

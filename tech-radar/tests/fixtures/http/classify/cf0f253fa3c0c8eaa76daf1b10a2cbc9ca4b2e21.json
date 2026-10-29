@@ -1,0 +1,9 @@
+{
+  "body": {
+    "name": "pydantic"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

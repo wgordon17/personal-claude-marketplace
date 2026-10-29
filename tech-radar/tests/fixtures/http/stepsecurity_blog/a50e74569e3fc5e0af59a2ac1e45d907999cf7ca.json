@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>StepSecurity Blog</title>\n    <item>\n      <guid>stepsec-1</guid>\n      <title>GitHub Actions Supply Chain Security Update</title>\n      <link>https://www.stepsecurity.io/blog/gha-security-update</link>\n      <pubDate>Tue, 27 Oct 2026 10:00:00 GMT</pubDate>\n      <description>Hardening CI workflows against malicious tag hijacking in GitHub Actions.</description>\n    </item>\n  </channel>\n</rss>\n",
+  "headers": {
+    "content-type": "application/rss+xml"
+  },
+  "status": 200
+}

@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "bun",
+    "pm",
+    "ls",
+    "-g"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "/Users/example-user/.bun/install/global node_modules (1)\n└── tsx@4.19.1\n"
+}

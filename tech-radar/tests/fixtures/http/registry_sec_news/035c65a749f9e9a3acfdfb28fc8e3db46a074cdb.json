@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>GitHub Changelog</title>\n    <item>\n      <guid>gh-changelog-1</guid>\n      <title>Immutable Releases and Artifact Attestations GA</title>\n      <link>https://github.blog/changelog/2026-10-26-immutable-releases/</link>\n      <pubDate>Mon, 26 Oct 2026 15:00:00 GMT</pubDate>\n      <description>GitHub Releases now support immutable tags and SLSA provenance verification.</description>\n    </item>\n  </channel>\n</rss>\n",
+  "headers": {
+    "content-type": "text/xml"
+  },
+  "status": 200
+}

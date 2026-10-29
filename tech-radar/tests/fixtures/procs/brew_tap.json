@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "brew",
+    "tap"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "example-org/tools\n"
+}

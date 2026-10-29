@@ -1,0 +1,38 @@
+{
+  "body": {
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "PyPI",
+          "name": "litellm"
+        },
+        "versions": [
+          "1.107.0"
+        ]
+      }
+    ],
+    "aliases": [
+      "GHSA-0000-0000-0001"
+    ],
+    "database_specific": {
+      "cwe_ids": [
+        "CWE-506"
+      ]
+    },
+    "details": "Synthetic malicious release of litellm 1.107.0 containing a startup .pth credential stealer.",
+    "id": "MAL-2026-9999",
+    "modified": "2026-10-27T12:00:00Z",
+    "published": "2026-10-27T10:00:00Z",
+    "references": [
+      {
+        "type": "ADVISORY",
+        "url": "https://osv.dev/vulnerability/MAL-2026-9999"
+      }
+    ],
+    "summary": "Malicious Package in litellm"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

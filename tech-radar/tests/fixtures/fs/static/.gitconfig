@@ -1,0 +1,10 @@
+[user]
+	name = Example User
+	email = user@example.com
+[core]
+	pager = delta
+[diff]
+	tool = difft
+[alias]
+	st = status
+	lg = !lazygit

@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "brew",
+    "info",
+    "--json=v2",
+    "jq"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "casks": [],
+    "formulae": [
+      {
+        "deprecated": true,
+        "deprecation_reason": "unmaintained upstream",
+        "disabled": false,
+        "installed": [
+          {
+            "version": "1.7.1"
+          }
+        ],
+        "name": "jq",
+        "tap": "homebrew/core"
+      }
+    ]
+  }
+}

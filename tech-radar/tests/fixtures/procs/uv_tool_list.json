@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "uv",
+    "tool",
+    "list",
+    "--show-paths"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "ruff v0.8.0 (/Users/example-user/.local/share/uv/tools/ruff)\n- ruff (/Users/example-user/.local/bin/ruff)\n"
+}

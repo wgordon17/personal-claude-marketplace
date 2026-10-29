@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "pkgutil",
+    "--pkg-info=com.apple.pkg.CLTools_Executables"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "package-id: com.apple.pkg.CLTools_Executables\nversion: 16.1.0.0.1.1729049160\nvolume: /\nlocation: /\n"
+}

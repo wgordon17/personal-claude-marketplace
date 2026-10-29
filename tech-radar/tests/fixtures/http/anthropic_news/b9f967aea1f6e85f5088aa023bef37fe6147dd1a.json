@@ -1,0 +1,7 @@
+{
+  "body": "<!DOCTYPE html><html><head><title>Newsroom - Anthropic</title></head><body><main><article><a href=\"/news/claude-max-plan-updates\"><h2>Claude Max plan weekly limit and quota updates</h2></a><p>Updated usage limit and rate limit details for Claude Pro plan and Max plan subscribers.</p></article><article><a href=\"/news/claude-code-hooks\"><h3>Introducing new hook events in Claude Code</h3></a><p>Run deterministic checks on tool calls.</p></article></main></body></html>",
+  "headers": {
+    "content-type": "text/html; charset=utf-8"
+  },
+  "status": 200
+}

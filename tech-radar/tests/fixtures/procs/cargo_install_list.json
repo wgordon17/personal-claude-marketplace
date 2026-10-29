@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "cargo",
+    "install",
+    "--list"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "fd-find v10.2.0:\n    fd\nrtk v0.5.0:\n    rtk\n"
+}

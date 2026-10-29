@@ -1,0 +1,9 @@
+{
+  "body": {
+    "name": "anthropic"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

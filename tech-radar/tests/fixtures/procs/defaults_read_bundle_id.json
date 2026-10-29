@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "defaults",
+    "read",
+    "{HOME}/Applications/OrbStack.app/Contents/Info.plist",
+    "CFBundleIdentifier"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "dev.kdrag0n.MacVirt\n"
+}

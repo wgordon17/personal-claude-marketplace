@@ -1,0 +1,11 @@
+{
+  "providers": [
+    {
+      "id": "claudeAgent_bifrost",
+      "models": [
+        "gemini-4-argon",
+        "claude-sonnet-5-5"
+      ]
+    }
+  ]
+}

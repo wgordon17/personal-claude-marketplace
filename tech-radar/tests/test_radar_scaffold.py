@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from tech_radar import cli, config
+from tech_radar import cli, config, errors
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "tech-radar" / "skills" / "radar" / "scripts"
@@ -344,3 +344,27 @@ def test_plugin_manifests_and_registries_synced() -> None:
     assert cc_entry["version"] == "0.1.0"
     assert cc_entry["description"] == root_manifest["description"]
     assert any(p["name"] == "tech-radar" for p in ag_market["plugins"])
+
+
+def test_every_error_class_subclasses_radar_error() -> None:
+    """Every error class in errors.py subclasses RadarError with expected attributes."""
+    error_classes = (
+        errors.EgressDenied,
+        errors.FetchError,
+        errors.UnsafeArg,
+        errors.CommandDenied,
+        errors.WriteDenied,
+        errors.ValidationError,
+        errors.Refused,
+    )
+    for cls in error_classes:
+        assert issubclass(cls, errors.RadarError), f"{cls.__name__} must subclass RadarError"
+
+    val_err = errors.ValidationError([{"field": "ring", "error": "invalid"}])
+    assert isinstance(val_err, errors.RadarError)
+    assert val_err.exit_code == 2
+    assert val_err.errors == [{"field": "ring", "error": "invalid"}]
+
+    refused_err = errors.Refused("denied")
+    assert isinstance(refused_err, errors.RadarError)
+    assert refused_err.exit_code == 4

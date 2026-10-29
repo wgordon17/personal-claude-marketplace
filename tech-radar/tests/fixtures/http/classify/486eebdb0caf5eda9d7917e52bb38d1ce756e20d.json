@@ -1,0 +1,9 @@
+{
+  "body": {
+    "name": "@modelcontextprotocol/server-github"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

@@ -1,0 +1,40 @@
+{
+  "locks": {
+    "nixpkgs": {
+      "locked": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a1b2c3d4e5f60123456789abcdef0123456789ab",
+        "type": "github"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    }
+  },
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a1b2c3d4e5f60123456789abcdef0123456789ab",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

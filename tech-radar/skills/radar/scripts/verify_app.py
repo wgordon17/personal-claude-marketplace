@@ -1,0 +1,204 @@
+"""Pinned inline verifier for the hourly launchd job (stdlib only, Spec 07 §7, Spec 12 A25)."""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import os
+import re
+import subprocess
+import sys
+from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import Any
+
+sys.dont_write_bytecode = True
+
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+ALERT_MESSAGE = "tech-radar: app integrity check failed"
+
+
+def _default_notify(message: str = ALERT_MESSAGE) -> None:
+    """Send a macOS notification via `/usr/bin/osascript` argv (no shell)."""
+    safe_msg = message.replace("\\", "\\\\").replace('"', '\\"')
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        subprocess.run(
+            [
+                "/usr/bin/osascript",
+                "-e",
+                f'display notification "{safe_msg}" with title "tech-radar"',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+
+
+def _alert_once(
+    state_dir: Path,
+    manifest_sha: str,
+    notify: Callable[[str], Any],
+) -> None:
+    prefix16 = (manifest_sha.strip() or "unknown")[:16].lower()
+    prefix16 = re.sub(r"[^0-9a-f]", "0", prefix16).ljust(16, "0")[:16]
+    marker = state_dir / f"integrity-alerted-{prefix16}"
+    if marker.exists():
+        return
+    with contextlib.suppress(Exception):
+        notify(ALERT_MESSAGE)
+    with contextlib.suppress(OSError):
+        state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(str(marker), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(f"{manifest_sha}\n")
+        os.chmod(marker, 0o600)
+
+
+def verify_tree(app_dir: Path, expected_manifest_sha: str | None = None) -> tuple[bool, str]:
+    """Verify `app_dir` against `MANIFEST.sha256`, rejecting unlisted files and symlinks.
+
+    If `expected_manifest_sha` is given, also verify `sha256(MANIFEST.sha256)` equals it.
+    Returns `(ok, reason)`.
+    """
+    if not app_dir.exists() or not app_dir.is_dir() or app_dir.is_symlink():
+        return False, "app directory missing or symlink"
+
+    manifest_path = app_dir / "MANIFEST.sha256"
+    if not manifest_path.is_file() or manifest_path.is_symlink():
+        return False, "MANIFEST.sha256 missing or symlink"
+
+    try:
+        manifest_bytes = manifest_path.read_bytes()
+    except OSError:
+        return False, "cannot read MANIFEST.sha256"
+
+    actual_manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
+    if expected_manifest_sha is not None:
+        if not _SHA256_RE.match(expected_manifest_sha.strip()):
+            return False, "invalid expected manifest sha256"
+        if actual_manifest_sha.lower() != expected_manifest_sha.strip().lower():
+            return False, "manifest sha256 mismatch"
+
+    try:
+        manifest_text = manifest_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return False, "manifest not valid utf-8"
+
+    expected_files: dict[str, str] = {}
+    for raw_line in manifest_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            return False, f"malformed manifest line: {line}"
+        file_sha, rel_path = parts[0].strip().lower(), parts[1].strip()
+        if not _SHA256_RE.match(file_sha):
+            return False, f"invalid file hash in manifest: {file_sha}"
+        if (
+            not rel_path
+            or rel_path.startswith("/")
+            or ".." in Path(rel_path).parts
+            or rel_path == "MANIFEST.sha256"
+            or rel_path in expected_files
+        ):
+            return False, f"invalid or duplicate manifest path: {rel_path}"
+        expected_files[rel_path] = file_sha
+
+    if not expected_files:
+        return False, "empty manifest"
+
+    actual_files: set[str] = set()
+    for root, dirs, files in os.walk(app_dir, followlinks=False):
+        root_path = Path(root)
+        for dname in dirs:
+            dpath = root_path / dname
+            if dpath.is_symlink():
+                return False, f"symlink directory rejected: {dpath}"
+        for fname in files:
+            fpath = root_path / fname
+            if fpath.is_symlink():
+                return False, f"symlink file rejected: {fpath}"
+            rel = fpath.relative_to(app_dir).as_posix()
+            if rel == "MANIFEST.sha256":
+                continue
+            actual_files.add(rel)
+
+    if actual_files != set(expected_files.keys()):
+        unlisted = sorted(actual_files - set(expected_files.keys()))
+        missing = sorted(set(expected_files.keys()) - actual_files)
+        if unlisted:
+            return False, f"unlisted files present: {unlisted}"
+        return False, f"listed files missing: {missing}"
+
+    for rel_path, expected_hash in sorted(expected_files.items()):
+        target = app_dir / rel_path
+        if not target.is_file() or target.is_symlink():
+            return False, f"missing or symlinked file: {rel_path}"
+        try:
+            digest = hashlib.sha256(target.read_bytes()).hexdigest().lower()
+        except OSError:
+            return False, f"unable to read file: {rel_path}"
+        if digest != expected_hash:
+            return False, f"hash mismatch on {rel_path}"
+
+    return True, "ok"
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    execve: Callable[[str, list[str], dict[str, str]], Any] = os.execve,
+    notify: Callable[[str], Any] = _default_notify,
+) -> int:
+    """Verify the pinned app directory and exec `uv run --script --locked --isolated`."""
+    args = list(argv) if argv is not None else sys.argv
+    if len(args) == 4:
+        manifest_sha, app_arg, uv_arg = str(args[1]), str(args[2]), str(args[3])
+    elif len(args) == 3:
+        manifest_sha, app_arg, uv_arg = str(args[0]), str(args[1]), str(args[2])
+    else:
+        return 4
+
+    app_dir = Path(app_arg)
+    raw_state = os.environ.get("TECH_RADAR_STATE")
+    state_dir = Path(raw_state) if raw_state else app_dir.parent
+
+    ok, _reason = verify_tree(app_dir, expected_manifest_sha=manifest_sha)
+    if not ok:
+        _alert_once(state_dir, manifest_sha, notify)
+        return 4
+
+    radar_py = app_dir / "radar.py"
+    if not radar_py.is_file() or radar_py.is_symlink():
+        _alert_once(state_dir, manifest_sha, notify)
+        return 4
+
+    env: dict[str, str] = {}
+    for k, v in os.environ.items():
+        if k.startswith(("TECH_RADAR_", "UV_")) or k in ("PATH", "HOME", "TMPDIR", "USER", "LANG"):
+            env[k] = v
+    env["PATH"] = os.environ.get("PATH", "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin")
+    env["HOME"] = os.environ.get("HOME", str(Path.home()))
+    env["TECH_RADAR_STATE"] = str(state_dir)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["UV_MALWARE_CHECK"] = "1"
+    env["HOMEBREW_NO_AUTO_UPDATE"] = os.environ.get("HOMEBREW_NO_AUTO_UPDATE", "1")
+
+    exec_argv = [
+        uv_arg,
+        "run",
+        "--script",
+        "--locked",
+        "--isolated",
+        "--quiet",
+        str(radar_py),
+        "hourly",
+    ]
+    execve(uv_arg, exec_argv, env)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

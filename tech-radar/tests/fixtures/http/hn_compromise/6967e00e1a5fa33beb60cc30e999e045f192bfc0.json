@@ -1,0 +1,11 @@
+{
+  "body": {
+    "hits": [],
+    "nbHits": 0,
+    "page": 0
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

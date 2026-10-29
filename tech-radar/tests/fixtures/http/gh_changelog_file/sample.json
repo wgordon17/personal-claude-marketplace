@@ -1,0 +1,16 @@
+{
+  "body": {
+    "content": "IyAwLjE0LjAKCi0gQWRkIGB1diBhdWRpdGAgc3ViY29tbWFuZCBmb3IgZGVwZW5kZW5jeSB2dWxuZXJhYmlsaXR5IHNjYW5uaW5nCi0gQWRkIGAtLW91dHB1dC1mb3JtYXRgIGZsYWcK",
+    "encoding": "base64",
+    "html_url": "https://github.com/astral-sh/uv/blob/main/CHANGELOG.md",
+    "name": "CHANGELOG.md",
+    "path": "CHANGELOG.md",
+    "sha": "a1b2c3d4e5f60123456789abcdef0123456789ab",
+    "size": 108,
+    "type": "file"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

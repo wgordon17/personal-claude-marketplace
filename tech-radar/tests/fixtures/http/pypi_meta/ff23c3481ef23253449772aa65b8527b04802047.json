@@ -1,0 +1,42 @@
+{
+  "body": {
+    "files": [
+      {
+        "filename": "litellm-1.106.2-py3-none-any.whl",
+        "provenance": "https://pypi.org/integrity/litellm/1.106.2/provenance",
+        "yanked": false
+      }
+    ],
+    "info": {
+      "author": "BerriAI",
+      "home_page": "https://github.com/BerriAI/litellm",
+      "name": "litellm",
+      "project_urls": {
+        "Repository": "https://github.com/BerriAI/litellm"
+      },
+      "summary": "Library to easily interface with LLM API providers.",
+      "version": "1.106.2"
+    },
+    "name": "litellm",
+    "project-status": {
+      "status": "active"
+    },
+    "releases": {
+      "1.106.2": [
+        {
+          "filename": "litellm-1.106.2-py3-none-any.whl",
+          "packagetype": "bdist_wheel",
+          "provenance": "https://pypi.org/integrity/litellm/1.106.2/provenance",
+          "yanked": false
+        }
+      ]
+    },
+    "versions": [
+      "1.106.2"
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}
