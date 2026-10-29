@@ -208,6 +208,12 @@ def send(
         return True, None
 
     runner = procs_runner if procs_runner is not None else (ctx.procs if ctx is not None else procs)
+    active_transport = getattr(runner, "transport", None)
+    if os.environ.get("TECH_RADAR_HOME") and (
+        isinstance(active_transport, procs.LiveProcs)
+        or (active_transport is None and not procs.is_replay_mode())
+    ):
+        return True, None
     tn_bin = runner.resolve("terminal-notifier")
     if tn_bin is not None:
         argv = [

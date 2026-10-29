@@ -187,9 +187,16 @@ def test_env_overrides_and_dir_permissions(tmp_path: Path, monkeypatch: pytest.M
     ],
 )
 def test_every_subcommand_emits_single_json_line(
-    argv: list[str], capsys: pytest.CaptureFixture[str]
+    argv: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """(d) Every subcommand emits exactly one valid JSON line to stdout."""
+    monkeypatch.setenv(
+        "TECH_RADAR_REPLAY_DIR", str(REPO_ROOT / "tech-radar" / "tests" / "fixtures")
+    )
+    monkeypatch.setenv("TECH_RADAR_NOTIFY_SINK", str(tmp_path / "notify_sink.txt"))
     code = cli.main(argv)
     captured = capsys.readouterr()
     lines = [line for line in captured.out.splitlines() if line.strip()]

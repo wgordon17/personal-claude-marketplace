@@ -97,6 +97,13 @@ def read_pinned_manifest_sha(plist_file: Path) -> str | None:
 def bootout(ctx: Ctx) -> procs.ProcResult:
     """Run `launchctl bootout gui/$UID/com.user.tech-radar.hourly` (ignoring not-loaded)."""
     target = launchctl_service_target()
+    if os.environ.get("TECH_RADAR_HOME") and isinstance(ctx.procs.transport, procs.LiveProcs):
+        return procs.ProcResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            argv=("launchctl", "bootout", target),
+        )
     try:
         return ctx.procs.run(["launchctl", "bootout", target])
     except CommandDenied as exc:
@@ -114,6 +121,13 @@ def bootstrap(ctx: Ctx, plist_file: Path) -> procs.ProcResult:
     """Run `launchctl bootstrap gui/$UID <plist>`."""
     domain = launchctl_domain()
     plist_str = str(plist_file)
+    if os.environ.get("TECH_RADAR_HOME") and isinstance(ctx.procs.transport, procs.LiveProcs):
+        return procs.ProcResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            argv=("launchctl", "bootstrap", domain, plist_str),
+        )
     try:
         return ctx.procs.run(["launchctl", "bootstrap", domain, plist_str])
     except CommandDenied as exc:
