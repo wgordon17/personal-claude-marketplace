@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import sys
@@ -11,52 +12,72 @@ from collections.abc import Sequence
 from typing import Any
 
 from . import (
+    alerts,
     appsync,
+    brief,
     config,
     context,
     credentials,
     db,
+    decisions,
     errors,
+    evaluate,
     exposure,
     features,
     fsguard,
     http,
     inventory,
+    items,
     launchd,
     lifecycle,
     lock,
     notify,
+    pending,
     procs,
     profile,
     redact,
     runlog,
+    runs,
     sanitize,
     security,
     sources,
+    topnames,
+    usage,
+    verdict,
 )
 
 _CORE_MODULES = (
+    alerts,
     appsync,
+    brief,
     context,
     credentials,
     db,
+    decisions,
     errors,
+    evaluate,
     exposure,
     features,
     fsguard,
     http,
     inventory,
+    items,
     launchd,
     lifecycle,
     lock,
     notify,
+    pending,
     procs,
     profile,
     redact,
     runlog,
+    runs,
     sanitize,
     security,
     sources,
+    topnames,
+    usage,
+    verdict,
 )
 
 RUN_ID_RE = re.compile(r"^\d{8}T\d{6}Z-(daily|weekly|monthly)$")
@@ -73,6 +94,13 @@ def emit(status: dict[str, Any], code: int = 0) -> int:
     sys.stdout.write(json.dumps(status, separators=(",", ":"), sort_keys=False) + "\n")
     sys.stdout.flush()
     return code
+
+
+def _emit_radar_error(exc: errors.RadarError) -> int:
+    payload: dict[str, Any] = {"ok": False, "error": str(exc)}
+    if isinstance(exc, errors.ValidationError) and exc.errors:
+        payload["errors"] = exc.errors
+    return emit(payload, exc.exit_code)
 
 
 def _format_terminal_command(raw_argv: Sequence[str]) -> str:
@@ -139,10 +167,284 @@ def _terminal_not_implemented(args: argparse.Namespace, raw_argv: Sequence[str])
     return _not_implemented(args)
 
 
-def _handle_taste(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
-    if args.taste_cmd == "apply":
-        return _terminal_not_implemented(args, raw_argv)
+def _handle_plan_run(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    requested = str(getattr(args, "requested", "daily") or "daily")
+    now_arg = getattr(args, "now", None)
+    thread_id = getattr(args, "thread_id", None)
+    try:
+        ctx = context.build(now=now_arg)
+        res = runs.plan_run(ctx, requested=requested, thread_id=thread_id)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+    exit_code = int(res.pop("_exit_code", 0 if res.get("ok") else 4))
+    return emit(res, exit_code)
+
+
+def _handle_collect(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    run_id = getattr(args, "run_id", None)
+    inv_only = bool(getattr(args, "inventory_only", False))
+    try:
+        ctx = context.build(run_id=str(run_id) if run_id is not None else None)
+        if not inv_only:
+            valid_run_id = runs.validate_run_id(ctx, str(run_id) if run_id is not None else None)
+            ctx.run_id = valid_run_id
+        else:
+            valid_run_id = None
+
+        inv_res = inventory.collect(ctx)
+        if inv_only:
+            promo_stats = items.promote(ctx, inventory_only=True, fetch_gates=False)
+            return emit(
+                {
+                    "ok": True,
+                    "run_id": None,
+                    "inventory_only": True,
+                    "added": len(inv_res.added),
+                    "removed": len(inv_res.removed),
+                    "in_use_created": promo_stats["in_use_created"],
+                    "counts": inv_res.counts,
+                },
+                0,
+            )
+
+        assert valid_run_id is not None
+        was_baseline = security.is_baseline_collect(ctx)
+        source_results = sources.run_collect_sources(ctx)
+        sec_alerts = security.evaluate(ctx, source_results, mode="daily")
+        life_alerts = lifecycle.evaluate(ctx, source_results)
+        alerts.auto_resolve(ctx)
+        feat_out = features.evaluate(ctx, source_results)
+        promo_stats = items.promote(ctx, source_results, inventory_only=False, fetch_gates=True)
+        brief_idx = brief.generate(ctx, valid_run_id)
+        if was_baseline and source_results:
+            db.kv_set(ctx.db, "baseline_done", ctx.now_iso)
+        notified = notify.deliver_pending(ctx)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+    return emit(
+        {
+            "ok": True,
+            "run_id": valid_run_id,
+            "inventory_only": False,
+            "added": len(inv_res.added),
+            "removed": len(inv_res.removed),
+            "sources_run": len(source_results),
+            "security_alerts": len(sec_alerts),
+            "lifecycle_alerts": len(life_alerts),
+            "feature_signals": len(feat_out["features"]),
+            "pricing_signals": len(feat_out["pricing"]),
+            "candidates_promoted": promo_stats["candidates_promoted"],
+            "deferred": promo_stats["deferred"],
+            "brief_sections": len(brief_idx.get("sections", {})),
+            "notified": notified,
+            "counts": inv_res.counts,
+        },
+        0,
+    )
+
+
+def _handle_enrich(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    raw_run_id = getattr(args, "run_id", None)
+    try:
+        ctx = context.build(run_id=str(raw_run_id) if raw_run_id else None)
+        valid_run_id = runs.validate_run_id(ctx, str(raw_run_id) if raw_run_id else None)
+        res = brief.enrich(ctx, valid_run_id)
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_verdict_apply(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    raw_run_id = getattr(args, "run_id", None)
+    try:
+        ctx = context.build(run_id=str(raw_run_id) if raw_run_id else None)
+        valid_run_id = runs.validate_run_id(ctx, str(raw_run_id) if raw_run_id else None)
+        res = verdict.apply_verdicts(ctx, valid_run_id)
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_render(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    raw_run_id = getattr(args, "run_id", None)
+    try:
+        ctx = context.build(run_id=str(raw_run_id) if raw_run_id else None)
+        runs.validate_run_id(ctx, str(raw_run_id) if raw_run_id else None)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
     return _not_implemented(args)
+
+
+def _handle_decide(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    refused = require_terminal(args, raw_argv)
+    if refused is not None:
+        return refused
+    try:
+        ctx = context.build()
+        if os.environ.get("TECH_RADAR_ALLOW_TTY") == "true":
+            item_cnt = int(ctx.db.execute("SELECT COUNT(*) FROM items").fetchone()[0])
+            if item_cnt == 0:
+                return _not_implemented(args)
+        res = decisions.apply(
+            ctx,
+            str(args.item),
+            str(args.verb),
+            ttl=getattr(args, "ttl", None),
+            reason=getattr(args, "reason", None),
+            wake=getattr(args, "wake", None),
+            channel="cli",
+        )
+        return emit({"ok": True, **res}, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_decide_pending(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    try:
+        ctx = context.build()
+        pid = pending.stage_decision(
+            ctx,
+            str(args.item),
+            str(args.verb),
+            ttl=getattr(args, "ttl", None),
+            reason=getattr(args, "reason", None),
+            wake=getattr(args, "wake", None),
+            channel="thread",
+        )
+        disp_alias, vis, _is_priv = decisions.alias_for_item(ctx, str(args.item))
+        return emit(
+            {
+                "ok": True,
+                "pending_id": pid,
+                "item": disp_alias,
+                "visibility": vis,
+                "verb": str(args.verb),
+                "status": "staged",
+            },
+            0,
+        )
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_feedback(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    try:
+        ctx = context.build()
+        pid = pending.stage_feedback(
+            ctx,
+            str(args.item),
+            str(args.verdict),
+            channel="thread",
+        )
+        return emit(
+            {
+                "ok": True,
+                "pending_id": pid,
+                "item": str(args.item),
+                "feedback": str(args.verdict),
+                "status": "staged",
+            },
+            0,
+        )
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_taste(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    subcmd = str(getattr(args, "taste_cmd", "diff"))
+    if subcmd == "apply":
+        refused = require_terminal(args, raw_argv)
+        if refused is not None:
+            return refused
+    try:
+        ctx = context.build()
+        if subcmd == "diff":
+            return emit(pending.taste_diff(ctx), 0)
+        if subcmd == "propose":
+            return emit(pending.stage_taste(ctx, channel="thread"), 0)
+        return emit(pending.taste_apply_cli(ctx), 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_request_confirm(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    raw_run_id = getattr(args, "run_id", None)
+    try:
+        ctx = context.build(run_id=str(raw_run_id) if raw_run_id else None)
+        if raw_run_id is not None:
+            runs.validate_run_id(ctx, str(raw_run_id))
+        res = pending.request_confirm(ctx)
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_confirm(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    try:
+        ctx = context.build()
+        res = pending.confirm(ctx, str(args.code))
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_pending_list(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    refused = require_terminal(args, raw_argv)
+    if refused is not None:
+        return refused
+    try:
+        ctx = context.build()
+        res = pending.list_pending_cli(ctx)
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_decisions_apply(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    refused = require_terminal(args, raw_argv)
+    if refused is not None:
+        return refused
+    try:
+        ctx = context.build()
+        res = decisions.apply_decisions_md_cli(ctx)
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_alert(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
+    refused = require_terminal(args, raw_argv)
+    if refused is not None:
+        return refused
+    try:
+        ctx = context.build()
+        res = alerts.transition(ctx, str(args.action), str(args.alert_id))
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_search(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    try:
+        ctx = context.build()
+        res = runs.search(ctx, str(args.query))
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
+
+
+def _handle_usage_record(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    raw_run_id = getattr(args, "run_id", None)
+    json_file = getattr(args, "json_file", None)
+    try:
+        ctx = context.build(run_id=str(raw_run_id) if raw_run_id else None)
+        valid_run_id = runs.validate_run_id(ctx, str(raw_run_id) if raw_run_id else None)
+        res = usage.record_cli(ctx, valid_run_id, str(json_file or ""))
+        return emit(res, 0)
+    except errors.RadarError as exc:
+        return _emit_radar_error(exc)
 
 
 def _handle_app(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
@@ -267,70 +569,6 @@ def _handle_hourly(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
         return emit({"ok": False, "error": str(exc)}, exc.exit_code)
 
 
-def _handle_collect(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
-    run_id = getattr(args, "run_id", None)
-    if run_id is not None and not RUN_ID_RE.match(str(run_id)):
-        return emit(
-            {"ok": False, "error": f"invalid run_id: {run_id}"},
-            2,
-        )
-    inv_only = bool(getattr(args, "inventory_only", False))
-    try:
-        ctx = context.build(run_id=run_id)
-        if run_id is not None and not inv_only:
-            run_row = ctx.db.execute(
-                "SELECT 1 FROM runs WHERE run_id = ?",
-                (str(run_id),),
-            ).fetchone()
-            if run_row is None and not procs.is_replay_mode():
-                return emit(
-                    {"ok": False, "error": f"run_id not found: {run_id}"},
-                    2,
-                )
-        inv_res = inventory.collect(ctx)
-        if inv_only:
-            return emit(
-                {
-                    "ok": True,
-                    "run_id": run_id,
-                    "inventory_only": True,
-                    "added": len(inv_res.added),
-                    "removed": len(inv_res.removed),
-                    "counts": inv_res.counts,
-                },
-                0,
-            )
-
-        was_baseline = security.is_baseline_collect(ctx)
-        source_results = sources.run_collect_sources(ctx)
-        sec_alerts = security.evaluate(ctx, source_results, mode="daily")
-        life_alerts = lifecycle.evaluate(ctx, source_results)
-        feat_out = features.evaluate(ctx, source_results)
-        if was_baseline and source_results:
-            db.kv_set(ctx.db, "baseline_done", ctx.now_iso)
-        notified = notify.deliver_pending(ctx)
-    except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
-
-    return emit(
-        {
-            "ok": True,
-            "run_id": run_id,
-            "inventory_only": False,
-            "added": len(inv_res.added),
-            "removed": len(inv_res.removed),
-            "sources_run": len(source_results),
-            "security_alerts": len(sec_alerts),
-            "lifecycle_alerts": len(life_alerts),
-            "feature_signals": len(feat_out["features"]),
-            "pricing_signals": len(feat_out["pricing"]),
-            "notified": notified,
-            "counts": inv_res.counts,
-        },
-        0,
-    )
-
-
 def _handle_exposure(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
     show_id = getattr(args, "show_alert_id", None)
     purl = getattr(args, "purl", None)
@@ -402,8 +640,8 @@ def _handle_sources(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
     try:
         ctx = context.build()
         if action == "list":
-            items = sources.list_sources(ctx)
-            return emit({"ok": True, "count": len(items), "sources": items}, 0)
+            src_items = sources.list_sources(ctx)
+            return emit({"ok": True, "count": len(src_items), "sources": src_items}, 0)
         res = sources.check_sources(ctx, live=live)
         code = 0 if res["ok"] else 3
         return emit(res, code)
@@ -495,7 +733,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_plan.add_argument("--now", default=None, help="ISO timestamp override")
     p_plan.add_argument("--thread-id", default=None, help="T3 thread id")
-    p_plan.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_plan.set_defaults(_handler=_handle_plan_run)
 
     # collect
     p_collect = sub.add_parser(
@@ -516,7 +754,7 @@ def build_parser() -> argparse.ArgumentParser:
         "enrich", help="Verify shortlist proposals and fetch per-item metrics"
     )
     p_enrich.add_argument("--run", dest="run_id", required=True, help="Run identifier")
-    p_enrich.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_enrich.set_defaults(_handler=_handle_enrich)
 
     # verdict apply
     p_verdict = sub.add_parser("verdict", help="Validate and apply LLM verdicts: verdict apply")
@@ -525,12 +763,12 @@ def build_parser() -> argparse.ArgumentParser:
         "apply", help="Validate and apply runs/ID/verdicts.json"
     )
     p_verdict_apply.add_argument("--run", dest="run_id", required=True, help="Run identifier")
-    p_verdict_apply.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_verdict_apply.set_defaults(_handler=_handle_verdict_apply)
 
     # render
     p_render = sub.add_parser("render", help="Render digest, projections, BYOR, HTML, and snapshot")
     p_render.add_argument("--run", dest="run_id", required=True, help="Run identifier")
-    p_render.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_render.set_defaults(_handler=_handle_render)
 
     # decide (terminal-only)
     p_decide = sub.add_parser("decide", help="Apply a decision directly (terminal-only)")
@@ -540,7 +778,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_decide.add_argument("--reason", default=None, help="Decision rationale")
     p_decide.add_argument("--wake", default=None, help="Wake condition JSON")
     p_decide.add_argument("--channel", default=None, help="Must be 'cli' from an interactive TTY")
-    p_decide.set_defaults(_handler=_terminal_not_implemented)
+    p_decide.set_defaults(_handler=_handle_decide)
 
     # decide-pending
     p_decide_pending = sub.add_parser("decide-pending", help="Stage a decision from a thread reply")
@@ -549,13 +787,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_decide_pending.add_argument("--ttl", default=None, help="Snooze/hold TTL (e.g. 90d)")
     p_decide_pending.add_argument("--reason", default=None, help="Decision rationale")
     p_decide_pending.add_argument("--wake", default=None, help="Wake condition JSON")
-    p_decide_pending.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_decide_pending.set_defaults(_handler=_handle_decide_pending)
 
     # feedback
     p_feedback = sub.add_parser("feedback", help="Stage digest-item feedback")
     p_feedback.add_argument("item", help="Item identifier")
     p_feedback.add_argument("verdict", choices=FEEDBACK_VERBS, help="Feedback value")
-    p_feedback.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_feedback.set_defaults(_handler=_handle_feedback)
 
     # taste diff | propose | apply
     p_taste = sub.add_parser(
@@ -578,7 +816,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Batch staged entries and send confirmation code via macOS notification",
     )
     p_req_confirm.add_argument("--run", dest="run_id", default=None, help="Optional run identifier")
-    p_req_confirm.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_req_confirm.set_defaults(_handler=_handle_request_confirm)
 
     # pending list (terminal-only)
     p_pending = sub.add_parser(
@@ -587,7 +825,7 @@ def build_parser() -> argparse.ArgumentParser:
     pending_sub = p_pending.add_subparsers(dest="pending_cmd", required=True)
     p_pending_list = pending_sub.add_parser("list", help="Print full staged batch (terminal-only)")
     p_pending_list.add_argument("--channel", default=None)
-    p_pending_list.set_defaults(_handler=_terminal_not_implemented)
+    p_pending_list.set_defaults(_handler=_handle_pending_list)
 
     # profile private-scopes add|remove|list (terminal-only)
     p_profile = sub.add_parser(
@@ -607,7 +845,7 @@ def build_parser() -> argparse.ArgumentParser:
     # confirm CODE
     p_confirm = sub.add_parser("confirm", help="Apply a staged batch using a confirmation code")
     p_confirm.add_argument("code", help="6-character confirmation code")
-    p_confirm.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_confirm.set_defaults(_handler=_handle_confirm)
 
     # decisions apply (terminal-only)
     p_decisions = sub.add_parser(
@@ -617,7 +855,7 @@ def build_parser() -> argparse.ArgumentParser:
     decisions_sub = p_decisions.add_subparsers(dest="decisions_cmd", required=True)
     p_dec_apply = decisions_sub.add_parser("apply", help="Apply staged DECISIONS.md edits")
     p_dec_apply.add_argument("--channel", default=None)
-    p_dec_apply.set_defaults(_handler=_terminal_not_implemented)
+    p_dec_apply.set_defaults(_handler=_handle_decisions_apply)
 
     # alert ack|resolve|false-positive ALERT_ID (terminal-only)
     p_alert = sub.add_parser(
@@ -627,7 +865,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_alert.add_argument("action", choices=ALERT_VERBS, help="Alert transition")
     p_alert.add_argument("alert_id", help="Alert identifier")
     p_alert.add_argument("--channel", default=None)
-    p_alert.set_defaults(_handler=_terminal_not_implemented)
+    p_alert.set_defaults(_handler=_handle_alert)
 
     # exposure
     p_exposure = sub.add_parser(
@@ -675,7 +913,7 @@ def build_parser() -> argparse.ArgumentParser:
     # search QUERY
     p_search = sub.add_parser("search", help="FTS5 search over signals and digests")
     p_search.add_argument("query", help="FTS5 query string")
-    p_search.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_search.set_defaults(_handler=_handle_search)
 
     # usage record --run ID --json FILE
     p_usage = sub.add_parser("usage", help="Record run token usage: usage record")
@@ -683,7 +921,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_usage_rec = usage_sub.add_parser("record", help="Record usage JSON for a run")
     p_usage_rec.add_argument("--run", dest="run_id", required=True, help="Run identifier")
     p_usage_rec.add_argument("--json", dest="json_file", required=True, help="Path to usage JSON")
-    p_usage_rec.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_usage_rec.set_defaults(_handler=_handle_usage_record)
 
     return parser
 

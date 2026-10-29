@@ -1,0 +1,32 @@
+{
+  "run_id": "20261029T070000Z-daily",
+  "items": [
+    {
+      "ref": "R-0001",
+      "action": "surface",
+      "ring": "assess",
+      "quadrant": "cli-dev-tools",
+      "fit": 85,
+      "quality_adj": 0,
+      "confidence": "high",
+      "why": "Contender surfaced without superiority or replaces.",
+      "superiority": null,
+      "benefit": null,
+      "replaces": null,
+      "relevant_to": [],
+      "technique_slug": null,
+      "citations": [
+        "https://github.com/example-org/fasttool/releases/tag/v1.2.0"
+      ],
+      "adoption_snippet": null,
+      "effort": "S",
+      "llm_fields": {
+        "cloud_code_upload": "no",
+        "arbitrary_shell": "no",
+        "broad_credentials": "no",
+        "telemetry_no_optout": "no"
+      },
+      "section": "contenders"
+    }
+  ]
+}

@@ -1344,4 +1344,7 @@ def evaluate(
     if was_baseline and results:
         db.kv_set(ctx.db, "baseline_done", ctx.now_iso)
 
+    from . import alerts
+
+    alerts.auto_resolve(ctx)
     return new_alert_ids

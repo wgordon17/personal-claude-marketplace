@@ -1,0 +1,34 @@
+{
+  "run_id": "20261029T070000Z-daily",
+  "items": [
+    {
+      "ref": "R-0004",
+      "action": "surface",
+      "ring": "trial",
+      "quadrant": "skills-mcp-plugins",
+      "fit": 88,
+      "quality_adj": 5,
+      "confidence": "high",
+      "why": "MCP server candidate requested for trial before user decision.",
+      "superiority": null,
+      "benefit": "Local docs search",
+      "replaces": null,
+      "relevant_to": [
+        "taste:categories:ai-agents-harness"
+      ],
+      "technique_slug": null,
+      "citations": [
+        "https://github.com/example-org/mcp-helper/releases/tag/v1.0.0"
+      ],
+      "adoption_snippet": null,
+      "effort": "S",
+      "llm_fields": {
+        "cloud_code_upload": "no",
+        "arbitrary_shell": "no",
+        "broad_credentials": "no",
+        "telemetry_no_optout": "no"
+      },
+      "section": "horizon"
+    }
+  ]
+}

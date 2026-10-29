@@ -1,0 +1,35 @@
+{
+  "run_id": "20261029T070000Z-daily",
+  "items": [
+    {
+      "ref": "S-1",
+      "action": "surface",
+      "ring": "trial",
+      "quadrant": "techniques",
+      "fit": 90,
+      "quality_adj": 10,
+      "confidence": "high",
+      "why": "Structured prompt-boundary delimiting pattern for untrusted data.",
+      "superiority": null,
+      "benefit": "Reduces prompt injection surface",
+      "replaces": null,
+      "relevant_to": [
+        "taste:categories:ai-agents-harness"
+      ],
+      "technique_slug": "xml-data-boundary-fencing",
+      "citations": [
+        "https://simonwillison.net/2026/Oct/20/xml-fencing/",
+        "https://github.com/example-org/fasttool/releases/tag/v1.2.0"
+      ],
+      "adoption_snippet": null,
+      "effort": "S",
+      "llm_fields": {
+        "cloud_code_upload": "no",
+        "arbitrary_shell": "no",
+        "broad_credentials": "no",
+        "telemetry_no_optout": "no"
+      },
+      "section": "technique"
+    }
+  ]
+}
