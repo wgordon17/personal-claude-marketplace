@@ -1,0 +1,18 @@
+{
+  "body": [
+    {
+      "commit": {
+        "author": {
+          "date": "2026-10-26T09:30:00Z"
+        },
+        "message": "Add mcp-builder skill reference and validation script"
+      },
+      "html_url": "https://github.com/anthropics/skills/commit/f0e1d2c3b4a5",
+      "sha": "f0e1d2c3b4a5968778695a4b3c2d1e0f12345678"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

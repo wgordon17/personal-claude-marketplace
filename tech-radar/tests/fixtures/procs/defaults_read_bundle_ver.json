@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "defaults",
+    "read",
+    "{HOME}/Applications/OrbStack.app/Contents/Info.plist",
+    "CFBundleShortVersionString"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "1.8.2\n"
+}

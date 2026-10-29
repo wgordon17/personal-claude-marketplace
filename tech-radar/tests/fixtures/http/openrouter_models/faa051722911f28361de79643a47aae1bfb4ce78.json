@@ -1,0 +1,21 @@
+{
+  "body": {
+    "data": [
+      {
+        "context_length": 200000,
+        "created": 1792900000,
+        "description": "High-throughput coding model with free promo tier credits.",
+        "id": "anthropic/claude-sonnet-4-5",
+        "name": "Anthropic: Claude Sonnet 4.5",
+        "pricing": {
+          "completion": "0.000015",
+          "prompt": "0.000003"
+        }
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

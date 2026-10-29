@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "go",
+    "version",
+    "-m",
+    "{HOME}/go/bin/gopls"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "{HOME}/go/bin/gopls: go1.23.2\n\tpath\tgolang.org/x/tools/gopls\n\tmod\tgolang.org/x/tools/gopls\tv0.16.2\th1:synthetic\n"
+}

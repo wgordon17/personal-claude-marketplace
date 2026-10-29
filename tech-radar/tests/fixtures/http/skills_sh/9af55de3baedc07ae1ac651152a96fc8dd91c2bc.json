@@ -1,0 +1,7 @@
+{
+  "body": "<!doctype html>\n<html><body><main>\n  <article>\n    <h2><a href=\"https://github.com/example-org/skill-pack\">skill-pack \u2014 Structured code review skill</a></h2>\n    <p>Leaderboard skill for automated test verification.</p>\n  </article>\n</main></body></html>",
+  "headers": {
+    "content-type": "text/html"
+  },
+  "status": 200
+}

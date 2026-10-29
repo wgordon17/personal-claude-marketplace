@@ -54,6 +54,21 @@ Understand:
 - Uncommitted changes
 - Recent commits
 
+### Step 3b: Tech radar alerts
+
+If `~/.local/share/tech-radar/project-alerts.json` exists:
+1. Run `git remote get-url origin`. If there is no `origin` remote (or the command fails), skip silently.
+2. Normalize the origin URL per Spec 04 (`project_key` normalization):
+   - Convert SCP/SSH forms (`git@host:o/r(.git)` and `ssh://git@host/o/r(.git)`) to `https://host/o/r`
+   - Strip userinfo (`user@` / `user:pass@`), lowercase the host and `owner/repo` path, and strip any trailing `.git` or `/`
+3. Read `~/.local/share/tech-radar/project-alerts.json` with the Read tool and look up `projects[<normalized_key>]`.
+4. If the key has open alerts (non-empty array), print a block (where `title` is already script-composed from validated fields per Spec 12 A24, and `id` is `item_or_alert_id`):
+```markdown
+**Tech radar alerts:**
+- [tier] title (id)
+```
+Otherwise print nothing.
+
 ### Step 4: Present Project Orientation
 
 Provide a structured summary:

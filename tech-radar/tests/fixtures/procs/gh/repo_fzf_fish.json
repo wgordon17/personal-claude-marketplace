@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/patrickf1/fzf.fish"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "full_name": "patrickf1/fzf.fish",
+    "name": "fzf.fish",
+    "private": false
+  }
+}

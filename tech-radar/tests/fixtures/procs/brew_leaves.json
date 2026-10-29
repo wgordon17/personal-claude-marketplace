@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "brew",
+    "leaves"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "jq\nripgrep\ngh\nuv\n"
+}

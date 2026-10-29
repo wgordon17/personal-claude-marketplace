@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "user/starred",
+    "--paginate"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "full_name": "astral-sh/uv",
+      "html_url": "https://github.com/astral-sh/uv",
+      "name": "uv",
+      "private": false,
+      "topics": [
+        "python",
+        "packaging",
+        "rust"
+      ]
+    },
+    {
+      "full_name": "example-org/mytool",
+      "html_url": "https://github.com/example-org/mytool",
+      "name": "mytool",
+      "private": false,
+      "topics": [
+        "cli"
+      ]
+    }
+  ]
+}

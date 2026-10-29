@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "gh",
+    "extension",
+    "list"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "gh dash\tdlvhdr/gh-dash\tv4.5.0\n"
+}

@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/anthropics/claude-code"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "full_name": "anthropics/claude-code",
+    "name": "claude-code",
+    "private": false
+  }
+}

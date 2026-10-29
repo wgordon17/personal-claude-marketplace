@@ -8,7 +8,7 @@ make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
 make test         # uv run pytest (runs the tests/ dirs in pyproject.toml testpaths)
 ```
 
-Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per-plugin `tests/` directories (see `pyproject.toml` `testpaths`): currently `dev-guard/tests/` and `chai-bot/tests/`.
+Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per-plugin `tests/` directories (see `pyproject.toml` `testpaths`): currently `dev-guard/tests/`, `chai-bot/tests/`, and `tech-radar/tests/`.
 
 ## Critical Rules
 
@@ -40,7 +40,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per
 
 ## Repository Structure
 
-Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.claude-plugin/marketplace.json`.
+Personal Claude Code plugin marketplace with 14 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
 - **dev-guard/** — Tool selection guard, commit validation, subagent completion verification
@@ -51,6 +51,7 @@ Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.clau
 - **drawio/** — Vendored draw.io diagram generation skill from jgraph/drawio-mcp (Apache 2.0); weekly upstream sync via GHA
 - **fetchaller-mcp/** — Pinned MCP fetch/search server for domains that block Claude Code's built-in WebFetch/WebSearch (Reddit and 15 other sites); commit-SHA pinned, never tracks main
 - **chai-bot/** — Advisory nudge + explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server; repo-gated to osac-project remotes, VPN-dependent
+- **tech-radar/** — Scheduled personal tech radar (new features you could use, compromises, lifecycle risks, superior replacements, and relevant horizon tools across your machine, projects, and AI harness); PEP 723 CLI + `tech_radar` package, `/tech-radar:radar` skill, and hourly LLM-free launchd compromise check
 
 Each plugin ships dual manifests: `.claude-plugin/plugin.json` (Claude Code) and root `plugin.json` (Agent Plugins v1), registered in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 

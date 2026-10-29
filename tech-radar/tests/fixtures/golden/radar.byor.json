@@ -1,0 +1,72 @@
+[
+  {
+    "name": "litellm",
+    "ring": "hold",
+    "quadrant": "languages-libraries",
+    "isNew": false,
+    "description": "Active supply-chain compromise on 1.107.0 ([REDACTED:aws_key]); hold and pin 1.106.2."
+  },
+  {
+    "name": "ripgrep",
+    "ring": "adopt",
+    "quadrant": "cli-dev-tools",
+    "isNew": false,
+    "description": "Core fast search CLI across local workflows."
+  },
+  {
+    "name": "uv-fast-pack",
+    "ring": "trial",
+    "quadrant": "cli-dev-tools",
+    "isNew": true,
+    "description": "Drop-in lockfile packer for private-project-1 with 3x faster cold builds."
+  },
+  {
+    "name": "gemini-4-argon",
+    "ring": "adopt",
+    "quadrant": "ai-agents-harness",
+    "isNew": true,
+    "description": "Primary scheduled evaluation model with low latency and 1M context window."
+  },
+  {
+    "name": "fetchaller",
+    "ring": "assess",
+    "quadrant": "skills-mcp-plugins",
+    "isNew": true,
+    "description": "MCP fetch server for bot-protected domains; capped at assess pending review."
+  },
+  {
+    "name": "actions/setup-uv",
+    "ring": "trial",
+    "quadrant": "platforms-services",
+    "isNew": true,
+    "description": "Official uv GitHub Action with built-in cache pruning."
+  },
+  {
+    "name": "context-compaction",
+    "ring": "assess",
+    "quadrant": "techniques",
+    "isNew": true,
+    "description": "Structured prompt boundary compaction for multi-turn agent loops."
+  },
+  {
+    "name": "secret-internal-pkg",
+    "ring": "adopt",
+    "quadrant": "languages-libraries",
+    "isNew": false,
+    "description": "Internal helper package for secret-widget."
+  },
+  {
+    "name": "experimental-agent-tui",
+    "ring": "assess",
+    "quadrant": "ai-agents-harness",
+    "isNew": true,
+    "description": "[watch] Early-stage terminal UI experiment; watch for 1.0 stability."
+  },
+  {
+    "name": "legacy-xml-tool",
+    "ring": "assess",
+    "quadrant": "languages-libraries",
+    "isNew": false,
+    "description": "Snoozed pending upstream v2 migration."
+  }
+]

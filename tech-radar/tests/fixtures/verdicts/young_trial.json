@@ -1,0 +1,34 @@
+{
+  "run_id": "20261029T070000Z-daily",
+  "items": [
+    {
+      "ref": "R-0002",
+      "action": "surface",
+      "ring": "trial",
+      "quadrant": "languages-libraries",
+      "fit": 85,
+      "quality_adj": 5,
+      "confidence": "high",
+      "why": "Promising young library requested for trial.",
+      "superiority": null,
+      "benefit": "Faster serialization",
+      "replaces": null,
+      "relevant_to": [
+        "taste:categories:python-tooling"
+      ],
+      "technique_slug": null,
+      "citations": [
+        "https://github.com/example-org/youngpkg/releases/tag/v0.1.0"
+      ],
+      "adoption_snippet": null,
+      "effort": "S",
+      "llm_fields": {
+        "cloud_code_upload": "no",
+        "arbitrary_shell": "no",
+        "broad_credentials": "no",
+        "telemetry_no_optout": "no"
+      },
+      "section": "horizon"
+    }
+  ]
+}

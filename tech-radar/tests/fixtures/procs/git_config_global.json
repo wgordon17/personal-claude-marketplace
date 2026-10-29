@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "git",
+    "-c",
+    "core.fsmonitor=",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "protocol.file.allow=never",
+    "-c",
+    "diff.external=",
+    "config",
+    "--global",
+    "--list"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "user.name=Example User\nuser.email=user@example.com\ncore.pager=delta\ndiff.tool=difft\nalias.st=status\nalias.lg=!lazygit\n"
+}

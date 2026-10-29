@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "3.6.0"
+    "version": "3.7.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -66,7 +66,7 @@
     },
     {
       "name": "dev-guard",
-      "version": "1.71.0",
+      "version": "1.71.1",
       "source": "./dev-guard",
       "description": "Development environment policy enforcement: tool selection guard, commit validation, URL fetch guard, trust management, oc/kubectl introspection, subagent completion verification, decision persistence, anti-deferral enforcement, shared behavioral feedback, path hallucination guard, narrative comment guard, token efficiency guidance",
       "category": "quality",
@@ -77,7 +77,7 @@
     },
     {
       "name": "code-quality",
-      "version": "3.31.1",
+      "version": "3.32.0",
       "source": "./code-quality",
       "description": "Code quality agents, development utilities, and orchestration skills: architecture, security, QA, performance, test execution, code review, code simplification, plan adherence, LSP navigation, uv-python, incremental planning (with issue tracking and PR boundary markers), roadmap lifecycle management, session management, deep-research (with Bridged mode), business-panel, file-audit, bug-investigation, unfuck, swarm, quality-gate, pr-review, plan-review, map-reduce, speculative, reflect, fix, index-repo, summarize, and test-plan",
       "category": "quality",
@@ -146,6 +146,15 @@
       "description": "Advisory nudge and explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server",
       "category": "productivity",
       "tags": ["mcp", "osac", "advisory", "ship-help"],
+      "author": { "name": "wgordon17" }
+    },
+    {
+      "name": "tech-radar",
+      "version": "0.1.0",
+      "source": "./tech-radar",
+      "description": "Scheduled personal tech radar: new features you could use, compromises, lifecycle risks, superior replacements and relevant new tools across your machine, projects and AI harness",
+      "category": "productivity",
+      "tags": ["tech-radar", "dependencies", "security", "discovery"],
       "author": { "name": "wgordon17" }
     }
   ]

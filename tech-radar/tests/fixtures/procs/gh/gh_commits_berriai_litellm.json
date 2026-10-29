@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/berriai/litellm/commits?per_page=1"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "commit": {
+        "author": {
+          "date": "2026-10-27T10:00:00Z"
+        },
+        "message": "release 1.106.2"
+      },
+      "sha": "1234567890abcdef1234567890abcdef12345678"
+    }
+  ]
+}

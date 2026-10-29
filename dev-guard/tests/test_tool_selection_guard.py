@@ -1954,6 +1954,72 @@ class TestCommentNarrationGuard:
         assert result.returncode == 2
         assert "comment-narration-replaces-old" in result.stderr
 
+    @pytest.mark.parametrize("ext", [".json", ".jsonl", ".JSON", ".JSONL"])
+    def test_write_and_edit_json_and_jsonl_not_blocked(self, ext):
+        url = "https://example.com/release#notes"
+        narrative = " ".join(
+            ["Super" + "sedes v1 and", "replaces the" + " old runner in", "Pha" + "se 2"]
+        )
+        payload = json.dumps({"url": url, "why": narrative})
+        write_res = run_guard(
+            "Write",
+            {
+                "file_path": f"verdicts{ext}",
+                "content": payload,
+            },
+        )
+        assert write_res.returncode == 0
+        assert "comment-narration" not in (write_res.stdout + write_res.stderr)
+
+        edit_res = run_guard(
+            "Edit",
+            {
+                "file_path": f"shortlist{ext}",
+                "old_string": "{}",
+                "new_string": payload,
+            },
+        )
+        assert edit_res.returncode == 0
+        assert "comment-narration" not in (edit_res.stdout + edit_res.stderr)
+
+    @pytest.mark.parametrize(
+        "file_path, template",
+        [
+            ("module.py", 'msg = "{url} — {narrative}"\n'),
+            ("index.html", '<a href="{url}">{narrative}</a>\n'),
+        ],
+        ids=["py-url-same-line", "html-url-same-line"],
+    )
+    def test_https_url_same_line_as_narrative_words_not_blocked(self, file_path, template):
+        url = "https://example.com/changelog"
+        narrative = " ".join(
+            ["Super" + "sedes v1 and", "replaces the" + " old runner in", "Pha" + "se 2"]
+        )
+        content = template.format(url=url, narrative=narrative)
+        for tool_name, tool_input in (
+            ("Write", {"file_path": file_path, "content": content}),
+            ("Edit", {"file_path": file_path, "old_string": "x = 1\n", "new_string": content}),
+        ):
+            result = run_guard(tool_name, tool_input)
+            assert result.returncode == 0
+            assert "comment-narration" not in (result.stdout + result.stderr)
+
+    def test_real_slash_comment_after_https_url_still_blocked(self):
+        url = "https://example.com/api"
+        comment_prefix = "/" * 2
+        word = "Super" + "sedes"
+        result = run_guard(
+            "Write",
+            {
+                "file_path": "client.ts",
+                "content": (
+                    f'const endpoint = "{url}"; {comment_prefix} {word} the legacy v1 endpoint\n'
+                ),
+            },
+        )
+        assert result.returncode == 2
+        assert "comment-narration-supersede" in result.stderr
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Whitespace edge cases

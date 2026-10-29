@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "launchctl",
+    "print",
+    "gui/{UID}/com.user.tech-radar.hourly"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "gui/501/com.user.tech-radar.hourly = {\n\tactive count = 0\n\tstate = waiting\n\tlast exit code = 0\n}\n"
+}

@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "mas",
+    "list"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "497799835  Xcode            (16.1)\n"
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "tech-radar",
+  "version": "0.1.0",
+  "description": "Scheduled personal tech radar: new features you could use, compromises, lifecycle risks, superior replacements and relevant new tools across your machine, projects and AI harness",
+  "author": {
+    "name": "wgordon17"
+  }
+}

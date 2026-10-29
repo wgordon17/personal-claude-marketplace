@@ -1,0 +1,100 @@
+{
+  "argv": [
+    "brew",
+    "info",
+    "--json=v2",
+    "--installed"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "casks": [
+      {
+        "homepage": "https://orbstack.dev",
+        "installed": "1.8.2",
+        "token": "orbstack",
+        "version": "1.8.2"
+      },
+      {
+        "homepage": "https://raycast.com",
+        "installed": "1.84.0",
+        "token": "raycast",
+        "version": "1.84.0"
+      }
+    ],
+    "formulae": [
+      {
+        "homepage": "https://jqlang.github.io/jq/",
+        "installed": [
+          {
+            "installed_on_request": true,
+            "version": "1.7.1"
+          }
+        ],
+        "name": "jq",
+        "urls": {
+          "stable": {
+            "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-1.7.1.tar.gz"
+          }
+        },
+        "versions": {
+          "stable": "1.7.1"
+        }
+      },
+      {
+        "homepage": "https://github.com/BurntSushi/ripgrep",
+        "installed": [
+          {
+            "installed_on_request": true,
+            "version": "14.1.1"
+          }
+        ],
+        "name": "ripgrep",
+        "urls": {
+          "stable": {
+            "url": "https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.1.tar.gz"
+          }
+        },
+        "versions": {
+          "stable": "14.1.1"
+        }
+      },
+      {
+        "homepage": "https://github.com/cli/cli",
+        "installed": [
+          {
+            "installed_on_request": true,
+            "version": "2.60.0"
+          }
+        ],
+        "name": "gh",
+        "urls": {
+          "stable": {
+            "url": "https://github.com/cli/cli/archive/refs/tags/v2.60.0.tar.gz"
+          }
+        },
+        "versions": {
+          "stable": "2.60.0"
+        }
+      },
+      {
+        "homepage": "https://github.com/astral-sh/uv",
+        "installed": [
+          {
+            "installed_on_request": true,
+            "version": "0.13.5"
+          }
+        ],
+        "name": "uv",
+        "urls": {
+          "stable": {
+            "url": "https://github.com/astral-sh/uv/archive/refs/tags/0.13.5.tar.gz"
+          }
+        },
+        "versions": {
+          "stable": "0.13.5"
+        }
+      }
+    ]
+  }
+}

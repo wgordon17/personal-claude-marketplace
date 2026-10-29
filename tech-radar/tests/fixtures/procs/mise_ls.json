@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "mise",
+    "ls",
+    "--json"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "node": [
+      {
+        "install_path": "/Users/example-user/.local/share/mise/installs/node/22.9.0",
+        "requested_version": "22",
+        "version": "22.9.0"
+      }
+    ],
+    "python": [
+      {
+        "install_path": "/Users/example-user/.local/share/mise/installs/python/3.13.0",
+        "requested_version": "3.13",
+        "version": "3.13.0"
+      }
+    ]
+  }
+}

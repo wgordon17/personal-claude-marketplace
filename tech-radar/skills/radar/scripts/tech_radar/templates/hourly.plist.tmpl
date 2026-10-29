@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOMEBREW_NO_AUTO_UPDATE</key>
+		<string>1</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin</string>
+		<key>PYTHONDONTWRITEBYTECODE</key>
+		<string>1</string>
+		<key>TECH_RADAR_STATE</key>
+		<string>{STATE}</string>
+		<key>UV_MALWARE_CHECK</key>
+		<string>1</string>
+	</dict>
+	<key>Label</key>
+	<string>com.user.tech-radar.hourly</string>
+	<key>LowPriorityIO</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/python3</string>
+		<string>-I</string>
+		<string>-c</string>
+		<string>{VERIFY_APP_CODE}</string>
+		<string>{MANIFEST_SHA256}</string>
+		<string>{STATE}/app</string>
+		<string>{UV_PATH}</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>{LOGS}/hourly.err</string>
+	<key>StandardOutPath</key>
+	<string>{LOGS}/hourly.log</string>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>Umask</key>
+	<integer>63</integer>
+</dict>
+</plist>

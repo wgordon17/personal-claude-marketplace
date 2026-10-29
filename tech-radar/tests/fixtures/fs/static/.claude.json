@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github@2026.1.0"
+      ]
+    },
+    "custom-uvx": {
+      "command": "/opt/homebrew/bin/uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/example-org/mcp-tool@1111111111111111111111111111111111111111",
+        "mcp-tool"
+      ]
+    }
+  }
+}

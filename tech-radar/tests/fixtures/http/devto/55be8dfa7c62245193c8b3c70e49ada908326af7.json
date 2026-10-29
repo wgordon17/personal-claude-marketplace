@@ -1,0 +1,17 @@
+{
+  "body": [
+    {
+      "comments_count": 11,
+      "description": "Practical walkthrough of https://github.com/astral-sh/uv for CLI apps.",
+      "id": 99001,
+      "public_reactions_count": 72,
+      "published_timestamp": "2026-10-27T12:00:00Z",
+      "title": "Modern Python CLI patterns with uv and ruff",
+      "url": "https://dev.to/example/modern-python-cli-patterns"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

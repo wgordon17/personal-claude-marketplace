@@ -1,0 +1,34 @@
+{
+  "run_id": "20261029T070000Z-daily",
+  "items": [
+    {
+      "ref": "R-0003",
+      "action": "surface",
+      "ring": "trial",
+      "quadrant": "languages-libraries",
+      "fit": 80,
+      "quality_adj": 0,
+      "confidence": "medium",
+      "why": "Package with prior MAL advisory history.",
+      "superiority": null,
+      "benefit": null,
+      "replaces": null,
+      "relevant_to": [
+        "taste:categories:python-tooling"
+      ],
+      "technique_slug": null,
+      "citations": [
+        "https://github.com/example-org/malpkg/releases/tag/v1.0.0"
+      ],
+      "adoption_snippet": null,
+      "effort": "M",
+      "llm_fields": {
+        "cloud_code_upload": "no",
+        "arbitrary_shell": "no",
+        "broad_credentials": "no",
+        "telemetry_no_optout": "no"
+      },
+      "section": "horizon"
+    }
+  ]
+}

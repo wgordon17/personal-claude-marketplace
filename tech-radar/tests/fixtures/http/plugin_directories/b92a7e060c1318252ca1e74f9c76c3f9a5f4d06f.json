@@ -1,0 +1,7 @@
+{
+  "body": "<!doctype html>\n<html><body><main>\n  <article>\n    <h2><a href=\"https://github.com/example-org/claude-plugin-demo\">claude-plugin-demo</a></h2>\n    <p>Curated Claude Code plugin for local diagnostics.</p>\n  </article>\n</main></body></html>",
+  "headers": {
+    "content-type": "text/html"
+  },
+  "status": 200
+}

@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "user/subscriptions"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "full_name": "anthropics/claude-code",
+      "html_url": "https://github.com/anthropics/claude-code",
+      "name": "claude-code",
+      "private": false
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "body": {
+    "anthropic": {
+      "doc": "https://docs.anthropic.com",
+      "id": "anthropic",
+      "models": {
+        "claude-sonnet-4-5": {
+          "cost": {
+            "input": 3.0,
+            "output": 15.0
+          },
+          "id": "claude-sonnet-4-5",
+          "limit": {
+            "context": 200000,
+            "output": 16384
+          },
+          "name": "Claude Sonnet 4.5",
+          "release_date": "2026-10-15"
+        }
+      },
+      "name": "Anthropic"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

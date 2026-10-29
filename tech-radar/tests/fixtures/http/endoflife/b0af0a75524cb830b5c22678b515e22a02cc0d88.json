@@ -1,0 +1,35 @@
+{
+  "body": {
+    "generated_at": "2026-10-28T00:00:00Z",
+    "result": {
+      "category": "lang",
+      "label": "Python",
+      "name": "python",
+      "releases": [
+        {
+          "eolFrom": "2029-10-31",
+          "isEol": false,
+          "isMaintained": true,
+          "latest": {
+            "name": "3.13.8"
+          },
+          "name": "3.13"
+        },
+        {
+          "eolFrom": "2026-10-31",
+          "isEol": false,
+          "isMaintained": true,
+          "latest": {
+            "name": "3.10.16"
+          },
+          "name": "3.10"
+        }
+      ]
+    },
+    "schema_version": "1.2.0"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

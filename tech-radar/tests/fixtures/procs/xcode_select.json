@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "xcode-select",
+    "-p"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "/Library/Developer/CommandLineTools\n"
+}

@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/astral-sh/uv"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "full_name": "astral-sh/uv",
+    "name": "uv",
+    "private": false
+  }
+}

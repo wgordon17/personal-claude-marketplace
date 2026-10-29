@@ -303,7 +303,7 @@ stdin JSON → parse → session state → hook dispatch (PreToolUse or PostTool
 2. **Session state:** Persists session ID to database for trust scope validation
 3. **Early exits:** Non-Bash tools pass through; EnterPlanMode redirects to skill.
    tmp-path guards inspect Edit/Write/NotebookEdit paths, and the comment-narration
-   guard inspects their content (skipping Markdown/text/doc files), before dispatch.
+   guard inspects their content (skipping Markdown/text/doc and JSON/JSONL files), before dispatch.
 4. **GUARD_BYPASS check:** If prefix present, enforce only GIT_DENY_RULES
 5. **Fetch command check:** curl/wget commands checked against BLOCKED_URL_RULES
 6. **Split commands:** Break on command delimiters (&&, ||, ;, newline)

@@ -32,7 +32,16 @@ logger = logging.getLogger(__name__)
 
 # Plugin directories allowed as path prefixes in reference resolution.
 _PLUGIN_ALLOWLIST: frozenset[str] = frozenset(
-    {"code-quality", "dev-guard", "git-tools", "github-mcp", "jira", "drawio", "chai-bot"}
+    {
+        "code-quality",
+        "dev-guard",
+        "git-tools",
+        "github-mcp",
+        "jira",
+        "drawio",
+        "chai-bot",
+        "tech-radar",
+    }
 )
 
 # Regex for backtick-quoted reference paths.

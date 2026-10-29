@@ -1,0 +1,11 @@
+{
+  "body": {
+    "crate": {
+      "id": "fd-find"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

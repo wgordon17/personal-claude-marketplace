@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/berriai/litellm/contributors?per_page=10"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "contributions": 400,
+      "login": "example-maint-1"
+    },
+    {
+      "contributions": 250,
+      "login": "example-maint-2"
+    },
+    {
+      "contributions": 150,
+      "login": "example-maint-3"
+    }
+  ]
+}

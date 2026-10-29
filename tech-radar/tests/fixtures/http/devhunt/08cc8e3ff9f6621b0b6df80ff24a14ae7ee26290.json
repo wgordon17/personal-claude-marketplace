@@ -1,0 +1,7 @@
+{
+  "body": "<!doctype html>\n<html><body><main>\n  <section>\n    <h3><a href=\"https://github.com/example-org/devhunt-cli\">devhunt-cli \u2014 Fast local benchmarker</a></h3>\n    <p>Open-source CLI tool launched this week on DevHunt.</p>\n  </section>\n</main></body></html>",
+  "headers": {
+    "content-type": "text/html"
+  },
+  "status": 200
+}

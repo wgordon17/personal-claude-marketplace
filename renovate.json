@@ -54,7 +54,8 @@
         "jira/**",
         "drawio/**",
         "fetchaller-mcp/**",
-        "chai-bot/**"
+        "chai-bot/**",
+        "tech-radar/**"
       ],
       "matchDatasources": [
         "pypi"
@@ -82,7 +83,8 @@
         "jira/**",
         "drawio/**",
         "fetchaller-mcp/**",
-        "chai-bot/**"
+        "chai-bot/**",
+        "tech-radar/**"
       ],
       "excludeDatasources": [
         "pypi"

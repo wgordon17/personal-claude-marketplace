@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>Datadog Security Labs</title>\n    <item>\n      <guid>dd-sec-1</guid>\n      <title>Tracking Malicious npm and PyPI Campaigns</title>\n      <link>https://securitylabs.datadoghq.com/articles/tracking-campaigns/</link>\n      <pubDate>Tue, 27 Oct 2026 11:00:00 GMT</pubDate>\n      <description>Analysis of recent typosquatting and backdoor campaigns across open-source registries.</description>\n    </item>\n  </channel>\n</rss>\n",
+  "headers": {
+    "content-type": "application/rss+xml"
+  },
+  "status": 200
+}

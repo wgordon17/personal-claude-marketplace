@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/example-org/unmaintained-lib/readme"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "content": "IyBVbm1haW50YWluZWQgTGliCgpUaGlzIHByb2plY3QgaXMgbm8gbG9uZ2VyIG1haW50YWluZWQgYW5kIGlzIGxvb2tpbmcgZm9yIG5ldyBtYWludGFpbmVycy4K",
+    "encoding": "base64",
+    "name": "README.md",
+    "path": "README.md"
+  }
+}

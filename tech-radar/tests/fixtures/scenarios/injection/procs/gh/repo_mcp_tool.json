@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/example-org/mcp-tool"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": {
+    "full_name": "example-org/mcp-tool",
+    "name": "mcp-tool",
+    "private": false
+  }
+}
