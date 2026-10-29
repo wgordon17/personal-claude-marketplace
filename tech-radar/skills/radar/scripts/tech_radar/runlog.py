@@ -15,8 +15,16 @@ if TYPE_CHECKING:
 
 def format_run_id(ctx: Ctx, mode: str) -> str:
     """Build a canonical `<YYYYMMDDTHHMMSSZ>-<mode>` run identifier from `ctx.now`."""
-    stamp = ctx.now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
-    return f"{stamp}-{mode}"
+    dt = ctx.now.astimezone(UTC)
+    resolved_id = f"{dt.strftime('%Y%m%dT%H%M%SZ')}-{mode}"
+    offset_sec = 1
+    while (
+        ctx.db.execute("SELECT 1 FROM runs WHERE run_id = ?", (resolved_id,)).fetchone() is not None
+    ):
+        bumped = dt + timedelta(seconds=offset_sec)
+        resolved_id = f"{bumped.strftime('%Y%m%dT%H%M%SZ')}-{mode}"
+        offset_sec += 1
+    return resolved_id
 
 
 def start_run(
@@ -31,19 +39,7 @@ def start_run(
 ) -> str:
     """Insert a `running` row into `runs` and return the `run_id`."""
     req_mode = requested_mode or mode
-    if run_id is not None:
-        resolved_id = run_id
-    else:
-        dt = ctx.now.astimezone(UTC)
-        resolved_id = f"{dt.strftime('%Y%m%dT%H%M%SZ')}-{mode}"
-        offset_sec = 1
-        while (
-            ctx.db.execute("SELECT 1 FROM runs WHERE run_id = ?", (resolved_id,)).fetchone()
-            is not None
-        ):
-            bumped = dt + timedelta(seconds=offset_sec)
-            resolved_id = f"{bumped.strftime('%Y%m%dT%H%M%SZ')}-{mode}"
-            offset_sec += 1
+    resolved_id = run_id if run_id is not None else format_run_id(ctx, mode)
 
     counts_str = (
         db.scrub_text(json.dumps(dict(counts), separators=(",", ":"), sort_keys=True))

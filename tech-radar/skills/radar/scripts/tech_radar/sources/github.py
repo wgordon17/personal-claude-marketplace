@@ -63,7 +63,8 @@ def covered_public_repos(ctx: Ctx) -> list[tuple[str, str]]:
         "SELECT DISTINCT e.entity_id, e.repo "
         "FROM entities e JOIN usages u ON u.entity_id = e.entity_id "
         "WHERE e.visibility = 'public' "
-        "AND (u.context NOT LIKE 'interest:%' OR u.context = 'interest:watchlist')"
+        "AND ((u.context NOT LIKE 'interest:%' AND u.direct = 1) "
+        "OR u.context = 'interest:watchlist')"
     ).fetchall()
     seen: dict[str, str] = {}
     for row in rows:

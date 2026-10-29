@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from tech_radar import config, procs
+from tech_radar import config, context, procs
 from tech_radar.errors import CommandDenied, UnsafeArg
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,26 +36,28 @@ def _write_proc_fixture(
 def test_gh_wrapper_endpoint_and_graphql_rules(tmp_path: Path) -> None:
     """Verify Spec 12 A33 gh endpoint regex, GET-only rule, GraphQL rules, and --paginate."""
     fix_dir = tmp_path / "procs_fix"
+    replay = procs.ReplayProcs([fix_dir])
 
     # 1. gh api -X POST repos/a/b/issues -> CommandDenied
-    with pytest.raises(CommandDenied):
-        procs.gh(["api", "-X", "POST", "repos/a/b/issues"])
+    with pytest.raises(CommandDenied, match="GET"):
+        procs.gh(["api", "-X", "POST", "repos/a/b/issues"], transport=replay)
 
     # 2. gh issue create -> CommandDenied
-    with pytest.raises(CommandDenied):
-        procs.gh(["issue", "create"])
+    with pytest.raises(CommandDenied, match="gh api"):
+        procs.gh(["issue", "create"], transport=replay)
 
     # 3. GraphQL mutation -> CommandDenied (even with comment/string tricks)
-    with pytest.raises(CommandDenied):
+    with pytest.raises(CommandDenied, match="mutation"):
         procs.gh(
             [
                 "api",
                 "graphql",
                 "-f",
                 'query=mutation { deleteIssue(input: {issueId: "1"}) { clientMutationId } }',
-            ]
+            ],
+            transport=replay,
         )
-    with pytest.raises(CommandDenied):
+    with pytest.raises(CommandDenied, match="mutation"):
         procs.gh(
             [
                 "api",
@@ -64,7 +66,8 @@ def test_gh_wrapper_endpoint_and_graphql_rules(tmp_path: Path) -> None:
                 "graphql",
                 "-f",
                 "query=# comment\nmutation CreateThing { __typename }",
-            ]
+            ],
+            transport=replay,
         )
 
     # 4. Allowed endpoints: GraphQL query, advisories, issues/12/comments, starred --paginate
@@ -85,7 +88,6 @@ def test_gh_wrapper_endpoint_and_graphql_rules(tmp_path: Path) -> None:
     starred_args = ["api", "user/starred", "--paginate"]
     _write_proc_fixture(fix_dir, ["gh", *starred_args], "[]")
 
-    replay = procs.ReplayProcs([fix_dir])
     with replay.activate():
         r_gql = procs.gh(gql_args)
         assert json.loads(r_gql.stdout)["data"]["viewer"]["login"] == "example-user"
@@ -102,6 +104,14 @@ def test_gh_wrapper_endpoint_and_graphql_rules(tmp_path: Path) -> None:
     # 5. repos/a/b/issues/12/labels -> CommandDenied
     with pytest.raises(CommandDenied):
         procs.gh(["api", "repos/a/b/issues/12/labels"], transport=replay)
+
+    # 6. Non-graphql endpoint with -f/-F without explicit -X GET -> CommandDenied (SEC-001)
+    with pytest.raises(CommandDenied):
+        procs.gh(["api", "search/issues", "-f", "q=repo:a/b"], transport=replay)
+
+    # 7. -f/-F value starting with '@' -> UnsafeArg (SEC-001)
+    with pytest.raises(UnsafeArg):
+        procs.gh(["api", "-X", "GET", "search/issues", "-F", "q=@/etc/passwd"], transport=replay)
 
 
 def test_unsafe_arg_and_prefixed_option_validation(tmp_path: Path) -> None:
@@ -154,6 +164,13 @@ def test_resolve_live_vs_replay_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     # Also via TECH_RADAR_REPLAY_DIR env var
     monkeypatch.setenv("TECH_RADAR_REPLAY_DIR", "/some/fixture/root")
     assert procs.resolve("uv") == "/opt/homebrew/bin/uv"
+    monkeypatch.delenv("TECH_RADAR_REPLAY_DIR", raising=False)
+
+    # Explicit transport=ReplayProcs resolves even when live _resolve_live returns None
+    monkeypatch.setattr(procs, "_resolve_live", lambda _name: None)
+    assert procs.resolve("gh", replay=True) == "/opt/homebrew/bin/gh"
+    runner = context.Procs(replay)
+    assert runner.resolve("gh") == "/opt/homebrew/bin/gh"
 
 
 def test_replay_procs_normalization_and_call_recording(

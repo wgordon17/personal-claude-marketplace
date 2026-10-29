@@ -111,7 +111,7 @@ Commands marked **†** are **terminal-only**: they require `--channel cli` **an
 | **State dir** (`0700`) | `~/.local/share/tech-radar` | `TECH_RADAR_STATE` | `radar.db` (`0600`), `cache.db` (`0600`, 14d HTTP cache), `app/` (verified script copy + `MANIFEST.sha256`), `exposure/<alert_id>.md`, `audit/`, `wafer_cache/`, `project-alerts.json`, `run.lock`, `hourly.lock` |
 | **Run root** (`0700`) | `~/.local/share/tech-radar-run` | `TECH_RADAR_RUN_ROOT` | T3 project root: `RADAR_CMD`, `.claude/settings.json` (when enforcement is honoured), `runs/<run_id>/` (`brief/*`, `shortlist.json`, `verdicts.json`, `digest.md`, aliased `radar.html`), `runs/bootstrap/` |
 | **Sync dir** (`0700`) | `~/SynologyDrive/ActiveProjects/personal/tech-radar-data` | `TECH_RADAR_SYNC` | `TASTE_PROFILE.md`, `TASTE_PROFILE.proposed.md`, `WATCHLIST.md`, `TECH_RADAR.md`, `INVENTORY.md`, `DECISIONS.md`, `radar.byor.json`, `radar.html`, `radar.snapshot.db`, `project-alerts.json` |
-| **Logs dir** (`0700`) | `~/.local/state/tech-radar` | `TECH_RADAR_LOGS` | `hourly.out.log`, `hourly.err.log` |
+| **Logs dir** (`0700`) | `~/.local/state/tech-radar` | `TECH_RADAR_LOGS` | `hourly.log`, `hourly.err` |
 | **LaunchAgents** (`0700`) | `~/Library/LaunchAgents` | Derived from `TECH_RADAR_HOME` | `com.user.tech-radar.hourly.plist` (`0600`, `fsguard` carve-out) |
 | **Project roots** | `~/SynologyDrive/ActiveProjects` (+ launchd/dotfiles roots) | `TECH_RADAR_PROJECT_ROOTS` | Scanned read-only for active git repositories and manifests |
 

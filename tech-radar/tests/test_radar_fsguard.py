@@ -74,19 +74,41 @@ def test_safe_write_rejects_symlink_target_and_symlink_subdir(tmp_path: Path) ->
 def test_safe_write_accepts_sync_dir_reached_through_symlinked_parent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Sync dir reached through a symlinked parent succeeds."""
+    """Sync dir with a symlinked parent succeeds for safe_write and snapshot, while a symlink
+    inside sync is still rejected with WriteDenied.
+    """
+    from tech_radar import context, snapshot
+
     real_active = tmp_path / "SynologyDrive" / "ActiveProjects" / "personal" / "tech-radar-data"
     real_active.mkdir(parents=True)
     projects_link = tmp_path / "Projects"
     projects_link.symlink_to(tmp_path / "SynologyDrive" / "ActiveProjects")
 
     via_symlink = projects_link / "personal" / "tech-radar-data"
-    monkeypatch.setenv("TECH_RADAR_SYNC", str(real_active))
+    monkeypatch.setenv("TECH_RADAR_SYNC", str(via_symlink))
 
-    target_via_symlink = via_symlink / "INVENTORY.md"
-    written = fsguard.safe_write(target_via_symlink, "inventory content\n")
-    assert written == (real_active / "INVENTORY.md").resolve()
-    assert (real_active / "INVENTORY.md").read_text(encoding="utf-8") == "inventory content\n"
+    written = fsguard.safe_write(via_symlink / "TECH_RADAR.md", "ok\n")
+    assert written == (real_active / "TECH_RADAR.md").resolve()
+    assert (real_active / "TECH_RADAR.md").read_text(encoding="utf-8") == "ok\n"
+
+    # Also succeeds when writing into a new subdirectory under the symlink-parented sync root
+    written_sub = fsguard.safe_write(via_symlink / "subdir" / "INVENTORY.md", "inventory content\n")
+    assert written_sub == (real_active / "subdir" / "INVENTORY.md").resolve()
+
+    # snapshot.create_snapshot succeeds when TECH_RADAR_SYNC has a symlinked parent
+    ctx = context.build(now="2026-10-28T12:00:00Z")
+    snap_path, snap_sha = snapshot.create_snapshot(ctx)
+    assert snap_path == (real_active / "radar.snapshot.db").resolve()
+    assert snap_path.is_file()
+    assert len(snap_sha) == 64
+
+    # A symlink inside sync (even pointing to another directory inside sync) is rejected
+    inside_real = real_active / "inside_real"
+    inside_real.mkdir()
+    sublink = via_symlink / "sublink"
+    sublink.symlink_to(inside_real)
+    with pytest.raises(WriteDenied):
+        fsguard.safe_write(via_symlink / "sublink" / "file.md", "denied")
 
 
 def test_is_dataless_handles_missing_and_present_st_flags() -> None:

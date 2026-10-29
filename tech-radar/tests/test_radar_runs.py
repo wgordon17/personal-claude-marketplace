@@ -459,3 +459,37 @@ def test_t3_model_resolution_decisions_staging_usage_and_fts_search_aliasing(
     assert run2_u["input_tokens"] == 500
     assert run2_u["output_tokens"] == 250
     assert run2_u["turns"] == 3
+
+    # 5. STRUCT-002: format_run_id bumps by +1s when a run row with the same timestamp+mode exists
+    ctx.now = datetime(2026, 10, 29, 7, 0, tzinfo=UTC)
+    bumped_id = runlog.format_run_id(ctx, "daily")
+    assert bumped_id == "20261029T070001Z-daily"
+
+
+def test_collect_degraded_source_returns_exit_code_3(
+    fixture_home: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """API-001: _handle_collect returns exit code 3 when a source fails (not skipped)."""
+    _ = fixture_home
+    from tech_radar import sources
+    from tech_radar.sources.base import SourceResult
+
+    monkeypatch.setenv("TECH_RADAR_REPLAY_DIR", str(FIXTURES_DIR))
+    assert cli.main(["plan-run", "--now", "2026-10-29T07:00:00Z"]) == 0
+    plan_out = json.loads(capsys.readouterr().out.strip())
+    run_id = plan_out["run_id"]
+
+    monkeypatch.setattr(
+        sources,
+        "run_collect_sources",
+        lambda _ctx: [
+            SourceResult(source_id="cisa_kev", signals=[], ok=False, error="simulated HTTP 500")
+        ],
+    )
+    rc = cli.main(["collect", "--run", run_id])
+    out = json.loads(capsys.readouterr().out.strip())
+    assert rc == 3
+    assert out["ok"] is True
+    assert out["run_id"] == run_id

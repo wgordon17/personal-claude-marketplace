@@ -2,7 +2,7 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyyaml==6.0.3", "defusedxml==0.7.1"]
 # [tool.uv]
-# exclude-newer = "2026-10-20"
+# exclude-newer = "2026-10-20T00:00:00Z"
 # ///
 """tech-radar CLI entry. Argument parsing only; all logic lives in tech_radar.cli."""
 

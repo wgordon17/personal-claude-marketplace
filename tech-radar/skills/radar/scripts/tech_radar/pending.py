@@ -239,6 +239,12 @@ def request_confirm(ctx: Ctx) -> dict[str, Any]:
         raise errors.Refused("no staged pending changes to confirm")
 
     # Cancel any earlier open batches before issuing the new batch code
+    prev_open_ids = [
+        int(r[0])
+        for r in ctx.db.execute(
+            "SELECT batch_id FROM confirm_batches WHERE status = 'open'"
+        ).fetchall()
+    ]
     ctx.db.execute("UPDATE confirm_batches SET status = 'cancelled' WHERE status = 'open'")
 
     code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
@@ -279,6 +285,21 @@ def request_confirm(ctx: Ctx) -> dict[str, Any]:
     msg = notify.format_confirm_code_message(code, len(rows), notif_tokens)
     ok, err_msg = notify.send(msg, group=notify.group_id(f"confirm|{batch_id}"), ctx=ctx)
     if not ok:
+        ctx.db.execute(
+            "UPDATE confirm_batches SET status = 'cancelled' WHERE batch_id = ?",
+            (batch_id,),
+        )
+        ctx.db.execute(
+            "UPDATE pending SET status = 'staged', batch_id = NULL "
+            "WHERE batch_id = ? AND status = 'batched'",
+            (batch_id,),
+        )
+        for old_bid in prev_open_ids:
+            ctx.db.execute(
+                "UPDATE confirm_batches SET status = 'open' WHERE batch_id = ?",
+                (old_bid,),
+            )
+        ctx.db.commit()
         raise errors.RadarError(f"failed to send confirmation notification: {err_msg}", exit_code=1)
 
     return {
@@ -300,11 +321,11 @@ def _apply_feedback_row(ctx: Ctx, ref: str, feedback_val: str) -> None:
     latest_run = ctx.db.execute(
         "SELECT run_id FROM runs ORDER BY started_at DESC LIMIT 1"
     ).fetchone()
-    run_id = (
-        str(latest_run["run_id"])
-        if latest_run is not None
-        else runlog.start_run(ctx, mode="adhoc", requested_mode="adhoc")
-    )
+    if latest_run is not None:
+        run_id = str(latest_run["run_id"])
+    else:
+        run_id = runlog.start_run(ctx, mode="adhoc", requested_mode="adhoc")
+        runlog.finish_run(ctx, run_id, "ok")
     ctx.db.execute(
         "INSERT INTO digest_items(run_id, ref, section, rank, feedback) "
         "VALUES (?, ?, 'horizon', 1, ?) "
@@ -444,6 +465,15 @@ def confirm(ctx: Ctx, code: str) -> dict[str, Any]:
         (batch_id,),
     )
     ctx.db.commit()
+    if (
+        any(str(r["kind"]) == "decision" for r, _ in parsed_rows)
+        and (ctx.paths.sync / "DECISIONS.md").is_file()
+    ):
+        from . import render
+
+        with contextlib.suppress(OSError, errors.RadarError):
+            render.render_decisions_md(ctx)
+
     return {
         "ok": True,
         "confirmed": len(parsed_rows),

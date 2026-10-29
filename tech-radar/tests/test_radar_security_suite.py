@@ -900,7 +900,9 @@ def test_d_script_dependencies_locks_and_isolation(
             assert "[" not in pkg_part, f"Unexpected extras in {dep!r} ({script.name})"
         # exclude-newer must be valid ISO date at least 8 days before 2026-10-29
         excl_dt = datetime.fromisoformat(exclude_newer)
-        assert excl_dt <= datetime(2026, 10, 21)
+        if excl_dt.tzinfo is None:
+            excl_dt = excl_dt.replace(tzinfo=UTC)
+        assert excl_dt <= datetime(2026, 10, 21, tzinfo=UTC)
 
     reddit_deps, _ = _parse_pep723_block(reddit_py)
     assert reddit_deps == ["wafer-py==0.7.7"]

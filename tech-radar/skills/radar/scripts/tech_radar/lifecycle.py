@@ -153,7 +153,8 @@ def _covered_entities(ctx: Ctx) -> dict[str, dict[str, Any]]:
         "u.context, u.version, u.direct "
         "FROM entities e JOIN usages u ON u.entity_id = e.entity_id "
         "WHERE e.visibility = 'public' "
-        "AND (u.context NOT LIKE 'interest:%' OR u.context = 'interest:watchlist')"
+        "AND ((u.context NOT LIKE 'interest:%' AND u.direct = 1) "
+        "OR u.context = 'interest:watchlist')"
     ).fetchall()
     out: dict[str, dict[str, Any]] = {}
     for r in rows:
@@ -229,6 +230,8 @@ def _check_github_extra_lifecycle(
         iss_res = ctx.gh(
             [
                 "api",
+                "-X",
+                "GET",
                 "search/issues",
                 "-f",
                 f"q=repo:{repo} is:issue created:>{since_90}",

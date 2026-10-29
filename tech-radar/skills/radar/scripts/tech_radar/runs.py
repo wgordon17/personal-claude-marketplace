@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from . import appsync, brief, db, decisions, errors, lock, runlog, sanitize, usage
+from . import appsync, brief, db, decisions, errors, lock, profile, runlog, sanitize, usage
 
 if TYPE_CHECKING:
     from .context import Ctx
@@ -324,6 +325,15 @@ def search(ctx: Ctx, query: str) -> dict[str, Any]:
         return {"ok": True, "query": "", "count": 0, "results": []}
 
     priv_map = brief._private_scrub_map(ctx)
+    priv_scopes = profile.load_private_scopes(ctx.db)
+    if brief._is_priv_str(clean_q, priv_map, priv_scopes):
+        return {
+            "ok": True,
+            "query": brief.scrub_private_text(clean_q, priv_map),
+            "count": 0,
+            "results": [],
+        }
+
     proj_lookup = brief._project_alias_lookup(ctx)
 
     sig_rows: list[Any] = []
@@ -357,9 +367,31 @@ def search(ctx: Ctx, query: str) -> dict[str, Any]:
         vis = str(r["entity_vis"] or "public")
         eid = str(r["entity_id"] or "")
 
-        # Spec 12 A8: inventory_change rows for private packages excluded
-        if sig_type == "inventory_change" and vis != "public":
-            continue
+        # Spec 12 A8: inventory_change rows for private packages or non-public projects excluded
+        if sig_type == "inventory_change":
+            if vis != "public":
+                continue
+            raw_title = str(r["title"] or "")
+            raw_payload = str(r["payload_json"] or "")
+            is_priv_proj_change = False
+            if raw_payload:
+                try:
+                    p_obj = json.loads(raw_payload)
+                    if isinstance(p_obj, dict):
+                        p_ctx = str(p_obj.get("context") or "")
+                        if p_ctx.startswith("project:"):
+                            pkey = p_ctx[len("project:") :]
+                            if pkey in proj_lookup and proj_lookup[pkey][1] != "public":
+                                is_priv_proj_change = True
+                except json.JSONDecodeError:
+                    pass
+            if not is_priv_proj_change:
+                for pkey, (_alias, p_vis) in proj_lookup.items():
+                    if p_vis != "public" and pkey in raw_title:
+                        is_priv_proj_change = True
+                        break
+            if is_priv_proj_change:
+                continue
 
         display_entity = eid
         if vis != "public" and eid:

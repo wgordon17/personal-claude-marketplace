@@ -2,6 +2,8 @@
   "argv": [
     "gh",
     "api",
+    "-X",
+    "GET",
     "search/issues",
     "-f",
     "q=repo:example-org/slow-issues is:issue created:>2026-07-30",

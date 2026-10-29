@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import html
 import json
@@ -372,6 +373,18 @@ def _primary_evidence_for_entity(
     ).fetchone()
     fallback_url = f"https://github.com/{repo}" if repo else "https://github.com"
     if s_row is None:
+        it_row = ctx.db.execute(
+            "SELECT reported_json FROM items WHERE entity_id = ?",
+            (entity_id,),
+        ).fetchone()
+        if it_row is not None and it_row["reported_json"]:
+            try:
+                rep = json.loads(str(it_row["reported_json"]))
+                cits = rep.get("citations") if isinstance(rep, dict) else None
+                if isinstance(cits, list) and cits:
+                    return _safe_https_url(str(cits[0]), fallback=fallback_url), None
+            except json.JSONDecodeError:
+                pass
         return _safe_https_url(fallback_url), None
     url = _safe_https_url(s_row["url"] or fallback_url, fallback=fallback_url)
     exc = str(s_row["untrusted_excerpt"]) if s_row["untrusted_excerpt"] else None
@@ -1419,6 +1432,11 @@ def render_tech_radar_md(ctx: Ctx) -> Path:
 
 def render_decisions_md(ctx: Ctx) -> Path:
     """Render `{sync}/DECISIONS.md` and update `kv['decisions_md_hash']` (Spec 09, A41)."""
+    target = ctx.paths.sync / "DECISIONS.md"
+    if target.is_file():
+        with contextlib.suppress(OSError, errors.RadarError):
+            decisions.stage_decisions_md(ctx)
+
     lines: list[str] = [
         "# Tech Radar Decisions",
         "",
@@ -1439,27 +1457,25 @@ def render_decisions_md(ctx: Ctx) -> Path:
         "ORDER BY i.item_id ASC"
     ).fetchall()
 
+    active_decisions: dict[str, tuple[str, str]] = {}
+    for dr in ctx.db.execute(
+        "SELECT item_id, verb, expires_at FROM decisions "
+        "WHERE superseded_by IS NULL ORDER BY decision_id ASC"
+    ).fetchall():
+        active_decisions[str(dr["item_id"])] = (
+            str(dr["verb"]),
+            str(dr["expires_at"])[:10] if dr["expires_at"] else "—",
+        )
+
     for ir in item_rows:
         iid = str(ir["item_id"])
         name = _safe_sync_str(str(ir["name"] or ir["entity_id"]), limit=100)
         ring = str(ir["ring"] or "assess")
-        dec_row = ctx.db.execute(
-            "SELECT verb, expires_at FROM decisions "
-            "WHERE item_id = ? AND superseded_by IS NULL "
-            "ORDER BY decision_id DESC LIMIT 1",
-            (iid,),
-        ).fetchone()
-        dec_verb = str(dec_row["verb"]) if dec_row is not None else "—"
-        exp_str = (
-            str(dec_row["expires_at"])[:10]
-            if (dec_row is not None and dec_row["expires_at"])
-            else "—"
-        )
+        dec_verb, exp_str = active_decisions.get(iid, ("—", "—"))
         lines.append(f"| {iid} | {name} | {ring} | {dec_verb} | {exp_str} |  |")
 
     lines.append("")
     content = redact.scrub("\n".join(lines))
-    target = ctx.paths.sync / "DECISIONS.md"
     written = fsguard.safe_write(target, content, mode=0o600, root=ctx.paths.sync)
     file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     db.kv_set(ctx.db, "decisions_md_hash", file_hash)
@@ -1928,11 +1944,7 @@ def _verdict_was_applied(ctx: Ctx, run_id: str) -> bool:
             (run_id,),
         ).fetchone()[0]
     )
-    if di_cnt > 0:
-        return True
-
-    v_file = ctx.paths.run_dir(run_id) / "verdicts.json"
-    return v_file.is_file()
+    return di_cnt > 0
 
 
 def render_run(

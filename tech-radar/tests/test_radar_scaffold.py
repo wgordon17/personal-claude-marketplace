@@ -95,10 +95,12 @@ def _run_pty_command(cmd: list[str], env: dict[str, str]) -> tuple[int, str]:
 
 def test_help_lists_all_spec_01_subcommands_and_writes_no_pycache() -> None:
     """(a) --help exits 0, lists every Spec 01 subcommand, and creates no __pycache__ in S/."""
+    env = {k: v for k, v in os.environ.items() if k != "UV_FROZEN"}
     res = subprocess.run(
         ["uv", "run", "--script", "--locked", "--isolated", str(RADAR_SCRIPT), "--help"],
         capture_output=True,
         text=True,
+        env=env,
         check=False,
     )
     assert res.returncode == 0, res.stderr
@@ -121,6 +123,7 @@ def test_env_overrides_and_dir_permissions(tmp_path: Path, monkeypatch: pytest.M
     root_a = tmp_path / "proj_a"
     root_b = tmp_path / "proj_b"
 
+    (custom_home / "Library").mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("TECH_RADAR_HOME", str(custom_home))
     monkeypatch.setenv("TECH_RADAR_STATE", str(custom_state))
     monkeypatch.setenv("TECH_RADAR_RUN_ROOT", str(custom_run))
@@ -148,12 +151,12 @@ def test_env_overrides_and_dir_permissions(tmp_path: Path, monkeypatch: pytest.M
         resolved.runs,
         resolved.exposure,
         resolved.logs,
-        resolved.sync,
         resolved.launch_agents,
     ):
         assert directory.is_dir(), f"Expected directory {directory} to be created"
         mode = stat.S_IMODE(directory.stat().st_mode)
         assert mode == 0o700, f"Expected 0700 for {directory}, got {oct(mode)}"
+    assert not resolved.sync.exists()
 
 
 @pytest.mark.parametrize(
@@ -222,14 +225,15 @@ def test_terminal_only_gate_non_tty_pty_and_env_override_immunity() -> None:
     assert "decide R-0001 adopt --channel cli" in non_tty_json["error"]
     assert "decide R-0001 adopt --channel cli" in non_tty_json["command"]
 
-    # Same command under a real PTY passes require_terminal (exits 1 not implemented, not 4)
+    # Same command under a real PTY passes require_terminal (exits 2 validation error, not 4)
     pty_code, pty_out = _run_pty_command(cmd, env)
     assert pty_code != 4, f"Expected PTY invocation to pass require_terminal, got: {pty_out!r}"
-    assert pty_code == 1
+    assert pty_code == 2
     pty_lines = [line.strip() for line in pty_out.splitlines() if line.strip()]
     assert len(pty_lines) == 1
     pty_json = json.loads(pty_lines[0])
-    assert pty_json == {"ok": False, "error": "not implemented"}
+    assert pty_json["ok"] is False
+    assert any("unknown item: R-0001" in e.get("error", "") for e in pty_json.get("errors", []))
 
     # Under a real PTY but without --channel cli, still refused with exit 4
     cmd_no_channel = [sys.executable, str(RADAR_SCRIPT), "decide", "R-0001", "adopt"]

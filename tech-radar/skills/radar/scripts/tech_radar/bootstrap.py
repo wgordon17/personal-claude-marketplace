@@ -209,6 +209,12 @@ def build_interview_context(ctx: Ctx) -> dict[str, Any]:
 
 def init(ctx: Ctx) -> dict[str, Any]:
     """Execute `radar.py bootstrap init --channel cli` (Spec 08, Spec 11 §9, Spec 12 A25, A43)."""
+    sync_dir = ctx.paths.sync
+    if sync_dir.is_symlink() or not sync_dir.parent.is_dir():
+        raise errors.Refused(f"sync directory parent missing or sync is a symlink: {sync_dir}")
+    sync_dir.mkdir(parents=False, exist_ok=True, mode=0o700)
+    os.chmod(sync_dir, 0o700)
+
     existing = Profile.load(ctx.paths.sync, conn=ctx.db)
 
     merged_categories = _dedupe_preserve([*DEFAULT_CATEGORIES, *existing.categories])

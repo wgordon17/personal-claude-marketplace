@@ -2,7 +2,7 @@
 # requires-python = ">=3.13"
 # dependencies = ["wafer-py==0.7.7"]
 # [tool.uv]
-# exclude-newer = "2026-10-20"
+# exclude-newer = "2026-10-20T00:00:00Z"
 # ///
 """Isolated PEP 723 Reddit top-posts puller using wafer-py (Spec 01, Spec 03, Spec 06 T5)."""
 

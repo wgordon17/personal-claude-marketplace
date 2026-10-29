@@ -1373,32 +1373,46 @@ def fetch_metrics(
             separators=(",", ":"),
         ).encode("utf-8")
         try:
-            resp_osv = ctx.http.fetch(
-                "https://api.osv.dev/v1/querybatch",
-                method="POST",
-                body=json.dumps(
-                    {"queries": [{"package": {"ecosystem": osv_eco, "name": name}}]},
-                    separators=(",", ":"),
-                ).encode("utf-8"),
-                use_cache=False,
-            )
+            try:
+                resp_osv = ctx.http.fetch(
+                    "https://api.osv.dev/v1/query",
+                    method="POST",
+                    body=q_body,
+                    use_cache=False,
+                )
+            except RadarError:
+                q_item: dict[str, Any] = {"package": {"ecosystem": osv_eco, "name": name}}
+                latest_v = metrics_out.get("latest_version")
+                if latest_v:
+                    q_item["version"] = str(latest_v)
+                resp_osv = ctx.http.fetch(
+                    "https://api.osv.dev/v1/querybatch",
+                    method="POST",
+                    body=json.dumps({"queries": [q_item]}, separators=(",", ":")).encode("utf-8"),
+                    use_cache=False,
+                )
             osv_obj = json.loads(resp_osv.body.decode("utf-8"))
             metrics_out["osv_available"] = True
-            results_arr = osv_obj.get("results") if isinstance(osv_obj, Mapping) else None
-            first_res = (
-                results_arr[0]
-                if isinstance(results_arr, list)
-                and results_arr
-                and isinstance(results_arr[0], Mapping)
-                else None
-            )
-            vulns = first_res.get("vulns") if first_res is not None else []
+            vulns: Any = None
+            if isinstance(osv_obj, Mapping):
+                if isinstance(osv_obj.get("vulns"), list):
+                    vulns = osv_obj.get("vulns")
+                else:
+                    results_arr = osv_obj.get("results")
+                    first_res = (
+                        results_arr[0]
+                        if isinstance(results_arr, list)
+                        and results_arr
+                        and isinstance(results_arr[0], Mapping)
+                        else None
+                    )
+                    vulns = first_res.get("vulns") if first_res is not None else []
             if isinstance(vulns, list):
                 for v in vulns:
                     if isinstance(v, Mapping) and is_mal_advisory(v):
                         metrics_out["has_mal_advisory"] = True
         except (RadarError, UnicodeDecodeError, json.JSONDecodeError):
-            _ = q_body
+            pass
 
     # 3. GitHub repo + sub-endpoints (only if `private == false` on `repos/{o}/{r}`, Spec 12 A5)
     if repo and "/" in repo:

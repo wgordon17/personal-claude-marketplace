@@ -159,7 +159,7 @@ def insert_signal(
     safe_payload = scrub_text(payload_json)
     safe_dedupe = redact.scrub(dedupe_key)
 
-    cur = conn.execute(
+    row = conn.execute(
         "INSERT INTO signals ("
         "entity_id, source_id, type, confidence, external_id, title, url, "
         "published_at, fetched_at, untrusted_excerpt, payload_json, "
@@ -171,7 +171,8 @@ def insert_signal(
         "fetched_at = excluded.fetched_at, "
         "untrusted_excerpt = excluded.untrusted_excerpt, "
         "payload_json = excluded.payload_json, "
-        "withdrawn = excluded.withdrawn",
+        "withdrawn = excluded.withdrawn "
+        "RETURNING signal_id",
         (
             entity_id,
             source_id,
@@ -188,14 +189,8 @@ def insert_signal(
             last_surfaced_at,
             withdrawn,
         ),
-    )
-    conn.commit()
-    if cur.lastrowid:
-        return int(cur.lastrowid)
-    row = conn.execute(
-        "SELECT signal_id FROM signals WHERE dedupe_key = ?",
-        (safe_dedupe,),
     ).fetchone()
+    conn.commit()
     return int(row[0]) if row else 0
 
 

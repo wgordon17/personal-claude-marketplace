@@ -32,11 +32,15 @@ def create_snapshot(
         raise errors.WriteDenied(f"sync directory unavailable or symlinked: {raw_sync}")
 
     sync_resolved = raw_sync.resolve()
-    allowed_roots = fsguard._allowed_roots(raw_sync)
-    if sync_resolved not in allowed_roots and not any(
-        sync_resolved.is_relative_to(r) for r in allowed_roots
-    ):
+    allowed_roots = fsguard._allowed_roots()
+    matched_root: Path | None = None
+    for r in allowed_roots:
+        if sync_resolved == r or sync_resolved.is_relative_to(r):
+            matched_root = r
+            break
+    if matched_root is None:
         raise errors.WriteDenied(f"sync directory {sync_resolved} outside allowed roots")
+    fsguard._check_no_symlink_in_relpath(matched_root, raw_sync.expanduser())
 
     target_raw = raw_sync / "radar.snapshot.db"
     tmp_raw = raw_sync / ".radar.snapshot.db.tmp"

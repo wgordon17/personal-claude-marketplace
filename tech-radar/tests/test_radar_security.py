@@ -399,9 +399,14 @@ def test_uv_audit_toggle_isolated_copy_private_skip_and_hourly_skip(
     )
     inventory.collect(ctx)
 
-    # 1. mode="hourly" never invokes uv audit or osv-scanner
+    # 1. mode="hourly" never invokes uv audit or osv-scanner and does not consume baseline_done
     p_tr.calls.clear()
-    security.evaluate(ctx, [], mode="hourly")
+    security.evaluate(
+        ctx,
+        [sources.SourceResult(source_id="cisa_kev", signals=[], ok=True)],
+        mode="hourly",
+    )
+    assert db.kv_get(ctx.db, "baseline_done") is None
     assert not any(argv[:2] == ["uv", "audit"] for argv, _ in p_tr.calls)
     assert not any(argv and argv[0] == "osv-scanner" for argv, _ in p_tr.calls)
 

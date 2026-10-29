@@ -29,19 +29,25 @@ def _allowed_roots(explicit_root: Path | str | None = None) -> tuple[Path, ...]:
 
 
 def _check_no_symlink_in_relpath(base_resolved: Path, target_parent_raw: Path) -> None:
-    """Ensure no existing directory component under the matched root is a symlink."""
+    """Ensure no directory component at or under the matched root is a symlink."""
+    try:
+        rel_parts = target_parent_raw.resolve().relative_to(base_resolved).parts
+    except ValueError as exc:
+        raise WriteDenied(
+            f"target {target_parent_raw} is outside allowed root {base_resolved}"
+        ) from exc
+
     cur = target_parent_raw
     visited: list[Path] = []
-    while True:
+    max_steps = len(rel_parts) + 1
+    for _ in range(max_steps):
         visited.append(cur)
-        if cur.exists() and cur.resolve() == base_resolved:
-            break
-        if cur.parent == cur:
+        if cur.resolve() == base_resolved or cur.parent == cur:
             break
         cur = cur.parent
 
     for item in reversed(visited):
-        if item.exists() and item.resolve() != base_resolved and item.is_symlink():
+        if item.is_symlink():
             raise WriteDenied(f"symlinked directory component not permitted: {item}")
 
 
@@ -58,8 +64,7 @@ def safe_write(
 
     # Check lexical traversal before resolution if root is given or path is relative
     if ".." in raw_path.parts:
-        # Resolve and check below, but also refuse any path escaping its intended root
-        pass
+        raise WriteDenied(f"path traversal '..' not allowed in {raw_path}")
 
     if raw_path.is_symlink():
         raise WriteDenied(f"refusing to write to symlink target: {path}")

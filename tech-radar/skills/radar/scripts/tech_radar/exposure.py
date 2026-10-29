@@ -56,17 +56,8 @@ def build_rotation_checklist(
     has_pth: bool = False,
 ) -> list[str]:
     """Derive a rotation and remediation checklist from the advisory payload class (SEC-15)."""
-    low = text_or_class.lower()
-    items: list[str] = list(STEALER_ROTATION_CHECKLIST)
-    if has_pth or ".pth" in low or "sitecustomize" in low or "startup" in low or "loader" in low:
-        for item in PTH_LOADER_CHECKLIST:
-            if item not in items:
-                items.append(item)
-    else:
-        for item in PTH_LOADER_CHECKLIST:
-            if item not in items:
-                items.append(item)
-    return items
+    _ = (text_or_class, has_pth)
+    return [*STEALER_ROTATION_CHECKLIST, *PTH_LOADER_CHECKLIST]
 
 
 def _parse_iso_dt(raw: str | None, fallback: datetime) -> datetime:
@@ -263,15 +254,18 @@ def _scan_wheel_cache(
     for root in cache_roots:
         if not root.is_dir():
             continue
+        root_hits: list[str] = []
         try:
-            for item in sorted(root.rglob("*")):
-                if not item.is_file():
-                    continue
-                low_name = item.name.lower()
-                if any(low_name.startswith(pref) for pref in prefixes):
-                    hits.append(str(item))
+            for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+                for fname in filenames:
+                    low_name = fname.lower()
+                    if any(low_name.startswith(pref) for pref in prefixes):
+                        cand = Path(dirpath) / fname
+                        if cand.is_file():
+                            root_hits.append(str(cand))
         except OSError:
             continue
+        hits.extend(sorted(root_hits))
     return hits
 
 
@@ -300,11 +294,18 @@ def _scan_venv_startup_files(
     window = timedelta(days=7)
 
     for vroot in venv_roots:
+        site_pkg_dirs: list[Path] = []
         try:
-            site_pkg_dirs = [p for p in sorted(vroot.rglob("site-packages")) if p.is_dir()]
+            for dirpath, dirnames, _filenames in os.walk(vroot, followlinks=False):
+                curr = Path(dirpath)
+                if curr.name == "site-packages":
+                    site_pkg_dirs.append(curr)
+                    dirnames[:] = []
+                else:
+                    dirnames.sort()
         except OSError:
             continue
-        for sp_dir in site_pkg_dirs:
+        for sp_dir in sorted(site_pkg_dirs):
             try:
                 entries = sorted(sp_dir.iterdir(), key=lambda p: p.name)
             except OSError:

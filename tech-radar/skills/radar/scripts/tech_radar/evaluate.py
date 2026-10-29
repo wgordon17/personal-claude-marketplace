@@ -203,14 +203,41 @@ def _scale_practitioner_count(count: int) -> float:
 def _compute_velocity_percentile(ctx: Ctx, entity_id: str, vel: float | None) -> float | None:
     if vel is None:
         return None
-    all_rows = ctx.db.execute(
-        "SELECT DISTINCT entity_id FROM items WHERE state = 'candidate'"
+    star_rows = ctx.db.execute(
+        "SELECT entity_id, value, observed_at FROM metrics "
+        "WHERE metric = 'stars' AND value IS NOT NULL "
+        "AND entity_id IN (SELECT DISTINCT entity_id FROM items WHERE state = 'candidate') "
+        "ORDER BY entity_id ASC, observed_at ASC"
     ).fetchall()
-    all_vels: list[float] = []
-    for r in all_rows:
-        v = compute_star_velocity(ctx, str(r["entity_id"]))
-        if v is not None:
-            all_vels.append(v)
+    stars_by_entity: dict[str, list[tuple[float, str]]] = {}
+    for r in star_rows:
+        eid = str(r["entity_id"])
+        stars_by_entity.setdefault(eid, []).append((float(r["value"]), str(r["observed_at"])))
+
+    computed_by_entity: dict[str, float] = {}
+    for eid, obs_list in stars_by_entity.items():
+        if len(obs_list) >= 2:
+            first_dt = _parse_iso(obs_list[-2][1])
+            last_dt = _parse_iso(obs_list[-1][1])
+            if first_dt is not None and last_dt is not None:
+                days = (last_dt - first_dt).total_seconds() / 86400.0
+                if days > 0:
+                    computed_by_entity[eid] = round((obs_list[-1][0] - obs_list[-2][0]) / days, 4)
+
+    fallback_rows = ctx.db.execute(
+        "SELECT entity_id, metric, value FROM metrics "
+        "WHERE metric IN ('star_velocity', 'stars_7d') AND value IS NOT NULL "
+        "AND entity_id IN (SELECT DISTINCT entity_id FROM items WHERE state = 'candidate') "
+        "ORDER BY observed_at DESC"
+    ).fetchall()
+    for r in fallback_rows:
+        eid = str(r["entity_id"])
+        if eid in computed_by_entity:
+            continue
+        val = float(r["value"])
+        computed_by_entity[eid] = round(val / 7.0, 4) if str(r["metric"]) == "stars_7d" else val
+
+    all_vels = list(computed_by_entity.values())
     if len(all_vels) >= 3:
         below_or_eq = sum(1 for v in all_vels if v <= vel)
         return round(100.0 * below_or_eq / len(all_vels), 2)
@@ -840,6 +867,12 @@ def finalize(
     if action == "watch" and final_ring is None:
         final_ring = "watch"
         res["ring"] = "watch"
+    elif action == "drop":
+        if not int(item_row.get("in_use") or 0):
+            final_ring = str(item_row["ring"]) if item_row.get("ring") else None
+        elif final_ring is None and item_row.get("ring"):
+            final_ring = str(item_row["ring"])
+        res["ring"] = final_ring
 
     ctx.db.execute(
         "UPDATE items SET "

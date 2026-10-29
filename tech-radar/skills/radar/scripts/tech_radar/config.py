@@ -135,8 +135,10 @@ def paths(*, ensure_dirs: bool = True) -> Paths:
     exposure = state / "exposure"
 
     if ensure_dirs:
-        for directory in (state, run_root, runs, exposure, logs, sync, launch_agents):
+        for directory in (state, run_root, runs, exposure, logs):
             _ensure_dir_0700(directory)
+        if launch_agents.parent.is_dir():
+            _ensure_dir_0700(launch_agents)
 
     return Paths(
         home=home,

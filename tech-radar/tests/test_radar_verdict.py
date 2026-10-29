@@ -153,6 +153,16 @@ def test_brief_generation_schemas_injection_seen_due_stale_and_aliasing(
         "UPDATE items SET created_at = '2026-08-01T00:00:00Z' WHERE item_id = ?",
         (stale_item_id,),
     )
+    db.kv_set(
+        ctx.db,
+        f"gate_inputs:{stale_eid}",
+        json.dumps(
+            {
+                "first_release_at": "2026-07-01T00:00:00Z",
+                "last_release_at": "2026-10-19T00:00:00Z",
+            }
+        ),
+    )
     ctx.db.commit()
 
     run_id = runlog.start_run(
@@ -171,6 +181,8 @@ def test_brief_generation_schemas_injection_seen_due_stale_and_aliasing(
 
     ctx_obj = json.loads((brief_dir / "context.json").read_text(encoding="utf-8"))
     _validate_context_schema(ctx_obj)
+    assert len(ctx_obj["token_heavy_tools"]) >= 1
+    assert len(ctx_obj["pain_labels"]) >= 1
 
     # Validate JSONL items and verify injection strings appear ONLY in untrusted_excerpt
     for sec_meta in idx_obj["sections"].values():
@@ -196,13 +208,16 @@ def test_brief_generation_schemas_injection_seen_due_stale_and_aliasing(
     ]
     assert any(d["item_id"] == due_item_id for d in due_lines)
 
-    # Check stale.jsonl contains the 70-day-unchanged assess item
+    # Check stale.jsonl contains the 70-day-unchanged assess item and computes age/release_age days
     stale_lines = [
         json.loads(ln)
         for ln in (brief_dir / "stale.jsonl").read_text(encoding="utf-8").splitlines()
         if ln.strip()
     ]
-    assert any(s["item_id"] == stale_item_id for s in stale_lines)
+    stale_matches = [s for s in stale_lines if s["item_id"] == stale_item_id]
+    assert len(stale_matches) == 1
+    assert stale_matches[0]["metrics"]["age_days"] > 120
+    assert stale_matches[0]["metrics"]["release_age_days"] > 10
 
     # Check rotation.jsonl selects the 4 oldest last_deep_inspect_at in-use public items
     rot_lines = [
@@ -382,6 +397,9 @@ def test_enrich_privacy_gate_private_repo_oracle_typosquat_and_valid_proposal(
     assert entries[1]["rejected_reason"] == "typosquat of requests"
     assert entries[2]["entity_id"] == "pkg:pypi/litellm"
     assert "rejected_reason" not in entries[2]
+    litellm_gates = json.loads(db.kv_get(ctx.db, "gate_inputs:pkg:pypi/litellm") or "{}")
+    assert "bidirectional_verified" in litellm_gates
+    assert " bidirectional_verified" not in litellm_gates
 
     # validate_shortlist rejects malformed shortlist schemas
     bad_shortlist_errs = brief.validate_shortlist(
@@ -592,6 +610,9 @@ def test_verdict_validation_fixtures_t10_gates_and_forged_enriched_rejection(
     assert r1_row["ring"] == "trial"
     r1_rep = json.loads(str(r1_row["reported_json"]))
     assert r1_rep["install_command"] == "uv tool install fasttool==1.2.0"
+    assert r1_rep["effort"] == "S"
+    assert r1_rep["adoption_snippet"] == "uv tool install fasttool==1.2.0"
+    assert db.kv_get(ctx.db, f"verdict_applied:{run_id}") == FIXED_NOW
     assert "UNTRUSTED_EXCERPT_MARKER" not in r1_rep["install_command"]
     assert "evil.example" not in r1_rep["install_command"]
 
@@ -615,13 +636,64 @@ def test_verdict_validation_fixtures_t10_gates_and_forged_enriched_rejection(
     res_tech = verdict.apply_verdicts(ctx, run_id)
     assert res_tech["applied"] == 1
     tech_row = ctx.db.execute(
-        "SELECT i.item_id, i.quadrant, e.kind FROM items i "
+        "SELECT i.item_id, i.quadrant, i.reported_json, e.kind FROM items i "
         "JOIN entities e ON e.entity_id = i.entity_id "
         "WHERE i.entity_id = 'technique:xml-data-boundary-fencing'"
     ).fetchone()
     assert tech_row is not None
     assert tech_row["quadrant"] == "techniques"
     assert tech_row["kind"] == "technique"
+    tech_rep = json.loads(str(tech_row["reported_json"]))
+    assert "benefit" in tech_rep
+    assert "relevant_to" in tech_rep
+    assert "citations" in tech_rep
+    tech_hist = ctx.db.execute(
+        "SELECT from_ring, to_ring FROM ring_history WHERE item_id = ?",
+        (tech_row["item_id"],),
+    ).fetchone()
+    assert tech_hist is not None
+    assert tech_hist["to_ring"] is not None
+
+    from tech_radar import render
+
+    ctx.db.execute("UPDATE runs SET mode = 'weekly' WHERE run_id = ?", (run_id,))
+    ctx.db.commit()
+    tech_md, _, _ = render.render_digest(ctx, run_id)
+    ctx.db.execute("UPDATE runs SET mode = 'daily' WHERE run_id = ?", (run_id,))
+    ctx.db.commit()
+    assert "xml-data-boundary-fencing" in tech_md
+    assert tech_rep["benefit"] in tech_md
+    assert "taste:categories:ai-agents-harness" in tech_md
+    assert "https://simonwillison.net/2026/Oct/20/xml-fencing/" in tech_md
+
+    # 3b. T10 verification gate table-driven checks (missing registry_repo, mismatch, typosquat)
+    db.kv_set(ctx.db, "topnames:pypi", json.dumps(["requests", "fasttool-core"]))
+    base_gates = json.loads(db.kv_get(ctx.db, "gate_inputs:pkg:pypi/fasttool") or "{}")
+    for gate_override, expected_substr in (
+        ({"registry_repo": None}, "registry<->repo link mismatch"),
+        ({"registry_repo": "other-org/other-repo"}, "registry<->repo link mismatch"),
+        ({"manifest_name": "wrong-name"}, "manifest name != package name"),
+        ({"bidirectional_link": False}, "bidirectional link mismatch"),
+    ):
+        merged_g = {**base_gates, **gate_override}
+        cap_out, reasons_out, _ = verdict._check_t10_verification_gate(
+            ctx,
+            {
+                "item_id": "R-0001",
+                "entity_id": "pkg:pypi/fasttool",
+                "kind": "package",
+                "ecosystem": "pypi",
+                "name": "fasttool",
+                "repo": "example-org/fasttool",
+            },
+            merged_g,
+            {
+                "gates": {"GATE-05": "pass", "GATE-06": "pass", "GATE-07": "pass"},
+                "reported": {"EVID-01": 3},
+            },
+        )
+        assert cap_out == "assess"
+        assert any(expected_substr in r for r in reasons_out)
 
     # 4. young_trial.json (5-day-old pkg) -> capped at ASSESS with reasons
     shutil.copy2(VERDICTS_FIXTURES_DIR / "young_trial.json", run_dir / "verdicts.json")
@@ -703,3 +775,31 @@ def test_verdict_validation_fixtures_t10_gates_and_forged_enriched_rejection(
     ).fetchone()
     assert dig_item["section"] == "rotation"
     assert int(dig_item["rank"]) == 1
+
+    # 9. Scrubbed citation URL in brief matches when echoed back in verdicts.json
+    ctx.db.execute(
+        "INSERT INTO projects("
+        "project_key, display_path, main_worktree, active, root_source, visibility, alias"
+        ") VALUES ('https://github.com/example-org/secret-widget', '~/Projects/secret-widget', "
+        "'/Users/example-user/Projects/secret-widget', 1, 'active_projects', 'private', "
+        "'private-project-1')"
+    )
+    db.insert_signal(
+        ctx.db,
+        source_id="gh_releases",
+        signal_type="contender",
+        entity_id="pkg:pypi/fasttool",
+        title="fasttool guide",
+        url="https://docs.example.com/guide/migration?project=secret-widget",
+        fetched_at=FIXED_NOW,
+        dedupe_key="gh_releases|contender|fasttool|scrubbed-url",
+    )
+    ctx.db.commit()
+    assert (
+        verdict._citation_verified(
+            ctx,
+            "https://docs.example.com/guide/migration?project=private-project-1",
+            {"ref": "R-0001", "entity_id": "pkg:pypi/fasttool"},
+        )
+        is True
+    )

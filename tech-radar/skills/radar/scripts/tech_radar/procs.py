@@ -180,7 +180,7 @@ def _resolve_live(name: str) -> str | None:
     return None
 
 
-def resolve(name: str, *, force_live: bool = False) -> str | None:
+def resolve(name: str, *, force_live: bool = False, replay: bool = False) -> str | None:
     """Resolve an allowlisted binary name to its absolute path.
 
     In replay/test mode (Spec 11 §1, Spec 12 A30), returns `/opt/homebrew/bin/<name>`
@@ -188,7 +188,7 @@ def resolve(name: str, *, force_live: bool = False) -> str | None:
     """
     if name not in ALLOWED_BINARIES:
         return None
-    if not force_live and is_replay_mode():
+    if not force_live and (replay or is_replay_mode()):
         return f"/opt/homebrew/bin/{name}"
     return _resolve_live(name)
 
@@ -231,7 +231,7 @@ def validate_arg(
     return arg
 
 
-def _validate_executable(prog: str) -> tuple[str, str]:
+def _validate_executable(prog: str, *, replay: bool = False) -> tuple[str, str]:
     base = os.path.basename(prog)
     if base not in ALLOWED_BINARIES:
         raise CommandDenied(f"binary {prog!r} is not in ALLOWED_BINARIES")
@@ -242,7 +242,7 @@ def _validate_executable(prog: str) -> tuple[str, str]:
         if parent not in allowed_dirs:
             raise CommandDenied(f"binary directory {parent!r} is not allowlisted")
         return prog, base
-    resolved = resolve(base)
+    resolved = resolve(base, replay=replay)
     if resolved is None:
         raise CommandDenied(f"binary {base!r} could not be resolved in allowlisted directories")
     return resolved, base
@@ -307,16 +307,19 @@ class LiveProcs:
         env: Mapping[str, str] | None = None,
         timeout: float = 60.0,
     ) -> ProcResult:
-        res = subprocess.run(
-            list(argv),
-            cwd=str(cwd) if cwd is not None else None,
-            env=dict(env) if env is not None else None,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            shell=False,
-            check=False,
-        )
+        try:
+            res = subprocess.run(
+                list(argv),
+                cwd=str(cwd) if cwd is not None else None,
+                env=dict(env) if env is not None else None,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                shell=False,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise CommandDenied(f"executable not found: {argv[0]}") from exc
         return ProcResult(
             returncode=int(res.returncode),
             stdout=res.stdout,
@@ -458,7 +461,9 @@ def run(
     if not argv:
         raise CommandDenied("empty argv")
 
-    resolved_bin, _base = _validate_executable(str(argv[0]))
+    active = _default_transport(transport)
+    is_replay = is_replay_mode() or isinstance(active, ReplayProcs)
+    resolved_bin, _base = _validate_executable(str(argv[0]), replay=is_replay)
     validated_argv: list[str] = [resolved_bin]
     free_idx = set(free_text_indices)
 
@@ -475,7 +480,6 @@ def run(
                 )
             )
 
-    active = _default_transport(transport)
     return active.execute(validated_argv, cwd=cwd, env=env, timeout=timeout)
 
 
@@ -502,7 +506,9 @@ def gh(
     if not args or args[0] != "api":
         raise CommandDenied("gh wrapper only permits 'gh api'")
 
-    gh_bin = resolve("gh")
+    active = _default_transport(transport)
+    is_replay = is_replay_mode() or isinstance(active, ReplayProcs)
+    gh_bin = resolve("gh", replay=is_replay)
     if gh_bin is None:
         raise CommandDenied("gh binary not found in allowlisted directories")
 
@@ -536,6 +542,9 @@ def gh(
             field_val = str(args[i + 1])
             if "=" not in field_val:
                 raise UnsafeArg(f"malformed gh field {field_val!r}")
+            _, fval_part = field_val.split("=", 1)
+            if fval_part.startswith("@"):
+                raise UnsafeArg(f"disallowed gh @file field value {field_val!r}")
             fields.append(field_val)
             validated_rest.extend([tok, field_val])
             i += 2
@@ -584,12 +593,11 @@ def gh(
         for q in queries:
             _validate_graphql_query(q)
     else:
-        if explicit_method and method != "GET":
-            raise CommandDenied("gh api non-graphql endpoints only allow GET")
         if method != "GET":
             raise CommandDenied("gh api non-graphql endpoints only allow GET")
+        if fields and not explicit_method:
+            raise CommandDenied("gh api non-graphql endpoints with -f/-F require explicit -X GET")
 
-    active = _default_transport(transport)
     return active.execute([gh_bin, *validated_rest], timeout=timeout)
 
 
@@ -604,7 +612,9 @@ def git(
     if not args:
         raise CommandDenied("empty git args")
 
-    git_bin = resolve("git")
+    active = _default_transport(transport)
+    is_replay = is_replay_mode() or isinstance(active, ReplayProcs)
+    git_bin = resolve("git", replay=is_replay)
     if git_bin is None:
         raise CommandDenied("git binary not found in allowlisted directories")
 
@@ -675,5 +685,4 @@ def git(
     git_env["GIT_TERMINAL_PROMPT"] = "0"
     git_env["GIT_CONFIG_NOSYSTEM"] = "1"
 
-    active = _default_transport(transport)
     return active.execute(full_argv, env=git_env, timeout=timeout)

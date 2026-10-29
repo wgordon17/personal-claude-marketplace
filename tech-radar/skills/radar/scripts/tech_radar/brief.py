@@ -163,12 +163,56 @@ def scrub_private_text(text: str, priv_map: Mapping[str, str]) -> str:
     out = redact.scrub(text)
     if not priv_map:
         return out
+    out_low = out.lower()
     for needle in sorted(priv_map.keys(), key=len, reverse=True):
         if len(needle) < 3:
             continue
+        if needle.lower() not in out_low:
+            continue
         replacement = priv_map[needle]
-        out = re.sub(re.escape(needle), replacement, out, flags=re.IGNORECASE)
+        if "/" in needle or ":" in needle:
+            pattern = re.escape(needle)
+        else:
+            pattern = (
+                r"(?<![A-Za-z0-9_/@:-])(?<![A-Za-z0-9_]\.)"
+                + re.escape(needle)
+                + r"(?![A-Za-z0-9_/@:-])(?!\.[A-Za-z0-9_])(?!\"\s*:)"
+            )
+        out = re.sub(pattern, replacement, out, flags=re.IGNORECASE)
+        out_low = out.lower()
     return out
+
+
+def _is_priv_str(
+    s: str,
+    priv_map: Mapping[str, str],
+    scopes: Sequence[str] = (),
+) -> bool:
+    """Return True if string `s` matches a private scope or any private token in `priv_map`."""
+    low = s.strip().lower()
+    if not low:
+        return True
+    if classify.matches_private_scope(low, scopes):
+        return True
+    for tok in re.split(r"[\s,;\"'()\[\]{}]+", low):
+        if tok and classify.matches_private_scope(tok, scopes):
+            return True
+    for k in priv_map:
+        if len(k) < 3:
+            continue
+        k_low = k.lower()
+        if k_low not in low:
+            continue
+        if "/" in k or ":" in k:
+            return True
+        pattern = (
+            r"(?<![A-Za-z0-9_/@:-])(?<![A-Za-z0-9_]\.)"
+            + re.escape(k_low)
+            + r"(?![A-Za-z0-9_/@:-])(?!\.[A-Za-z0-9_])"
+        )
+        if re.search(pattern, low, flags=re.IGNORECASE):
+            return True
+    return False
 
 
 def _project_alias_lookup(ctx: Ctx) -> dict[str, tuple[str, str]]:
@@ -314,16 +358,10 @@ def build_context_json(
     active_priv_map = priv_map if priv_map is not None else _private_scrub_map(ctx)
     scopes = ctx.profile.private_scopes
 
-    def _is_priv_str(s: str) -> bool:
-        low = s.strip().lower()
-        if not low:
-            return True
-        if classify.matches_private_scope(low, scopes):
-            return True
-        return any(k in low for k in active_priv_map if len(k) >= 4)
-
     clean_watchlist = [
-        scrub_private_text(w, active_priv_map) for w in ctx.profile.watchlist if not _is_priv_str(w)
+        scrub_private_text(w, active_priv_map)
+        for w in ctx.profile.watchlist
+        if not _is_priv_str(w, active_priv_map, scopes)
     ]
 
     # Top 40 in-use public entities by quadrant + private counts by kind
@@ -374,7 +412,7 @@ def build_context_json(
         eco_to_lang = {"pypi": "python", "npm": "typescript", "cargo": "rust", "golang": "go"}
         for dr in dep_rows:
             dname = str(dr["name"] or "").strip()
-            if dname and not _is_priv_str(dname) and dname not in stack:
+            if dname and not _is_priv_str(dname, active_priv_map, scopes) and dname not in stack:
                 stack.append(dname)
             lang = eco_to_lang.get(str(dr["ecosystem"] or "").lower())
             if lang and lang not in langs:
@@ -388,21 +426,41 @@ def build_context_json(
         )
 
     # Top 20 public pain/intent labels
+    pain_labels: list[str] = []
+
+    def _add_pain_label(raw: Any) -> None:
+        s_lbl = str(raw or "").strip()
+        if s_lbl and not _is_priv_str(s_lbl, active_priv_map, scopes):
+            scrubbed_lbl = scrub_private_text(s_lbl, active_priv_map)
+            if scrubbed_lbl not in pain_labels:
+                pain_labels.append(scrubbed_lbl)
+
     pain_rows = ctx.db.execute(
         "SELECT u.attrs_json FROM usages u "
         "WHERE u.entity_id = 'svc:pain-labels' AND u.context = 'interest:pain' LIMIT 1"
     ).fetchall()
-    pain_labels: list[str] = []
     for pr in pain_rows:
         if pr["attrs_json"]:
             try:
                 attrs = json.loads(str(pr["attrs_json"]))
                 for lbl in attrs.get("labels") or []:
-                    s_lbl = str(lbl).strip()
-                    if s_lbl and not _is_priv_str(s_lbl) and s_lbl not in pain_labels:
-                        pain_labels.append(scrub_private_text(s_lbl, active_priv_map))
+                    _add_pain_label(lbl)
             except json.JSONDecodeError:
                 pass
+
+    fp_pain_rows = ctx.db.execute(
+        "SELECT context, token, count FROM fingerprints "
+        "WHERE token LIKE 'pain:%' OR token LIKE 'intent:%' "
+        "ORDER BY count DESC, token ASC"
+    ).fetchall()
+    for fpr in fp_pain_rows:
+        fp_ctx = str(fpr["context"] or "")
+        if fp_ctx.startswith("project:"):
+            pkey = fp_ctx[len("project:") :]
+            if pkey in proj_lookup and proj_lookup[pkey][1] != "public":
+                continue
+        raw_tok = str(fpr["token"] or "")
+        _add_pain_label(raw_tok.removeprefix("pain:").removeprefix("intent:"))
     pain_labels = pain_labels[:20]
 
     # Top starred topics
@@ -417,7 +475,7 @@ def build_context_json(
                 attrs = json.loads(str(sr["attrs_json"]))
                 for t in attrs.get("topics") or []:
                     t_clean = str(t).strip().lower()
-                    if t_clean and not _is_priv_str(t_clean):
+                    if t_clean and not _is_priv_str(t_clean, active_priv_map, scopes):
                         starred_topics[t_clean] = starred_topics.get(t_clean, 0) + 1
             except json.JSONDecodeError:
                 pass
@@ -425,7 +483,7 @@ def build_context_json(
     # Top 10 token-heavy tools (Spec 12 A13)
     tok_rows = ctx.db.execute(
         "SELECT entity_id, MAX(value) AS val FROM metrics "
-        "WHERE entity_id LIKE 'harness:tool/%' AND metric = 'tokens_90d' "
+        "WHERE entity_id LIKE 'harness:tool/%' AND metric IN ('tokens', 'tokens_90d') "
         "GROUP BY entity_id ORDER BY val DESC LIMIT 10"
     ).fetchall()
     token_heavy_tools = [
@@ -616,7 +674,25 @@ def generate(ctx: Ctx, run_id: str) -> dict[str, Any]:
 
         # Script-composed title from structured identifiers so untrusted text stays in evidence
         composed_title = f"{eid} ({section})"
-        valid_refs[iid] = {"ref": iid, "item_id": iid, "entity_id": eid, "section": section}
+        valid_refs[iid] = {
+            "ref": iid,
+            "item_id": iid,
+            "entity_id": eid,
+            "repo": str(item_row["repo"]) if item_row.get("repo") else None,
+            "evidence_urls": [str(ev["url"]) for ev in evidence if ev.get("url")],
+            "section": section,
+        }
+
+        age_days = evaluate._days_between(
+            ctx.now, gate_inputs.get("first_release_at") or gate_inputs.get("repo_created_at")
+        )
+        if age_days is None:
+            raw_age = gate_inputs.get("age_days")
+            age_days = int(raw_age) if isinstance(raw_age, int | float) else 0
+        release_age_days = evaluate._days_between(ctx.now, gate_inputs.get("last_release_at"))
+        if release_age_days is None:
+            raw_rel_age = gate_inputs.get("release_age_days")
+            release_age_days = int(raw_rel_age) if isinstance(raw_rel_age, int | float) else 0
 
         return _build_common_item_object(
             ctx,
@@ -636,8 +712,8 @@ def generate(ctx: Ctx, run_id: str) -> dict[str, Any]:
                 "stars": gate_inputs.get("stars", 0),
                 "star_velocity_7d": evaluate.compute_star_velocity(ctx, eid, gate_inputs) or 0.0,
                 "downloads_30d": gate_inputs.get("downloads_30d", 0),
-                "age_days": 0,
-                "release_age_days": 0,
+                "age_days": age_days,
+                "release_age_days": release_age_days,
             },
             gates=gates,
             red_flags=red_flags,
@@ -706,6 +782,7 @@ def generate(ctx: Ctx, run_id: str) -> dict[str, Any]:
             "signal_id": sig_id,
             "item_id": item_id,
             "entity_id": eid or None,
+            "evidence_urls": [s_url] if s_url else [],
             "section": section,
         }
 
@@ -880,13 +957,12 @@ def generate(ctx: Ctx, run_id: str) -> dict[str, Any]:
     ).fetchone()
     usage_last_run: dict[str, Any] | None = None
     if prev_usage_row is not None and prev_usage_row["usage_json"]:
-        with_usage = None
         try:
             with_usage = json.loads(str(prev_usage_row["usage_json"]))
+            if isinstance(with_usage, dict):
+                usage_last_run = with_usage
         except json.JSONDecodeError:
-            with_usage = None
-        if isinstance(with_usage, dict):
-            usage_last_run = with_usage
+            pass
 
     index_obj = {
         "run_id": run_id,
@@ -1174,11 +1250,13 @@ def enrich(ctx: Ctx, run_id: str) -> dict[str, Any]:
         # Fetch full metrics now that public existence is confirmed
         m_data = registries.fetch_metrics(ctx, eid)
         m_data.update({k: v for k, v in init_meta.items() if k not in m_data})
-        m_data[" bidirectional_verified"] = bool(
+        bidir_ok = bool(
             not repo
             or not m_data.get("registry_repo")
             or str(m_data.get("registry_repo")).lower() == repo.lower()
         )
+        m_data["bidirectional_verified"] = bidir_ok
+        m_data["bidirectional_link"] = bidir_ok
         db.kv_set(
             ctx.db,
             f"gate_inputs:{eid}",
@@ -1191,6 +1269,8 @@ def enrich(ctx: Ctx, run_id: str) -> dict[str, Any]:
             "ref": item_id,
             "item_id": item_id,
             "entity_id": eid,
+            "repo": resolved_repo,
+            "evidence_urls": [source_url] if source_url else [],
             "section": section,
             "enriched": True,
         }

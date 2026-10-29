@@ -142,8 +142,12 @@ class Procs:
         """Resolve an allowlisted binary name to its absolute path."""
         if isinstance(self.transport, procs.ReplayProcs) and not force_live:
             with self.transport.activate():
-                return procs.resolve(name, force_live=force_live)
-        return procs.resolve(name, force_live=force_live)
+                return procs.resolve(name, force_live=force_live, replay=True)
+        return procs.resolve(
+            name,
+            force_live=force_live,
+            replay=isinstance(self.transport, procs.ReplayProcs),
+        )
 
     def run(
         self,
@@ -342,7 +346,7 @@ def build(
     if h_tr is None:
         h_tr = http.LiveTransport()
     if p_tr is None:
-        p_tr = procs.LiveProcs()
+        p_tr = procs._ACTIVE_REPLAY_STACK[-1] if procs._ACTIVE_REPLAY_STACK else procs.LiveProcs()
     if g_tr is None:
         g_tr = p_tr if isinstance(p_tr, procs.ReplayProcs) else procs.LiveProcs()
 

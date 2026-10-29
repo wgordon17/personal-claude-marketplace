@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -183,7 +184,9 @@ def _ensure_run_id_for_history(ctx: Ctx, channel: str) -> str:
         return str(latest["run_id"])
 
     mode = "bootstrap" if channel == "bootstrap" else "adhoc"
-    return runlog.start_run(ctx, mode=mode, requested_mode=mode)
+    new_id = runlog.start_run(ctx, mode=mode, requested_mode=mode)
+    runlog.finish_run(ctx, new_id, "ok")
+    return new_id
 
 
 def apply(
@@ -531,6 +534,12 @@ def apply_decisions_md_cli(ctx: Ctx) -> dict[str, Any]:
         applied.append(res)
 
     ctx.db.commit()
+    if applied and (ctx.paths.sync / "DECISIONS.md").is_file():
+        from . import render
+
+        with contextlib.suppress(OSError, errors.RadarError):
+            render.render_decisions_md(ctx)
+
     return {
         "ok": True,
         "applied": len(applied),

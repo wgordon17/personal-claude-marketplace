@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -28,8 +29,10 @@ from tech_radar import http, procs  # noqa: E402
 @pytest.fixture(scope="session", autouse=True)
 def warm_uv_script_cache() -> bool:
     """Warm the uv script environment for S/radar.py once per test session (Spec 11 §1)."""
+    env = {k: v for k, v in os.environ.items() if k != "UV_FROZEN"}
     res = subprocess.run(
         ["uv", "run", "--script", "--locked", "--isolated", str(RADAR_SCRIPT), "--help"],
+        env=env,
         capture_output=True,
         text=True,
         check=False,
@@ -47,7 +50,7 @@ def isolated_radar_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[
     sync = tmp_path / "sync"
     proj_root = home / "SynologyDrive" / "ActiveProjects"
 
-    for directory in (home, proj_root):
+    for directory in (home, proj_root, sync):
         directory.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setenv("TECH_RADAR_HOME", str(home))
@@ -58,6 +61,7 @@ def isolated_radar_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[
     monkeypatch.setenv("TECH_RADAR_PROJECT_ROOTS", str(proj_root))
     monkeypatch.delenv("TECH_RADAR_REPLAY_DIR", raising=False)
     monkeypatch.delenv("TECH_RADAR_NOTIFY_SINK", raising=False)
+    monkeypatch.delenv("UV_FROZEN", raising=False)
 
     return {
         "home": home,

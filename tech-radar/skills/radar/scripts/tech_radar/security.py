@@ -1340,8 +1340,8 @@ def evaluate(
             ),
         )
 
-    # Mark baseline_done after the first source-running evaluation (Spec 12 A3)
-    if was_baseline and results:
+    # Mark baseline_done after the first daily source-running evaluation (Spec 12 A3)
+    if mode == "daily" and was_baseline and results:
         db.kv_set(ctx.db, "baseline_done", ctx.now_iso)
 
     from . import alerts

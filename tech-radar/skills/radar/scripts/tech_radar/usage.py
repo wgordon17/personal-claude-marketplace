@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+import os
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import db, errors
+from . import db, errors, fsguard
 
 if TYPE_CHECKING:
     from .context import Ctx
@@ -28,7 +29,7 @@ def _parse_iso(ts: str | None) -> datetime | None:
 
 
 def _parse_transcript_jsonl_lines(
-    lines: list[str],
+    lines: Iterable[str],
     *,
     expected_cwd: str | None = None,
     window_start: datetime | None = None,
@@ -167,15 +168,20 @@ def compute_previous_run_usage(
         if not jsonl_file.is_file():
             continue
         try:
-            lines = jsonl_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+            st = os.stat(jsonl_file)
+            if fsguard.is_dataless(st):
+                continue
+            if st.st_mtime < window_start.timestamp() and not os.environ.get("TECH_RADAR_HOME"):
+                continue
+            with open(jsonl_file, encoding="utf-8", errors="ignore") as fh:
+                parsed = _parse_transcript_jsonl_lines(
+                    fh,
+                    expected_cwd=expected_cwd,
+                    window_start=window_start,
+                    window_end=window_end,
+                )
         except OSError:
             continue
-        parsed = _parse_transcript_jsonl_lines(
-            lines,
-            expected_cwd=expected_cwd,
-            window_start=window_start,
-            window_end=window_end,
-        )
         if parsed is not None:
             matched_any = True
             for k in (

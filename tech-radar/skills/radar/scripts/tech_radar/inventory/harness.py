@@ -491,87 +491,86 @@ def _collect_transcripts(ctx: Ctx, out: HarnessInventoryOutput) -> None:
                 continue
             if st.st_mtime < cutoff_ts and not os.environ.get("TECH_RADAR_HOME"):
                 continue
-            lines = jsonl_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            with open(jsonl_path, encoding="utf-8", errors="ignore") as fh:
+                for raw_line in fh:
+                    if not raw_line.strip():
+                        continue
+                    try:
+                        rec = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(rec, dict):
+                        continue
+
+                    raw_msg = rec.get("message")
+                    msg: dict[str, Any] = raw_msg if isinstance(raw_msg, dict) else rec
+                    role = str(msg.get("role") or rec.get("type") or "").lower()
+
+                    if role == "assistant":
+                        model_id = msg.get("model")
+                        if isinstance(model_id, str) and model_id.strip():
+                            out.fingerprints.append(
+                                fp.FingerprintRecord(
+                                    context="harness:claude",
+                                    kind="model_id",
+                                    token=model_id.strip(),
+                                )
+                            )
+
+                        raw_usage = msg.get("usage")
+                        usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
+                        turn_tokens = sum(
+                            int(usage.get(k) or 0)
+                            for k in (
+                                "input_tokens",
+                                "output_tokens",
+                                "cache_read_input_tokens",
+                                "cache_creation_input_tokens",
+                            )
+                            if isinstance(usage.get(k), int | float)
+                        )
+
+                        content_blocks = msg.get("content")
+                        turn_tools: list[str] = []
+                        if isinstance(content_blocks, list):
+                            for block in content_blocks:
+                                if not isinstance(block, dict):
+                                    continue
+                                if block.get("type") == "tool_use":
+                                    tname = str(block.get("name") or "").strip()
+                                    tid = str(block.get("id") or "").strip()
+                                    if tname:
+                                        tool_calls[tname] += 1
+                                        turn_tools.append(tname)
+                                        if tid:
+                                            tool_use_id_map[tid] = tname
+
+                        if turn_tokens > 0 and turn_tools:
+                            for tname in set(turn_tools):
+                                tool_tokens[tname] += turn_tokens
+
+                    elif role in ("user", "human"):
+                        content_val = msg.get("content")
+                        if isinstance(content_val, list):
+                            for block in content_val:
+                                if not isinstance(block, dict):
+                                    continue
+                                btype = block.get("type")
+                                if btype == "tool_result":
+                                    tid = str(block.get("tool_use_id") or "").strip()
+                                    tname = str(
+                                        block.get("tool_name") or ""
+                                    ).strip() or tool_use_id_map.get(tid, "unknown")
+                                    bsize = _measure_tool_result_bytes(block.get("content"))
+                                    tool_bytes[tname] += bsize
+                                    if block.get("is_error") is True:
+                                        tool_errors[tname] += 1
+                                elif btype == "text" and isinstance(block.get("text"), str):
+                                    _extract_user_pain_label(block["text"], out)
+                        elif isinstance(content_val, str):
+                            _extract_user_pain_label(content_val, out)
         except OSError:
             continue
-
-        for raw_line in lines:
-            if not raw_line.strip():
-                continue
-            try:
-                rec = json.loads(raw_line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(rec, dict):
-                continue
-
-            raw_msg = rec.get("message")
-            msg: dict[str, Any] = raw_msg if isinstance(raw_msg, dict) else rec
-            role = str(msg.get("role") or rec.get("type") or "").lower()
-
-            if role == "assistant":
-                model_id = msg.get("model")
-                if isinstance(model_id, str) and model_id.strip():
-                    out.fingerprints.append(
-                        fp.FingerprintRecord(
-                            context="harness:claude",
-                            kind="model_id",
-                            token=model_id.strip(),
-                        )
-                    )
-
-                raw_usage = msg.get("usage")
-                usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
-                turn_tokens = sum(
-                    int(usage.get(k) or 0)
-                    for k in (
-                        "input_tokens",
-                        "output_tokens",
-                        "cache_read_input_tokens",
-                        "cache_creation_input_tokens",
-                    )
-                    if isinstance(usage.get(k), int | float)
-                )
-
-                content_blocks = msg.get("content")
-                turn_tools: list[str] = []
-                if isinstance(content_blocks, list):
-                    for block in content_blocks:
-                        if not isinstance(block, dict):
-                            continue
-                        if block.get("type") == "tool_use":
-                            tname = str(block.get("name") or "").strip()
-                            tid = str(block.get("id") or "").strip()
-                            if tname:
-                                tool_calls[tname] += 1
-                                turn_tools.append(tname)
-                                if tid:
-                                    tool_use_id_map[tid] = tname
-
-                if turn_tokens > 0 and turn_tools:
-                    for tname in set(turn_tools):
-                        tool_tokens[tname] += turn_tokens
-
-            elif role in ("user", "human"):
-                content_val = msg.get("content")
-                if isinstance(content_val, list):
-                    for block in content_val:
-                        if not isinstance(block, dict):
-                            continue
-                        btype = block.get("type")
-                        if btype == "tool_result":
-                            tid = str(block.get("tool_use_id") or "").strip()
-                            tname = str(
-                                block.get("tool_name") or ""
-                            ).strip() or tool_use_id_map.get(tid, "unknown")
-                            bsize = _measure_tool_result_bytes(block.get("content"))
-                            tool_bytes[tname] += bsize
-                            if block.get("is_error") is True:
-                                tool_errors[tname] += 1
-                        elif btype == "text" and isinstance(block.get("text"), str):
-                            _extract_user_pain_label(block["text"], out)
-                elif isinstance(content_val, str):
-                    _extract_user_pain_label(content_val, out)
 
     for tname, cnt in sorted(tool_calls.items()):
         out.fingerprints.append(

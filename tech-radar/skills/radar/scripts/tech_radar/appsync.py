@@ -27,6 +27,13 @@ import verify_app  # noqa: E402
 PLUGIN_KEY = "tech-radar@personal-claude-marketplace"
 MARKETPLACE_NAME = "personal-claude-marketplace"
 SCRIPTS_REL_IN_REPO = "tech-radar/skills/radar/scripts"
+RUNTIME_FILES: tuple[str, ...] = (
+    "radar.py",
+    "radar.py.lock",
+    "reddit_pull.py",
+    "reddit_pull.py.lock",
+    "verify_app.py",
+)
 
 
 @dataclass(frozen=True)
@@ -83,6 +90,10 @@ def collect_source_files(src_dir: Path) -> dict[str, bytes]:
             if rel_posix == "MANIFEST.sha256":
                 continue
             files_out[rel_posix] = fpath.read_bytes()
+
+    for req_file in RUNTIME_FILES:
+        if req_file not in files_out:
+            raise WriteDenied(f"required runtime file missing from source scripts: {req_file}")
 
     return files_out
 

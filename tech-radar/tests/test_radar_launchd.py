@@ -102,6 +102,8 @@ def test_plist_golden_and_app_copy_structure(
     app_dir = ctx.paths.app
     assert (app_dir / "radar.py").is_file()
     assert (app_dir / "radar.py.lock").is_file()
+    assert (app_dir / "reddit_pull.py").is_file()
+    assert (app_dir / "reddit_pull.py.lock").is_file()
     assert (app_dir / "verify_app.py").is_file()
     assert (app_dir / "tech_radar" / "__init__.py").is_file()
     assert (app_dir / "MANIFEST.sha256").is_file()
@@ -367,6 +369,8 @@ def test_launchd_install_uninstall_status_and_tty_gate(
     # CLI app sync --from with TTY succeeds
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-    assert cli.main(["app", "sync", "--from", str(SCRIPTS_DIR), "--channel", "cli"]) == 0
+    assert isinstance(ctx.procs.transport, procs.ReplayProcs)
+    with ctx.procs.transport.activate():
+        assert cli.main(["app", "sync", "--from", str(SCRIPTS_DIR), "--channel", "cli"]) == 0
     sync_cli_out = json.loads(capsys.readouterr().out.strip())
     assert sync_cli_out["ok"] is True

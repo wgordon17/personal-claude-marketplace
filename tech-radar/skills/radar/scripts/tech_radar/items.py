@@ -477,7 +477,7 @@ def _build_relevance_sets(ctx: Ctx) -> tuple[set[str], set[str], set[str]]:
     in_use_rows = ctx.db.execute(
         "SELECT DISTINCT e.entity_id, e.name, e.repo FROM entities e "
         "JOIN usages u ON u.entity_id = e.entity_id "
-        "WHERE u.context NOT LIKE 'interest:%' AND e.visibility = 'public'"
+        "WHERE u.context NOT LIKE 'interest:%' AND u.direct = 1 AND e.visibility = 'public'"
     ).fetchall()
     in_use_names: set[str] = set()
     for r in in_use_rows:
@@ -519,11 +519,11 @@ def promote(
     """Promote in-use entities and relevant discovery candidates into `items` (Spec 11 §6, A5)."""
     ctx.reload_profile()
 
-    # 1. Sync in_use items from usages (non-interest contexts)
+    # 1. Sync in_use items from usages (non-interest contexts, direct dependencies only)
     used_rows = ctx.db.execute(
         "SELECT DISTINCT e.entity_id, e.kind, e.quadrant "
         "FROM entities e JOIN usages u ON u.entity_id = e.entity_id "
-        "WHERE u.context NOT LIKE 'interest:%'"
+        "WHERE u.context NOT LIKE 'interest:%' AND u.direct = 1"
     ).fetchall()
     used_eids = {str(r["entity_id"]) for r in used_rows}
 

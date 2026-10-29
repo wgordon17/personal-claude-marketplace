@@ -70,6 +70,10 @@ class RawSignal:
     payload: dict[str, Any] = field(default_factory=dict)
     dedupe_key: str | None = None
     withdrawn: int = 0
+    _persisted_signal_id: int | None = field(default=None, init=False, repr=False, compare=False)
+    _persisted_key: tuple[int, str, int] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         self.title = sanitize.clean(self.title, limit=300) or self.external_id or self.source_id
@@ -264,6 +268,9 @@ def make_feed_parser(
 def persist_raw_signal(ctx: Ctx, sig: RawSignal, *, fetched_at: str | None = None) -> int:
     """Insert or update a RawSignal in the SQLite `signals` table and return `signal_id`."""
     ts = fetched_at or ctx.now_iso
+    cache_key = (id(ctx.db), ts, sig.withdrawn)
+    if sig._persisted_signal_id is not None and sig._persisted_key == cache_key:
+        return sig._persisted_signal_id
     dedupe = sig.dedupe_key or f"{sig.source_id}|{sig.type}|{sig.external_id}"
     payload_dict: dict[str, Any] = dict(sig.payload) if sig.payload else {}
     if sig.metrics:
@@ -304,12 +311,9 @@ def persist_raw_signal(ctx: Ctx, sig: RawSignal, *, fetched_at: str | None = Non
         payload_json=payload_str,
         withdrawn=sig.withdrawn,
     )
-    safe_dedupe = redact.scrub(dedupe)
-    sig_row = ctx.db.execute(
-        "SELECT signal_id FROM signals WHERE dedupe_key = ?",
-        (safe_dedupe,),
-    ).fetchone()
-    return int(sig_row[0]) if sig_row is not None else row_id
+    sig._persisted_signal_id = row_id
+    sig._persisted_key = cache_key
+    return row_id
 
 
 def record_source_ok(ctx: Ctx, source_id: str, item_count: int) -> None:

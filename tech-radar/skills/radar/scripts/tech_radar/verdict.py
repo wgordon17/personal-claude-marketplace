@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import db, errors, evaluate, http, items, procs, redact, sanitize, topnames
+from . import brief, db, errors, evaluate, http, items, procs, redact, sanitize, topnames
 
 if TYPE_CHECKING:
     from .context import Ctx
@@ -80,8 +80,6 @@ def compose_install_command(
     if eco == "brew" or eid.startswith("brew:"):
         return f"brew install {name}"
     if eco == "pypi" or eid.startswith("pkg:pypi/"):
-        if kind == "cli":
-            return f"uv tool install {name}=={ver}" if ver else f"uv tool install {name}"
         return f"uv tool install {name}=={ver}" if ver else f"uv tool install {name}"
     if eco == "npm" or eid.startswith("pkg:npm/"):
         return f"npm i -g {name}@{ver}" if ver else f"npm i -g {name}"
@@ -112,13 +110,26 @@ def _citation_verified(
     url: str,
     ref_info: Mapping[str, Any] | None,
 ) -> bool:
-    if _is_generic_citation_url(url):
+    clean_url = url.strip()
+    if _is_generic_citation_url(clean_url):
         return False
     if ctx is None:
         return True
 
-    # Check if URL appears in DB signals for this entity or signal
+    # Check if URL appears in ref_info evidence_urls or DB signals for this entity or signal
+    ref_repo = ""
     if ref_info:
+        priv_map = brief._private_scrub_map(ctx)
+        db_urls: set[str] = set()
+        ev_urls = ref_info.get("evidence_urls")
+        if isinstance(ev_urls, list | tuple | set):
+            for u in ev_urls:
+                if u:
+                    raw_u = str(u).strip()
+                    db_urls.add(raw_u)
+                    db_urls.add(brief.scrub_private_text(raw_u, priv_map))
+        if ref_info.get("repo"):
+            ref_repo = str(ref_info["repo"]).strip().lower()
         eid = ref_info.get("entity_id")
         sig_id = ref_info.get("signal_id")
         if sig_id is not None:
@@ -126,30 +137,55 @@ def _citation_verified(
                 "SELECT url FROM signals WHERE signal_id = ?",
                 (int(sig_id),),
             ).fetchone()
-            if s_row is not None and s_row["url"] and str(s_row["url"]).strip() == url.strip():
-                return True
+            if s_row is not None and s_row["url"]:
+                raw_u = str(s_row["url"]).strip()
+                db_urls.add(raw_u)
+                db_urls.add(brief.scrub_private_text(raw_u, priv_map))
         if eid:
             e_rows = ctx.db.execute(
                 "SELECT url FROM signals WHERE entity_id = ?",
                 (str(eid),),
             ).fetchall()
-            if any(r["url"] and str(r["url"]).strip() == url.strip() for r in e_rows):
-                return True
+            for r in e_rows:
+                if r["url"]:
+                    raw_u = str(r["url"]).strip()
+                    db_urls.add(raw_u)
+                    db_urls.add(brief.scrub_private_text(raw_u, priv_map))
+            ent_meta = ctx.db.execute(
+                "SELECT repo, homepage FROM entities WHERE entity_id = ?",
+                (str(eid),),
+            ).fetchone()
+            if ent_meta is not None:
+                if ent_meta["homepage"]:
+                    raw_u = str(ent_meta["homepage"]).strip()
+                    db_urls.add(raw_u)
+                    db_urls.add(brief.scrub_private_text(raw_u, priv_map))
+                if not ref_repo and ent_meta["repo"]:
+                    ref_repo = str(ent_meta["repo"]).strip().lower()
+            if not ref_repo and str(eid).startswith("gh:"):
+                ref_repo = str(eid)[len("gh:") :].strip().lower()
+        if clean_url in db_urls:
+            return True
 
-    parsed = urllib.parse.urlsplit(url.strip())
+    parsed = urllib.parse.urlsplit(clean_url)
     host = (parsed.hostname or "").lower()
     if host not in http.EGRESS_ALLOWLIST and host != "github.com":
         return False
 
     if host == "github.com":
-        return True
+        segments = [seg for seg in parsed.path.split("/") if seg]
+        url_repo = f"{segments[0]}/{segments[1]}".lower() if len(segments) >= 2 else ""
+        if url_repo and ref_repo and url_repo == ref_repo:
+            return True
 
     try:
-        resp = ctx.http.fetch(url.strip(), ttl_hours=24)
+        resp = ctx.http.fetch(clean_url, ttl_hours=24)
         return 200 <= resp.status < 300
-    except errors.RadarError:
-        # In replay mode, allow allowlisted host citations that match existing entity/repo
-        return bool(ref_info and ref_info.get("entity_id"))
+    except errors.RadarError as exc:
+        is_replay = procs.is_replay_mode() or isinstance(ctx.http.transport, http.ReplayHttp)
+        if is_replay and "missing HTTP replay fixture" in str(exc):
+            return bool(ref_info and ref_info.get("entity_id"))
+        return False
 
 
 def _validate_relevant_to_entry(ctx: Ctx | None, entry: str) -> bool:
@@ -197,16 +233,25 @@ def _load_valid_refs_from_db(ctx: Ctx, run_id: str | None) -> dict[str, dict[str
 
     # Fallback: include DB items and signals if `brief_refs:{run_id}` wasn't pre-populated
     if not refs:
-        for ir in ctx.db.execute("SELECT item_id, entity_id FROM items").fetchall():
+        for ir in ctx.db.execute(
+            "SELECT i.item_id, i.entity_id, e.repo FROM items i "
+            "LEFT JOIN entities e ON e.entity_id = i.entity_id"
+        ).fetchall():
             iid = str(ir["item_id"])
-            refs[iid] = {"ref": iid, "item_id": iid, "entity_id": str(ir["entity_id"])}
-        for sr in ctx.db.execute("SELECT signal_id, entity_id, type FROM signals").fetchall():
+            refs[iid] = {
+                "ref": iid,
+                "item_id": iid,
+                "entity_id": str(ir["entity_id"]),
+                "repo": str(ir["repo"]) if ir["repo"] else None,
+            }
+        for sr in ctx.db.execute("SELECT signal_id, entity_id, type, url FROM signals").fetchall():
             sid = int(sr["signal_id"])
             sref = f"S-{sid}"
             refs[sref] = {
                 "ref": sref,
                 "signal_id": sid,
                 "entity_id": str(sr["entity_id"]) if sr["entity_id"] else None,
+                "evidence_urls": [str(sr["url"])] if sr["url"] else [],
             }
     return refs
 
@@ -352,7 +397,7 @@ def _validate_single_verdict_item(
         elif ctx is not None:
             u_row = ctx.db.execute(
                 "SELECT 1 FROM usages WHERE entity_id = ? "
-                "AND context NOT LIKE 'interest:%' LIMIT 1",
+                "AND context NOT LIKE 'interest:%' AND direct = 1 LIMIT 1",
                 (replaces.strip(),),
             ).fetchone()
             if u_row is None:
@@ -490,12 +535,15 @@ def _check_t10_verification_gate(
         reasons.append("T10: OSV/GHSA check not clean")
 
     # 4. Registry <-> repo bidirectional link (for package ecosystems)
-    if eco in ("pypi", "npm", "cargo"):
-        reg_repo = str(gate_inputs.get("registry_repo") or repo or "").strip().lower()
+    if (
+        gate_inputs.get("bidirectional_link") is False
+        or gate_inputs.get("bidirectional_verified") is False
+    ):
+        reasons.append("T10: registry<->repo bidirectional link mismatch")
+    elif eco in ("pypi", "npm", "cargo"):
+        reg_repo = str(gate_inputs.get("registry_repo") or "").strip().lower()
         manifest_name = str(gate_inputs.get("manifest_name") or name).strip().lower()
-        if gate_inputs.get("bidirectional_link") is False:
-            reasons.append("T10: registry<->repo bidirectional link mismatch")
-        elif not reg_repo or (repo and reg_repo != repo):
+        if not reg_repo or (repo and reg_repo != repo):
             reasons.append("T10: registry<->repo link mismatch")
         elif manifest_name != name.lower():
             reasons.append("T10: repo manifest name != package name")
@@ -514,6 +562,72 @@ def _check_t10_verification_gate(
     if reasons:
         return "assess", reasons, pinned_sha
     return None, [], pinned_sha
+
+
+def _populate_verdict_reported(
+    reported: dict[str, Any],
+    v_item: Mapping[str, Any],
+    citations: list[str],
+) -> None:
+    if v_item.get("superiority"):
+        reported["superiority"] = redact.scrub(
+            sanitize.clean(str(v_item["superiority"]), limit=400)
+        )
+    if v_item.get("benefit"):
+        reported["benefit"] = redact.scrub(sanitize.clean(str(v_item["benefit"]), limit=200))
+    if v_item.get("replaces"):
+        reported["replaces"] = str(v_item["replaces"])
+    if v_item.get("relevant_to"):
+        reported["relevant_to"] = [str(x) for x in v_item["relevant_to"]]
+    if v_item.get("effort"):
+        reported["effort"] = str(v_item["effort"])
+    if v_item.get("adoption_snippet"):
+        reported["adoption_snippet"] = redact.scrub(
+            sanitize.clean(str(v_item["adoption_snippet"]), limit=400)
+        )
+    if citations:
+        reported["citations"] = citations
+
+
+def _record_ring_change(
+    ctx: Ctx,
+    item_id: str,
+    run_id: str,
+    old_ring: str | None,
+    new_ring: str | None,
+    why: Any,
+) -> None:
+    if new_ring != old_ring and new_ring is not None:
+        ctx.db.execute(
+            "INSERT INTO ring_history(item_id, run_id, from_ring, to_ring, at, reason) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                item_id,
+                run_id,
+                old_ring,
+                new_ring,
+                ctx.now_iso,
+                redact.scrub(sanitize.clean(str(why or ""), limit=400)),
+            ),
+        )
+
+
+def _record_surfaced_digest_item(
+    ctx: Ctx,
+    run_id: str,
+    ref: str,
+    section: str,
+    section_ranks: dict[str, int],
+) -> None:
+    rank = section_ranks.get(section, 0) + 1
+    section_ranks[section] = rank
+    ctx.db.execute(
+        "INSERT INTO digest_items(run_id, ref, section, rank, feedback) "
+        "VALUES (?, ?, ?, ?, NULL) "
+        "ON CONFLICT(run_id, ref) DO UPDATE SET "
+        "section = excluded.section, rank = excluded.rank",
+        (run_id, ref, section, rank),
+    )
 
 
 def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
@@ -535,6 +649,16 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
     if not isinstance(root_obj, Mapping) or not isinstance(root_obj.get("items"), list):
         raise errors.ValidationError(
             [{"field": "items", "error": "verdicts.json must contain an items list"}]
+        )
+
+    raw_run_id = root_obj.get("run_id")
+    if not isinstance(raw_run_id, str) or not raw_run_id.strip():
+        raise errors.ValidationError(
+            [{"field": "run_id", "reason": "run_id is required", "error": "run_id is required"}]
+        )
+    if raw_run_id.strip() != run_id:
+        raise errors.ValidationError(
+            [{"field": "run_id", "reason": "run_id mismatch", "error": "run_id mismatch"}]
         )
 
     valid_refs = _load_valid_refs_from_db(ctx, run_id)
@@ -560,30 +684,55 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
         tech_slug = v_item.get("technique_slug")
         citations = [str(c) for c in (v_item.get("citations") or [])]
 
-        # Handle Spec 12 A9 technique_slug on S- refs in technique/horizon
-        if ref_str.startswith("S-") and tech_slug and section in ("technique", "horizon"):
+        # Handle Spec 12 A9 technique_slug / horizon signal promotion on S- refs
+        if (
+            ref_str.startswith("S-")
+            and action != "drop"
+            and (tech_slug or section in ("technique", "horizon"))
+        ):
+            sig_id = int(ref_str[2:])
+            sig_meta = ctx.db.execute(
+                "SELECT title FROM signals WHERE signal_id = ?",
+                (sig_id,),
+            ).fetchone()
+            if tech_slug:
+                resolved_slug = str(tech_slug).strip().lower()
+            else:
+                raw_title = str(sig_meta["title"]) if sig_meta and sig_meta["title"] else ref_str
+                resolved_slug = (
+                    re.sub(r"[^a-z0-9]+", "-", raw_title.lower()).strip("-")[:48]
+                    or f"signal-{sig_id}"
+                )
+            prior_tech = ctx.db.execute(
+                "SELECT ring FROM items WHERE entity_id = ?",
+                (f"technique:{resolved_slug}",),
+            ).fetchone()
+            old_tech_ring = str(prior_tech["ring"]) if prior_tech and prior_tech["ring"] else None
+
             fin = evaluate.create_or_finalize_technique(
                 ctx,
-                str(tech_slug),
+                resolved_slug,
                 v_item,
                 evidence_count=max(2, len(citations)),
             )
             item_id = str(fin["item_id"])
-            sig_id = int(ref_str[2:])
+            tech_eid = str(fin["entity_id"])
+            reported = dict(fin["reported"])
+            _populate_verdict_reported(reported, v_item, citations)
             ctx.db.execute(
-                "UPDATE signals SET last_surfaced_at = ? WHERE signal_id = ?",
-                (ctx.now_iso, sig_id),
+                "UPDATE items SET reported_json = ? WHERE item_id = ?",
+                (json.dumps(reported, separators=(",", ":"), sort_keys=True), item_id),
+            )
+            fin["reported"] = reported
+
+            _record_ring_change(ctx, item_id, run_id, old_tech_ring, fin["ring"], v_item.get("why"))
+            ctx.db.execute(
+                "UPDATE signals SET last_surfaced_at = ?, entity_id = COALESCE(entity_id, ?) "
+                "WHERE signal_id = ?",
+                (ctx.now_iso, tech_eid, sig_id),
             )
             if action == "surface":
-                rank = section_ranks.get(section, 0) + 1
-                section_ranks[section] = rank
-                ctx.db.execute(
-                    "INSERT INTO digest_items(run_id, ref, section, rank, feedback) "
-                    "VALUES (?, ?, ?, ?, NULL) "
-                    "ON CONFLICT(run_id, ref) DO UPDATE SET "
-                    "section = excluded.section, rank = excluded.rank",
-                    (run_id, item_id, section, rank),
-                )
+                _record_surfaced_digest_item(ctx, run_id, item_id, section, section_ranks)
             ctx.db.commit()
             applied_items.append(fin)
             continue
@@ -592,23 +741,39 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
         if ref_str.startswith("S-"):
             sig_id = int(ref_str[2:])
             sig_row = ctx.db.execute(
-                "SELECT entity_id FROM signals WHERE signal_id = ?",
+                "SELECT entity_id, payload_json FROM signals WHERE signal_id = ?",
                 (sig_id,),
             ).fetchone()
-            ctx.db.execute(
-                "UPDATE signals SET last_surfaced_at = ? WHERE signal_id = ?",
-                (ctx.now_iso, sig_id),
-            )
-            if action == "surface":
-                rank = section_ranks.get(section, 0) + 1
-                section_ranks[section] = rank
+            if sig_row is not None and (v_item.get("adoption_snippet") or v_item.get("effort")):
+                pay_obj: dict[str, Any] = {}
+                if sig_row["payload_json"]:
+                    try:
+                        loaded_pay = json.loads(str(sig_row["payload_json"]))
+                        if isinstance(loaded_pay, dict):
+                            pay_obj = loaded_pay
+                    except json.JSONDecodeError:
+                        pay_obj = {}
+                if v_item.get("adoption_snippet"):
+                    pay_obj["adoption_snippet"] = redact.scrub(
+                        sanitize.clean(str(v_item["adoption_snippet"]), limit=400)
+                    )
+                if v_item.get("effort"):
+                    pay_obj["effort"] = str(v_item["effort"])
                 ctx.db.execute(
-                    "INSERT INTO digest_items(run_id, ref, section, rank, feedback) "
-                    "VALUES (?, ?, ?, ?, NULL) "
-                    "ON CONFLICT(run_id, ref) DO UPDATE SET "
-                    "section = excluded.section, rank = excluded.rank",
-                    (run_id, ref_str, section, rank),
+                    "UPDATE signals SET last_surfaced_at = ?, payload_json = ? WHERE signal_id = ?",
+                    (
+                        ctx.now_iso,
+                        json.dumps(pay_obj, separators=(",", ":"), sort_keys=True),
+                        sig_id,
+                    ),
                 )
+            else:
+                ctx.db.execute(
+                    "UPDATE signals SET last_surfaced_at = ? WHERE signal_id = ?",
+                    (ctx.now_iso, sig_id),
+                )
+            if action == "surface":
+                _record_surfaced_digest_item(ctx, run_id, ref_str, section, section_ranks)
             ctx.db.commit()
             applied_items.append(
                 {
@@ -666,16 +831,7 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
             reported["install_command"] = install_cmd
         if pinned_sha:
             reported["pinned_sha"] = pinned_sha
-        if v_item.get("superiority"):
-            reported["superiority"] = redact.scrub(
-                sanitize.clean(str(v_item["superiority"]), limit=400)
-            )
-        if v_item.get("benefit"):
-            reported["benefit"] = redact.scrub(sanitize.clean(str(v_item["benefit"]), limit=200))
-        if v_item.get("replaces"):
-            reported["replaces"] = str(v_item["replaces"])
-        if v_item.get("relevant_to"):
-            reported["relevant_to"] = [str(x) for x in v_item["relevant_to"]]
+        _populate_verdict_reported(reported, v_item, citations)
 
         ctx.db.execute(
             "UPDATE items SET reported_json = ? WHERE item_id = ?",
@@ -684,20 +840,8 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
         fin["reported"] = reported
         fin["install_command"] = install_cmd
 
-        new_ring = fin["ring"]
-        if new_ring != old_ring and new_ring is not None:
-            ctx.db.execute(
-                "INSERT INTO ring_history(item_id, run_id, from_ring, to_ring, at, reason) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    ref_str,
-                    run_id,
-                    old_ring,
-                    new_ring,
-                    ctx.now_iso,
-                    redact.scrub(sanitize.clean(str(v_item.get("why") or ""), limit=400)),
-                ),
-            )
+        if action != "drop":
+            _record_ring_change(ctx, ref_str, run_id, old_ring, fin["ring"], v_item.get("why"))
 
         if section == "rotation":
             ctx.db.execute(
@@ -711,18 +855,13 @@ def apply_verdicts(ctx: Ctx, run_id: str) -> dict[str, Any]:
         )
 
         if action == "surface":
-            rank = section_ranks.get(section, 0) + 1
-            section_ranks[section] = rank
-            ctx.db.execute(
-                "INSERT INTO digest_items(run_id, ref, section, rank, feedback) "
-                "VALUES (?, ?, ?, ?, NULL) "
-                "ON CONFLICT(run_id, ref) DO UPDATE SET "
-                "section = excluded.section, rank = excluded.rank",
-                (run_id, ref_str, section, rank),
-            )
+            _record_surfaced_digest_item(ctx, run_id, ref_str, section, section_ranks)
 
         ctx.db.commit()
         applied_items.append(fin)
+
+    if applied_items:
+        db.kv_set(ctx.db, f"verdict_applied:{run_id}", ctx.now_iso)
 
     if all_errors:
         msg = (

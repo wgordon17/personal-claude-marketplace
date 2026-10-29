@@ -101,6 +101,10 @@
   .ring-assess { background-color: #92400e; color: #fef3c7; }
   .ring-watch { background-color: #3730a3; color: #e0e7ff; }
   .ring-hold { background-color: #991b1b; color: #fee2e2; }
+  @media (max-width: 768px) {
+    body { padding: 16px; }
+    .layout { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -108,6 +112,7 @@
   <h1>{{TITLE}}</h1>
   <div class="meta">Generated at {{GENERATED_AT}} &middot; 4 concentric rings + outer watch band &middot; 6 quadrants</div>
 </header>
+<main>
 <div class="layout">
   <div class="radar-box">
     <svg viewBox="0 0 800 800" role="img" aria-label="Personal Tech Radar">
@@ -129,13 +134,13 @@
   <table>
     <thead>
       <tr>
-        <th>ID</th>
-        <th>Name</th>
-        <th>Quadrant</th>
-        <th>Ring</th>
-        <th>Score</th>
-        <th>In Use</th>
-        <th>Evidence</th>
+        <th scope="col">ID</th>
+        <th scope="col">Name</th>
+        <th scope="col">Quadrant</th>
+        <th scope="col">Ring</th>
+        <th scope="col">Score</th>
+        <th scope="col">In Use</th>
+        <th scope="col">Evidence</th>
       </tr>
     </thead>
     <tbody>
@@ -143,5 +148,6 @@
     </tbody>
   </table>
 </div>
+</main>
 </body>
 </html>

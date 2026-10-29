@@ -28,7 +28,7 @@ def test_a_pep723_header_exact_pin_exclude_newer_and_lockfile_exists() -> None:
     text = REDDIT_SCRIPT.read_text(encoding="utf-8")
     assert "# /// script" in text
     assert '"wafer-py==0.7.7"' in text
-    assert 'exclude-newer = "2026-10-20"' in text
+    assert 'exclude-newer = "2026-10-20T00:00:00Z"' in text
     assert "tech_radar" not in text
 
     lock_text = REDDIT_LOCK.read_text(encoding="utf-8")

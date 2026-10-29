@@ -379,3 +379,21 @@ def test_confirm_wrong_code_5_attempts_expiry_feedback_and_taste_sha256_lock(
     assert rc_apply_prop == 0, apply_out
     assert not proposed_path.exists()
     assert "applied-via-pty" in (ctx.paths.sync / "TASTE_PROFILE.md").read_text(encoding="utf-8")
+
+    # 6. STRUCT-004: request_confirm reverts batch and staged items when notify.send fails
+    from tech_radar import notify
+
+    pending.stage_decision(ctx, item_id, "hold", reason="Revert test")
+    monkeypatch.setattr(notify, "send", lambda *_a, **_kw: (False, "simulated notify failure"))
+    with pytest.raises(errors.RadarError, match="simulated notify failure"):
+        pending.request_confirm(ctx)
+
+    last_batch = ctx.db.execute(
+        "SELECT status FROM confirm_batches ORDER BY batch_id DESC LIMIT 1"
+    ).fetchone()
+    assert last_batch["status"] == "cancelled"
+    reverted_row = ctx.db.execute(
+        "SELECT status, batch_id FROM pending ORDER BY pending_id DESC LIMIT 1"
+    ).fetchone()
+    assert reverted_row["status"] == "staged"
+    assert reverted_row["batch_id"] is None

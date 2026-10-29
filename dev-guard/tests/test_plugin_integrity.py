@@ -545,7 +545,7 @@ class TestPluginVersionParity:
 
     def test_codex_marketplace_entries_match_claude_marketplace(self):
         """Both .claude-plugin/marketplace.json and .agents/plugins/marketplace.json must
-        register the exact same 13 plugins in order, with valid source, policy, and category."""
+        register the exact same 14 plugins in order, with valid source, policy, and category."""
         codex_marketplace_path = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
         assert codex_marketplace_path.exists(), f"Missing {codex_marketplace_path}"
 

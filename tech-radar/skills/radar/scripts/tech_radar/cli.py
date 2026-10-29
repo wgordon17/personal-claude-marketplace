@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shlex
 import sys
@@ -164,17 +163,6 @@ def require_terminal(args: argparse.Namespace, raw_argv: Sequence[str] | None = 
     )
 
 
-def _not_implemented(_args: argparse.Namespace) -> int:
-    return emit({"ok": False, "error": "not implemented"}, 1)
-
-
-def _terminal_not_implemented(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
-    refused = require_terminal(args, raw_argv)
-    if refused is not None:
-        return refused
-    return _not_implemented(args)
-
-
 def _handle_doctor(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
     try:
         ctx = context.build()
@@ -258,6 +246,7 @@ def _handle_collect(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
     except errors.RadarError as exc:
         return _emit_radar_error(exc)
 
+    degraded = any(not r.ok and not r.skipped_reason for r in source_results)
     return emit(
         {
             "ok": True,
@@ -276,7 +265,7 @@ def _handle_collect(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
             "notified": notified,
             "counts": inv_res.counts,
         },
-        0,
+        3 if degraded else 0,
     )
 
 
@@ -304,11 +293,8 @@ def _handle_verdict_apply(args: argparse.Namespace, _raw_argv: Sequence[str]) ->
 
 def _handle_render(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
     raw_run_id = getattr(args, "run_id", None)
-    sync_existed = bool(getattr(args, "_sync_existed_before", True))
     try:
         ctx = context.build(run_id=str(raw_run_id) if raw_run_id else None)
-        if not sync_existed and ctx.paths.sync.is_dir() and not any(ctx.paths.sync.iterdir()):
-            ctx.paths.sync.rmdir()
         valid_run_id = runs.validate_run_id(ctx, str(raw_run_id) if raw_run_id else None)
         res = render.render_run(ctx, valid_run_id)
         return emit(res, 0)
@@ -322,10 +308,6 @@ def _handle_decide(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
         return refused
     try:
         ctx = context.build()
-        if os.environ.get("TECH_RADAR_ALLOW_TTY") == "true":
-            item_cnt = int(ctx.db.execute("SELECT COUNT(*) FROM items").fetchone()[0])
-            if item_cnt == 0:
-                return _not_implemented(args)
         res = decisions.apply(
             ctx,
             str(args.item),
@@ -495,7 +477,7 @@ def _handle_app(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
         ctx = context.build()
         res = appsync.sync(ctx, from_path=getattr(args, "from_path", None))
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
 
     if not res.ok:
         code = 4 if res.status == "refused" else 1
@@ -534,7 +516,7 @@ def _handle_launchd(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
             return emit(launchd.uninstall(ctx), 0)
         return emit(launchd.status(ctx), 0)
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
 
 
 def _handle_notify_test(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
@@ -542,7 +524,7 @@ def _handle_notify_test(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> 
         ctx = context.build()
         ok, err_msg = notify.notify_test(ctx)
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
     if not ok:
         return emit({"ok": False, "error": err_msg or "notify-test failed"}, 1)
     return emit({"ok": True, "notified": True}, 0)
@@ -571,6 +553,7 @@ def _handle_hourly(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
         if hourly_lock is None:
             return emit({"ok": True, "skipped": "hourly in progress"}, 0)
 
+        run_id: str | None = None
         try:
             usage_cnt = int(
                 ctx.db.execute(
@@ -602,10 +585,14 @@ def _handle_hourly(_args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
                 },
                 0,
             )
+        except Exception as exc:
+            if run_id is not None:
+                runlog.finish_run(ctx, run_id, "failed", error=str(exc))
+            raise
         finally:
             lock.release(hourly_lock)
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
 
 
 def _handle_exposure(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
@@ -634,7 +621,7 @@ def _handle_exposure(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
             0,
         )
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
 
 
 def _handle_private_scopes(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
@@ -656,7 +643,7 @@ def _handle_private_scopes(args: argparse.Namespace, raw_argv: Sequence[str]) ->
             updated = current
         return emit({"ok": True, "action": action, "scopes": updated}, 0)
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
 
 
 def _handle_credentials(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
@@ -670,7 +657,7 @@ def _handle_credentials(args: argparse.Namespace, _raw_argv: Sequence[str]) -> i
         st = credentials.status(ctx)
         return emit({"ok": True, **st}, 0)
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
 
 
 def _handle_sources(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
@@ -685,7 +672,7 @@ def _handle_sources(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
         code = 0 if res["ok"] else 3
         return emit(res, code)
     except errors.RadarError as exc:
-        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+        return _emit_radar_error(exc)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -982,16 +969,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return emit({"ok": False, "error": hook_err}, 4)
 
-    pre_paths = config.paths(ensure_dirs=False)
-    args._sync_existed_before = pre_paths.sync.is_dir()
     config.paths(ensure_dirs=True)
-    if (
-        getattr(args, "subcommand", None) == "render"
-        and not args._sync_existed_before
-        and pre_paths.sync.is_dir()
-        and not any(pre_paths.sync.iterdir())
-    ):
-        pre_paths.sync.rmdir()
     handler = getattr(args, "_handler", None)
     if handler is None:
         return emit({"ok": False, "error": "no subcommand handler"}, 1)
