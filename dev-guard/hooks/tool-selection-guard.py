@@ -2422,7 +2422,7 @@ class NarrativePattern(NamedTuple):
 
 
 _COMMENT_NARRATION_SKIP_EXTENSIONS: frozenset[str] = frozenset(
-    {".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc"}
+    {".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc", ".json", ".jsonl"}
 )
 
 # Guards against O(n^2) regex blowup in the cross-delimiter span patterns below
@@ -2437,7 +2437,7 @@ _COMMENT_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"'''(.*?)'''", re.DOTALL),  # Python docstrings, alt quote
     re.compile(r"/\*(.{0,2000}?)\*/", re.DOTALL),  # C-style block comments
     re.compile(r"<!--(.{0,2000}?)-->", re.DOTALL),  # HTML/XML comments
-    re.compile(r"(?:#|//)[^\n]*"),  # line comments
+    re.compile(r"(?:#|(?<!:)//)[^\n]*"),  # line comments
 )
 
 _NARRATIVE_COMMENT_PATTERNS: tuple[NarrativePattern, ...] = (
