@@ -1,7 +1,8 @@
 # chai-bot
 
-Advisory nudge and explicit `/chai-bot` command for offloading OSAC-scoped
-research and actions to the Red Hat-internal "Chai Bot" MCP server
+Advisory `SessionStart` nudge (for OSAC repositories) and unrestricted explicit
+`/chai-bot` command for offloading OSAC-scoped research/actions or general
+second-opinion questions to the Red Hat-internal "Chai Bot" MCP server
 (`ask_persona`, via the `ship-help` MCP server). This plugin ships an
 `omp-extension.ts` dual-harness bridge so its hooks also work under the OMP
 harness, not just Claude Code.
@@ -9,13 +10,17 @@ harness, not just Claude Code.
 ## What it does
 
 - A `SessionStart` hook advisorially nudges Claude to prefer `ask_persona`
-  for broad OSAC research/status/cross-referencing questions, when it's
-  actually available — only in `osac-project` repos, only when reachable.
+  for broad OSAC research/status/cross-referencing questions (and as a peer
+  agent for second-opinion questions) when working in an OSAC repo (`osac-project`
+  org or `osac`/`osac-*`/`.osac-*` repos like `osac-spine`) and Chai Bot is
+  reachable.
 - Nothing is enforced or blocked: this is advisory guidance, not a gate on
   local exploration.
 - Usage is logged (never question/answer content) to a shared metrics DB.
-- An explicit `/chai-bot [question]` command sends a question manually,
-  regardless of whether the automatic nudge already suggested it.
+- An explicit `/chai-bot [question]` command sends a question manually from
+  **any** repo or directory (requiring only VPN/network reachability via
+  `check-availability.sh --probe-only`), regardless of whether the automatic
+  `SessionStart` nudge fired.
 
 ## VPN dependency
 
@@ -64,18 +69,23 @@ this repository and is never committed):
 
 ## Where the automatic nudge fires
 
-Only in repos whose git remote (`origin`, falling back to `upstream`) is
-under the `osac-project` GitHub org, and only when Chai Bot actually answers
-a fast reachability probe. Everywhere else — a non-`osac-project` repo, or
-an `osac-project` repo with the VPN down — the `SessionStart` hook is
+Only in repos where **either** `origin` or `upstream` matches an OSAC
+GitHub remote — either under the `osac-project` GitHub org (including forked
+child repos where `origin` is a personal fork and `upstream` is `osac-project`)
+or any GitHub repo named `osac`, `osac-*`, or `.osac-*` (such as `osac-spine`,
+`osac-dev-environment`, `osac-sno-provisioner`, or `.osac-ai-skills`) — and
+only when Chai Bot answers a fast reachability probe. Everywhere else — an
+unrelated repo, or an OSAC repo with the VPN down — the `SessionStart` hook is
 silent.
 
 ## Using `/chai-bot` explicitly
 
-`/chai-bot What is the status of OSAC-1234?` runs the same repo + VPN
-availability gate as the automatic nudge, then calls `ask_persona` with your
-question passed through verbatim. If the gate fails, the command tells you
-why (wrong repo vs. unreachable) instead of attempting the call.
+`/chai-bot What is the status of OSAC-1234?` (or any generalized technical /
+second-opinion question) runs `check-availability.sh --probe-only` to verify
+VPN/server reachability without restricting by repository, then calls
+`ask_persona` with your question passed through verbatim. If the reachability
+probe fails, the command reports that Chai Bot is unreachable instead of
+attempting the call.
 
 ## Safety note
 

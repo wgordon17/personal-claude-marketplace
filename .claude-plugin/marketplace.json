@@ -141,9 +141,9 @@
     },
     {
       "name": "chai-bot",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "source": "./chai-bot",
-      "description": "Advisory nudge and explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server",
+      "description": "Advisory SessionStart nudge (for OSAC repos) and unrestricted /chai-bot command for offloading OSAC research/actions or general second-opinion questions to the Red Hat-internal Chai Bot MCP server",
       "category": "productivity",
       "tags": ["mcp", "osac", "advisory", "ship-help"],
       "author": { "name": "wgordon17" }

@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # session-start.sh — SessionStart hook: if this session is in an eligible
-# (osac-project) repo and Chai Bot is reachable, inject the advisory
-# guidance doc into context. Silent (no output) otherwise — the SessionStart
-# nudge doesn't need to distinguish "not eligible" from "unreachable"; only
-# the explicit /chai-bot command does.
+# OSAC repo and Chai Bot is reachable, inject the advisory guidance doc into
+# context. Silent (no output) otherwise — the SessionStart nudge doesn't need
+# to distinguish "not an OSAC repo" from "unreachable".
 
 # Guard: CLAUDE_PLUGIN_ROOT must be set and non-empty (matches
 # inject-reference.sh's pattern).
