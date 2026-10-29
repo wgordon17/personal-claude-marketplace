@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #0f172a;
+    color: #e2e8f0;
+    margin: 0;
+    padding: 24px;
+    line-height: 1.5;
+  }
+  header {
+    max-width: 1200px;
+    margin: 0 auto 24px auto;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 12px;
+  }
+  h1 {
+    margin: 0 0 4px 0;
+    font-size: 1.6rem;
+    color: #f8fafc;
+  }
+  .meta {
+    font-size: 0.9rem;
+    color: #94a3b8;
+  }
+  .layout {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    align-items: start;
+  }
+  .radar-box, .legend-box, .table-box {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .table-box {
+    max-width: 1200px;
+    margin: 24px auto 0 auto;
+    overflow-x: auto;
+  }
+  h2 {
+    margin: 0 0 12px 0;
+    font-size: 1.15rem;
+    color: #f1f5f9;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .legend-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.88rem;
+  }
+  .legend-list li {
+    padding: 4px 0;
+    border-bottom: 1px solid #334155;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #334155;
+  }
+  th {
+    color: #cbd5e1;
+    background-color: #0f172a;
+  }
+  a {
+    color: #38bdf8;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  .ring-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .ring-adopt { background-color: #065f46; color: #d1fae5; }
+  .ring-trial { background-color: #1e40af; color: #dbeafe; }
+  .ring-assess { background-color: #92400e; color: #fef3c7; }
+  .ring-watch { background-color: #3730a3; color: #e0e7ff; }
+  .ring-hold { background-color: #991b1b; color: #fee2e2; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{TITLE}}</h1>
+  <div class="meta">Generated at {{GENERATED_AT}} &middot; 4 concentric rings + outer watch band &middot; 6 quadrants</div>
+</header>
+<div class="layout">
+  <div class="radar-box">
+    <svg viewBox="0 0 800 800" role="img" aria-label="Personal Tech Radar">
+      <title>{{TITLE}}</title>
+      {{SVG_RINGS}}
+      {{SVG_SECTORS}}
+      {{SVG_BLIPS}}
+    </svg>
+  </div>
+  <div class="legend-box">
+    <h2>Legend &amp; Quadrants</h2>
+    <ul class="legend-list">
+      {{LEGEND_ITEMS}}
+    </ul>
+  </div>
+</div>
+<div class="table-box">
+  <h2>Radar Items</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Quadrant</th>
+        <th>Ring</th>
+        <th>Score</th>
+        <th>In Use</th>
+        <th>Evidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{TABLE_ROWS}}
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

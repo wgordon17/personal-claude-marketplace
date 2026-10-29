@@ -36,10 +36,12 @@ from . import (
     procs,
     profile,
     redact,
+    render,
     runlog,
     runs,
     sanitize,
     security,
+    snapshot,
     sources,
     topnames,
     usage,
@@ -70,10 +72,12 @@ _CORE_MODULES = (
     procs,
     profile,
     redact,
+    render,
     runlog,
     runs,
     sanitize,
     security,
+    snapshot,
     sources,
     topnames,
     usage,
@@ -269,12 +273,16 @@ def _handle_verdict_apply(args: argparse.Namespace, _raw_argv: Sequence[str]) ->
 
 def _handle_render(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
     raw_run_id = getattr(args, "run_id", None)
+    sync_existed = bool(getattr(args, "_sync_existed_before", True))
     try:
         ctx = context.build(run_id=str(raw_run_id) if raw_run_id else None)
-        runs.validate_run_id(ctx, str(raw_run_id) if raw_run_id else None)
+        if not sync_existed and ctx.paths.sync.is_dir() and not any(ctx.paths.sync.iterdir()):
+            ctx.paths.sync.rmdir()
+        valid_run_id = runs.validate_run_id(ctx, str(raw_run_id) if raw_run_id else None)
+        res = render.render_run(ctx, valid_run_id)
+        return emit(res, 0)
     except errors.RadarError as exc:
         return _emit_radar_error(exc)
-    return _not_implemented(args)
 
 
 def _handle_decide(args: argparse.Namespace, raw_argv: Sequence[str]) -> int:
@@ -943,7 +951,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return emit({"ok": False, "error": hook_err}, 4)
 
+    pre_paths = config.paths(ensure_dirs=False)
+    args._sync_existed_before = pre_paths.sync.is_dir()
     config.paths(ensure_dirs=True)
+    if (
+        getattr(args, "subcommand", None) == "render"
+        and not args._sync_existed_before
+        and pre_paths.sync.is_dir()
+        and not any(pre_paths.sync.iterdir())
+    ):
+        pre_paths.sync.rmdir()
     handler = getattr(args, "_handler", None)
     if handler is None:
         return emit({"ok": False, "error": "no subcommand handler"}, 1)

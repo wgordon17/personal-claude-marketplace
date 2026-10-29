@@ -21,3 +21,4 @@ This skill orchestrates the personal tech radar workflow:
 - [scripts/tech_radar/schema.sql](scripts/tech_radar/schema.sql)
 - [scripts/tech_radar/cache_schema.sql](scripts/tech_radar/cache_schema.sql)
 - [scripts/tech_radar/templates/hourly.plist.tmpl](scripts/tech_radar/templates/hourly.plist.tmpl)
+- [scripts/tech_radar/templates/radar.html.tmpl](scripts/tech_radar/templates/radar.html.tmpl)
