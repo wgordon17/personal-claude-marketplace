@@ -1,0 +1,27 @@
+{
+  "body": {
+    "data": {
+      "repository": {
+        "discussions": {
+          "nodes": [
+            {
+              "bodyText": "Announcing built-in uv audit support for lockfiles.",
+              "category": {
+                "name": "Announcements",
+                "slug": "announcements"
+              },
+              "id": "D_kwDO12345",
+              "publishedAt": "2026-10-25T16:00:00Z",
+              "title": "uv 0.14 Announcement: Built-in dependency auditing",
+              "url": "https://github.com/astral-sh/uv/discussions/999"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

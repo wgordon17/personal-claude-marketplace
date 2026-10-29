@@ -1,0 +1,23 @@
+{
+  "body": [
+    {
+      "commit": {
+        "author": {
+          "date": "2026-10-27T08:00:00Z"
+        },
+        "message": "hyperfine-plus: new formula"
+      },
+      "files": [
+        {
+          "filename": "Formula/h/hyperfine-plus.rb"
+        }
+      ],
+      "html_url": "https://github.com/Homebrew/homebrew-core/commit/b1c2d3e4f5a6",
+      "sha": "b1c2d3e4f5a60718293a4b5c6d7e8f9087654321"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

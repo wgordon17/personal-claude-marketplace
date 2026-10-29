@@ -73,9 +73,13 @@ def status(ctx: Ctx) -> dict[str, Any]:
     """Return status dict for all keyed accounts."""
     creds = ctx.credentials if isinstance(ctx.credentials, Credentials) else Credentials(ctx.procs)
     accounts_map = creds.status(KEYED_ACCOUNTS)
+    present = [acct for acct, st in accounts_map.items() if st == "present"]
+    missing = [acct for acct, st in accounts_map.items() if st != "present"]
     return {
         "service": KEYCHAIN_SERVICE,
         "accounts": accounts_map,
+        "present": present,
+        "missing": missing,
     }
 
 

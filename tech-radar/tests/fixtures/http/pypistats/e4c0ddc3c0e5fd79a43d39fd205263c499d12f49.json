@@ -1,0 +1,15 @@
+{
+  "body": {
+    "data": {
+      "last_day": 150000,
+      "last_month": 4500000,
+      "last_week": 1050000
+    },
+    "package": "litellm",
+    "type": "recent_downloads"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

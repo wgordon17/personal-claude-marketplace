@@ -357,3 +357,33 @@ def test_replay_http_error_fixture_forms(tmp_path: Path) -> None:
 
     with pytest.raises(FetchError, match="503"):
         http.fetch(status_url, transport=replay)
+
+
+def test_allowlist_matches_registry() -> None:
+    """EGRESS_ALLOWLIST equals enabled feed/json_api/html hosts + api.github.com + vis hosts."""
+    import urllib.parse
+
+    from tech_radar import sources
+
+    expected_hosts: set[str] = {"api.github.com", *http.VISIBILITY_HOSTS}
+    disabled_hosts: set[str] = set()
+
+    for spec in sources.SOURCES:
+        assert spec.hosts or spec.archetype == "subprocess", f"source {spec.id} must declare hosts"
+        if not spec.enabled:
+            disabled_hosts.update(spec.hosts)
+            continue
+        if spec.archetype in ("feed", "json_api", "html"):
+            expected_hosts.update(spec.hosts)
+            if spec.url and spec.url.startswith("https://"):
+                parsed_host = (urllib.parse.urlsplit(spec.url).hostname or "").lower()
+                assert parsed_host in spec.hosts
+                assert parsed_host in http.EGRESS_ALLOWLIST
+
+    assert frozenset(expected_hosts) == http.EGRESS_ALLOWLIST
+
+    for reddit_host in ("www.reddit.com", "api.reddit.com", "oauth.reddit.com"):
+        assert reddit_host not in http.EGRESS_ALLOWLIST
+
+    for broken_host in disabled_hosts:
+        assert broken_host not in http.EGRESS_ALLOWLIST

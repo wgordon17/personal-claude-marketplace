@@ -20,6 +20,14 @@ from typing import Any, Protocol
 from . import db
 from .errors import EgressDenied, FetchError
 
+VISIBILITY_HOSTS: frozenset[str] = frozenset(
+    {
+        "pypi.org",
+        "registry.npmjs.org",
+        "crates.io",
+    }
+)
+
 EGRESS_ALLOWLIST: frozenset[str] = frozenset(
     {
         "ampcode.com",
@@ -43,6 +51,7 @@ EGRESS_ALLOWLIST: frozenset[str] = frozenset(
         "github.com",
         "hn.algolia.com",
         "javascriptweekly.com",
+        "latent.space",
         "lobste.rs",
         "models.dev",
         "nodeweekly.com",
@@ -66,6 +75,7 @@ EGRESS_ALLOWLIST: frozenset[str] = frozenset(
         "www.cisa.gov",
         "www.claudepluginhub.com",
         "www.latent.space",
+        "www.skills.sh",
         "www.stepsecurity.io",
         "www.wiz.io",
     }

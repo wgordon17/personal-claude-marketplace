@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>Lobsters python</title>\n    <item>\n      <guid>lobsters-python-item-1</guid>\n      <title>Practitioner notes on python tooling</title>\n      <link>https://github.com/example-org/python-tool</link>\n      <pubDate>Wed, 28 Oct 2026 10:00:00 GMT</pubDate>\n      <description>Discussion on https://github.com/example-org/python-tool.</description>\n    </item>\n  </channel>\n</rss>\n",
+  "headers": {
+    "content-type": "application/rss+xml"
+  },
+  "status": 200
+}

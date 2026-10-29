@@ -1,0 +1,17 @@
+{
+  "body": {
+    "data": {
+      "rows": [
+        {
+          "description": "Trending Python analytics library",
+          "repo_name": "example-org/oss-trend-pkg",
+          "stars": 1250
+        }
+      ]
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

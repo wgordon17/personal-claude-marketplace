@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>OpenAI News</title>\n    <item>\n      <guid>openai_news-item-1</guid>\n      <title>New API free tier credits and lower token pricing</title>\n      <link>https://openai.com/index/api-pricing-update/</link>\n      <pubDate>Wed, 28 Oct 2026 10:00:00 GMT</pubDate>\n      <description>Updated API pricing plan with promotional free credits for developers.</description>\n    </item>\n  </channel>\n</rss>\n",
+  "headers": {
+    "content-type": "text/xml"
+  },
+  "status": 200
+}

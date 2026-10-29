@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n  <title>Terminal Trove</title>\n  <entry>\n    <id>terminal_trove-entry-1</id>\n    <title>yazi \u2014 Blazing fast terminal file manager</title>\n    <link href=\"https://github.com/sxyazi/yazi\"/>\n    <published>2026-10-28T10:00:00Z</published>\n    <summary>Terminal file manager written in Rust https://github.com/sxyazi/yazi.</summary>\n  </entry>\n</feed>\n",
+  "headers": {
+    "content-type": "application/xml"
+  },
+  "status": 200
+}

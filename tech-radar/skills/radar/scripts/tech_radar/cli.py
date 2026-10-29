@@ -382,6 +382,35 @@ def _handle_private_scopes(args: argparse.Namespace, raw_argv: Sequence[str]) ->
         return emit({"ok": False, "error": str(exc)}, exc.exit_code)
 
 
+def _handle_credentials(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    subcmd = str(getattr(args, "credentials_cmd", "status"))
+    try:
+        if subcmd == "guide":
+            name = str(getattr(args, "name", "producthunt"))
+            info = credentials.guide(name)
+            return emit({"ok": True, **info}, 0)
+        ctx = context.build()
+        st = credentials.status(ctx)
+        return emit({"ok": True, **st}, 0)
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+
+
+def _handle_sources(args: argparse.Namespace, _raw_argv: Sequence[str]) -> int:
+    action = str(getattr(args, "action", "list"))
+    live = bool(getattr(args, "live", False))
+    try:
+        ctx = context.build()
+        if action == "list":
+            items = sources.list_sources(ctx)
+            return emit({"ok": True, "count": len(items), "sources": items}, 0)
+        res = sources.check_sources(ctx, live=live)
+        code = 0 if res["ok"] else 3
+        return emit(res, code)
+    except errors.RadarError as exc:
+        return emit({"ok": False, "error": str(exc)}, exc.exit_code)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argparse parser for all Spec 01 CLI subcommands."""
     epilog = (
@@ -451,10 +480,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     creds_sub = p_creds.add_subparsers(dest="credentials_cmd", required=True)
     p_creds_status = creds_sub.add_parser("status", help="Show Keychain item availability")
-    p_creds_status.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_creds_status.set_defaults(_handler=_handle_credentials)
     p_creds_guide = creds_sub.add_parser("guide", help="Print setup guide for a credential")
     p_creds_guide.add_argument("name", help="Credential account name")
-    p_creds_guide.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_creds_guide.set_defaults(_handler=_handle_credentials)
 
     # plan-run
     p_plan = sub.add_parser("plan-run", help="Sync app, stage DECISIONS.md, acquire lock, plan run")
@@ -641,7 +670,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sources = sub.add_parser("sources", help="List or check sources: sources list, sources check")
     p_sources.add_argument("action", choices=SOURCES_VERBS, help="list or check")
     p_sources.add_argument("--live", action="store_true", help="Run each source live once")
-    p_sources.set_defaults(_handler=lambda a, _raw: _not_implemented(a))
+    p_sources.set_defaults(_handler=_handle_sources)
 
     # search QUERY
     p_search = sub.add_parser("search", help="FTS5 search over signals and digests")

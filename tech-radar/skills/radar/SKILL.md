@@ -15,6 +15,8 @@ This skill orchestrates the personal tech radar workflow:
 
 - [scripts/radar.py](scripts/radar.py)
 - [scripts/radar.py.lock](scripts/radar.py.lock)
+- [scripts/reddit_pull.py](scripts/reddit_pull.py)
+- [scripts/reddit_pull.py.lock](scripts/reddit_pull.py.lock)
 - [scripts/verify_app.py](scripts/verify_app.py)
 - [scripts/tech_radar/schema.sql](scripts/tech_radar/schema.sql)
 - [scripts/tech_radar/cache_schema.sql](scripts/tech_radar/cache_schema.sql)

@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>Changelog News</title>\n    <item>\n      <guid>changelog_news-item-1</guid>\n      <title>Developer workflow automation tools</title>\n      <link>https://github.com/casey/just</link>\n      <pubDate>Wed, 28 Oct 2026 10:00:00 GMT</pubDate>\n      <description>Command runner https://github.com/casey/just.</description>\n    </item>\n  </channel>\n</rss>\n",
+  "headers": {
+    "content-type": "application/xml"
+  },
+  "status": 200
+}

@@ -1,0 +1,24 @@
+{
+  "body": [
+    {
+      "downloads": 300000000,
+      "name": "requests"
+    },
+    {
+      "downloads": 290000000,
+      "name": "urllib3"
+    },
+    {
+      "downloads": 180000000,
+      "name": "pydantic"
+    },
+    {
+      "downloads": 150000000,
+      "name": "react"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

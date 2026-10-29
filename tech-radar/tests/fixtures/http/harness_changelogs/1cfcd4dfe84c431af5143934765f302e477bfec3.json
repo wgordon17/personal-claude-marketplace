@@ -1,0 +1,7 @@
+{
+  "body": "<!doctype html>\n<html><body><main>\n  <article>\n    <h2><a href=\"https://github.com/example-org/harness-tool\">Agent context pinning and MCP tool routing</a></h2>\n    <p>Added deterministic subagent handoff and workspace sandboxing.</p>\n  </article>\n</main></body></html>",
+  "headers": {
+    "content-type": "text/html"
+  },
+  "status": 200
+}

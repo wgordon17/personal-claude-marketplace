@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "users/simonw/starred?per_page=10"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "description": "Vector search SQLite extension",
+      "forks_count": 180,
+      "full_name": "example-org/sqlite-vec",
+      "html_url": "https://github.com/example-org/sqlite-vec",
+      "id": 7003,
+      "name": "sqlite-vec",
+      "owner": {
+        "login": "example-org"
+      },
+      "private": false,
+      "pushed_at": "2026-10-26T11:00:00Z",
+      "stargazers_count": 3900
+    }
+  ]
+}

@@ -427,6 +427,15 @@ def run_source(spec: SourceSpec, ctx: Ctx) -> SourceResult:
 
         for sig in signals:
             persist_raw_signal(ctx, sig, fetched_at=ctx.now_iso)
+        if not signals and spec.archetype == "subprocess":
+            degraded_reason = "degraded: empty output"
+            record_source_skipped(ctx, spec.id, degraded_reason)
+            return SourceResult(
+                source_id=spec.id,
+                signals=[],
+                ok=True,
+                skipped_reason=degraded_reason,
+            )
         record_source_ok(ctx, spec.id, len(signals))
         return SourceResult(source_id=spec.id, signals=signals, ok=True)
     except (RadarError, Exception) as exc:

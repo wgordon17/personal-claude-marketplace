@@ -1,0 +1,21 @@
+{
+  "body": {
+    "dependent_repos_count": 2100,
+    "description": "Library to call LLM APIs consistently",
+    "downloads": 4500000,
+    "ecosystem": "pypi",
+    "first_release_published_at": "2023-08-01T00:00:00Z",
+    "homepage": "https://litellm.ai",
+    "latest_release_number": "1.106.2",
+    "latest_release_published_at": "2026-10-15T00:00:00Z",
+    "name": "litellm",
+    "normalized_licenses": [
+      "MIT"
+    ],
+    "repository_url": "https://github.com/BerriAI/litellm"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

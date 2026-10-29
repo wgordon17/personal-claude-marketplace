@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>This Week in Rust</title>\n    <item>\n      <guid>twir-item-1</guid>\n      <title>This Week in Rust 675</title>\n      <link>https://this-week-in-rust.org/blog/2026/10/28/this-week-in-rust-675/</link>\n      <pubDate>Wed, 28 Oct 2026 10:00:00 GMT</pubDate>\n      <description>Crate of the week: https://github.com/BurntSushi/ripgrep.</description>\n    </item>\n  </channel>\n</rss>\n",
+  "headers": {
+    "content-type": "application/xml"
+  },
+  "status": 200
+}

@@ -1,0 +1,21 @@
+{
+  "argv": [
+    "gh",
+    "api",
+    "repos/sst/opencode/releases?per_page=5"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "body": "- Add sandboxed MCP tool execution and diff preview\n",
+      "draft": false,
+      "html_url": "https://github.com/sst/opencode/releases/tag/v0.9.0",
+      "id": 8801,
+      "name": "v0.9.0",
+      "prerelease": false,
+      "published_at": "2026-10-26T12:00:00Z",
+      "tag_name": "v0.9.0"
+    }
+  ]
+}

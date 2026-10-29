@@ -1,0 +1,7 @@
+{
+  "body": "<!doctype html>\n<html><body><main>\n  <article><h2><a href=\"https://github.com/example-org/daily-tool\">daily-tool</a></h2></article>\n</main></body></html>",
+  "headers": {
+    "content-type": "text/html"
+  },
+  "status": 200
+}

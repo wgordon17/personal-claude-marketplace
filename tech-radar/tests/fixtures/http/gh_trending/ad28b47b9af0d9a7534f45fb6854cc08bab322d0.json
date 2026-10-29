@@ -1,0 +1,7 @@
+{
+  "body": "<!doctype html>\n<html><body><main>\n  <article class=\"Box-row\">\n    <h2 class=\"h3 lh-condensed\"><a href=\"/example-org/trending-typescript\">example-org / trending-typescript</a></h2>\n    <p class=\"col-9 color-fg-muted my-1 pr-4\">Fast typescript developer toolkit.</p>\n    <div>1,420 stars this week</div>\n  </article>\n</main></body></html>",
+  "headers": {
+    "content-type": "text/html"
+  },
+  "status": 200
+}

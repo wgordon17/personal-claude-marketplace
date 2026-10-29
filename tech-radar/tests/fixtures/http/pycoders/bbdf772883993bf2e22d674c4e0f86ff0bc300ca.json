@@ -1,0 +1,7 @@
+{
+  "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n  <title>PyCoders Weekly</title>\n  <entry>\n    <id>pycoders-entry-1</id>\n    <title>PyCoders Issue #750: Fast Python Tooling</title>\n    <link href=\"https://github.com/astral-sh/ruff\"/>\n    <published>2026-10-28T10:00:00Z</published>\n    <summary>Highlights on https://github.com/astral-sh/ruff and async patterns.</summary>\n  </entry>\n</feed>\n",
+  "headers": {
+    "content-type": "application/xml"
+  },
+  "status": 200
+}

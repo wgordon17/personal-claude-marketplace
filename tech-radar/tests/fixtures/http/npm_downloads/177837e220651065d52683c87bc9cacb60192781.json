@@ -1,0 +1,12 @@
+{
+  "body": {
+    "downloads": 95000000,
+    "end": "2026-10-28",
+    "package": "react",
+    "start": "2026-09-28"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}
