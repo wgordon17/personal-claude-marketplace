@@ -25,8 +25,8 @@ typecheck:  ## Pyright type checking (dev-guard/hooks)
 prek:  ## Run pre-commit on all files
 	uvx prek run --all-files
 
-prek-install:  ## Install pre-commit + pre-push hooks
-	uvx prek install --install-hooks --hook-type pre-commit --hook-type pre-push
+prek-install:  ## Install pre-commit hooks
+	uvx prek install --install-hooks --hook-type pre-commit
 
 eval-changed:  ## On-demand: eval only changed skills (run before opening/merging a PR)
 	cd skill-eval && uv run python -m skill_eval.cli
