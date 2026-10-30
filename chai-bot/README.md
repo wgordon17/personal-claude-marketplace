@@ -38,7 +38,8 @@ this repository and is never committed):
 {
   "env": {
     "CHAI_TOKEN": "<your-chai-token>",
-    "CHAI_BOT_BASE_URL": "<your-internal-ship-help-host>"
+    "CHAI_BOT_BASE_URL": "https://<your-internal-ship-help-host>",
+    "MCP_TOOL_TIMEOUT": "3600000"
   },
   "permissions": {
     "allow": ["mcp__plugin_chai-bot_ship-help__ask_persona"]
@@ -48,7 +49,11 @@ this repository and is never committed):
 
 - `CHAI_TOKEN` — your personal Chai Bot bearer token. Never commit a real
   value; the placeholder above is illustrative only.
-- `CHAI_BOT_BASE_URL` — the internal ship-help-mcp host. This value is kept
+- `CHAI_BOT_BASE_URL` — the internal ship-help-mcp host, **host only**
+  (`https://<host>`, no path). `.mcp.json` appends
+  `/personas/osac_public/mcp` itself, so a value that already includes that
+  path doubles it and the MCP connection fails with `ENDPOINT_NOT_FOUND`;
+  `hooks/check-availability.sh` rejects such a value (exit 2). This value is kept
   out of `.mcp.json` and `hooks/check-availability.sh` (both committed,
   public files) specifically so the internal Red Hat hostname never lands in
   git history. **Must use the `https://` scheme** (loopback `http://` is
@@ -58,6 +63,10 @@ this repository and is never committed):
   (`hooks/metrics.py` returns `permissionDecision: "deny"`), and `hooks/check-availability.sh`
   also reports unavailable (exit 2), suppressing the advisory nudge and the
   `/chai-bot` command.
+- `MCP_TOOL_TIMEOUT` — how long Claude Code waits for an MCP tool call, in
+  milliseconds. Chai Bot calls can run 30 minutes or more, and shorter
+  limits cut them off (600s was observed in practice). 60 minutes is a
+  reasonable value.
 - The `permissions.allow` entry documents intent and avoids a manual
   permission prompt on the very first `ask_persona` call in a session,
   before the chai-bot metrics hook has had a chance to fire. It is **not**
