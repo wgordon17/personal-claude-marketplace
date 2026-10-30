@@ -95,13 +95,23 @@ def _bin_dir_with_real(tmp_path: Path, *tools: str) -> Path:
     return bin_dir
 
 
-def _run_script(bin_dir: Path, *, base_url: str | None) -> subprocess.CompletedProcess:
+def _run_script(
+    bin_dir: Path,
+    *,
+    base_url: str | None,
+    args: tuple[str, ...] = (),
+) -> subprocess.CompletedProcess:
     env = {**os.environ, "PATH": str(bin_dir)}
     if base_url is None:
         env.pop("CHAI_BOT_BASE_URL", None)
     else:
         env["CHAI_BOT_BASE_URL"] = base_url
-    return subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True, env=env)
+    return subprocess.run(
+        ["bash", str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
 
 
 class TestAvailabilityProbeExitCodes:
@@ -180,6 +190,28 @@ class TestAvailabilityProbeExitCodes:
         result = _run_script(bin_dir, base_url="https://example.invalid")
         assert result.returncode == 1, result.stderr
         assert not call_log.exists(), "curl must never be invoked when the repo gate rejects"
+
+    def test_probe_only_in_non_matching_repo_succeeds_when_curl_succeeds(self, tmp_path):
+        """With --probe-only, a non-OSAC repo still runs the curl probe and
+        exits 0 when Chai Bot is reachable."""
+        bin_dir = _bin_dir_with_real(tmp_path, "bash")
+        _make_git_shim(bin_dir, origin="git@github.com:not-osac-project/x.git")
+        call_log = tmp_path / "curl-calls.log"
+        _make_curl_shim(bin_dir, call_log, exit_code=0)
+        result = _run_script(bin_dir, base_url="https://example.invalid", args=("--probe-only",))
+        assert result.returncode == 0, result.stderr
+        assert call_log.read_text().count("called") == 1
+
+    def test_probe_only_in_non_matching_repo_exits_2_when_curl_fails(self, tmp_path):
+        """With --probe-only, an unreachable server yields exit 2 (never exit 1)
+        even when the repo is not an OSAC repo."""
+        bin_dir = _bin_dir_with_real(tmp_path, "bash")
+        _make_git_shim(bin_dir, origin="git@github.com:not-osac-project/x.git")
+        call_log = tmp_path / "curl-calls.log"
+        _make_curl_shim(bin_dir, call_log, exit_code=28)
+        result = _run_script(bin_dir, base_url="https://example.invalid", args=("--probe-only",))
+        assert result.returncode == 2, result.stderr
+        assert call_log.read_text().count("called") == 1
 
 
 class TestRealHttpServerReachability:

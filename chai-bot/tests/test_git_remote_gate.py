@@ -81,11 +81,16 @@ def _bin_dir_with_real(tmp_path: Path, *tools: str) -> Path:
     return bin_dir
 
 
-def _run_script(bin_dir: Path, *, cwd: Path | None = None) -> subprocess.CompletedProcess:
+def _run_script(
+    bin_dir: Path,
+    *,
+    cwd: Path | None = None,
+    args: tuple[str, ...] = (),
+) -> subprocess.CompletedProcess:
     env = {**os.environ, "PATH": str(bin_dir)}
     env.pop("CHAI_BOT_BASE_URL", None)
     return subprocess.run(
-        ["bash", str(SCRIPT)],
+        ["bash", str(SCRIPT), *args],
         capture_output=True,
         text=True,
         env=env,
@@ -94,7 +99,7 @@ def _run_script(bin_dir: Path, *, cwd: Path | None = None) -> subprocess.Complet
 
 
 class TestGitRemoteGateMatches:
-    """A matching osac-project remote reaches step 4 -- exit 2 (env var unset), not exit 1."""
+    """A matching OSAC remote reaches step 4 -- exit 2 (env var unset), not exit 1."""
 
     def test_ssh_form_matches(self, tmp_path):
         bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
@@ -116,6 +121,59 @@ class TestGitRemoteGateMatches:
         assert result.returncode == 2, result.stderr
 
     @pytest.mark.parametrize(
+        "origin_url,upstream_url",
+        [
+            (
+                "git@github.com:some-user/managed-cluster-config.git",
+                "git@github.com:osac-project/managed-cluster-config.git",
+            ),
+            (
+                "https://github.com/some-user/docs.git",
+                "https://github.com/osac-project/docs.git",
+            ),
+            (
+                "git@github.com:some-user/unrelated.git",
+                "git@github.com:some-user/osac-spine.git",
+            ),
+        ],
+    )
+    def test_fork_workflow_non_matching_origin_falls_through_to_upstream(
+        self, tmp_path, origin_url, upstream_url
+    ):
+        """When origin points to a personal fork whose repo name is not osac-*
+        (e.g. managed-cluster-config, docs), the gate must still check upstream
+        and match when upstream is an eligible OSAC remote."""
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        _make_git_shim(bin_dir, origin=origin_url, upstream=upstream_url)
+        result = _run_script(bin_dir)
+        assert result.returncode == 2, result.stderr
+
+    @pytest.mark.parametrize(
+        "remote_url",
+        [
+            "git@github.com:some-user/osac-spine.git",
+            "https://github.com/some-user/osac-spine.git",
+            "https://github.com/some-user/osac-spine",
+            "ssh://git@github.com/some-user/osac-spine.git",
+            "git@github.com:some-user/osac-dev-environment.git",
+            "git@github.com:some-user/osac-sno-provisioner.git",
+            "git@github.com:some-user/.osac-ai-skills.git",
+            "git@github.com:some-user/osac.git",
+            "https://github.com/some-user/osac",
+            "https://github.com/some-user/OSAC-Spine.git",
+        ],
+    )
+    def test_osac_named_repos_under_any_owner_match(self, tmp_path, remote_url):
+        """Repositories named osac, osac-<suffix>, or .osac-<suffix> on
+        github.com (such as osac-spine, osac-dev-environment,
+        osac-sno-provisioner, .osac-ai-skills, or a direct fork of osac) match
+        even without an osac-project org remote."""
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        _make_git_shim(bin_dir, origin=remote_url)
+        result = _run_script(bin_dir)
+        assert result.returncode == 2, result.stderr
+
+    @pytest.mark.parametrize(
         "remote_url",
         [
             "git@github.com:OSAC-Project/x.git",
@@ -125,7 +183,7 @@ class TestGitRemoteGateMatches:
     def test_differently_cased_org_still_matches(self, tmp_path, remote_url):
         """The real osac-project org, but differently cased -- must
         still be treated as eligible (proceed past the gate to exit 2, not
-        wrongly rejected with exit 1) now that the match is case-insensitive."""
+        wrongly rejected with exit 1) since the match is case-insensitive."""
         bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
         _make_git_shim(bin_dir, origin=remote_url)
         result = _run_script(bin_dir)
@@ -161,14 +219,25 @@ class TestGitRemoteGateRejects:
             "https://github.com/osac-project-fork/x.git",
             "git@github.com:not-osac-project/x.git",
             "https://github.com/not-osac-project/x.git",
-            "git@github.com:some-org/osac-project.git",
+            "git@github.com:some-org/not-osac.git",
+            "git@github.com:some-org/osacful.git",
+            "https://github.com/osac-project/x/extra-segment",
+            "https://github.com/some-org/osac-spine/extra-segment",
+            "https://github.com/../osac-spine.git",
+            "https://github.com/osac-project/",
+            "https://github.com/osac-project/..",
+            "https://github.com/osac-project/.git",
+            "git@github.com:some-org/.osac.git",
             "https://gitlab.com/osac-project/x.git",
+            "https://gitlab.com/some-org/osac-spine.git",
             # Lookalike host -- "github.com" is only a substring of the
             # actual host, which must not satisfy the anchored scheme/host match.
             "https://faux-github.com/osac-project/x.git",
+            "https://faux-github.com/some-org/osac-spine.git",
             # "github.com/osac-project/" appears, but only as a path
             # segment on a completely different host -- must not match.
             "https://evil.example.com/github.com/osac-project/x",
+            "https://evil.example.com/github.com/some-org/osac-spine.git",
             # "github.com" as userinfo of a different host (the real host
             # is evil.com) -- the userinfo group [^/@]*@ must not let this match.
             "https://github.com@evil.com/osac-project/x.git",
@@ -177,6 +246,16 @@ class TestGitRemoteGateRejects:
     def test_lookalike_rejected(self, tmp_path, remote_url):
         bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
         _make_git_shim(bin_dir, origin=remote_url)
+        result = _run_script(bin_dir)
+        assert result.returncode == 1, result.stderr
+
+    def test_both_remotes_non_matching_rejected(self, tmp_path):
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        _make_git_shim(
+            bin_dir,
+            origin="git@github.com:some-user/other-repo.git",
+            upstream="git@github.com:other-org/other-repo.git",
+        )
         result = _run_script(bin_dir)
         assert result.returncode == 1, result.stderr
 
@@ -240,3 +319,52 @@ class TestGitRemoteGateRejects:
         result = _run_script(bin_dir, cwd=empty_dir)
         assert result.returncode == 1, result.stderr
         assert not call_log.exists(), "curl must never be invoked for a real non-git directory"
+
+    @pytest.mark.parametrize(
+        "bad_args",
+        [
+            ("--unknown-flag",),
+            ("--probe-only", "extra-arg"),
+        ],
+    )
+    def test_invalid_cli_args_rejected_without_curl(self, tmp_path, bad_args):
+        """An unrecognized CLI flag or extra positional argument exits 1 before
+        any git or curl call."""
+        bin_dir = _bin_dir_with_real(tmp_path, "bash")
+        _make_git_shim(bin_dir, origin="git@github.com:osac-project/x.git")
+        call_log = tmp_path / "curl-calls.log"
+        _make_curl_call_counting_shim(bin_dir, call_log)
+        result = _run_script(bin_dir, args=bad_args)
+        assert result.returncode == 1, result.stderr
+        assert not call_log.exists(), "curl must never be invoked on invalid CLI args"
+
+
+class TestProbeOnlyBypassesGitGate:
+    """--probe-only skips Steps 1-3 (git repo and remote checks) and proceeds
+    directly to Step 4 (reachability probe), so /chai-bot can run from any
+    repository or non-git directory."""
+
+    def test_probe_only_in_non_osac_repo_reaches_step_4(self, tmp_path):
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        _make_git_shim(bin_dir, origin="git@github.com:not-osac-project/x.git")
+        result = _run_script(bin_dir, args=("--probe-only",))
+        assert result.returncode == 2, result.stderr
+
+    def test_probe_only_outside_git_repo_reaches_step_4(self, tmp_path):
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        _make_git_shim(bin_dir, is_repo=False)
+        result = _run_script(bin_dir, args=("--probe-only",))
+        assert result.returncode == 2, result.stderr
+
+    def test_probe_only_without_git_installed_reaches_step_4(self, tmp_path):
+        bin_dir = _bin_dir_with_real(tmp_path, "bash", "curl")
+        result = _run_script(bin_dir, args=("--probe-only",))
+        assert result.returncode == 2, result.stderr
+
+    def test_command_file_invokes_check_availability_with_probe_only(self):
+        """Pins that commands/chai-bot.md invokes check-availability.sh with
+        --probe-only so explicit /chai-bot calls are not restricted by repo."""
+        command_file = REPO_ROOT / "chai-bot" / "commands" / "chai-bot.md"
+        assert command_file.exists(), f"expected command file at {command_file}"
+        content = command_file.read_text()
+        assert 'check-availability.sh" --probe-only' in content

@@ -1,20 +1,24 @@
 # Chai Bot (`ask_persona`) advisory guidance
 
-This session is in an `osac-project` repo and Chai Bot (reachable via the
-`ship-help` MCP server's `ask_persona` tool) is reachable.
+This session is in an OSAC repository (`osac-project` org or `osac`/`osac-*`
+repo such as `osac-spine`) and Chai Bot (reachable via the `ship-help` MCP
+server's `ask_persona` tool) is reachable.
 
 ## What it is
 
-`ask_persona` reaches a Red Hat-internal "Chai Bot" persona with access to
-Slack, Jira, GitHub, and docs for the OSAC org. It is a single
-natural-language question/answer tool, not a set of narrow read-only
-queries.
+`ask_persona` reaches a Red Hat-internal "Chai Bot" agent with access to
+Slack, Jira, GitHub, and docs for the OSAC org, and can also serve as an
+independent peer agent for generalized technical questions or a second
+opinion. It is a single natural-language question/answer tool, not a set of
+narrow read-only queries.
 
 ## When to prefer it
 
-Broad OSAC research, status, or cross-referencing questions that would
-otherwise take several local tool calls or a codebase crawl — e.g. "what's
-the status of ticket X across Jira and its PRs."
+- Broad OSAC research, status, or cross-referencing questions that would
+  otherwise take several local tool calls or a codebase crawl — e.g. "what's
+  the status of ticket X across Jira and its PRs."
+- Consulting another agent for an independent perspective, sanity check, or
+  generalized technical question when helpful or requested by the user.
 
 ## Latency caveat
 

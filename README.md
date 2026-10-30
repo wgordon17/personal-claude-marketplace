@@ -129,7 +129,7 @@ Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project
 
 | Plugin | Description | Components | Docs |
 |--------|-------------|------------|------|
-| chai-bot | Advisory nudge and explicit `/chai-bot` command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server | MCP server, 1 command, 2 hooks | [README](chai-bot/README.md) |
+| chai-bot | Advisory `SessionStart` nudge (for OSAC repos) and unrestricted `/chai-bot` command for offloading OSAC research/actions or general second-opinion questions to the Red Hat-internal Chai Bot MCP server | MCP server, 1 command, 2 hooks | [README](chai-bot/README.md) |
 
 ### Development Guard
 

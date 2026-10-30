@@ -50,7 +50,7 @@ Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.clau
 - **jira/** — Jira integration via Atlassian Rovo MCP server; OSAC defaults (project=OSAC); skill (`/jira:jira`) and spawnable agent (`jira:jira-agent`)
 - **drawio/** — Vendored draw.io diagram generation skill from jgraph/drawio-mcp (Apache 2.0); weekly upstream sync via GHA
 - **fetchaller-mcp/** — Pinned MCP fetch/search server for domains that block Claude Code's built-in WebFetch/WebSearch (Reddit and 15 other sites); commit-SHA pinned, never tracks main
-- **chai-bot/** — Advisory nudge + explicit /chai-bot command for offloading OSAC-scoped research/actions to the Red Hat-internal Chai Bot MCP server; repo-gated to osac-project remotes, VPN-dependent
+- **chai-bot/** — Advisory SessionStart nudge (OSAC-repo-gated) + unrestricted `/chai-bot` command for offloading OSAC research/actions or general second-opinion questions to the Red Hat-internal Chai Bot MCP server; VPN-dependent
 
 Each plugin ships dual manifests: `.claude-plugin/plugin.json` (Claude Code) and root `plugin.json` (Agent Plugins v1), registered in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 
