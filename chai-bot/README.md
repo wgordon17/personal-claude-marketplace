@@ -39,7 +39,8 @@ this repository and is never committed):
   "env": {
     "CHAI_TOKEN": "<your-chai-token>",
     "CHAI_BOT_BASE_URL": "https://<your-internal-ship-help-host>",
-    "MCP_TOOL_TIMEOUT": "3600000"
+    "MCP_TOOL_TIMEOUT": "3600000",
+    "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT": "3600000"
   },
   "permissions": {
     "allow": ["mcp__plugin_chai-bot_ship-help__ask_persona"]
@@ -63,10 +64,12 @@ this repository and is never committed):
   (`hooks/metrics.py` returns `permissionDecision: "deny"`), and `hooks/check-availability.sh`
   also reports unavailable (exit 2), suppressing the advisory nudge and the
   `/chai-bot` command.
-- `MCP_TOOL_TIMEOUT` — how long Claude Code waits for an MCP tool call, in
-  milliseconds. Chai Bot calls can run 30 minutes or more, and shorter
-  limits cut them off (600s was observed in practice). 60 minutes is a
-  reasonable value.
+- `MCP_TOOL_TIMEOUT` and `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` — how long Claude
+  Code waits for an MCP tool call (wall-clock and HTTP idle timeout, in
+  milliseconds). Chai Bot calls can run 30 minutes or more; `.mcp.json` sets
+  `"timeout": 3600000` (60 minutes) on the `ship-help` server directly, and
+  setting both environment variables to `3600000` keeps the global defaults
+  matched.
 - The `permissions.allow` entry documents intent and avoids a manual
   permission prompt on the very first `ask_persona` call in a session,
   before the chai-bot metrics hook has had a chance to fire. It is **not**

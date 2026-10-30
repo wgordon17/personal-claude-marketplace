@@ -6,7 +6,7 @@
       "headers": {
         "Authorization": "Bearer ${CHAI_TOKEN}"
       },
-      "timeout": 600000
+      "timeout": 3600000
     }
   }
 }

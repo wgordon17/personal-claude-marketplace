@@ -32,11 +32,12 @@ only quick questions, subject to the action rules below.
 Calls usually take minutes and can run 30 minutes or more. Do not use for
 iterative, tight-loop, or latency-sensitive work.
 
-Claude Code gives up on an MCP tool call after its tool timeout (calls were
-cut off at 600s in practice). Set `MCP_TOOL_TIMEOUT` (milliseconds) in the
-`env` block of `~/.claude/settings.json`, e.g. `"3600000"` for 60 minutes; it
-applies from the next session. A call the client gave up on may keep running
-on Chai Bot's side.
+Claude Code gives up on an MCP tool call after its tool timeout. `.mcp.json`
+sets `"timeout": 3600000` (60 minutes) on the `ship-help` server; you can also
+set `MCP_TOOL_TIMEOUT` and `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` (milliseconds)
+to `"3600000"` in the `env` block of `~/.claude/settings.json` (applies from
+the next session). A call the client gave up on may keep running on Chai Bot's
+side.
 
 ## One call at a time
 
