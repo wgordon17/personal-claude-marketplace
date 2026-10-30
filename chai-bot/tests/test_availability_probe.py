@@ -269,6 +269,52 @@ class TestRealHttpServerReachability:
         assert result.returncode == 2, result.stderr
 
 
+class TestBaseUrlIncludesMcpPath:
+    """.mcp.json appends /personas/osac_public/mcp to CHAI_BOT_BASE_URL. A base
+    URL that already carries that path doubles it, so the MCP connection fails
+    with ENDPOINT_NOT_FOUND even though the host answers the reachability
+    probe. check-availability.sh must reject it (exit 2, curl never invoked)
+    and say how to fix it."""
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "https://chai.example.invalid/personas/osac_public/mcp",
+            "https://chai.example.invalid/personas/osac_public/mcp/",
+            "https://chai.example.invalid/personas/osac_public",
+            "https://chai.example.invalid/personas",
+            "https://chai.example.invalid/mcp",
+        ],
+    )
+    def test_base_url_with_mcp_path_rejected_without_curl(self, tmp_path, base_url):
+        bin_dir = _bin_dir_with_real(tmp_path, "bash")
+        _make_git_shim(bin_dir, origin="git@github.com:osac-project/x.git")
+        call_log = tmp_path / "curl-calls.log"
+        _make_curl_shim(bin_dir, call_log, exit_code=0)
+        result = _run_script(bin_dir, base_url=base_url)
+        assert result.returncode == 2, f"{base_url!r} should be rejected: {result.stderr}"
+        assert not call_log.exists(), f"curl must not be invoked for {base_url!r}"
+        assert "must be the host only" in result.stderr
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "https://chai.example.invalid",
+            "https://chai.example.invalid/",
+            "https://personas.example.invalid",
+            "https://mcp.example.invalid",
+        ],
+    )
+    def test_host_only_base_url_reaches_curl(self, tmp_path, base_url):
+        bin_dir = _bin_dir_with_real(tmp_path, "bash")
+        _make_git_shim(bin_dir, origin="git@github.com:osac-project/x.git")
+        call_log = tmp_path / "curl-calls.log"
+        _make_curl_shim(bin_dir, call_log, exit_code=0)
+        result = _run_script(bin_dir, base_url=base_url)
+        assert result.returncode == 0, result.stderr
+        assert call_log.exists(), f"{base_url!r} should reach the curl probe"
+
+
 class TestHttpsSchemeEnforcement:
     """The https gate (check-availability.sh): a non-https, non-loopback
     CHAI_BOT_BASE_URL is rejected (exit 2, curl never invoked) so CHAI_TOKEN

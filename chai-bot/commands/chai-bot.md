@@ -13,7 +13,7 @@ The question is: $ARGUMENTS
 Follow these steps exactly, in order:
 
 1. Run `"${CLAUDE_PLUGIN_ROOT}/hooks/check-availability.sh" --probe-only` via Bash and note its exit code.
-2. If the exit code is non-zero (e.g. `2`): tell the user Chai Bot is unreachable (likely VPN is down or `CHAI_BOT_BASE_URL` is unset/invalid), and STOP. Do not call `ask_persona`.
+2. If the exit code is non-zero (e.g. `2`): tell the user Chai Bot is unreachable (likely VPN is down, or `CHAI_BOT_BASE_URL` is unset, not https://, or includes the MCP path when it must be the host only), pass along any message the script printed to stderr, and STOP. Do not call `ask_persona`.
 3. If the exit code is `0`:
    a. Immediately before calling the tool, log this explicit invocation into dev-guard's shared metrics DB (respects `GUARD_DB_PATH`, defaults to `~/.claude/logs/dev-guard.db`) by running this command via Bash:
       `uv run --no-project "${CLAUDE_PLUGIN_ROOT}/hooks/metrics.py" --log-explicit-invoke`

@@ -11,7 +11,8 @@
 #   0 = available (eligible repo or --probe-only, and Chai Bot reachable)
 #   1 = not an eligible OSAC repo (or invalid CLI flag) — no network call made
 #   2 = Chai Bot is unusable (unreachable — likely VPN down — missing
-#       CHAI_BOT_BASE_URL, or CHAI_BOT_BASE_URL not https://)
+#       CHAI_BOT_BASE_URL, CHAI_BOT_BASE_URL not https://, or
+#       CHAI_BOT_BASE_URL already including the MCP path)
 
 set -u
 
@@ -97,6 +98,16 @@ if [[ "$CHAI_BOT_BASE_URL" == *$'\n'* || "$CHAI_BOT_BASE_URL" == *$'\r'* ]]; the
 fi
 if [[ ! "$CHAI_BOT_BASE_URL" =~ ^https:// ]] &&
     [[ ! "$CHAI_BOT_BASE_URL" =~ ^http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/.*)?$ ]]; then
+    exit 2
+fi
+
+# .mcp.json appends /personas/osac_public/mcp to CHAI_BOT_BASE_URL, so a base
+# URL that already carries that path doubles it and the MCP connection fails
+# with ENDPOINT_NOT_FOUND. The reachability probe below would still pass (it
+# only checks the connection), so catch this misconfiguration explicitly.
+if [[ "$CHAI_BOT_BASE_URL" =~ /personas(/|$) || "$CHAI_BOT_BASE_URL" =~ /mcp/*$ ]]; then
+    echo "chai-bot: CHAI_BOT_BASE_URL must be the host only (e.g. https://<host>);" \
+        "the plugin appends /personas/osac_public/mcp itself" >&2
     exit 2
 fi
 

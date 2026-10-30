@@ -12,18 +12,44 @@ independent peer agent for generalized technical questions or a second
 opinion. It is a single natural-language question/answer tool, not a set of
 narrow read-only queries.
 
+It is a full agent, not just a lookup. When asked, it can investigate the
+OSAC repos, reproduce and verify behavior in code, write code, create and
+update Jira issues, and open PRs. Hand it heavy, multi-step work rather than
+only quick questions, subject to the action rules below.
+
 ## When to prefer it
 
 - Broad OSAC research, status, or cross-referencing questions that would
   otherwise take several local tool calls or a codebase crawl — e.g. "what's
   the status of ticket X across Jira and its PRs."
+- Verifying claims against the current code, checking Jira for duplicates,
+  or choosing the right parent Epic before filing a ticket.
 - Consulting another agent for an independent perspective, sanity check, or
   generalized technical question when helpful or requested by the user.
 
 ## Latency caveat
 
-Calls take 30 seconds to 4+ minutes. Do not use for iterative, tight-loop,
-or latency-sensitive work.
+Calls usually take minutes and can run 30 minutes or more. Do not use for
+iterative, tight-loop, or latency-sensitive work.
+
+Claude Code gives up on an MCP tool call after its tool timeout (calls were
+cut off at 600s in practice). Set `MCP_TOOL_TIMEOUT` (milliseconds) in the
+`env` block of `~/.claude/settings.json`, e.g. `"3600000"` for 60 minutes; it
+applies from the next session. A call the client gave up on may keep running
+on Chai Bot's side.
+
+## One call at a time
+
+Chai Bot works on one request at a time. A call sent while another is still
+running comes back with "I'm busy right now. Please try again in a minute."
+instead of an answer.
+
+- Never send `ask_persona` calls in parallel, including from parallel
+  subagents. Send them one after another.
+- On a "busy" reply, wait several minutes before retrying once. An earlier
+  call that timed out on the client side may still be holding the slot.
+- Put everything you need into one well-scoped, self-contained question
+  rather than several small ones.
 
 ## No conversational memory
 
