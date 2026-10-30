@@ -20,8 +20,8 @@ install_atomic_executable() {
 }
 
 ensure_betterleaks_hook() {
-    # Skip during unrelated pytest runs unless BETTERLEAKS_CONFIG_DIR is explicitly isolated
-    if [ -n "${PYTEST_CURRENT_TEST:-}" ] && [ -z "${BETTERLEAKS_CONFIG_DIR:-}" ]; then
+    # Skip during unrelated pytest runs unless BETTERLEAKS_CONFIG_DIR or GIT_CONFIG_GLOBAL is explicitly isolated
+    if [ -n "${PYTEST_CURRENT_TEST:-}" ] && [ -z "${BETTERLEAKS_CONFIG_DIR:-}" ] && [ -z "${GIT_CONFIG_GLOBAL:-}" ]; then
         return 0
     fi
 
@@ -32,7 +32,7 @@ ensure_betterleaks_hook() {
         return 0
     fi
 
-    local script_dir plugin_root config_dir hook_src sync_src hook_dst sync_dst
+    local script_dir plugin_root config_dir hook_src sync_src hook_dst sync_dst hook_cmd current_cmd
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || return 0
     plugin_root="${CLAUDE_PLUGIN_ROOT:-$(cd "$script_dir/.." 2>/dev/null && pwd)}" || return 0
     config_dir="${BETTERLEAKS_CONFIG_DIR:-$HOME/.config/betterleaks}"
@@ -40,6 +40,13 @@ ensure_betterleaks_hook() {
     sync_src="$plugin_root/scripts/sync-betterleaks-overlay.py"
     hook_dst="$config_dir/git-hook.sh"
     sync_dst="$config_dir/sync_overlay.py"
+    if [ -n "${BETTERLEAKS_CONFIG_DIR:-}" ]; then
+        hook_cmd="$hook_dst"
+    else
+        # Literal tilde is expanded by Git's shell hook runner at execution time
+        # shellcheck disable=SC2088
+        hook_cmd="~/.config/betterleaks/git-hook.sh"
+    fi
 
     mkdir -p "$config_dir" 2>/dev/null || return 0
     chmod 700 "$config_dir" 2>/dev/null || true
@@ -53,8 +60,20 @@ ensure_betterleaks_hook() {
     if [ "$(git config --global --get hook.betterleaks.parallel 2>/dev/null || true)" != "true" ]; then
         git config --global hook.betterleaks.parallel true 2>/dev/null || true
     fi
-    if [ "$(git config --global --get hook.betterleaks.command 2>/dev/null || true)" != "$hook_dst" ]; then
-        git config --global hook.betterleaks.command "$hook_dst" 2>/dev/null || true
+    current_cmd="$(git config --global --get hook.betterleaks.command 2>/dev/null || true)"
+    if [ -n "${BETTERLEAKS_CONFIG_DIR:-}" ]; then
+        if [ "$current_cmd" != "$hook_cmd" ]; then
+            git config --global hook.betterleaks.command "$hook_cmd" 2>/dev/null || true
+        fi
+    else
+        # shellcheck disable=SC2016
+        case "$current_cmd" in
+            "$hook_cmd"|'sh -c '\''exec "$HOME/.config/betterleaks/git-hook.sh" "$@"'\'' --')
+                ;;
+            *)
+                git config --global hook.betterleaks.command "$hook_cmd" 2>/dev/null || true
+                ;;
+        esac
     fi
 
     if [ -z "${PYTEST_CURRENT_TEST:-}" ] && [ -x "$sync_dst" ] && command -v uv >/dev/null 2>&1; then
