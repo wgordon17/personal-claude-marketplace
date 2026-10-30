@@ -540,6 +540,69 @@ exit 0
         inode_after = (hook_dst.stat().st_ino, sync_dst.stat().st_ino)
         assert inode_after == inode_before
 
+    def test_session_start_default_home_writes_portable_tilde_and_preserves_shell_wrapper(
+        self, tmp_path: Path
+    ):
+        home_dir = tmp_path / "home"
+        cfg_dir = home_dir / ".config" / "betterleaks"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "betterleaks-unified.toml").write_text("rules = []\n", encoding="utf-8")
+
+        gitconfig = home_dir / ".gitconfig"
+        gitconfig.write_text(
+            f'[hook "betterleaks"]\n\tcommand = {cfg_dir}/git-hook.sh\n',
+            encoding="utf-8",
+        )
+
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_executable(bin_dir / "betterleaks", "#!/bin/sh\necho 'betterleaks 2.0.0'\n")
+
+        env = os.environ.copy()
+        env.pop("BETTERLEAKS_CONFIG_DIR", None)
+        env["HOME"] = str(home_dir)
+        env["PATH"] = f"{bin_dir}:{env.get('PATH', '/usr/bin:/bin')}"
+        env["GIT_CONFIG_GLOBAL"] = str(gitconfig)
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+
+        proc = subprocess.run(
+            ["bash", str(GIT_INSTRUCTIONS_PATH)],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, proc.stderr
+
+        val = subprocess.check_output(
+            ["git", "config", "--global", "--get", "hook.betterleaks.command"],
+            env=env,
+            text=True,
+        ).strip()
+        assert val == "~/.config/betterleaks/git-hook.sh"
+
+        # Portable $HOME shell wrapper in tracked dotfiles must also be preserved untouched
+        shell_wrapper = 'sh -c \'exec "$HOME/.config/betterleaks/git-hook.sh" "$@"\' --'
+        subprocess.run(
+            ["git", "config", "--global", "hook.betterleaks.command", shell_wrapper],
+            env=env,
+            check=True,
+        )
+        subprocess.run(
+            ["bash", str(GIT_INSTRUCTIONS_PATH)],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        val_after = subprocess.check_output(
+            ["git", "config", "--global", "--get", "hook.betterleaks.command"],
+            env=env,
+            text=True,
+        ).strip()
+        assert val_after == shell_wrapper
+
     def test_session_start_warns_and_skips_gitconfig_when_betterleaks_missing(self, tmp_path: Path):
         script_copy = self._make_executable(
             tmp_path / "git-instructions.sh",
