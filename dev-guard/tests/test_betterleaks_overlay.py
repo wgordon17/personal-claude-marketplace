@@ -540,9 +540,7 @@ exit 0
         inode_after = (hook_dst.stat().st_ino, sync_dst.stat().st_ino)
         assert inode_after == inode_before
 
-    def test_session_start_default_home_writes_portable_tilde_and_preserves_shell_wrapper(
-        self, tmp_path: Path
-    ):
+    def test_session_start_default_home_writes_portable_tilde(self, tmp_path: Path):
         home_dir = tmp_path / "home"
         cfg_dir = home_dir / ".config" / "betterleaks"
         cfg_dir.mkdir(parents=True)
@@ -580,28 +578,6 @@ exit 0
             text=True,
         ).strip()
         assert val == "~/.config/betterleaks/git-hook.sh"
-
-        # Portable $HOME shell wrapper in tracked dotfiles must also be preserved untouched
-        shell_wrapper = 'sh -c \'exec "$HOME/.config/betterleaks/git-hook.sh" "$@"\' --'
-        subprocess.run(
-            ["git", "config", "--global", "hook.betterleaks.command", shell_wrapper],
-            env=env,
-            check=True,
-        )
-        subprocess.run(
-            ["bash", str(GIT_INSTRUCTIONS_PATH)],
-            cwd=tmp_path,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        val_after = subprocess.check_output(
-            ["git", "config", "--global", "--get", "hook.betterleaks.command"],
-            env=env,
-            text=True,
-        ).strip()
-        assert val_after == shell_wrapper
 
     def test_session_start_warns_and_skips_gitconfig_when_betterleaks_missing(self, tmp_path: Path):
         script_copy = self._make_executable(
