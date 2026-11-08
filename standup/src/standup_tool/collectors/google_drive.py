@@ -31,6 +31,7 @@ _DRIVE_RE = re.compile(r"https://drive\.google\.com/(?:file/d/|open\?id=)([a-zA-
 _HTTP_TIMEOUT = 30  # seconds, per Drive API request
 
 _thread_local = threading.local()
+_run_generation = 0
 
 
 def _is_fatal_drive_error(exc: BaseException) -> bool:
@@ -63,13 +64,20 @@ def _is_fatal_drive_error(exc: BaseException) -> bool:
 
 
 def _get_thread_service(config_dir: Path | None = None):
-    """Get or create a thread-local Drive API service object."""
-    if not hasattr(_thread_local, "service"):
+    """Get or create a thread-local Drive API service object keyed by config_dir and run."""
+    sentinel = object()
+    if (
+        not hasattr(_thread_local, "service")
+        or getattr(_thread_local, "config_dir", sentinel) != config_dir
+        or getattr(_thread_local, "run_gen", None) != _run_generation
+    ):
         creds = get_credentials(config_dir)
         authed_http = google_auth_httplib2.AuthorizedHttp(
             creds, http=httplib2.Http(timeout=_HTTP_TIMEOUT)
         )
         _thread_local.service = build("drive", "v3", http=authed_http)
+        _thread_local.config_dir = config_dir
+        _thread_local.run_gen = _run_generation
     return _thread_local.service
 
 
@@ -118,7 +126,6 @@ def _export_text(service, file_id: str) -> str | None:
     except Exception as exc:
         if _is_fatal_drive_error(exc):
             raise
-        logger.debug("Failed to export doc %s: %s", file_id, exc)
         logger.warning("Failed to export doc %s: %s", file_id, exc)
         return None
 
@@ -137,7 +144,6 @@ def _download_text(service, file_id: str) -> str | None:
     except Exception as exc:
         if _is_fatal_drive_error(exc):
             raise
-        logger.debug("Failed to download file %s: %s", file_id, exc)
         logger.warning("Failed to download file %s: %s", file_id, exc)
         return None
 
@@ -187,7 +193,6 @@ def _fetch_comments(service, file_id: str, since: date | None = None) -> list[di
     except Exception as exc:
         if _is_fatal_drive_error(exc):
             raise
-        logger.debug("Failed to fetch comments for %s: %s", file_id, exc)
         logger.warning("Failed to fetch comments for %s: %s", file_id, exc)
         return []
 
@@ -286,7 +291,6 @@ def _process_meeting_ref(ref: dict, since_date: date, config_dir: Path | None) -
     except Exception as exc:
         if _is_fatal_drive_error(exc):
             raise
-        logger.debug("Failed to get metadata for %s: %s", fid, exc)
         logger.warning("Failed to get metadata for %s: %s", fid, exc)
         return None
 
@@ -299,7 +303,6 @@ def _process_activity_item(item: dict, since_date: date, config_dir: Path | None
     except Exception as exc:
         if _is_fatal_drive_error(exc):
             raise
-        logger.debug("Failed to process activity file %s: %s", item.get("id"), exc)
         logger.warning("Failed to process activity file %s: %s", item.get("id"), exc)
         return None
 
@@ -316,6 +319,9 @@ def collect(
     2. Files the user modified during the date range (docs, sheets, slides)
     Returns list of dicts with source="meeting" or source="activity".
     """
+    global _run_generation
+    _run_generation += 1
+    _thread_local.__dict__.clear()
     creds = get_credentials(config_dir)
     authed_http = google_auth_httplib2.AuthorizedHttp(
         creds, http=httplib2.Http(timeout=_HTTP_TIMEOUT)
@@ -348,54 +354,48 @@ def collect(
             f"modifiedTime >= '{since_rfc}' and modifiedTime <= '{until_rfc}' and trashed = false"
         )
 
-        try:
-            # Get the authenticated user's email for filtering
-            about = service.about().get(fields="user(emailAddress)").execute()
-            my_email = about.get("user", {}).get("emailAddress", "")
+        # Get the authenticated user's email for filtering
+        about = service.about().get(fields="user(emailAddress)").execute()
+        my_email = about.get("user", {}).get("emailAddress", "")
 
-            activity_items = []
-            page_token = None
-            while True:
-                resp = (
-                    service.files()
-                    .list(
-                        q=query,
-                        fields=f"nextPageToken,files({_META_FIELDS})",
-                        pageSize=100,
-                        pageToken=page_token,
-                        supportsAllDrives=True,
-                        includeItemsFromAllDrives=True,
-                    )
-                    .execute()
+        activity_items = []
+        page_token = None
+        while True:
+            resp = (
+                service.files()
+                .list(
+                    q=query,
+                    fields=f"nextPageToken,files({_META_FIELDS})",
+                    pageSize=100,
+                    pageToken=page_token,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
                 )
-                for item in resp.get("files", []):
-                    fid = item.get("id", "")
-                    if fid in seen:
-                        continue
-                    if item.get("mimeType", "") in _SKIP_MIMES:
-                        continue
-                    # Only include files the user actually modified
-                    last_modifier = item.get("lastModifyingUser", {}).get("emailAddress", "")
-                    if my_email and last_modifier != my_email:
-                        continue
-                    seen.add(fid)
-                    activity_items.append(item)
-                page_token = resp.get("nextPageToken")
-                if not page_token:
-                    break
+                .execute()
+            )
+            for item in resp.get("files", []):
+                fid = item.get("id", "")
+                if fid in seen:
+                    continue
+                if item.get("mimeType", "") in _SKIP_MIMES:
+                    continue
+                # Only include files the user actually modified
+                last_modifier = item.get("lastModifyingUser", {}).get("emailAddress", "")
+                if my_email and last_modifier != my_email:
+                    continue
+                seen.add(fid)
+                activity_items.append(item)
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
 
-            for item in activity_items:
-                futures.append(
-                    executor.submit(_process_activity_item, item, since_date, config_dir)
-                )
+        for item in activity_items:
+            futures.append(executor.submit(_process_activity_item, item, since_date, config_dir))
 
-            for fut in concurrent.futures.as_completed(futures):
-                res = fut.result()
-                if res:
-                    results.append(res)
-        # fatal
-        except Exception:
-            raise
+        for fut in concurrent.futures.as_completed(futures):
+            res = fut.result()
+            if res:
+                results.append(res)
 
     meeting_count = sum(1 for r in results if r["source"] == "meeting")
     activity_count = sum(1 for r in results if r["source"] == "activity")

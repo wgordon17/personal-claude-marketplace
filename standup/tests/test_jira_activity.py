@@ -37,6 +37,15 @@ def test_run_jql_parses_tab_separated_fields():
     assert result[0]["type"] == "Story"
 
 
+def test_run_jql_accepts_alphanumeric_and_underscore_project_keys():
+    stdout = (
+        "PROJ2-42\tAdd second feature\tIn Progress\tStory\nTEAM_A-101\tFix team issue\tOpen\tBug\n"
+    )
+    with patch("subprocess.run", side_effect=make_run(stdout)):
+        result = _run_jql("project = PROJ2")
+    assert [r["key"] for r in result] == ["PROJ2-42", "TEAM_A-101"]
+
+
 def test_run_jql_squeezes_consecutive_tabs():
     stdout = "ACME-456\t\tFix bug\t\tDone\t\tBug\n"
     with patch("subprocess.run", side_effect=make_run(stdout)):

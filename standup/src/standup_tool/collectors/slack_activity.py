@@ -16,7 +16,6 @@ import requests
 
 from standup_tool.config import SlackConfig
 from standup_tool.slack_auth import (
-    SlackCredentials,
     get_slack_credentials,
     make_session,
     safe_get,
@@ -27,10 +26,6 @@ logger = logging.getLogger(__name__)
 REQUEST_DELAY = 2.0
 _THREAD_FETCH_DELAY = 1.0
 _MAX_RETRIES = 3
-
-
-def _make_session(bearer_token: str, cookie: str) -> requests.Session:
-    return make_session(SlackCredentials(token=bearer_token, cookie=cookie))
 
 
 def _search(session: requests.Session, query: str, count: int = 100) -> list[dict]:

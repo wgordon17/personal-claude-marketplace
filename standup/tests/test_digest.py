@@ -39,6 +39,13 @@ def test_extract_entities_jira_key():
     assert extract_entities("Fixed ACME-101") == {"ACME-101"}
 
 
+def test_extract_entities_alphanumeric_and_underscore_jira_keys():
+    result = extract_entities("Fixed PROJ2-42 and TEAM_A-101 on branch PROJ2-42-fix-auth")
+    assert "PROJ2-42" in result
+    assert "TEAM_A-101" in result
+    assert "PROJ2-42-fix-auth" in result
+
+
 def test_extract_entities_pr_refs():
     result = extract_entities("See #47 and widgets#48")
     assert "#47" in result
@@ -615,3 +622,274 @@ def test_conversation_registry_includes_uncorrelated_conversations():
         u for u in digest["uncorrelated"] if u.get("conversation_id") == "conv-noentity"
     )
     assert uncorrelated_conv["source"] == "conversations"
+
+
+def test_pr_activity_real_schema_and_relevance_scoring():
+    """Verify pr_activity.collect() schema (pr_number, review_requests, uppercase state,
+    title, url, is_draft, review_decision) and case-insensitive state relevance scoring."""
+    data = {
+        "prs": [
+            {
+                "repo": "widgets",
+                "pr_number": 88,
+                "title": "PROJ2-42: Add widget caching",
+                "state": "OPEN",
+                "head_branch": "PROJ2-42-widget-cache",
+                "created_at": "2026-04-25T10:00:00Z",
+                "updated_at": "2026-05-04T09:00:00Z",
+                "url": "https://github.com/acme/widgets/pull/88",
+                "is_draft": False,
+                "role": "author",
+                "checks": "SUCCESS",
+                "review_decision": "REVIEW_REQUIRED",
+                "review_requests": ["ada-example", "bo-sample"],
+            },
+            {
+                "repo": "widgets",
+                "pr_number": 89,
+                "title": "TEAM_A-101: Old merged PR",
+                "state": "MERGED",
+                "head_branch": "TEAM_A-101-merged",
+                "created_at": "2026-05-03T10:00:00Z",
+                "updated_at": "2026-05-04T08:00:00Z",
+                "url": "https://github.com/acme/widgets/pull/89",
+                "is_draft": False,
+                "role": "author",
+                "checks": "SUCCESS",
+                "review_decision": "APPROVED",
+                "review_requests": [],
+            },
+        ]
+    }
+    digest = build_digest(data, TEAM, date(2026, 5, 4), date(2026, 5, 4))
+    by_entity = {wu["entity"]: wu for wu in digest["work_units"]}
+
+    wu_open = by_entity["PROJ2-42"]
+    assert wu_open["pr"] == {
+        "number": 88,
+        "repo": "widgets",
+        "title": "PROJ2-42: Add widget caching",
+        "url": "https://github.com/acme/widgets/pull/88",
+        "state": "OPEN",
+        "is_draft": False,
+        "ci": "SUCCESS",
+        "review_decision": "REVIEW_REQUIRED",
+        "reviewers": ["ada-example", "bo-sample"],
+        "role": "author",
+    }
+    # updated_at (2026-05-04) takes precedence over created_at (2026-04-25), so not stale
+    assert wu_open["stale"] is False
+
+    wu_merged = by_entity["TEAM_A-101"]
+    assert wu_merged["pr"]["number"] == 89
+    assert wu_merged["pr"]["state"] == "MERGED"
+    # Open PR gets +1 relevance bonus over uppercase MERGED PR
+    assert wu_open["relevance_score"] == wu_merged["relevance_score"] + 1
+
+
+def test_collector_to_digest_field_and_timestamp_mappings():
+    """Verify uncorrelated text/timestamp extraction and Slack message_count thread_replies."""
+    data = {
+        "slack": [
+            {
+                "source": "participation",
+                "channel": "#eng",
+                "thread_ts": "1714816800.123456",
+                "date": "1714816800",
+                "messages": [
+                    {
+                        "user": "ada-example",
+                        "text": "Discussing ACME-303 rollout",
+                        "ts": "1714816800.1",
+                    },
+                    {"user": "bo-sample", "text": "Sounds good", "ts": "1714816805.2"},
+                    {"user": "ada-example", "text": "Shipping now", "ts": "1714816810.3"},
+                ],
+                "message_count": 3,
+            },
+            {
+                "source": "dm",
+                "channel": "DM with Bo Sample",
+                "thread_ts": "1714816900.000100",
+                "date": "1714816900",
+                "messages": [
+                    {"user": "bo-sample", "text": "Quick sync later?", "ts": "1714816900.0"}
+                ],
+                "message_count": 1,
+            },
+        ],
+        "calendar_events": [
+            {
+                "summary": "Architecture sync",
+                "start": "2026-05-04T14:00:00Z",
+                "description": "",
+            }
+        ],
+        "drive_docs": [
+            {
+                "source": "activity",
+                "file_name": "Q2 Planning Notes",
+                "modified_time": "2026-05-04T15:30:00.123Z",
+                "text_preview": "Draft objectives",
+                "comments": [{"author": "Bo Sample", "content": "Add timeline table"}],
+            }
+        ],
+        "emails": [
+            {
+                "subject": "Release checklist",
+                "date": "Mon, 04 May 2026 16:20:00 +0000",
+                "body_snippet": "Please verify",
+            }
+        ],
+    }
+    digest = build_digest(data, TEAM, date(2026, 5, 4), date(2026, 5, 4))
+
+    wu_303 = next(wu for wu in digest["work_units"] if wu["entity"] == "ACME-303")
+    assert wu_303["slack"][0]["thread_replies"] == 2
+
+    by_source = {u["source"]: u for u in digest["uncorrelated"]}
+    assert by_source["calendar"]["text"] == "Architecture sync"
+    assert "timestamp" in by_source["calendar"]
+
+    assert by_source["drive"]["text"] == "Q2 Planning Notes: Add timeline table"
+    assert "timestamp" in by_source["drive"]
+
+    assert by_source["email"]["text"] == "Release checklist"
+    assert "timestamp" in by_source["email"]
+
+    assert by_source["slack"]["text"] == "Quick sync later?"
+    assert "timestamp" in by_source["slack"]
+
+
+def test_cross_stage_collector_producers_into_build_digest():
+    """Feed actual collector output builders (pr_activity._build_pr_dict,
+    slack_activity._format_match, google_drive._build_result, google_calendar.collect)
+    directly into digest.build_digest() to verify end-to-end schema contracts."""
+    from unittest.mock import MagicMock, patch
+
+    from standup_tool.collectors import google_calendar, google_drive, pr_activity, slack_activity
+
+    # 1. PR emitted by pr_activity._build_pr_dict
+    raw_gh_pr = {
+        "number": 142,
+        "title": "PROJ2-77: Wire collector schemas into digest",
+        "state": "OPEN",
+        "updatedAt": "2026-05-04T11:15:00Z",
+        "createdAt": "2026-04-20T08:00:00Z",
+        "url": "https://github.com/acme/widgets/pull/142",
+        "isDraft": False,
+        "headRefName": "PROJ2-77-collector-digest",
+        "reviewDecision": "REVIEW_REQUIRED",
+        "reviewRequests": [{"login": "bo-sample"}],
+        "statusCheckRollup": [{"conclusion": "SUCCESS", "status": "COMPLETED"}],
+    }
+    pr_item = pr_activity._build_pr_dict(raw_gh_pr, "widgets", "author")
+
+    # 2. Slack item emitted by slack_activity._format_match + thread enrichment
+    slack_session = MagicMock()
+    user_cache = {"UEXAMPLE01": "Ada Example", "UBOSAMPLE": "Bo Sample"}
+    raw_slack_match = {
+        "channel": {"name": "eng"},
+        "ts": "1714820000.000200",
+        "username": "ada-example",
+        "text": "Following up on PROJ2-77 with <@UBOSAMPLE>",
+        "permalink": "https://acme.slack.com/archives/C123/p1714820000000200?thread_ts=1714819000.000100",
+    }
+    slack_correlated = slack_activity._format_match(
+        raw_slack_match, "participation", slack_session, user_cache
+    )
+    slack_correlated["messages"].append(
+        {"user": "bo-sample", "text": "LGTM!", "ts": "1714820060.000300"}
+    )
+    slack_correlated["message_count"] = 2
+
+    raw_uncorr_slack = {
+        "channel": {"name": "UBOSAMPLE"},
+        "ts": "1714821000.000100",
+        "username": "bo-sample",
+        "text": "Are you joining the demo?",
+        "permalink": "https://acme.slack.com/archives/D123/p1714821000000100",
+    }
+    slack_uncorrelated = slack_activity._format_match(
+        raw_uncorr_slack, "dm", slack_session, user_cache
+    )
+
+    # 3. Calendar events emitted by google_calendar.collect
+    mock_cal_service = MagicMock()
+    mock_cal_service.events().list().execute.return_value = {
+        "items": [
+            {
+                "summary": "Sprint retro",
+                "start": {"dateTime": "2026-05-04T15:00:00Z"},
+                "end": {"dateTime": "2026-05-04T15:30:00Z"},
+                "organizer": {"email": "ada@example.com"},
+                "attendees": [
+                    {"email": "ada@example.com", "self": True, "responseStatus": "accepted"}
+                ],
+            }
+        ]
+    }
+    with (
+        patch("standup_tool.collectors.google_calendar.get_credentials", return_value=MagicMock()),
+        patch("standup_tool.collectors.google_calendar.build", return_value=mock_cal_service),
+    ):
+        cal_events = google_calendar.collect(date(2026, 5, 4), date(2026, 5, 4))
+
+    # 4. Drive doc emitted by google_drive._build_result
+    mock_drive_service = MagicMock()
+    mock_drive_service.comments().list().execute.return_value = {
+        "comments": [
+            {
+                "id": "c-1",
+                "content": "Review section 2",
+                "author": {"displayName": "Bo Sample", "emailAddress": "bo@example.com"},
+                "createdTime": "2026-05-04T16:00:00Z",
+                "resolved": False,
+                "replies": [],
+            }
+        ]
+    }
+    drive_meta = {
+        "id": "doc-uncorr-1",
+        "name": "Architecture RFC",
+        "mimeType": "application/vnd.google-apps.document",
+        "webViewLink": "https://docs.google.com/document/d/doc-uncorr-1/edit",
+        "modifiedTime": "2026-05-04T16:05:00Z",
+        "capabilities": {"canDownload": False},
+    }
+    drive_item = google_drive._build_result(
+        drive_meta, mock_drive_service, "activity", since=date(2026, 5, 4)
+    )
+
+    digest = build_digest(
+        {
+            "prs": [pr_item],
+            "slack": [slack_correlated, slack_uncorrelated],
+            "calendar_events": cal_events,
+            "drive_docs": [drive_item],
+        },
+        TEAM,
+        date(2026, 5, 4),
+        date(2026, 5, 4),
+        self_dm="DM with Ada Example",
+    )
+
+    by_entity = {wu["entity"]: wu for wu in digest["work_units"]}
+    wu = by_entity["PROJ2-77"]
+    assert wu["stale"] is False
+    assert wu["pr"]["number"] == 142
+    assert wu["pr"]["title"] == "PROJ2-77: Wire collector schemas into digest"
+    assert wu["pr"]["url"] == "https://github.com/acme/widgets/pull/142"
+    assert wu["pr"]["is_draft"] is False
+    assert wu["pr"]["review_decision"] == "REVIEW_REQUIRED"
+    assert wu["pr"]["reviewers"] == ["bo-sample"]
+    assert wu["slack"][0]["thread_replies"] == 1
+    assert "Bo Sample" in wu["slack"][0]["text"]
+
+    uncorr_by_source = {u["source"]: u for u in digest["uncorrelated"]}
+    assert uncorr_by_source["slack"]["text"] == "Are you joining the demo?"
+    assert "timestamp" in uncorr_by_source["slack"]
+    assert uncorr_by_source["calendar"]["text"] == "Sprint retro"
+    assert "timestamp" in uncorr_by_source["calendar"]
+    assert uncorr_by_source["drive"]["text"] == "Architecture RFC: Review section 2"
+    assert "timestamp" in uncorr_by_source["drive"]

@@ -241,3 +241,50 @@ def test_get_credentials_tightens_creds_file_and_rejects_symlinks(tmp_path, monk
     monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(link_tok))
     with pytest.raises(ConfigError, match="symlink"):
         google_auth.get_credentials(interactive=False)
+
+
+def test_get_credentials_serializes_concurrent_refresh_across_threads(tmp_path, monkeypatch):
+    import concurrent.futures
+
+    creds_path = tmp_path / "creds.json"
+    creds_path.write_text('{"installed": {}}')
+    token_file = tmp_path / "token.json"
+    token_file.write_text('{"token": "expired"}')
+    monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(creds_path))
+    monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(token_file))
+
+    refresh_calls = 0
+
+    def fake_from_file(path_str: str, scopes):
+        content = Path(path_str).read_text(encoding="utf-8")
+        assert content, "token.json must never be read as empty during concurrent refresh"
+        mock_c = MagicMock()
+        if "refreshed" in content:
+            mock_c.valid = True
+            mock_c.expired = False
+        else:
+            mock_c.valid = False
+            mock_c.expired = True
+            mock_c.refresh_token = "refresh-tok"
+
+            def do_refresh(_req):
+                nonlocal refresh_calls
+                refresh_calls += 1
+
+            mock_c.refresh.side_effect = do_refresh
+            mock_c.to_json.return_value = '{"token": "refreshed"}'
+        return mock_c
+
+    with (
+        patch(
+            "standup_tool.collectors.google_auth.Credentials.from_authorized_user_file",
+            side_effect=fake_from_file,
+        ),
+        concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool,
+    ):
+        futures = [pool.submit(google_auth.get_credentials) for _ in range(4)]
+        results = [f.result() for f in futures]
+
+    assert len(results) == 4
+    assert refresh_calls == 1
+    assert token_file.read_text(encoding="utf-8") == '{"token": "refreshed"}'

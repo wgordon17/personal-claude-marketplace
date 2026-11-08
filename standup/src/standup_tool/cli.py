@@ -45,23 +45,19 @@ from standup_tool.workspace import list_repos
 _SECRET_FIELD_NAMES = frozenset({"token", "cookie", "password"})
 
 
-def _serialize_config_value(obj: Any) -> Any:
+def _strip_secret_keys(obj: Any) -> Any:
+    """Recursively convert Paths/tuples and strip any key named token, cookie, or password."""
     if isinstance(obj, Path):
         return str(obj)
     if isinstance(obj, tuple | list):
-        return [_serialize_config_value(item) for item in obj]
+        return [_strip_secret_keys(item) for item in obj]
     if isinstance(obj, dict):
         return {
-            str(k): _serialize_config_value(v)
+            str(k): _strip_secret_keys(v)
             for k, v in obj.items()
             if str(k).lower() not in _SECRET_FIELD_NAMES
         }
     return obj
-
-
-def _strip_secret_keys(data: Any) -> Any:
-    """Recursively convert Paths/tuples and strip any key named token, cookie, or password."""
-    return _serialize_config_value(data)
 
 
 def _get_author_email(config: Config) -> str:
@@ -108,25 +104,29 @@ def _get_jira_server(config: Config, config_path: Path | None = None) -> str:
     )
 
 
-def _collect(args: argparse.Namespace, config: Config) -> None:
+def _parse_date_range(since_raw: str, until_raw: str | None) -> tuple[date, date]:
     try:
-        since = date.fromisoformat(args.since)
+        since = date.fromisoformat(since_raw)
     except ValueError:
         sys.stderr.write(
-            f"ERROR: Invalid --since date '{args.since}'. Expected format: YYYY-MM-DD\n"
+            f"ERROR: Invalid --since date '{since_raw}'. Expected format: YYYY-MM-DD\n"
         )
         sys.exit(1)
 
-    if args.until:
+    if until_raw:
         try:
-            until = date.fromisoformat(args.until)
+            until = date.fromisoformat(until_raw)
         except ValueError:
             sys.stderr.write(
-                f"ERROR: Invalid --until date '{args.until}'. Expected format: YYYY-MM-DD\n"
+                f"ERROR: Invalid --until date '{until_raw}'. Expected format: YYYY-MM-DD\n"
             )
             sys.exit(1)
-    else:
-        until = max(since, date.today() - timedelta(days=1))
+        return since, max(since, until)
+    return since, max(since, date.today() - timedelta(days=1))
+
+
+def _collect(args: argparse.Namespace, config: Config) -> None:
+    since, until = _parse_date_range(args.since, args.until)
 
     cfg_dir = config_dir()
     author_email = _get_author_email(config)
@@ -234,8 +234,8 @@ def _slack_auth(config: Config) -> tuple:
     """Return (session, user_id), exit on auth failure."""
     creds = get_slack_credentials(config.collectors.slack, secret_path("slack-token"))
     session = make_session(creds)
-    resp = safe_get(session, "https://slack.com/api/auth.test")
     try:
+        resp = safe_get(session, "https://slack.com/api/auth.test")
         resp.raise_for_status()
     except Exception as exc:
         sys.stderr.write(redact_secrets(f"ERROR: Slack auth.test HTTP error: {exc}\n"))
@@ -355,11 +355,11 @@ def _post_standup(args: argparse.Namespace, config: Config) -> None:
     headers = load_template(config_path(config.standup.template_file)).headers
     session, user_id = _slack_auth(config)
 
-    dm_resp = session.post(
-        "https://slack.com/api/conversations.open",
-        json={"users": user_id},
-    )
     try:
+        dm_resp = session.post(
+            "https://slack.com/api/conversations.open",
+            json={"users": user_id},
+        )
         dm_resp.raise_for_status()
     except Exception as exc:
         sys.stderr.write(redact_secrets(f"ERROR: conversations.open HTTP error: {exc}\n"))
@@ -373,17 +373,17 @@ def _post_standup(args: argparse.Namespace, config: Config) -> None:
     blocks = _standup_to_blocks(text, headers)
     fallback = text.replace("• ", "- ").replace("* ", "- ")
 
-    post_resp = session.post(
-        "https://slack.com/api/chat.postMessage",
-        json={
-            "channel": channel_id,
-            "text": fallback,
-            "blocks": blocks,
-            "unfurl_links": False,
-            "unfurl_media": False,
-        },
-    )
     try:
+        post_resp = session.post(
+            "https://slack.com/api/chat.postMessage",
+            json={
+                "channel": channel_id,
+                "text": fallback,
+                "blocks": blocks,
+                "unfurl_links": False,
+                "unfurl_media": False,
+            },
+        )
         post_resp.raise_for_status()
     except Exception as exc:
         sys.stderr.write(redact_secrets(f"ERROR: chat.postMessage HTTP error: {exc}\n"))
@@ -512,7 +512,7 @@ def _backlog(args: argparse.Namespace, config: Config) -> None:
     """Move issues to backlog (removes from sprint) via Jira Agile REST API."""
     issues = args.issues
     for key in issues:
-        if not re.match(r"^[A-Z]+-[0-9]+$", key):
+        if not re.match(r"^[A-Z][A-Z0-9_]*-[0-9]+$", key):
             sys.stderr.write(f"ERROR: Invalid issue key '{key}'\n")
             sys.exit(1)
 
@@ -531,7 +531,7 @@ def _backlog(args: argparse.Namespace, config: Config) -> None:
 
     opener = urllib.request.build_opener(_NoRedirectHandler())
     try:
-        resp = opener.open(req)
+        resp = opener.open(req, timeout=30)
         if resp.status == 204:
             for key in issues:
                 sys.stdout.write(f"{key}: removed from sprint\n")
@@ -564,25 +564,7 @@ def _digest(args: argparse.Namespace, config: Config) -> None:
         parsed_json = json.load(f)
 
     team = load_team(config_path("team-members.yaml"))
-
-    try:
-        since = date.fromisoformat(args.since)
-    except ValueError:
-        sys.stderr.write(
-            f"ERROR: Invalid --since date '{args.since}'. Expected format: YYYY-MM-DD\n"
-        )
-        sys.exit(1)
-
-    if args.until:
-        try:
-            until = date.fromisoformat(args.until)
-        except ValueError:
-            sys.stderr.write(
-                f"ERROR: Invalid --until date '{args.until}'. Expected format: YYYY-MM-DD\n"
-            )
-            sys.exit(1)
-    else:
-        until = max(since, date.today() - timedelta(days=1))
+    since, until = _parse_date_range(args.since, args.until)
 
     self_dm = args.self_dm or config.collectors.slack.self_dm_name or ""
     if not self_dm and team:
