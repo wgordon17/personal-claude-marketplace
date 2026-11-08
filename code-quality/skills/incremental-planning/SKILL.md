@@ -335,9 +335,9 @@ While writing a task, if you encounter ambiguity, apply this decision:
 - **Implementation detail ambiguity** (resolvable during execution, doesn't change plan shape): Flag inline in the task as `[ASSUMPTION: description]`, continue writing, and surface in Phase 6.
 - **Classification test:** "If I'm wrong about this, would it change other tasks?" → YES = scope ambiguity (hard gate); NO = detail ambiguity (flag inline).
 
-#### 4. Checkpoint Every 2-3 Tasks
+#### 4. Incorporate Feedback Immediately
 
-After every 2-3 tasks, use `AskUserQuestion` ("Looks good, continue", "Let me review the plan file", "Adjust something") with a summary of tasks written and the count of assumptions flagged so far. When the user gives feedback on a specific task, rewrite ONLY that task.
+When the user gives feedback on a specific task, rewrite ONLY that task; do not regenerate the plan.
 
 ## Phase 5: Validate
 

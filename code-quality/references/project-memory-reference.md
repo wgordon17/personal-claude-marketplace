@@ -2,7 +2,7 @@
 
 > **Cross-reference note:** This file is referenced by multiple skills and commands. When editing, check all consumers.
 > Consumers — Skills: swarm (+ references), speculative, unfuck, map-reduce, incremental-planning, deep-research, index-repo,
-> roadmap, pr-review, plan-review, quality-gate, bug-investigation, file-audit, fix, summarize, test-plan. Commands: session-start, session-end, review-project.
+> roadmap, pr-review, plan-review, quality-gate, bug-investigation, file-audit, fix, summarize, test-plan. Commands: session-start, session-end, review-project. Cross-plugin: standup/src/standup_tool/memory.py, dev-guard/hooks/decision-persistence.py, dev-guard/hooks/stop-hook.py.
 
 Canonical definitions for project memory conventions. All memory-aware skills and commands in this plugin reference
 this file. Do not maintain ad-hoc memory conventions elsewhere — point here.

@@ -244,27 +244,7 @@ alter the file structure:
 
 ---
 
-## 4. Checkpoint Every 2-3 Tasks
-
-After every 2-3 tasks:
-
-```
-AskUserQuestion: "I've written tasks N-M covering [summary].
-Tasks so far: 1) X, 2) Y, 3) Z.
-Any adjustments before I continue?"
-
-Options:
-- "Looks good, continue"
-- "Let me review the plan file"
-- "Adjust something"
-```
-
-If "Let me review" → wait for the user to read the file and come back.
-If "Adjust something" → discuss, rewrite just that task, continue.
-
-Mention in the checkpoint: "N assumptions flagged so far — will surface all in Phase 6."
-
-### 5. Incorporate Feedback Immediately
+## 4. Incorporate Feedback Immediately
 
 When the user gives feedback on a specific task, rewrite ONLY that task. Don't regenerate
 the entire plan.
@@ -323,7 +303,7 @@ Phase 4: Write incrementally (summaries in chat, content to file) →
 Phase 5: Validate → Phase 6: Complete (issue creation + completion report)
 
 ### What Goes Where
-CHAT: Research findings, reasoning, questions, 1-sentence task summaries, checkpoints
+CHAT: Research findings, reasoning, questions, 1-sentence task summaries
 FILE: Plan header, task definitions, code snippets, test commands, commit messages
 NEVER IN CHAT: Full plan content, task details, code blocks from the plan
 
