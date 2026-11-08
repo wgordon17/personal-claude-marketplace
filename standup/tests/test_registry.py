@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import threading
-import time
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
@@ -274,16 +273,17 @@ def test_run_all_executes_independents_concurrently_and_dependents_after(
     ctx = _make_ctx(acme_config, cfg_dir)
     lock = threading.Lock()
     running = [0]
-    max_running = [0]
+    two_running = threading.Event()
     order: list[str] = []
 
     def make_indep(name: str):
         def _fn(c: Ctx, outputs: dict):
             with lock:
                 running[0] += 1
-                if running[0] > max_running[0]:
-                    max_running[0] = running[0]
-            time.sleep(0.05)
+                if running[0] >= 2:
+                    two_running.set()
+            # Passes only if another independent collector is in flight at the same time.
+            two_running.wait(timeout=5)
             with lock:
                 running[0] -= 1
                 order.append(name)
@@ -316,7 +316,7 @@ def test_run_all_executes_independents_concurrently_and_dependents_after(
     ]
 
     outputs, status = run_all(custom_registry, ctx, None)
-    assert max_running[0] >= 2
+    assert two_running.is_set()
     assert order[-1] == "drive"
     assert list(outputs.keys()) == ["git_commits", "calendar_events", "drive_docs", "prs"]
     assert list(status.keys()) == ["git", "calendar", "drive", "pr"]

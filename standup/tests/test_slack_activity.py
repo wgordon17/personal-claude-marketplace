@@ -31,7 +31,7 @@ def token_file(tmp_path: Path) -> Path:
 
 
 def _mock_search_responses():
-    """Build a side_effect function for _search that returns canned results."""
+    """Build a side_effect function for search_messages that returns canned results."""
 
     def _has_positive(query: str, token: str) -> bool:
         idx = query.find(token)
@@ -132,7 +132,7 @@ def _mock_auth(*_args, **_kwargs):
     return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
 )
 @patch("requests.Session.get", side_effect=_mock_auth)
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 def test_collect_returns_all_source_types(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     results = slack_activity.collect(
@@ -154,7 +154,7 @@ def test_collect_returns_all_source_types(mock_search, _mock_get, _mock_creds, t
     return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
 )
 @patch("requests.Session.get", side_effect=_mock_auth)
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 def test_collect_finds_target_channels(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     results = slack_activity.collect(
@@ -175,7 +175,7 @@ def test_collect_finds_target_channels(mock_search, _mock_get, _mock_creds, toke
     return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
 )
 @patch("requests.Session.get", side_effect=_mock_auth)
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 def test_collect_includes_dm_messages(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     results = slack_activity.collect(
@@ -195,7 +195,7 @@ def test_collect_includes_dm_messages(mock_search, _mock_get, _mock_creds, token
     return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
 )
 @patch("requests.Session.get", side_effect=_mock_auth)
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 def test_collect_deduplicates_mentions_in_target_channels(
     mock_search, _mock_get, _mock_creds, token_file
 ):
@@ -217,7 +217,7 @@ def test_collect_deduplicates_mentions_in_target_channels(
     return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
 )
 @patch("requests.Session.get", side_effect=_mock_auth)
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 def test_collect_deduplicates_by_permalink(mock_search, _mock_get, _mock_creds, token_file):
     def duped_search(session, query, count=100):
         return [
@@ -247,7 +247,7 @@ def test_collect_deduplicates_by_permalink(mock_search, _mock_get, _mock_creds, 
     return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
 )
 @patch("requests.Session.get", side_effect=_mock_auth)
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 def test_collect_iterates_per_day_with_on_filter(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     slack_activity.collect(
@@ -284,7 +284,7 @@ def test_search_paginates_across_multiple_pages(_mock_sleep):
     }
     session.get.side_effect = [page1, page2]
 
-    results = slack_activity._search(session, "test query")
+    results = slack_activity.search_messages(session, "test query")
     assert len(results) == 2
     assert results[0]["text"] == "first"
     assert results[1]["text"] == "second"
@@ -300,7 +300,7 @@ def test_search_raises_on_auth_error(_mock_sleep, error_code):
     session.get.return_value = resp
 
     with pytest.raises(PermissionError, match=error_code):
-        slack_activity._search(session, "test query")
+        slack_activity.search_messages(session, "test query")
 
 
 @patch("standup_tool.collectors.slack_activity.time.sleep")
@@ -310,7 +310,7 @@ def test_search_soft_error_returns_empty_list(_mock_sleep):
     resp.json.return_value = {"ok": False, "error": "ratelimited"}
     session.get.return_value = resp
 
-    results = slack_activity._search(session, "test query")
+    results = slack_activity.search_messages(session, "test query")
     assert results == []
 
 
@@ -359,6 +359,7 @@ def test_resolve_user_id_success(_mock_sleep):
         "https://slack.com/api/users.info",
         params={"user": "UEXAMPLE02"},
         allow_redirects=False,
+        timeout=(5, 30),
     )
 
 
@@ -506,7 +507,7 @@ def test_resolve_mentions_handles_pipe_variant(_mock_sleep):
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_resolve_user_id", return_value="Bo Sample")
 @patch.object(slack_activity, "_fetch_thread")
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 def test_collect_resolves_mentions_in_thread_replies(
     mock_search, mock_fetch_thread, _mock_resolve, _mock_get, _mock_creds, token_file
 ):
@@ -554,8 +555,54 @@ def test_collect_resolves_mentions_in_thread_replies(
 )
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch("standup_tool.collectors.slack_activity.time.sleep")
+@patch.object(slack_activity, "_resolve_user_id", return_value="Bo Sample")
+@patch.object(slack_activity, "_fetch_thread")
+@patch.object(slack_activity, "search_messages")
+def test_collect_fetches_each_thread_once_and_gives_each_item_its_own_copy(
+    mock_search, mock_fetch_thread, _mock_resolve, _mock_sleep, _mock_get, _mock_creds, token_file
+):
+    thread = "https://acme.slack.com/archives/DEXAMPLE01/p{ts}?thread_ts=1714000000.000100"
+
+    def search_side_effect(session, query, count=100):
+        if "is:dm" not in query:
+            return []
+        return [
+            {
+                "username": "bo-sample",
+                "text": text,
+                "ts": ts,
+                "channel": {"name": "UEXAMPLE02"},
+                "permalink": thread.format(ts=ts.replace(".", "")),
+            }
+            for text, ts in (("first", "1714000000.000200"), ("second", "1714000000.000300"))
+        ]
+
+    mock_search.side_effect = search_side_effect
+    mock_fetch_thread.return_value = [
+        {"user": "UEXAMPLE01", "text": "root", "ts": "1714000000.000100"},
+        {"user": "UEXAMPLE02", "text": "reply", "ts": "1714000000.000200"},
+    ]
+
+    results = slack_activity.collect(
+        date(2026, 4, 24), date(2026, 4, 24), slack_cfg=_SLACK_CFG, token_path=token_file
+    )
+
+    dm_results = [r for r in results if r["source"] == "dm"]
+    assert len(dm_results) == 2
+    assert mock_fetch_thread.call_count == 1
+    assert all(r["message_count"] == 2 for r in dm_results)
+    dm_results[0]["messages"][0]["text"] = "mutated"
+    assert dm_results[1]["messages"][0]["text"] == "root"
+
+
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
+@patch("requests.Session.get", side_effect=_mock_auth)
+@patch("standup_tool.collectors.slack_activity.time.sleep")
 @patch.object(slack_activity, "_fetch_thread", return_value=[])
-@patch.object(slack_activity, "_search")
+@patch.object(slack_activity, "search_messages")
 @patch.object(slack_activity, "_resolve_user_id", return_value="Bo Sample")
 def test_collect_resolves_mentions_in_initial_message_text(
     _mock_resolve, mock_search, _mock_fetch_thread, _mock_sleep, _mock_get, _mock_creds, token_file

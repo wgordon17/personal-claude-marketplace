@@ -87,6 +87,42 @@ def test_detect_memory_dir_resolves_linked_worktree_to_main_worktree(tmp_path: P
     assert detect_memory_dir(linked_wt) == hack.resolve()
 
 
+def test_detect_memory_dir_in_bare_clone_layout_uses_the_checkout_not_the_bare_dir(
+    tmp_path: Path,
+):
+    source = _init_git_repo(tmp_path / "source")
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "initial"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+    branch = subprocess.run(
+        ["git", "branch", "--show-current"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    bare = tmp_path / "proj" / ".bare"
+    subprocess.run(
+        ["git", "clone", "--bare", str(source), str(bare)], check=True, capture_output=True
+    )
+    checkout = tmp_path / "proj" / "main"
+    subprocess.run(
+        ["git", "worktree", "add", str(checkout), branch],
+        cwd=bare,
+        check=True,
+        capture_output=True,
+    )
+    hack = checkout / "hack"
+    hack.mkdir()
+    (hack / "PROJECT.md").write_text("# Project\n", encoding="utf-8")
+    (hack / "TODO.md").write_text("# TODO\n", encoding="utf-8")
+
+    assert detect_memory_dir(checkout) == hack.resolve()
+
+
 def test_detect_memory_dir_respects_candidate_priority(tmp_path: Path):
     repo = _init_git_repo(tmp_path / "repo")
     for cand in ("hack", ".dev"):

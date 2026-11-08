@@ -72,6 +72,7 @@ def get_github_org_members(org: str) -> list[dict]:
             text=True,
             timeout=30,
         )
+    # tolerant: gh unavailable or timed out yields an empty member list
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return []
     if result.returncode != 0:
@@ -123,6 +124,7 @@ def enrich_from_github_profiles(
                 text=True,
                 timeout=10,
             )
+        # tolerant: gh unavailable skips GitHub profile enrichment and returns members unchanged
         except (FileNotFoundError, subprocess.TimeoutExpired):
             log.warning("gh api unavailable — skipping GitHub profile enrichment")
             return members
@@ -183,14 +185,19 @@ def enrich_from_ldap(
             continue
 
         ldap_data = github_to_ldap.get(gh_login.lower())
-        if not ldap_data:
-            uid_to_try = existing.get("directory_uid") or member.get("directory_uid") or gh_login
+        # Guessing a uid from the GitHub login, or matching on display name, is only safe when
+        # the directory entry can be tied back to the GitHub account via social_url_attr; a
+        # GitHub display name or login is attacker-chosen. An explicit directory_uid is trusted.
+        explicit_uid = existing.get("directory_uid") or member.get("directory_uid")
+        uid_to_try = explicit_uid or (gh_login if ldap.social_url_attr else None)
+
+        if not ldap_data and uid_to_try:
             if _LDAP_ID_RE.match(uid_to_try):
                 ldap_data = _ldap_lookup_uid(uid_to_try, gh_login, ldap)
             else:
                 log.warning("Skipping invalid LDAP uid %r", uid_to_try)
 
-        if not ldap_data:
+        if not ldap_data and ldap.social_url_attr:
             real_name = existing.get("name") or member.get("name")
             if real_name and real_name != gh_login:
                 ldap_data = _ldap_lookup_cn(real_name, gh_login, ldap)
@@ -233,6 +240,7 @@ def _ldap_available(ldap: LdapConfig) -> bool:
             text=True,
             timeout=10,
         )
+    # tolerant: ldapsearch unavailable disables LDAP enrichment
     except (FileNotFoundError, subprocess.TimeoutExpired):
         log.warning("ldapsearch not available — skipping LDAP enrichment")
         return False
@@ -423,6 +431,7 @@ def _ldap_query(ldap_filter: str, attrs: list[str], ldap: LdapConfig) -> str | N
             text=True,
             timeout=15,
         )
+    # tolerant: an LDAP query timeout skips that lookup
     except subprocess.TimeoutExpired:
         log.warning("LDAP lookup failed for %s", ldap_filter)
         return None
@@ -553,6 +562,7 @@ def enrich_from_slack(
 
     try:
         creds = get_slack_credentials(slack_cfg, token_path)
+    # tolerant: missing Slack credentials skip Slack enrichment
     except SlackAuthError:
         log.warning("No Slack credentials — skipping Slack enrichment")
         return members
@@ -589,6 +599,7 @@ def _build_slack_email_map(session: object, target_emails: dict[str, dict]) -> d
             resp = safe_get(session, "https://slack.com/api/users.list", params=params)
             resp.raise_for_status()
             data = resp.json()
+        # tolerant: a failed Slack users.list page is retried with backoff, then enrichment stops
         except Exception:
             retries += 1
             if retries > max_retries:

@@ -24,20 +24,8 @@ from standup_tool.workspace import RepoInfo
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "standup_tool"
 
-AUDITED_MODULES: tuple[Path, ...] = (
-    PACKAGE_ROOT / "collectors" / "git_activity.py",
-    PACKAGE_ROOT / "collectors" / "pr_activity.py",
-    PACKAGE_ROOT / "collectors" / "jira_activity.py",
-    PACKAGE_ROOT / "collectors" / "slack_activity.py",
-    PACKAGE_ROOT / "collectors" / "gmail.py",
-    PACKAGE_ROOT / "collectors" / "google_calendar.py",
-    PACKAGE_ROOT / "collectors" / "google_drive.py",
-    PACKAGE_ROOT / "collectors" / "google_auth.py",
-    PACKAGE_ROOT / "collectors" / "conversation_activity.py",
-    PACKAGE_ROOT / "memory.py",
-    PACKAGE_ROOT / "collectors" / "memory_activity.py",
-    PACKAGE_ROOT / "slack_auth.py",
-)
+# Every module in the package, so a new module cannot escape the audit.
+AUDITED_MODULES: tuple[Path, ...] = tuple(sorted(PACKAGE_ROOT.rglob("*.py")))
 
 
 def _get_collector(name: str):
@@ -69,7 +57,9 @@ def _make_ctx(acme_config: Config, cfg_dir: Path, repos: list[RepoInfo] | None =
     )
 
 
-@pytest.mark.parametrize("module_path", AUDITED_MODULES, ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "module_path", AUDITED_MODULES, ids=lambda p: str(p.relative_to(PACKAGE_ROOT))
+)
 def test_every_except_handler_has_tolerant_or_fatal_annotation(module_path: Path):
     assert module_path.is_file(), f"Missing audited module: {module_path}"
     source = module_path.read_text(encoding="utf-8")

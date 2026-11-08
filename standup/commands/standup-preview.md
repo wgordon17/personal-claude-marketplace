@@ -1,7 +1,14 @@
 ---
 description: Run standup guidance without advancing the last-run marker or drafting/posting Slack messages — surfaces what needs addressing, what needs follow-up, what to focus on, and what to chase next.
 allowed-tools:
-  - Bash
+  - Bash(uv run --directory:*)
+  - Bash(chmod 600:*)
+  - Bash(jq:*)
+  - Bash(git -C:*)
+  - Bash(gh pr checks:*)
+  - Bash(gh run view:*)
+  - Bash(command -v:*)
+  - Bash(test -f:*)
   - Read
   - Write
   - Edit

@@ -893,3 +893,13 @@ def test_cross_stage_collector_producers_into_build_digest():
     assert "timestamp" in uncorr_by_source["calendar"]
     assert uncorr_by_source["drive"]["text"] == "Architecture RFC: Review section 2"
     assert "timestamp" in uncorr_by_source["drive"]
+
+
+def test_extract_entities_is_linear_on_long_unbroken_tokens():
+    import time
+
+    blob = "a" * 50_000
+    start = time.perf_counter()
+    entities = extract_entities(blob + " fixes acme/widgets#42")
+    assert time.perf_counter() - start < 2.0
+    assert any(e.endswith("#42") for e in entities)

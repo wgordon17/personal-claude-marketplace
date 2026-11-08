@@ -6,6 +6,7 @@ import json
 import logging
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -111,6 +112,28 @@ def _build_pr_dict(item: dict, repo_name: str, role: str) -> dict:
     }
 
 
+_QUERIES: tuple[tuple[list[str], str], ...] = (
+    (["--author", "@me"], "author"),
+    (["--search", "review-requested:@me"], "review_requested"),
+    (["--search", "reviewed-by:@me"], "reviewer"),
+)
+_MAX_WORKERS = 6
+
+
+def _fetch_repo(repo: RepoInfo) -> tuple[list[tuple[str, list[dict]]], bool]:
+    """Run every PR query for *repo*; return `(role, items)` pairs and whether a query failed.
+
+    Stops at the first failing query, keeping what earlier queries returned.
+    """
+    fetched: list[tuple[str, list[dict]]] = []
+    for extra_args, role in _QUERIES:
+        items = _gh_pr_list(repo.upstream_slug or "", extra_args, repo_path=repo.path)
+        if items is None:
+            return fetched, True
+        fetched.append((role, items))
+    return fetched, False
+
+
 def collect(
     repos: list[RepoInfo],
     since_date: date,
@@ -135,26 +158,26 @@ def collect(
     prs: list[dict] = []
     seen_urls: set[str] = set()
 
-    queries = [
-        (["--author", "@me"], "author"),
-        (["--search", "review-requested:@me"], "review_requested"),
-        (["--search", "reviewed-by:@me"], "reviewer"),
-    ]
+    eligible: list[RepoInfo] = []
+    for repo in repos:
+        if repo.upstream_slug:
+            eligible.append(repo)
+        else:
+            sys.stderr.write(f"WARNING: skipping PR collection for {repo.path} (no remote slug)\n")
 
-    eligible_repos = 0
+    # gh calls are slow and independent per repo; fetch concurrently, then merge in repo order
+    # so dedupe and output ordering are unchanged.
+    if eligible:
+        with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(eligible))) as pool:
+            fetched_by_repo = list(pool.map(_fetch_repo, eligible))
+    else:
+        fetched_by_repo = []
+
+    eligible_repos = len(eligible)
     failed_repos = 0
 
-    for repo in repos:
-        if not repo.upstream_slug:
-            sys.stderr.write(f"WARNING: skipping PR collection for {repo.path} (no remote slug)\n")
-            continue
-        eligible_repos += 1
-        repo_failed = False
-        for extra_args, role in queries:
-            items = _gh_pr_list(repo.upstream_slug, extra_args, repo_path=repo.path)
-            if items is None:
-                repo_failed = True
-                break
+    for repo, (fetched, repo_failed) in zip(eligible, fetched_by_repo, strict=True):
+        for role, items in fetched:
             for item in items:
                 state = item.get("state", "")
                 is_open = state in ("OPEN", "open")

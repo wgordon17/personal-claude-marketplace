@@ -10,7 +10,7 @@ from pathlib import Path
 
 from googleapiclient.discovery import build
 
-from standup_tool.collectors.google_auth import get_credentials
+from standup_tool.collectors.google_auth import authorized_http, get_credentials
 
 _BODY_LIMIT = 3000
 
@@ -129,7 +129,7 @@ def collect(
     Gmail date format: YYYY/MM/DD (not YYYY-MM-DD).
     """
     creds = get_credentials(config_dir)
-    service = build("gmail", "v1", credentials=creds)
+    service = build("gmail", "v1", http=authorized_http(creds))
 
     # Gmail after:/before: are exclusive — adjust by 1 day to include endpoints
     after = _gmail_date(since_date - timedelta(days=1))

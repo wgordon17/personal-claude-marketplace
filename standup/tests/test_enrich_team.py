@@ -471,6 +471,35 @@ def test_ldap_chain_walk_and_enrich_from_ldap_strategies() -> None:
     assert by_gh["cy-cn"]["directory_uid"] == "ccn"
 
 
+def test_enrich_from_ldap_does_not_guess_identity_without_social_url_attr() -> None:
+    """A GitHub login or display name is attacker-chosen; without a social-URL attribute to
+    verify against, neither may be used to pick a directory entry. An explicit directory_uid
+    is still trusted."""
+    ldap = dataclasses.replace(_enabled_ldap(), social_url_attr=None, worker_id_attr=None)
+    queries: list[str] = []
+
+    def fake_ldap_query(ldap_filter: str, attrs: list[str], cfg: LdapConfig) -> str | None:
+        queries.append(ldap_filter)
+        return "dn: uid=victim\nuid: victim\ncn: Victim Person\nmail: victim@example.com\n"
+
+    members = [
+        {"github": "mallory", "name": "Victim Person"},
+        {"github": "trent", "directory_uid": "victim"},
+    ]
+    with (
+        patch.object(enrich_team, "_ldap_available", return_value=True),
+        patch.object(enrich_team, "_ldap_query", side_effect=fake_ldap_query),
+    ):
+        result = enrich_from_ldap(members, {}, ldap)
+
+    by_gh = {m["github"]: m for m in result}
+    assert "jira_email" not in by_gh["mallory"]
+    assert by_gh["mallory"]["name"] == "Victim Person"
+    assert "directory_uid" not in by_gh["mallory"]
+    assert queries == ["(uid=victim)"]
+    assert by_gh["trent"]["jira_email"] == "victim@example.com"
+
+
 def test_run_enrichment_dry_run_outputs_yaml_without_writing_file(
     acme_config: Config,
     cfg_dir: Path,

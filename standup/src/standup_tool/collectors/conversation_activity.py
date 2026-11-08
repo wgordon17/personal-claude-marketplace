@@ -179,6 +179,10 @@ def _extract_context(jsonl_path: Path) -> str:
     try:
         with open(jsonl_path) as f:
             for line in f:
+                # Cheap reject: only user/assistant lines can contribute, and most of a
+                # transcript is large tool output that is not worth parsing.
+                if '"user"' not in line and '"assistant"' not in line:
+                    continue
                 try:
                     obj = json.loads(line)
                 # tolerant: skip malformed JSON line inside session transcript
@@ -240,7 +244,6 @@ async def _compress(client, context: str, sem: asyncio.Semaphore) -> str:
     compressed_parts = []
 
     async def process_chunk(chunk: str) -> str:
-        redacted_chunk = redact_secrets(chunk)
         async with sem:
             response = await client.messages.create(
                 model="claude-haiku-4-5@20251001",
@@ -248,7 +251,7 @@ async def _compress(client, context: str, sem: asyncio.Semaphore) -> str:
                 messages=[
                     {
                         "role": "user",
-                        "content": _COMPRESS_PROMPT + f"<excerpt>\n{redacted_chunk}\n</excerpt>",
+                        "content": _COMPRESS_PROMPT + f"<excerpt>\n{chunk}\n</excerpt>",
                     }
                 ],
             )
@@ -256,7 +259,7 @@ async def _compress(client, context: str, sem: asyncio.Semaphore) -> str:
                 if block.type == "text":
                     text = block.text.strip()
                     if text != "EMPTY":
-                        return redact_secrets(text)
+                        return text
             return ""
 
     results = await asyncio.gather(*(process_chunk(c) for c in chunks))
@@ -264,7 +267,7 @@ async def _compress(client, context: str, sem: asyncio.Semaphore) -> str:
         if res:
             compressed_parts.append(res)
 
-    return redact_secrets("\n\n".join(compressed_parts))
+    return "\n\n".join(compressed_parts)
 
 
 def _project_name_from_dir(dir_name: str) -> str:
@@ -355,7 +358,7 @@ async def _async_collect(
         if not repos_touched:
             return None
 
-        raw_context = redact_secrets(_extract_context(conv["file_path"]))
+        raw_context = _extract_context(conv["file_path"])
         if not raw_context:
             return None
 
@@ -370,7 +373,7 @@ async def _async_collect(
                 raise
             logger.debug("Failed to compress conversation %s: %s", conversation_id, exc)
             logger.warning("Failed to compress conversation %s: %s", conversation_id, exc)
-            context = redact_secrets(raw_context[:_COMPRESS_THRESHOLD_CHARS])
+            context = raw_context[:_COMPRESS_THRESHOLD_CHARS]
         else:
             context = redact_secrets(context)
         if not context.strip():

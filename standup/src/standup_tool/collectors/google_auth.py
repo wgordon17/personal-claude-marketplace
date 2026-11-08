@@ -7,6 +7,8 @@ import sys
 import threading
 from pathlib import Path
 
+import google_auth_httplib2
+import httplib2
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -21,12 +23,19 @@ SCOPES = [
 
 _CREDENTIALS_LOCK = threading.Lock()
 
+HTTP_TIMEOUT = 30  # seconds, per Google API request
+
 
 class GoogleAuthError(ConfigError):
     """Raised when Google OAuth token is missing or expired in non-interactive mode."""
 
 
-def _credentials_path(config_dir: Path | None = None) -> Path:
+def authorized_http(creds: Credentials) -> google_auth_httplib2.AuthorizedHttp:
+    """HTTP client for googleapiclient with a bounded timeout (the default is unbounded)."""
+    return google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=HTTP_TIMEOUT))
+
+
+def credentials_path(config_dir: Path | None = None) -> Path:
     env = os.environ.get("STANDUP_GOOGLE_CREDENTIALS")
     if env:
         return Path(env)
@@ -58,7 +67,7 @@ def get_credentials(config_dir: Path | None = None, *, interactive: bool = False
     with _CREDENTIALS_LOCK:
         creds: Credentials | None = None
         token_path = _token_path(config_dir)
-        creds_path = _credentials_path(config_dir)
+        creds_path = credentials_path(config_dir)
 
         if token_path.exists():
             tighten_mode(token_path)

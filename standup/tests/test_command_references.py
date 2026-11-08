@@ -162,6 +162,18 @@ def test_no_jira_write_tools_in_allowed_tools_frontmatter() -> None:
 
 
 @pytest.mark.parametrize("cmd_name", ["standup.md", "standup-preview.md"])
+def test_commands_scope_bash_instead_of_allowing_it_unrestricted(cmd_name: str) -> None:
+    """These commands read untrusted Slack/email/Jira/Drive content, so Bash is allowed only
+    for the specific commands they run; anything else prompts the user."""
+    cmd_path = STANDUP_ROOT / "commands" / cmd_name
+    tools = parse_allowed_tools(parse_frontmatter(cmd_path.read_text(encoding="utf-8")))
+    assert "Bash" not in tools
+    scoped = [t for t in tools if t.startswith("Bash(")]
+    assert "Bash(uv run --directory:*)" in scoped
+    assert all(t.endswith(":*)") for t in scoped)
+
+
+@pytest.mark.parametrize("cmd_name", ["standup.md", "standup-preview.md"])
 def test_commands_include_all_13_read_only_jira_mcp_tools(cmd_name: str) -> None:
     """Both standup commands list all 13 read-only Atlassian MCP tools in allowed-tools."""
     cmd_path = STANDUP_ROOT / "commands" / cmd_name
