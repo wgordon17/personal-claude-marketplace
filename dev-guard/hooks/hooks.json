@@ -37,6 +37,10 @@
           {
             "type": "command",
             "command": "uv run ${CLAUDE_PLUGIN_ROOT}/hooks/tool-selection-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/enforce-project-commit-format.sh"
           }
         ]
       },

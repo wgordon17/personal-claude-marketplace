@@ -1377,6 +1377,35 @@ class TestCheckHackDirModified:
         result = self.mod._check_hack_dir_modified(str(tmp_path))
         assert result == {"plans": False, "research": False}
 
+    def test_linked_worktree_resolves_main_worktree_hack_dir(self, tmp_path):
+        """A linked worktree at <repo>/.claude/worktrees/wt1 with no .dev symlink
+        resolves <repo>/hack/ via git worktree list --porcelain."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.email", "dev@example.com"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "Dev"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True)
+
+        hack = repo / "hack"
+        hack.mkdir()
+        (hack / "PROJECT.md").write_text("# Project\n")
+        (hack / "SESSIONS.md").write_text("# Sessions\n")
+        plans = hack / "plans"
+        plans.mkdir()
+        (plans / "my-plan.md").write_text("# Plan\n")
+
+        wt_dir = repo / ".claude" / "worktrees" / "wt1"
+        wt_dir.parent.mkdir(parents=True)
+        subprocess.run(
+            ["git", "worktree", "add", "-q", "-b", "feat/wt1", str(wt_dir)],
+            cwd=repo,
+            check=True,
+        )
+
+        result = self.mod._check_hack_dir_modified(str(wt_dir))
+        assert result == {"plans": True, "research": False}
+
 
 # ── State migration: old format ───────────────────────────────────────────────
 

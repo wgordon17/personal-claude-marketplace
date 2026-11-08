@@ -241,6 +241,42 @@ class TestFindMemoryDir:
             "expected passthrough when hack/ has <2 core files, even with decisions seeded"
         )
 
+    def test_linked_worktree_resolves_main_worktree_hack_dir(self, tmp_path):
+        """A linked worktree at <repo>/.claude/worktrees/wt1 with no .dev symlink
+        resolves <repo>/hack/ via git worktree list --porcelain."""
+        project = tmp_path / "repo"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        subprocess.run(["git", "config", "user.email", "dev@example.com"], cwd=project, check=True)
+        subprocess.run(["git", "config", "user.name", "Dev"], cwd=project, check=True)
+        subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=project, check=True)
+
+        hack = project / "hack"
+        hack.mkdir()
+        (hack / "PROJECT.md").write_text("# Project\n")
+        (hack / "TODO.md").write_text("# TODO\n")
+
+        wt_dir = project / ".claude" / "worktrees" / "wt1"
+        wt_dir.parent.mkdir(parents=True)
+        subprocess.run(
+            ["git", "worktree", "add", "-q", "-b", "feat/wt1", str(wt_dir)],
+            cwd=project,
+            check=True,
+        )
+
+        q = make_dp_question("SQL injection in linked worktree")
+        record = make_decision_record()
+        seed_decisions_file(hack / "review-decisions.json", [record])
+
+        payload = make_pre_payload([q])
+        result = run_hook(payload, cwd=wt_dir)
+        assert result.returncode == 0
+        assert result.stdout.strip() != "", (
+            "expected linked worktree without .dev symlink to resolve main worktree hack/"
+        )
+        output = json.loads(result.stdout)
+        assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+
 
 # ── pr-test-7: _save_decisions OSError cleanup ───────────────────────────────
 
