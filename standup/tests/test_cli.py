@@ -52,6 +52,9 @@ def test_parser_subcommands_match_expected_set():
         "enrich-team",
         "standup-history",
         "config",
+        "verify",
+        "init",
+        "google-auth",
     }
 
 
@@ -1361,3 +1364,93 @@ def test_get_author_email_returns_empty_when_no_repos(acme_config: Config):
     with patch("subprocess.run") as mock_run:
         assert _get_author_email(cfg_empty) == ""
     mock_run.assert_not_called()
+
+
+def test_init_copies_from_importlib_resources_without_overwriting(
+    cfg_dir: Path, capsys: pytest.CaptureFixture[str]
+):
+    import importlib.resources
+
+    with patch.object(
+        importlib.resources,
+        "files",
+        wraps=importlib.resources.files,
+    ) as mock_files:
+        cli.main(["init"])
+        mock_files.assert_called_once_with("standup_tool.examples")
+
+    cfg_file = cfg_dir / "config.yaml"
+    tpl_file = cfg_dir / "template.md"
+    assert cfg_file.exists()
+    assert tpl_file.exists()
+    assert not (cfg_dir / "team-members.yaml").exists()
+    assert stat.S_IMODE(cfg_file.lstat().st_mode) == 0o600
+    assert stat.S_IMODE(tpl_file.lstat().st_mode) == 0o600
+
+    out_lines = capsys.readouterr().out.strip().splitlines()
+    assert out_lines == [str(cfg_file), str(tpl_file)]
+
+    # Modify config.yaml and template.md and ensure subsequent init does not overwrite either
+    cfg_file.write_text("# custom existing config\nversion: 1\n", encoding="utf-8")
+    tpl_file.write_text(
+        ":dart: Custom Header\n• item\n\n:rocket: Second\n• item\n", encoding="utf-8"
+    )
+    cli.main(["init"])
+    assert cfg_file.read_text(encoding="utf-8") == "# custom existing config\nversion: 1\n"
+    assert (
+        tpl_file.read_text(encoding="utf-8")
+        == ":dart: Custom Header\n• item\n\n:rocket: Second\n• item\n"
+    )
+
+
+def test_config_path_prints_fixture_dir_without_requiring_config_yaml(
+    cfg_dir: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert not (cfg_dir / "config.yaml").exists()
+    cli.main(["config", "path"])
+    captured = capsys.readouterr()
+    assert captured.out == f"{cfg_dir}\n"
+    assert captured.err == ""
+
+
+def test_google_auth_passes_interactive_true_and_handles_missing_credentials(
+    cfg_dir: Path, capsys: pytest.CaptureFixture[str]
+):
+    with patch("standup_tool.cli.get_credentials", return_value=MagicMock()) as mock_get:
+        cli.main(["google-auth"])
+    mock_get.assert_called_once_with(cfg_dir, interactive=True)
+    assert capsys.readouterr().out.strip() == "ok"
+
+    with (
+        patch(
+            "standup_tool.cli.get_credentials",
+            side_effect=FileNotFoundError("missing credentials.json"),
+        ),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main(["google-auth"])
+    assert exc_info.value.code == 1
+    assert f"credentials.json not found at {cfg_dir / 'credentials.json'}" in (
+        capsys.readouterr().err
+    )
+
+
+def test_verify_cli_subcommand_invokes_run_verify(
+    acme_config: Config,
+    cfg_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    cli.main(["verify", "--only", "memory"])
+    out = capsys.readouterr().out
+    assert "check | status | hint" in out
+    assert "memory | ok |" in out
+
+    fake_home = tmp_path / "empty-home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["verify", "--only", "permissions"])
+    assert exc_info.value.code == 1

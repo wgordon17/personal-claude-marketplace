@@ -77,6 +77,20 @@ Every `standup-tool collect` run emits a top-level `"_status"` object as its fir
 
 ## Onboarding
 
+Run `/standup-onboard` (or `/standup:standup-onboard`) for guided interactive setup. The skill walks through seven steps without ever reading or prompting for raw secrets:
+
+1. **Detect state:** Resolves `<config_dir>` via `standup-tool config path` and runs `standup-tool config validate`. If no config exists yet, runs `standup-tool init` to copy packaged `config.example.yaml` and `template.example.md` into `<config_dir>` with mode `0600` (never overwriting existing files). If validation already passes, jumps straight to step 6.
+2. **Non-secret configuration:** Prompts one topic per `AskUserQuestion` call for `github.org`, `repos[].path` (noting auto-discovery of direct child clones matching `github.org`), `collectors.jira` (`project` and optional `server`), `collectors.slack` (`workspace_url`, `channels`, `standup_channels`), enabled collectors (`conversations` off by default with its Google Cloud Vertex AI egress disclosed; warns if `drive` is enabled without `calendar`), `standup.audience`, and optional `ldap` settings (`host`, `base_dn`, `email_domain`, attribute overrides), then writes `<config_dir>/config.yaml` and runs `standup-tool config validate`.
+3. **Template customization:** Displays `<config_dir>/template.md` and offers to keep, edit, or replace it while preserving `:emoji: Header` section headers and `<!-- criteria: ... -->` comments.
+4. **Permissions and credentials:** Offers to configure `~/.claude/settings.json` with `permissions.additionalDirectories` (`["<config_dir>"]`) and `permissions.deny` rules blocking `Read` on the three secret files:
+   - `<config_dir>/slack-token` — single-line browser `d` session cookie captured via `umask 077; pbpaste > <config_dir>/slack-token; pbcopy < /dev/null` in the user's own terminal.
+   - `<config_dir>/credentials.json` — Google OAuth2 Desktop client secrets (`0600`).
+   - `<config_dir>/token.json` — Google OAuth2 refresh/access token created by running `uv run --directory "<plugin_root>" standup-tool google-auth` in the user's own terminal (required because `google-auth` prints an authorization URL to open in a browser).
+   Also guides `jira init` + shell-profile `JIRA_API_TOKEN` setup and `gh auth login`.
+5. **Team map:** Runs `standup-tool enrich-team` to populate `<config_dir>/team-members.yaml` from GitHub org members, optional LDAP, and Slack users.
+6. **Verification (`standup-tool verify`):** Runs all 11 checks (`git`, `pr`, `jira`, `calendar`, `gmail`, `drive`, `slack`, `memory`, `conversations`, `ldap`, `permissions`, or a single check via `--only <name>`) and prints a `check | status | hint` table (`ok`, `missing`, `failed`, `disabled`) with secret-redacted hints. Missing `permissions` warns with a copy-paste settings snippet without failing the overall exit code unless `--only permissions` is passed.
+7. **Dry run:** Runs `standup-tool collect --since YYYY-MM-DD --no-marker` for a 3-day window into `<config_dir>/.collect-output.json` (`0600`) and reads only `._status` to confirm collector readiness.
+
 ## Commands
 
 ## CLI

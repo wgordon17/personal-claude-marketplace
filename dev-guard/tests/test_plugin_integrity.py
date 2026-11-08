@@ -1302,7 +1302,7 @@ class TestSkillMigrationFidelity:
         resolve_skill_bundle = runner_mod.resolve_skill_bundle
 
         skill_files = sorted(REPO_ROOT.glob("*/skills/*/SKILL.md"))
-        assert len(skill_files) == 24, f"Expected 24 skills, found {len(skill_files)}"
+        assert len(skill_files) == 25, f"Expected 25 skills, found {len(skill_files)}"
 
         for skill_md in skill_files:
             line_count = len(skill_md.read_text().splitlines())
