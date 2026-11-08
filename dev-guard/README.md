@@ -17,6 +17,7 @@ Development environment policy enforcement: tool selection guard, commit validat
 - **Native tool redirections** — Redirects `grep`/`find`/`cat`/`sed` to Grep/Glob/Read/Edit tools
 - **Python tooling** — Enforces `uv run`/`uvx` over bare `python`/`pip`
 - **Git safety** — Blocks force pushes, branch deletions, commits to main, and other destructive operations
+- **SafeDep PMG bypass blocking** — Hard-blocks (`PMG_DENY_RULES`) setting `PMG_INSECURE_INSTALLATION`, `PMG_PROXY_INSTALL_ONLY`, or `PMG_CONFIG_DIR` (as `VAR=x cmd`, `env`, `export`/`declare -x`, `launchctl setenv`); `--skip-dependency-cooldown` on PMG-guarded commands; and pip installs that skip PMG's bare-name `pip`/`pip3` shim (`python -m pip`, `.venv/bin/pip`, `pip3.12`, `uv run pip`). Reading the variables (`grep`, `echo $VAR`, `printenv`) and `uv pip install`/`uv add` stay allowed
 - **URL fetch guard** — Blocks or redirects WebFetch, WebSearch domain filters, and curl/wget for authenticated services and bot-blocked public sites (extensible via `URL_GUARD_EXTRA_RULES`)
 - **Command guard** — User-defined command blocking rules (via `COMMAND_GUARD_EXTRA_RULES`)
 - **Interactive command blocking** — Prevents `git rebase -i`, `git add -p`, and other interactive commands
@@ -304,7 +305,7 @@ stdin JSON → parse → session state → hook dispatch (PreToolUse or PostTool
 3. **Early exits:** Non-Bash tools pass through; EnterPlanMode redirects to skill.
    tmp-path guards inspect Edit/Write/NotebookEdit paths, and the comment-narration
    guard inspects their content (skipping Markdown/text/doc files), before dispatch.
-4. **GUARD_BYPASS check:** If prefix present, enforce only GIT_DENY_RULES
+4. **GUARD_BYPASS check:** If prefix present, enforce only GIT_DENY_RULES and PMG_DENY_RULES
 5. **Fetch command check:** curl/wget commands checked against BLOCKED_URL_RULES
 6. **Split commands:** Break on command delimiters (&&, ||, ;, newline)
 7. **Per-subcommand analysis:**
@@ -430,7 +431,7 @@ Users can trust these built-in ask-type rules with `/dev-guard:trust add <rule-n
 
 | Prefix | Scope | Use case |
 |--------|-------|----------|
-| `GUARD_BYPASS=1` | All Bash rules except GIT_DENY_RULES | Override tool selection and command guard rules; GIT_DENY_RULES (reset --hard, force push, branch -D, etc.) is always enforced — GIT_ASK_RULES (e.g. stash-drop) is bypassed like everything else |
+| `GUARD_BYPASS=1` | All Bash rules except GIT_DENY_RULES and PMG_DENY_RULES | Override tool selection and command guard rules; GIT_DENY_RULES (reset --hard, force push, branch -D, etc.) and PMG_DENY_RULES (SafeDep PMG bypasses) are always enforced — GIT_ASK_RULES (e.g. stash-drop) is bypassed like everything else |
 | `ALLOW_FETCH=1` | URL rules (curl/wget only) | Fetch an authenticated URL after confirming alternatives |
 
 ## OMP Compatibility

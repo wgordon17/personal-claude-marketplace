@@ -2011,6 +2011,142 @@ GIT_ASK_RULES: list[GitRule] = [
 ]
 
 
+# ── SafeDep PMG bypass rules ──
+#
+# PMG (github.com/safedep/pmg) wraps package managers with a malware scan and a
+# dependency cooldown. Its shims only intercept the bare command names (`pip`,
+# `pip3`, `npm`, `uv`, ...), and its behavior can be weakened via environment
+# variables and a CLI flag. These rules hard-block those escape hatches and,
+# like GIT_DENY_RULES, are enforced even under GUARD_BYPASS=1.
+
+_PMG_GUIDANCE_SUFFIX = (
+    " This bypasses SafeDep PMG supply-chain protection (malware scan + dependency "
+    "cooldown). Use the shimmed package manager as-is (e.g. `uv add <pkg>`, "
+    "`uv pip install <pkg>`, `npm install <pkg>`). If a package is blocked or held "
+    "by the cooldown, stop and ask the user instead of working around PMG."
+)
+
+# Quoted strings containing whitespace are prose (commit messages, PR bodies,
+# grep patterns), not argv tokens. Single-token quoted strings are unquoted so
+# `env "PMG_CONFIG_DIR=x" npm i` or `"$VENV"/bin/pip install` are still seen.
+_PMG_QUOTED_RE = re.compile(r"""'[^']*'|"(?:\\.|[^"\\])*\"""")
+_PMG_ENV_VARS = ("PMG_INSECURE_INSTALLATION", "PMG_PROXY_INSTALL_ONLY", "PMG_CONFIG_DIR")
+_PMG_ENV_ASSIGN_START_RE = re.compile(rf"^\s*(?:{'|'.join(_PMG_ENV_VARS)})=")
+
+
+def _sanitize_pmg_args(cmd: str) -> str:
+    """Neutralize multi-word quoted arguments so prose can't trigger PMG rules."""
+
+    def _repl(m: re.Match[str]) -> str:
+        inner = m.group(0)[1:-1]
+        if not re.search(r"\s", inner) or _PMG_ENV_ASSIGN_START_RE.match(inner):
+            return inner
+        return "_ARG_"
+
+    return _PMG_QUOTED_RE.sub(_repl, cmd)
+
+
+def _sets_pmg_env(cmd: str, var: str) -> bool:
+    """Return True if cmd assigns/exports ``var`` (any value).
+
+    Covers `VAR=x cmd`, `env VAR=x cmd`, `export VAR=x`, `declare -x VAR=x`,
+    `sudo VAR=x cmd`, and `launchctl setenv VAR x`. Reading the variable
+    (`echo $VAR`, `printenv VAR`, `grep VAR file`, `unset VAR`) is allowed.
+    Any assigned value is blocked (fail closed) rather than replicating PMG's
+    truthiness parsing.
+    """
+    sanitized = _sanitize_pmg_args(cmd)
+    if re.search(rf"(?:^|[\s(]){var}=", sanitized):
+        return True
+    return bool(re.search(rf"(?:^|\s)setenv\s+{var}(?!\S)", sanitized))
+
+
+# Package-manager command names PMG guards (shim names plus pmg itself).
+_PMG_GUARDED_CMDS = r"(?:pmg|npm|npx|pnpm|pnpx|yarn|bun|pip|pip3|pipx|poetry|uv|uvx|aube|aubr|aubx)"
+_PMG_SKIP_COOLDOWN_RE = re.compile(
+    rf"(?:^|[\s(/]){_PMG_GUARDED_CMDS}(?![\w.-])[^|;&<>\n]*?"
+    r"(?<!\S)--skip-dependency-cooldown(?![\w-])"
+)
+
+
+def _has_pmg_skip_cooldown(cmd: str) -> bool:
+    """Return True if a PMG-guarded command passes --skip-dependency-cooldown."""
+    return bool(_PMG_SKIP_COOLDOWN_RE.search(_sanitize_pmg_args(cmd)))
+
+
+_PIP_FETCH_SUBCMD = r"(?<!\S)(?:install|download|wheel)(?!\S)"
+# `python -m pip`, `python3 -m pip`, `python3.12 -m pip`, `.venv/bin/python -m pip`,
+# `uv run python -m pip` — PMG's `pip` shim never sees these.
+_PYTHON_M_PIP_RE = re.compile(
+    r"(?:^|[\s(/])python(?:\d+(?:\.\d+)*)?(?=\s)[^|;&<>\n]*?(?<!\S)-m\s*pip(?!\S)"
+    rf"[^|;&<>\n]*?{_PIP_FETCH_SUBCMD}"
+)
+# pip invoked by path (`.venv/bin/pip`, `/opt/homebrew/bin/pip3`) or by a versioned
+# name (`pip3.12`) that has no PMG shim.
+_PIP_UNSHIMMED_RE = re.compile(
+    r"(?:^|[\s(])(?P<exe>\S*/pip(?:\d+(?:\.\d+)*)?|pip\d+\.\d+)(?=\s)"
+    rf"[^|;&<>\n]*?{_PIP_FETCH_SUBCMD}"
+)
+# `uv run pip install` resolves the project venv's pip ahead of the PMG shim.
+_UV_RUN_PIP_RE = re.compile(
+    r"(?:^|[\s(])uv\s+run\s[^|;&<>\n]*?(?<!\S)pip(?:\d+(?:\.\d+)*)?(?=\s)"
+    rf"[^|;&<>\n]*?{_PIP_FETCH_SUBCMD}"
+)
+_PMG_SHIM_DIR_MARKER = "/safedep/pmg/bin/"
+
+
+def _is_unshimmed_pip_install(cmd: str) -> bool:
+    """Return True if pip fetches packages through a path PMG's shim can't intercept."""
+    sanitized = _sanitize_pmg_args(cmd)
+    if _PYTHON_M_PIP_RE.search(sanitized) or _UV_RUN_PIP_RE.search(sanitized):
+        return True
+    return any(
+        _PMG_SHIM_DIR_MARKER not in m.group("exe") for m in _PIP_UNSHIMMED_RE.finditer(sanitized)
+    )
+
+
+PMG_DENY_RULES: list[GitRule] = [
+    GitRule(
+        "pmg-insecure-env",
+        lambda cmd: _sets_pmg_env(cmd, "PMG_INSECURE_INSTALLATION"),
+        "Setting PMG_INSECURE_INSTALLATION is FORBIDDEN — it puts PMG in insecure mode "
+        "and installs packages without malware checks." + _PMG_GUIDANCE_SUFFIX,
+    ),
+    GitRule(
+        "pmg-proxy-mode-env",
+        lambda cmd: _sets_pmg_env(cmd, "PMG_PROXY_INSTALL_ONLY"),
+        "Setting PMG_PROXY_INSTALL_ONLY is FORBIDDEN — it changes PMG's proxy "
+        "interception mode." + _PMG_GUIDANCE_SUFFIX,
+    ),
+    GitRule(
+        "pmg-config-dir-env",
+        lambda cmd: _sets_pmg_env(cmd, "PMG_CONFIG_DIR"),
+        "Setting PMG_CONFIG_DIR is FORBIDDEN — it loads an alternate PMG config "
+        "that can disable protections." + _PMG_GUIDANCE_SUFFIX,
+    ),
+    GitRule(
+        "pmg-skip-cooldown",
+        _has_pmg_skip_cooldown,
+        "--skip-dependency-cooldown is FORBIDDEN — it disables PMG's dependency "
+        "cooldown for freshly published (unvetted) versions." + _PMG_GUIDANCE_SUFFIX,
+    ),
+    GitRule(
+        "pip-unshimmed",
+        _is_unshimmed_pip_install,
+        "Running pip via `python -m pip`, a path (e.g. `.venv/bin/pip`), a versioned "
+        "name (e.g. `pip3.12`), or `uv run pip` is FORBIDDEN for install/download/wheel "
+        "— PMG's shim only intercepts the bare `pip`/`pip3` commands." + _PMG_GUIDANCE_SUFFIX,
+    ),
+]
+
+
+def check_pmg_safety(cmd: str) -> None:
+    """Block commands that bypass SafeDep PMG. Exits on match; returns otherwise."""
+    for name, check_fn, message in PMG_DENY_RULES:
+        if check_fn(cmd):
+            _exit_with_decision(message, "block", rule_name=name, matched_segment=cmd)
+
+
 _GIT_C_PATTERN = re.compile(r"\bgit\s+-C\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))")
 
 
@@ -2538,6 +2674,7 @@ def _check_rules(cmd: str, fetch_seen: bool, skip_rules: frozenset[str] | None =
     where native-tool alternatives don't apply to piped output).
     """
     cmd = strip_shell_keyword(cmd)
+    check_pmg_safety(cmd)
     git_asked = check_git_safety(cmd, fetch_seen=fetch_seen)
     normalized = strip_env_prefix(cmd)
     first_non_block: tuple[CommandRule, str] | None = None
@@ -4439,7 +4576,7 @@ def _handle_bash_command(command: str) -> NoReturn:
         sys.exit(2)
 
     # Andon cord: GUARD_BYPASS=1 prefix skips tool-selection and ask rules,
-    # but still enforces hard deny rules (git safety) and URL auth guards.
+    # but still enforces hard deny rules (git safety, PMG bypass) and URL auth guards.
     if command.startswith("GUARD_BYPASS=1 "):
         _log_event("bypass", "bypassed", command=command)
         real_cmd = command[len("GUARD_BYPASS=1 ") :]
@@ -4458,6 +4595,7 @@ def _handle_bash_command(command: str) -> NoReturn:
             ]
             for seg in bypass_segments:
                 _check_fetch_command(seg)
+                check_pmg_safety(strip_shell_keyword(seg))
                 stripped = strip_env_prefix(strip_shell_keyword(seg))
                 for name, check_fn, message in GIT_DENY_RULES:
                     if check_fn(stripped) or check_fn(seg):

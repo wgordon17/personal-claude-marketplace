@@ -2447,6 +2447,116 @@ class TestCoreHooksPathBypass:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SafeDep PMG bypass rules (PMG_DENY_RULES)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPmgBypassDeny:
+    """End-to-end coverage for PMG_DENY_RULES; helper edge cases are unit-tested below."""
+
+    @pytest.mark.parametrize(
+        "command, expected_rule",
+        [
+            ("PMG_INSECURE_INSTALLATION=1 npm install left-pad", "pmg-insecure-env"),
+            ("env PMG_INSECURE_INSTALLATION=true pip install requests", "pmg-insecure-env"),
+            ("export PMG_INSECURE_INSTALLATION=1 && uv add requests", "pmg-insecure-env"),
+            ("bash -c 'PMG_INSECURE_INSTALLATION=1 npm ci'", "pmg-insecure-env"),
+            ("echo $(PMG_INSECURE_INSTALLATION=1 npm ci)", "pmg-insecure-env"),
+            ("PMG_PROXY_INSTALL_ONLY=false npm install left-pad", "pmg-proxy-mode-env"),
+            ("export PMG_PROXY_INSTALL_ONLY=false", "pmg-proxy-mode-env"),
+            ("PMG_CONFIG_DIR=hack/pmg pip install requests", "pmg-config-dir-env"),
+            ("env PMG_CONFIG_DIR=$HOME/.alt-pmg pnpm add left-pad", "pmg-config-dir-env"),
+            ("pmg --skip-dependency-cooldown npm install left-pad", "pmg-skip-cooldown"),
+            ("npm install left-pad --skip-dependency-cooldown", "pmg-skip-cooldown"),
+            ("python3 -m pip install requests", "pip-unshimmed"),
+            ("python3.12 -m pip install requests", "pip-unshimmed"),
+            ("uv run python -m pip install requests", "pip-unshimmed"),
+            (".venv/bin/pip install requests", "pip-unshimmed"),
+            ("/opt/homebrew/bin/pip3 install requests", "pip-unshimmed"),
+            ("ls && .venv/bin/pip install requests | tee log.txt", "pip-unshimmed"),
+            ("GUARD_BYPASS=1 PMG_INSECURE_INSTALLATION=1 npm install left-pad", "pmg-insecure-env"),
+            ("GUARD_BYPASS=1 python3 -m pip install requests", "pip-unshimmed"),
+        ],
+        ids=[
+            "insecure-prefix",
+            "insecure-env-cmd",
+            "insecure-export-chain",
+            "insecure-bash-c",
+            "insecure-subshell",
+            "proxy-mode-prefix",
+            "proxy-mode-export",
+            "config-dir-prefix",
+            "config-dir-env-cmd",
+            "skip-cooldown-pmg",
+            "skip-cooldown-shimmed-npm",
+            "python3-m-pip",
+            "python-versioned-m-pip",
+            "uv-run-python-m-pip",
+            "venv-pip-path",
+            "homebrew-pip3-path",
+            "pip-path-in-chain-and-pipe",
+            "guard-bypass-insecure-still-blocked",
+            "guard-bypass-m-pip-still-blocked",
+        ],
+    )
+    def test_blocked(self, command, expected_rule):
+        result = run_bash(command)
+        assert_guard(result, 2, f"[{expected_rule}]")
+        assert "SafeDep PMG" in result.stderr
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "grep PMG_CONFIG_DIR README.md",
+            "grep -rn PMG_INSECURE_INSTALLATION .",
+            "echo $PMG_CONFIG_DIR",
+            "printenv PMG_PROXY_INSTALL_ONLY",
+            "unset PMG_INSECURE_INSTALLATION",
+            "env -u PMG_CONFIG_DIR npm install left-pad",
+            "MY_PMG_CONFIG_DIR=x make build",
+            'grep -rn "export PMG_CONFIG_DIR=a b" docs/',
+            "pmg npm install left-pad",
+            "grep -rn -- --skip-dependency-cooldown docs/",
+            "uv pip install requests",
+            "uv add requests",
+            ".venv/bin/pip list",
+            "uv run python -m pip list",
+        ],
+        ids=[
+            "grep-config-dir-name",
+            "grep-insecure-name",
+            "echo-config-dir-value",
+            "printenv-proxy-mode",
+            "unset-insecure",
+            "env-unset-config-dir",
+            "suffix-named-var",
+            "quoted-prose-assignment",
+            "pmg-without-skip-flag",
+            "grep-skip-flag-literal",
+            "uv-pip-install",
+            "uv-add",
+            "venv-pip-list",
+            "uv-run-m-pip-list",
+        ],
+    )
+    def test_allowed(self, command):
+        result = run_bash(command)
+        assert_guard(result, 0)
+        assert "SafeDep PMG" not in (result.stderr + result.stdout)
+
+    @pytest.mark.parametrize(
+        "command",
+        ["pip install requests", "pip3 install requests"],
+        ids=["bare-pip", "bare-pip3"],
+    )
+    def test_bare_pip_not_pmg_rule(self, command):
+        """Bare pip/pip3 hit the PMG shim; only the pre-existing `pip` style rule applies."""
+        result = run_bash(command)
+        assert "SafeDep PMG" not in (result.stderr + result.stdout)
+        assert "pip-unshimmed" not in result.stderr
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Git safety: branch creation enforcement
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2813,6 +2923,104 @@ _parse_branch_creation = _mod._parse_branch_creation
 _is_safe_start_point = _mod._is_safe_start_point
 _strip_shell_keyword = _mod.strip_shell_keyword
 _split_pipes = _mod.split_pipes
+
+
+class TestPmgBypassHelpers:
+    """Unit tests for the PMG_DENY_RULES check functions (no subprocess)."""
+
+    @pytest.mark.parametrize(
+        "cmd, var, expected",
+        [
+            ("PMG_INSECURE_INSTALLATION=1 npm i", "PMG_INSECURE_INSTALLATION", True),
+            ("FOO=bar PMG_INSECURE_INSTALLATION=yes uv add x", "PMG_INSECURE_INSTALLATION", True),
+            ('env "PMG_INSECURE_INSTALLATION=1" npm ci', "PMG_INSECURE_INSTALLATION", True),
+            ("declare -x PMG_INSECURE_INSTALLATION=1", "PMG_INSECURE_INSTALLATION", True),
+            ("sudo PMG_INSECURE_INSTALLATION=1 npm i", "PMG_INSECURE_INSTALLATION", True),
+            ("launchctl setenv PMG_INSECURE_INSTALLATION 1", "PMG_INSECURE_INSTALLATION", True),
+            ("( PMG_PROXY_INSTALL_ONLY=false npm i )", "PMG_PROXY_INSTALL_ONLY", True),
+            ('PMG_CONFIG_DIR="/a b/c" npm install', "PMG_CONFIG_DIR", True),
+            ("env 'PMG_CONFIG_DIR=/a b' npm install", "PMG_CONFIG_DIR", True),
+            ("export PMG_CONFIG_DIR=", "PMG_CONFIG_DIR", True),
+            ("grep PMG_CONFIG_DIR file", "PMG_CONFIG_DIR", False),
+            ("echo $PMG_CONFIG_DIR", "PMG_CONFIG_DIR", False),
+            ("echo ${PMG_CONFIG_DIR}", "PMG_CONFIG_DIR", False),
+            ("unset PMG_CONFIG_DIR", "PMG_CONFIG_DIR", False),
+            ("env -u PMG_CONFIG_DIR npm i", "PMG_CONFIG_DIR", False),
+            ("XPMG_CONFIG_DIR=1 make", "PMG_CONFIG_DIR", False),
+            ("launchctl getenv PMG_CONFIG_DIR", "PMG_CONFIG_DIR", False),
+            ('gh pr create --body "never set PMG_CONFIG_DIR=x"', "PMG_CONFIG_DIR", False),
+        ],
+    )
+    def test_sets_pmg_env(self, cmd, var, expected):
+        assert _mod._sets_pmg_env(cmd, var) is expected
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            ("pmg --skip-dependency-cooldown npm install x", True),
+            ("pmg --skip-dependency-cooldown=true pip install x", True),
+            ('pmg "--skip-dependency-cooldown" npm ci', True),
+            ("/opt/homebrew/bin/pmg --skip-dependency-cooldown uv add x", True),
+            ("uv add x --skip-dependency-cooldown", True),
+            ("yarn add x --skip-dependency-cooldown", True),
+            ("pmg npm install x", False),
+            ("pmg --paranoid npm install x", False),
+            ("grep -- --skip-dependency-cooldown README.md", False),
+            ('rg "pmg --skip-dependency-cooldown npm" docs/', False),
+            ("npm install x | grep -- --skip-dependency-cooldown", False),
+            ("pmg --skip-dependency-cooldown-other npm i", False),
+        ],
+    )
+    def test_has_pmg_skip_cooldown(self, cmd, expected):
+        assert _mod._has_pmg_skip_cooldown(cmd) is expected
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            ("python -m pip install requests", True),
+            ("python3 -m pip install -r requirements.txt", True),
+            ("python3.12 -m pip install requests", True),
+            ("python3 -I -m pip install x", True),
+            ("python3 -mpip install x", True),
+            ("python3 -m pip --disable-pip-version-check install x", True),
+            (".venv/bin/python -m pip install x", True),
+            ("/usr/bin/env python3 -m pip install x", True),
+            ("uv run python -m pip install x", True),
+            ("uv run pip install x", True),
+            ("uv run --with foo pip3 install x", True),
+            (".venv/bin/pip install requests", True),
+            ("./venv/bin/pip3.12 install x", True),
+            ("/opt/homebrew/bin/pip3 install requests", True),
+            ("pip3.12 install requests", True),
+            ('"$VIRTUAL_ENV/bin/pip" install x', True),
+            ("VAR=1 .venv/bin/pip install x", True),
+            (".venv/bin/pip download x", True),
+            ("python -m pip wheel .", True),
+            ("pip install requests", False),
+            ("pip3 install requests", False),
+            ("uv pip install requests", False),
+            ("uv add requests", False),
+            ("uv run pytest", False),
+            (".venv/bin/pip list", False),
+            (".venv/bin/pip freeze | grep install", False),
+            ("python3 -m pip --version", False),
+            ("python -m pip list | grep install", False),
+            ("ipython -m pip install x", False),
+            ("rg 'pip install' .venv/bin/pip", False),
+            ('git log --grep "python -m pip install"', False),
+            (".venv/bin/pip-compile install", False),
+            ('"/Users/me/Library/Application Support/safedep/pmg/bin/pip" install x', False),
+            ("/Users/me/Library/Application\\ Support/safedep/pmg/bin/pip install x", False),
+        ],
+    )
+    def test_is_unshimmed_pip_install(self, cmd, expected):
+        assert _mod._is_unshimmed_pip_install(cmd) is expected
+
+    def test_rule_names_unique_and_disjoint_from_git_rules(self):
+        pmg_names = [r.name for r in _mod.PMG_DENY_RULES]
+        git_names = {r.name for r in _mod.GIT_DENY_RULES + _mod.GIT_ASK_RULES}
+        assert len(pmg_names) == len(set(pmg_names))
+        assert not set(pmg_names) & git_names
 
 
 class TestParseBranchCreation:
