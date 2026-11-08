@@ -370,6 +370,19 @@ class TestParserRobustness:
         cmd = f'cat <<-EOF\n\tgit commit -m x\n\tEOF\ngit commit -m "bad" {ASSISTED}'
         assert run_enforce(cmd, cwd=repo).returncode == 2
 
+    def test_here_string_does_not_swallow_the_following_commit(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        cmd = f'jq . <<< "$json"\ngit commit -m "bad" {ASSISTED}'
+        assert run_enforce(cmd, cwd=repo).returncode == 2
+
+    def test_absolute_cd_after_an_unresolved_cd_is_enforced(self, tmp_path: Path) -> None:
+        project = init_repo(tmp_path / "project")
+        other = init_repo(tmp_path / "other", trailers_required=False)
+        res = run_enforce(f'cd "$X" && cd {project} && git commit -m "bad"', cwd=other)
+        assert res.returncode == 2
+        res = run_enforce('cd "$X" && cd sub && git commit -m "bad"', cwd=project)
+        assert res.returncode == 0
+
     def test_every_commit_in_a_command_is_checked(self, tmp_path: Path) -> None:
         repo = init_repo(tmp_path / "repo")
         good = f'git commit -s -m "OSAC-1: adds thing" {ASSISTED}'

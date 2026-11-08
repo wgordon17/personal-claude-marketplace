@@ -38,7 +38,11 @@ if [[ -n "$INPUT" ]]; then
         # The text match is the activation gate (it also covers wrapped forms the parser
         # cannot see, such as `bash -c`); the parser only resolves -C / --git-dir /
         # --work-tree / cd targets and falls back to the current directory when it finds none.
-        if ! pcf_parse_command "$COMMAND" && [[ ! "$COMMAND" =~ git.*commit ]]; then
+        # `git` must be a standalone word followed, on the same line, by whitespace-separated
+        # options and then the word `commit` (so `git-tools commit` and `git log # commits`
+        # do not match, while `bash -c "git -C r commit"` does).
+        COMMIT_RE=$'(^|[[:space:];&|("\'])git([ \t]+[^[:space:];&|<>]+)*[ \t]+commit([[:space:]]|$)'
+        if ! pcf_parse_command "$COMMAND" && [[ ! "$COMMAND" =~ $COMMIT_RE ]]; then
             exit 0
         fi
     else
@@ -66,6 +70,17 @@ COMMIT_MSG=$(pcf_run_git log -1 --pretty=%B "$SHA" 2>/dev/null || echo "")
 # If we can't get a commit message, this isn't a git commit operation
 if [[ -z "$COMMIT_MSG" ]]; then
     exit 0
+fi
+
+# As a hook, only judge a commit this command just created. A command that merely
+# mentions `git ... commit` (git log, grep, a PR body) must not be held to the format
+# rules for whatever HEAD already was.
+if [[ -n "$INPUT" ]]; then
+    COMMIT_TS=$(pcf_run_git log -1 --format=%ct "$SHA" 2>/dev/null || echo 0)
+    NOW_TS=$(date +%s)
+    if (( NOW_TS - COMMIT_TS > 120 )); then
+        exit 0
+    fi
 fi
 
 # Now enable strict error handling for the actual validation

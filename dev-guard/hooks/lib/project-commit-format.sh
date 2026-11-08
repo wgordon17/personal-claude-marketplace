@@ -201,6 +201,14 @@ pcf_tokenize_command() {
             continue
         fi
 
+        # Here-string (<<<): an ordinary redirection, not a heredoc.
+        if [[ "$ch" == "<" && "$next_ch" == "<" && "${cmd:i+2:1}" == "<" ]]; then
+            cur+="<<<"
+            has_cur=1
+            (( i += 3 ))
+            continue
+        fi
+
         # Heredoc operator (<<WORD, <<-WORD, <<'WORD'): note the delimiter so the
         # body, which starts after the next newline, is not tokenized as shell.
         if [[ "$ch" == "<" && "$next_ch" == "<" && "${cmd:i+2:1}" != "<" ]]; then
@@ -573,6 +581,10 @@ pcf_parse_next() {
                     PCF_CD_UNRESOLVED=1
                 else
                     PCF_CD_DIR=$(pcf_join_dir "$PCF_CD_DIR" "${seg[1]}")
+                    # An absolute cd makes the working directory known again.
+                    if [[ "$(pcf_expand_tilde "${seg[1]}")" == /* ]]; then
+                        PCF_CD_UNRESOLVED=0
+                    fi
                 fi
             fi
             seg=()
