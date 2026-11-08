@@ -7,6 +7,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from standup_tool.collectors import google_auth
+from standup_tool.collectors.google_auth import GoogleAuthError
+from standup_tool.config import ConfigError
+
+
+def test_google_auth_error_subclasses_config_error():
+    assert issubclass(GoogleAuthError, ConfigError)
 
 
 def test_credentials_path_uses_env_override(tmp_path, monkeypatch):
@@ -50,8 +56,10 @@ def test_get_credentials_raises_when_no_creds_file(tmp_path, monkeypatch):
         google_auth.get_credentials()
 
 
-def test_get_credentials_returns_valid_creds_and_tightens_mode(tmp_path, monkeypatch):
-    monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(tmp_path / "creds.json"))
+def test_get_credentials_returns_valid_creds_and_tightens_mode_without_checking_creds_file(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(tmp_path / "missing-creds.json"))
     token_file = tmp_path / "token.json"
     monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(token_file))
 
@@ -82,57 +90,112 @@ def test_save_token_uses_secure_permissions(tmp_path):
     assert mode.endswith("600"), f"Expected 0o600, got {mode}"
 
 
-def test_get_credentials_raises_on_expired_no_refresh(tmp_path, monkeypatch):
+def test_get_credentials_non_interactive_raises_google_auth_error_on_failing_refresh(
+    tmp_path, monkeypatch
+):
     monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(tmp_path / "creds.json"))
     monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(tmp_path / "token.json"))
 
+    ya29_secret = "ya29.a0AfH6SMBxSecretToken123"
     mock_creds = MagicMock()
     mock_creds.valid = False
     mock_creds.expired = True
     mock_creds.refresh_token = "fake_refresh"
-    mock_creds.refresh.side_effect = Exception("Token revoked")
+    mock_creds.refresh.side_effect = Exception(f"Token revoked ({ya29_secret})")
 
     with patch(
         "standup_tool.collectors.google_auth.Credentials.from_authorized_user_file",
         return_value=mock_creds,
     ):
         (tmp_path / "token.json").write_text('{"token": "x"}')
-        with pytest.raises(RuntimeError, match="refresh failed"):
-            google_auth.get_credentials()
+        with pytest.raises(GoogleAuthError, match="refresh failed") as exc_info:
+            google_auth.get_credentials(interactive=False)
+
+    assert "a0AfH6SMBxSecretToken123" not in str(exc_info.value)
 
 
-def test_get_credentials_raises_when_non_interactive_and_no_token(tmp_path, monkeypatch):
-    """Non-interactive context (stdin not a tty) raises RuntimeError instead of blocking."""
+def test_get_credentials_interactive_continues_to_local_server_on_failing_refresh(
+    tmp_path, monkeypatch
+):
+    creds_path = tmp_path / "creds.json"
+    creds_path.write_text('{"installed": {}}')
+    token_path = tmp_path / "token.json"
+    token_path.write_text('{"token": "x"}')
+    monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(creds_path))
+    monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(token_path))
+
+    stale_creds = MagicMock()
+    stale_creds.valid = False
+    stale_creds.expired = True
+    stale_creds.refresh_token = "stale_refresh"
+    stale_creds.refresh.side_effect = Exception("Token revoked")
+
+    new_creds = MagicMock()
+    new_creds.to_json.return_value = '{"token": "fresh"}'
+    mock_flow = MagicMock()
+    mock_flow.run_local_server.return_value = new_creds
+
+    with (
+        patch(
+            "standup_tool.collectors.google_auth.Credentials.from_authorized_user_file",
+            return_value=stale_creds,
+        ),
+        patch(
+            "standup_tool.collectors.google_auth.InstalledAppFlow.from_client_secrets_file",
+            return_value=mock_flow,
+        ),
+    ):
+        result = google_auth.get_credentials(interactive=True)
+
+    mock_flow.run_local_server.assert_called_once_with(port=0, open_browser=False)
+    assert result is new_creds
+    assert token_path.read_text() == '{"token": "fresh"}'
+
+
+def test_get_credentials_non_interactive_with_no_token_raises_and_never_calls_local_server(
+    tmp_path, monkeypatch
+):
     creds_path = tmp_path / "creds.json"
     creds_path.write_text('{"installed": {}}')
     monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(creds_path))
     monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(tmp_path / "token.json"))
 
-    with patch("sys.stdin") as mock_stdin:
-        mock_stdin.isatty.return_value = False
-        with pytest.raises(RuntimeError, match="stdin is not a terminal"):
-            google_auth.get_credentials()
+    mock_flow = MagicMock()
+    with (
+        patch(
+            "standup_tool.collectors.google_auth.InstalledAppFlow.from_client_secrets_file",
+            return_value=mock_flow,
+        ),
+        pytest.raises(
+            GoogleAuthError,
+            match="Google token missing or expired; run standup-tool google-auth",
+        ),
+    ):
+        google_auth.get_credentials(interactive=False)
+
+    mock_flow.run_local_server.assert_not_called()
 
 
-def test_get_credentials_starts_flow_when_interactive(tmp_path, monkeypatch):
-    """Interactive context (stdin is a tty) proceeds with OAuth flow."""
+def test_get_credentials_interactive_with_no_token_calls_run_local_server_once(
+    tmp_path, monkeypatch
+):
     creds_path = tmp_path / "creds.json"
     creds_path.write_text('{"installed": {}}')
     monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(creds_path))
     monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(tmp_path / "token.json"))
 
     mock_creds = MagicMock()
+    mock_creds.to_json.return_value = '{"token": "new"}'
     mock_flow = MagicMock()
     mock_flow.run_local_server.return_value = mock_creds
-    mock_creds.to_json.return_value = '{"token": "new"}'
 
-    flow_patch = "standup_tool.collectors.google_auth.InstalledAppFlow.from_client_secrets_file"
-    with patch("sys.stdin") as mock_stdin:
-        mock_stdin.isatty.return_value = True
-        with patch(flow_patch, return_value=mock_flow):
-            result = google_auth.get_credentials()
+    with patch(
+        "standup_tool.collectors.google_auth.InstalledAppFlow.from_client_secrets_file",
+        return_value=mock_flow,
+    ):
+        result = google_auth.get_credentials(interactive=True)
 
-    mock_flow.run_local_server.assert_called_once()
+    mock_flow.run_local_server.assert_called_once_with(port=0, open_browser=False)
     assert result is mock_creds
 
 
@@ -157,3 +220,24 @@ def test_get_credentials_refreshes_expired_token_and_saves(tmp_path, monkeypatch
     assert result is mock_creds
     mock_creds.refresh.assert_called_once()
     assert token_file.read_text() == '{"token": "refreshed"}'
+
+
+def test_get_credentials_tightens_creds_file_and_rejects_symlinks(tmp_path, monkeypatch):
+    creds_path = tmp_path / "creds.json"
+    creds_path.write_text('{"installed": {}}')
+    creds_path.chmod(0o644)
+    monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(creds_path))
+    monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(tmp_path / "token.json"))
+
+    with pytest.raises(GoogleAuthError):
+        google_auth.get_credentials(interactive=False)
+    assert stat.S_IMODE(creds_path.lstat().st_mode) == 0o600
+
+    # Symlinked token.json rejected via tighten_mode
+    outside = tmp_path / "outside-token.json"
+    outside.write_text('{"token": "x"}')
+    link_tok = tmp_path / "link-token.json"
+    link_tok.symlink_to(outside)
+    monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(link_tok))
+    with pytest.raises(ConfigError, match="symlink"):
+        google_auth.get_credentials(interactive=False)

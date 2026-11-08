@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 import stat
@@ -144,6 +145,25 @@ def state_path(name: str) -> Path:
     if p.is_symlink():
         raise ConfigError(f"Refusing symlink at {p}")
     return p
+
+
+def write_private(path: Path, text: str) -> None:
+    """Write *text* to *path* with mode 0600, refusing symlinks via O_NOFOLLOW."""
+    if path.is_symlink():
+        raise ConfigError(f"Refusing symlink at {path}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ConfigError(f"Refusing symlink at {path}") from exc
+        raise ConfigError(f"Failed to open {path} for private write: {exc}") from exc
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            os.fchmod(fd, 0o600)
+            f.write(text)
+    except OSError as exc:
+        raise ConfigError(f"Failed to write private file {path}: {exc}") from exc
 
 
 def validate_https_origin_url(url: str, field_name: str = "url") -> None:

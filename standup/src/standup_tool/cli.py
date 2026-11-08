@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import dataclasses
 import html
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -17,6 +19,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from standup_tool.collectors.registry import REGISTRY, Ctx, run_all
 from standup_tool.config import (
     Config,
@@ -24,10 +28,13 @@ from standup_tool.config import (
     config_dir,
     config_path,
     load_config,
+    redact_secrets,
     secret_path,
     state_path,
     validate_https_origin_url,
+    write_private,
 )
+from standup_tool.slack_auth import get_slack_credentials, make_session, safe_get
 from standup_tool.template import Header, load_template
 from standup_tool.workspace import list_repos
 
@@ -79,15 +86,16 @@ def _get_jira_server(config: Config, config_path: Path | None = None) -> str:
     )
     try:
         if jira_cfg.exists():
-            for line in jira_cfg.read_text(encoding="utf-8").splitlines():
-                if line.startswith("server:"):
-                    server = line.split(":", 1)[1].strip().strip('"').strip("'").rstrip("/")
-                    if server:
-                        validate_https_origin_url(server, "jira-cli server")
-                        return server
+            parsed = yaml.safe_load(jira_cfg.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                raw_server = parsed.get("server")
+                if isinstance(raw_server, str) and raw_server.strip():
+                    server = raw_server.strip().rstrip("/")
+                    validate_https_origin_url(server, "jira-cli server")
+                    return server
     except ConfigError:
         raise
-    except OSError:
+    except (OSError, yaml.YAMLError):
         pass
 
     raise ConfigError(
@@ -142,8 +150,13 @@ def _collect(args: argparse.Namespace, config: Config) -> None:
     outputs_by_key, status_by_name = run_all(REGISTRY, ctx, selected)
 
     output = {"_status": status_by_name, **outputs_by_key}
-    json.dump(output, sys.stdout, indent=2, default=str)
-    sys.stdout.write("\n")
+    serialized = json.dumps(output, indent=2, default=str) + "\n"
+    out_arg = getattr(args, "output", None)
+    if out_arg == "-":
+        sys.stdout.write(serialized)
+    else:
+        out_path = Path(out_arg) if out_arg else state_path(".collect-output.json")
+        write_private(out_path, serialized)
 
     summary_tokens = " ".join(
         f"{name}=ran:{st['count']}" if st["state"] == "ran" else f"{name}={st['state']}"
@@ -174,55 +187,54 @@ def _write_last_run_marker(config_dir: Path, until_date: date) -> None:
     marker = config_dir / _LAST_RUN_FILE
     next_start = until_date + timedelta(days=1)
     try:
-        marker.write_text(next_start.isoformat() + "\n")
-    except OSError as exc:
+        write_private(marker, next_start.isoformat() + "\n")
+    except (OSError, ConfigError) as exc:
         logging.warning("Failed to write last-run marker: %s", exc)
 
 
-def _extract_jira_auth() -> str:
-    """Build Authorization header from JIRA_API_TOKEN env var or jira-cli debug output."""
-    import base64
-    import os
+def _jira_basic_auth() -> str:
+    """Build Authorization Basic header from JIRA_API_TOKEN and ~/.config/.jira/.config.yml."""
+    token = os.environ.get("JIRA_API_TOKEN", "").strip()
+    if not token:
+        sys.stderr.write("ERROR: JIRA_API_TOKEN not set\n")
+        sys.exit(1)
 
-    token = os.environ.get("JIRA_API_TOKEN", "")
-    if token:
-        cfg_file = Path("~/.config/.jira/.config.yml").expanduser()
-        login = ""
-        if cfg_file.exists():
-            for line in cfg_file.read_text().splitlines():
-                if line.startswith("login:"):
-                    login = line.split(":", 1)[1].strip()
-                    break
-        if login:
-            creds = base64.b64encode(f"{login}:{token}".encode()).decode()
-            return f"Basic {creds}"
+    cfg_file = Path("~/.config/.jira/.config.yml").expanduser()
+    login = ""
+    if cfg_file.exists():
+        try:
+            doc = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
+            if isinstance(doc, dict):
+                raw_login = doc.get("login")
+                if isinstance(raw_login, str):
+                    login = raw_login.strip()
+        except (OSError, yaml.YAMLError):
+            login = ""
 
-    result = subprocess.run(
-        ["jira", "me", "--debug"],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    for line in (result.stdout + result.stderr).splitlines():
-        if "Authorization:" in line:
-            return line.split("Authorization:", 1)[1].strip()
-    return ""
+    if not login:
+        sys.stderr.write("ERROR: jira-cli login not found\n")
+        sys.exit(1)
+
+    creds = base64.b64encode(f"{login}:{token}".encode()).decode()
+    return f"Basic {creds}"
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject all 3xx redirects so Authorization headers are never forwarded."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
 
 
 def _slack_auth(config: Config) -> tuple:
     """Return (session, user_id), exit on auth failure."""
-    from standup_tool.collectors.slack_activity import _get_credentials, _make_session
-
-    bearer_token, cookie = _get_credentials(
-        secret_path("slack-token"),
-        config.collectors.slack.workspace_url,
-    )
-    session = _make_session(bearer_token, cookie)
-    resp = session.get("https://slack.com/api/auth.test")
+    creds = get_slack_credentials(config.collectors.slack, secret_path("slack-token"))
+    session = make_session(creds)
+    resp = safe_get(session, "https://slack.com/api/auth.test")
     try:
         resp.raise_for_status()
     except Exception as exc:
-        sys.stderr.write(f"ERROR: Slack auth.test HTTP error: {exc}\n")
+        sys.stderr.write(redact_secrets(f"ERROR: Slack auth.test HTTP error: {exc}\n"))
         sys.exit(1)
     auth_data = resp.json()
     if not auth_data.get("ok"):
@@ -346,7 +358,7 @@ def _post_standup(args: argparse.Namespace, config: Config) -> None:
     try:
         dm_resp.raise_for_status()
     except Exception as exc:
-        sys.stderr.write(f"ERROR: conversations.open HTTP error: {exc}\n")
+        sys.stderr.write(redact_secrets(f"ERROR: conversations.open HTTP error: {exc}\n"))
         sys.exit(1)
     dm_data = dm_resp.json()
     if not dm_data.get("ok"):
@@ -370,7 +382,7 @@ def _post_standup(args: argparse.Namespace, config: Config) -> None:
     try:
         post_resp.raise_for_status()
     except Exception as exc:
-        sys.stderr.write(f"ERROR: chat.postMessage HTTP error: {exc}\n")
+        sys.stderr.write(redact_secrets(f"ERROR: chat.postMessage HTTP error: {exc}\n"))
         sys.exit(1)
     post_data = post_resp.json()
     if not post_data.get("ok"):
@@ -466,7 +478,7 @@ def _standup_history(args: argparse.Namespace, config: Config) -> None:
             if day_offset < days - 1:
                 time.sleep(REQUEST_DELAY)
     except PermissionError as exc:
-        sys.stderr.write(f"ERROR: {exc}\n")
+        sys.stderr.write(redact_secrets(f"ERROR: {exc}\n"))
         sys.exit(1)
 
     all_dates = sorted(set(drafts_by_date) | set(published_by_date), reverse=True)
@@ -479,8 +491,14 @@ def _standup_history(args: argparse.Namespace, config: Config) -> None:
         for d in all_dates
     ]
 
-    json.dump(pairs, sys.stdout, indent=2, default=str)
-    sys.stdout.write("\n")
+    serialized = json.dumps(pairs, indent=2, default=str) + "\n"
+    out_arg = getattr(args, "output", None)
+    if out_arg == "-":
+        sys.stdout.write(serialized)
+    else:
+        out_path = Path(out_arg) if out_arg else state_path(".standup-history.json")
+        write_private(out_path, serialized)
+
     sys.stderr.write(
         f"STANDUP HISTORY: {len(pairs)} day(s) with standup data over {days}-day window\n"
     )
@@ -494,27 +512,38 @@ def _backlog(args: argparse.Namespace, config: Config) -> None:
             sys.stderr.write(f"ERROR: Invalid issue key '{key}'\n")
             sys.exit(1)
 
-    auth_header = _extract_jira_auth()
-    if not auth_header:
-        sys.stderr.write("ERROR: Could not extract auth from jira CLI\n")
-        sys.exit(1)
-
+    auth_header = _jira_basic_auth()
     server = _get_jira_server(config)
     url = f"{server}/rest/agile/1.0/backlog/issue"
+
+    if getattr(args, "dry_run", False):
+        sys.stdout.write(f"POST {url} issues={issues}\n")
+        return
+
     data = json.dumps({"issues": issues}).encode()
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Authorization", auth_header)
     req.add_header("Content-Type", "application/json")
 
+    opener = urllib.request.build_opener(_NoRedirectHandler())
     try:
-        resp = urllib.request.urlopen(req)
+        resp = opener.open(req)
         if resp.status == 204:
             for key in issues:
                 sys.stdout.write(f"{key}: removed from sprint\n")
         else:
             sys.stdout.write(f"Unexpected status: {resp.status}\n")
     except urllib.error.HTTPError as e:
-        sys.stderr.write(f"ERROR: {e.code} — {e.read().decode()}\n")
+        body = ""
+        if e.fp is not None:
+            try:
+                body = e.read().decode(errors="replace")
+            except Exception:
+                body = ""
+        sys.stderr.write(redact_secrets(f"ERROR: {e.code} — {body}\n"))
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        sys.stderr.write(redact_secrets(f"ERROR: {e.reason}\n"))
         sys.exit(1)
 
 
@@ -560,9 +589,7 @@ def _digest(args: argparse.Namespace, config: Config) -> None:
     digest = build_digest(parsed_json, team, since, until, self_dm=self_dm)
 
     output_path = Path(args.output) if args.output else state_path(".digest.json")
-    with open(output_path, "w") as f:
-        json.dump(digest, f, indent=2, default=str)
-        f.write("\n")
+    write_private(output_path, json.dumps(digest, indent=2, default=str) + "\n")
 
     n_units = len(digest.get("work_units", []))
     n_uncorrelated = len(digest.get("uncorrelated", []))
@@ -602,6 +629,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip writing the last-run marker, even when running all collectors "
         "(for preview/guidance runs that must not shift the next real run's date range)",
     )
+    collect_parser.add_argument(
+        "--output",
+        default=None,
+        help="Output file path (default: <config_dir>/.collect-output.json; use '-' for stdout)",
+    )
 
     digest_parser = subparsers.add_parser(
         "digest",
@@ -640,6 +672,11 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Issue keys to move to backlog (e.g. PROJ-123)",
     )
+    backlog_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print method, URL, and issue keys without sending the request",
+    )
 
     enrich_parser = subparsers.add_parser(
         "enrich-team",
@@ -665,6 +702,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=14,
         help="Days to look back (default: 14)",
+    )
+    history_parser.add_argument(
+        "--output",
+        default=None,
+        help="Output file path (default: <config_dir>/.standup-history.json; use '-' for stdout)",
     )
 
     config_parser = subparsers.add_parser(

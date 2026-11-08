@@ -9,17 +9,24 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from standup_tool.collectors import slack_activity
-from standup_tool.config import ConfigError
+from standup_tool.config import SlackConfig
+from standup_tool.slack_auth import SlackCredentials
 
-_XOXP_TEST = "xox" + "p-test-token-123"
 _XOXC_TEST = "xox" + "c-client-token"
 _XOXD_TEST = "xox" + "d-session-cookie"
+_SLACK_CFG = SlackConfig(
+    enabled=True,
+    workspace_url="https://acme.slack.com",
+    channels=("eng", "ops"),
+    standup_channels=("eng", "ops"),
+    self_dm_name=None,
+)
 
 
 @pytest.fixture
 def token_file(tmp_path: Path) -> Path:
     path = tmp_path / "slack-token"
-    path.write_text(_XOXP_TEST + "\n", encoding="utf-8")
+    path.write_text(_XOXD_TEST + "\n", encoding="utf-8")
     return path
 
 
@@ -111,7 +118,7 @@ def _mock_search_responses():
     return side_effect
 
 
-def _mock_auth(session):
+def _mock_auth(*_args, **_kwargs):
     """Mock auth.test response."""
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -120,16 +127,19 @@ def _mock_auth(session):
     return mock_resp
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_search")
-def test_collect_returns_all_source_types(mock_search, mock_get, token_file):
+def test_collect_returns_all_source_types(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     results = slack_activity.collect(
         date(2026, 4, 24),
         date(2026, 4, 24),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     sources = {r["source"] for r in results}
@@ -139,16 +149,19 @@ def test_collect_returns_all_source_types(mock_search, mock_get, token_file):
     assert "participation" in sources
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_search")
-def test_collect_finds_target_channels(mock_search, mock_get, token_file):
+def test_collect_finds_target_channels(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     results = slack_activity.collect(
         date(2026, 4, 24),
         date(2026, 4, 24),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     eng_results = [r for r in results if r["channel"] == "#eng"]
@@ -157,16 +170,19 @@ def test_collect_finds_target_channels(mock_search, mock_get, token_file):
     assert len(ops_results) == 1
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_search")
-def test_collect_includes_dm_messages(mock_search, mock_get, token_file):
+def test_collect_includes_dm_messages(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     results = slack_activity.collect(
         date(2026, 4, 24),
         date(2026, 4, 24),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     dm_results = [r for r in results if r["source"] == "dm"]
@@ -174,16 +190,21 @@ def test_collect_includes_dm_messages(mock_search, mock_get, token_file):
     assert "DM with bo-sample" in dm_results[0]["channel"]
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_search")
-def test_collect_deduplicates_mentions_in_target_channels(mock_search, mock_get, token_file):
+def test_collect_deduplicates_mentions_in_target_channels(
+    mock_search, _mock_get, _mock_creds, token_file
+):
     mock_search.side_effect = _mock_search_responses()
     results = slack_activity.collect(
         date(2026, 4, 24),
         date(2026, 4, 24),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     mention_results = [r for r in results if r["source"] == "mention"]
@@ -191,9 +212,13 @@ def test_collect_deduplicates_mentions_in_target_channels(mock_search, mock_get,
     assert mention_results[0]["channel"] == "#general"
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_search")
-def test_collect_deduplicates_by_permalink(mock_search, mock_get, token_file):
+def test_collect_deduplicates_by_permalink(mock_search, _mock_get, _mock_creds, token_file):
     def duped_search(session, query, count=100):
         return [
             {
@@ -209,25 +234,27 @@ def test_collect_deduplicates_by_permalink(mock_search, mock_get, token_file):
     results = slack_activity.collect(
         date(2026, 4, 24),
         date(2026, 4, 24),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     permalinks = [r["permalink"] for r in results]
     assert permalinks.count("https://acme.slack.com/same-link") == 1
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_search")
-def test_collect_iterates_per_day_with_on_filter(mock_search, mock_get, token_file):
+def test_collect_iterates_per_day_with_on_filter(mock_search, _mock_get, _mock_creds, token_file):
     mock_search.side_effect = _mock_search_responses()
     slack_activity.collect(
         date(2026, 4, 25),
         date(2026, 4, 27),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     queries = [call.args[1] for call in mock_search.call_args_list]
@@ -236,62 +263,10 @@ def test_collect_iterates_per_day_with_on_filter(mock_search, mock_get, token_fi
     assert not any("after:" in q or "before:" in q for q in queries)
 
 
-def test_get_credentials_xoxp_from_file(token_file):
-    token, cookie = slack_activity._get_credentials(token_file, "https://acme.slack.com")
-    assert token == _XOXP_TEST
-    assert cookie is None
-
-
-def test_get_credentials_xoxc_pair_from_file(tmp_path):
-    tok_path = tmp_path / "slack-token"
-    tok_path.write_text(f"{_XOXC_TEST}\n{_XOXD_TEST}\n")
-    token, cookie = slack_activity._get_credentials(tok_path, "https://acme.slack.com")
-    assert token == _XOXC_TEST
-    assert cookie == _XOXD_TEST
-
-
-def test_get_credentials_xoxp_from_env(tmp_path, monkeypatch):
-    env_tok = "xox" + "p-env-token"
-    monkeypatch.setenv("STANDUP_SLACK_TOKEN", env_tok)
-    token, cookie = slack_activity._get_credentials(tmp_path / "missing", "https://acme.slack.com")
-    assert token == env_tok
-    assert cookie is None
-
-
-def test_get_credentials_xoxc_pair_from_env(tmp_path, monkeypatch):
-    env_tok = "xox" + "c-env-token"
-    env_cookie = "xox" + "d-env-cookie"
-    monkeypatch.setenv("STANDUP_SLACK_XOXC", env_tok)
-    monkeypatch.setenv("STANDUP_SLACK_COOKIE", env_cookie)
-    token, cookie = slack_activity._get_credentials(tmp_path / "missing", "https://acme.slack.com")
-    assert token == env_tok
-    assert cookie == env_cookie
-
-
-@patch.object(slack_activity, "_bootstrap_xoxc", return_value=_XOXC_TEST)
-def test_get_credentials_xoxd_cookie_bootstraps_xoxc(mock_bootstrap, tmp_path):
-    tok_path = tmp_path / "slack-token"
-    tok_path.write_text(_XOXD_TEST + "\n")
-    token, cookie = slack_activity._get_credentials(tok_path, "https://acme.slack.com")
-    assert token == _XOXC_TEST
-    assert cookie == _XOXD_TEST
-    mock_bootstrap.assert_called_once_with(_XOXD_TEST, "https://acme.slack.com")
-
-
-def test_bootstrap_xoxc_raises_config_error_without_workspace_url():
-    with pytest.raises(ConfigError, match="workspace_url"):
-        slack_activity._bootstrap_xoxc(_XOXD_TEST, None)
-
-
-def test_get_credentials_missing_raises(tmp_path):
-    with pytest.raises(FileNotFoundError, match="Slack token not found"):
-        slack_activity._get_credentials(tmp_path / "missing", "https://acme.slack.com")
-
-
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_search_paginates_across_multiple_pages(_mock_sleep):
     session = MagicMock()
-    page1 = MagicMock()
+    page1 = MagicMock(status_code=200)
     page1.json.return_value = {
         "ok": True,
         "messages": {
@@ -299,7 +274,7 @@ def test_search_paginates_across_multiple_pages(_mock_sleep):
             "paging": {"pages": 2, "page": 1},
         },
     }
-    page2 = MagicMock()
+    page2 = MagicMock(status_code=200)
     page2.json.return_value = {
         "ok": True,
         "messages": {
@@ -320,7 +295,7 @@ def test_search_paginates_across_multiple_pages(_mock_sleep):
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_search_raises_on_auth_error(_mock_sleep, error_code):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {"ok": False, "error": error_code}
     session.get.return_value = resp
 
@@ -331,7 +306,7 @@ def test_search_raises_on_auth_error(_mock_sleep, error_code):
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_search_soft_error_returns_empty_list(_mock_sleep):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {"ok": False, "error": "ratelimited"}
     session.get.return_value = resp
 
@@ -368,7 +343,7 @@ def test_format_match_uses_own_ts_when_no_thread_ts_in_permalink():
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_resolve_user_id_success(_mock_sleep):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {
         "ok": True,
         "user": {"profile": {"real_name": "Bo Sample", "display_name": "bo-sample"}},
@@ -381,14 +356,16 @@ def test_resolve_user_id_success(_mock_sleep):
     assert result == "Bo Sample"
     assert cache["UEXAMPLE02"] == "Bo Sample"
     session.get.assert_called_once_with(
-        "https://slack.com/api/users.info", params={"user": "UEXAMPLE02"}
+        "https://slack.com/api/users.info",
+        params={"user": "UEXAMPLE02"},
+        allow_redirects=False,
     )
 
 
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_resolve_user_id_falls_back_to_display_name(_mock_sleep):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {
         "ok": True,
         "user": {"profile": {"real_name": "", "display_name": "bo-sample"}},
@@ -404,7 +381,7 @@ def test_resolve_user_id_falls_back_to_display_name(_mock_sleep):
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_resolve_user_id_api_failure_returns_id(_mock_sleep):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {"ok": False, "error": "user_not_found"}
     session.get.return_value = resp
 
@@ -451,7 +428,7 @@ def test_resolve_user_id_uses_cache(_mock_sleep):
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_resolve_channel_name_calls_resolve_for_user_id(_mock_sleep):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {
         "ok": True,
         "user": {"profile": {"real_name": "Bo Sample", "display_name": ""}},
@@ -476,7 +453,7 @@ def test_resolve_channel_name_passthrough_for_plain_name():
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_resolve_mentions_replaces_inline_user_ids(_mock_sleep):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {"ok": True, "user": {"profile": {"real_name": "Bo Sample"}}}
     session.get.return_value = resp
     cache: dict[str, str] = {}
@@ -511,7 +488,7 @@ def test_resolve_mentions_passthrough_when_no_mentions():
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 def test_resolve_mentions_handles_pipe_variant(_mock_sleep):
     session = MagicMock()
-    resp = MagicMock()
+    resp = MagicMock(status_code=200)
     resp.json.return_value = {"ok": True, "user": {"profile": {"real_name": "Bo Sample"}}}
     session.get.return_value = resp
     cache: dict[str, str] = {}
@@ -522,12 +499,16 @@ def test_resolve_mentions_handles_pipe_variant(_mock_sleep):
     assert result == "Hey Bo Sample can you check this?"
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch.object(slack_activity, "_resolve_user_id", return_value="Bo Sample")
 @patch.object(slack_activity, "_fetch_thread")
 @patch.object(slack_activity, "_search")
 def test_collect_resolves_mentions_in_thread_replies(
-    mock_search, mock_fetch_thread, _mock_resolve, _mock_get, token_file
+    mock_search, mock_fetch_thread, _mock_resolve, _mock_get, _mock_creds, token_file
 ):
     def search_side_effect(session, query, count=100):
         if "is:dm" in query:
@@ -555,9 +536,8 @@ def test_collect_resolves_mentions_in_thread_replies(
     results = slack_activity.collect(
         date(2026, 4, 24),
         date(2026, 4, 24),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     assert mock_fetch_thread.called
@@ -568,13 +548,17 @@ def test_collect_resolves_mentions_in_thread_replies(
     assert any("Bo Sample" in t for t in enriched_texts)
 
 
+@patch(
+    "standup_tool.collectors.slack_activity.get_slack_credentials",
+    return_value=SlackCredentials(token=_XOXC_TEST, cookie=_XOXD_TEST),
+)
 @patch("requests.Session.get", side_effect=_mock_auth)
 @patch("standup_tool.collectors.slack_activity.time.sleep")
 @patch.object(slack_activity, "_fetch_thread", return_value=[])
 @patch.object(slack_activity, "_search")
 @patch.object(slack_activity, "_resolve_user_id", return_value="Bo Sample")
 def test_collect_resolves_mentions_in_initial_message_text(
-    _mock_resolve, mock_search, _mock_fetch_thread, _mock_sleep, _mock_get, token_file
+    _mock_resolve, mock_search, _mock_fetch_thread, _mock_sleep, _mock_get, _mock_creds, token_file
 ):
     """collect() resolves <@U...> mentions in the initial search result text via _format_match."""
 
@@ -596,9 +580,8 @@ def test_collect_resolves_mentions_in_initial_message_text(
     results = slack_activity.collect(
         date(2026, 4, 24),
         date(2026, 4, 24),
+        slack_cfg=_SLACK_CFG,
         token_path=token_file,
-        workspace_url="https://acme.slack.com",
-        channels=("eng", "ops"),
     )
 
     dm_results = [r for r in results if r["source"] == "dm"]

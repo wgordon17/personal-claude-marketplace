@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import json
 import logging
-import os
+import stat
 import sys
 import threading
 import time
 import urllib.error
+import urllib.request
 from datetime import date, timedelta
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -21,10 +23,11 @@ import requests
 from standup_tool import cli
 from standup_tool.cli import (
     _build_standup_queries,
-    _extract_jira_auth,
     _get_author_email,
     _get_jira_server,
     _is_standup,
+    _jira_basic_auth,
+    _NoRedirectHandler,
     _parse_inline_elements,
     _standup_to_blocks,
     _write_last_run_marker,
@@ -33,9 +36,11 @@ from standup_tool.cli import (
     subcommand_names,
 )
 from standup_tool.config import Config, ConfigError, IdentityConfig, JiraConfig
+from standup_tool.slack_auth import SlackCredentials
 from standup_tool.template import load_template
 
-_FAKE_SLACK_TOK = "xox" + "b-fake"
+_FAKE_SLACK_TOK = "xox" + "c-fake-token"
+_FAKE_SLACK_COOKIE = "xox" + "d-fake-cookie"
 
 
 def test_parser_subcommands_match_expected_set():
@@ -76,7 +81,7 @@ def test_missing_config_exits_with_onboard_hint(cfg_dir: Path, capsys):
 
 
 def test_collect_outputs_json_with_all_keys_and_status_first(acme_config: Config, capsys):
-    argv = ["standup-tool", "collect", "--since", "2026-04-20"]
+    argv = ["standup-tool", "collect", "--since", "2026-04-20", "--output", "-"]
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
@@ -112,10 +117,64 @@ def test_collect_outputs_json_with_all_keys_and_status_first(acme_config: Config
     assert "conversations=disabled" in captured.err
 
 
+def test_collect_defaults_to_private_state_file_and_0600_marker(cfg_dir: Path, acme_config: Config):
+    argv = [
+        "standup-tool",
+        "collect",
+        "--since",
+        "2026-04-20",
+        "--until",
+        "2026-04-24",
+    ]
+    with (
+        patch.object(sys, "argv", argv),
+        patch("standup_tool.cli.list_repos", return_value=[]),
+        patch("standup_tool.collectors.registry.git_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.pr_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.jira_activity.collect", return_value={}),
+        patch("standup_tool.collectors.registry.google_calendar.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.gmail.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.slack_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.memory_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.conversation_activity.collect", return_value=[]),
+    ):
+        cli.main()
+
+    collect_out = cfg_dir / ".collect-output.json"
+    marker = cfg_dir / ".last-run"
+    assert collect_out.exists()
+    assert stat.S_IMODE(collect_out.lstat().st_mode) == 0o600
+    assert marker.exists()
+    assert stat.S_IMODE(marker.lstat().st_mode) == 0o600
+
+
+def test_digest_output_is_written_with_mode_0600(
+    cfg_dir: Path, acme_config: Config, tmp_path: Path
+):
+    in_file = tmp_path / "collect.json"
+    in_file.write_text(json.dumps({"git_commits": [], "prs": [], "jira_activity": {}}))
+    out_file = cfg_dir / ".digest.json"
+    argv = [
+        "standup-tool",
+        "digest",
+        "--file",
+        str(in_file),
+        "--since",
+        "2026-04-20",
+        "--output",
+        str(out_file),
+    ]
+    with patch.object(sys, "argv", argv):
+        cli.main()
+
+    assert out_file.exists()
+    assert stat.S_IMODE(out_file.lstat().st_mode) == 0o600
+
+
 def test_collect_continues_on_collector_failure_and_skips_marker(
     cfg_dir: Path, acme_config: Config, capsys
 ):
-    argv = ["standup-tool", "collect", "--since", "2026-04-20"]
+    argv = ["standup-tool", "collect", "--since", "2026-04-20", "--output", "-"]
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
@@ -187,7 +246,7 @@ def test_collect_uses_until_default_yesterday(acme_config: Config):
         captured_args["until"] = until
         return []
 
-    argv = ["standup-tool", "collect", "--since", "2026-04-20"]
+    argv = ["standup-tool", "collect", "--since", "2026-04-20", "--output", "-"]
     captured = StringIO()
     with (
         patch.object(sys, "argv", argv),
@@ -253,7 +312,7 @@ def test_collect_runs_collectors_in_parallel(acme_config: Config):
         tracking_collector(*args, **kwargs)
         return {}
 
-    argv = ["standup-tool", "collect", "--since", "2026-04-20"]
+    argv = ["standup-tool", "collect", "--since", "2026-04-20", "--output", "-"]
     captured = StringIO()
     with (
         patch.object(sys, "argv", argv),
@@ -318,6 +377,8 @@ def test_collect_with_collectors_flag_runs_subset(acme_config: Config):
         "2026-04-20",
         "--collectors",
         "git",
+        "--output",
+        "-",
     ]
     captured = StringIO()
     with (
@@ -360,6 +421,8 @@ def test_collect_with_empty_collectors_flag_runs_all_enabled(acme_config: Config
         "collect",
         "--since",
         "2026-04-20",
+        "--output",
+        "-",
         "--collectors",
     ]
     captured = StringIO()
@@ -381,8 +444,6 @@ def test_collect_with_empty_collectors_flag_runs_all_enabled(acme_config: Config
     ):
         cli.main()
 
-    # 7 enabled independent collectors in acme_config; conversations is disabled;
-    # drive skips google_drive.collect when calendar returns empty.
     assert len(called_collectors) == 7
     output = json.loads(captured.getvalue())
     assert set(output.keys()) == {
@@ -399,6 +460,22 @@ def test_collect_with_empty_collectors_flag_runs_all_enabled(acme_config: Config
     }
 
 
+def _setup_jira_cli_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    login: str | None = "ada@example.com",
+):
+    fake_home = tmp_path / "jira-home"
+    jira_dir = fake_home / ".config" / ".jira"
+    jira_dir.mkdir(parents=True, exist_ok=True)
+    cfg_lines = ["server: https://acme.atlassian.net"]
+    if login is not None:
+        cfg_lines.append(f"login: {login}")
+    (jira_dir / ".config.yml").write_text("\n".join(cfg_lines) + "\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(fake_home))
+    return fake_home
+
+
 def test_backlog_rejects_invalid_key(acme_config: Config):
     argv = ["standup-tool", "backlog", "invalid-key"]
     with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as exc_info:
@@ -406,44 +483,85 @@ def test_backlog_rejects_invalid_key(acme_config: Config):
     assert exc_info.value.code != 0
 
 
-def test_backlog_exits_on_missing_auth(acme_config: Config):
+def test_backlog_exits_on_missing_auth(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    monkeypatch.delenv("JIRA_API_TOKEN", raising=False)
+    _setup_jira_cli_home(tmp_path, monkeypatch)
     argv = ["standup-tool", "backlog", "ACME-123"]
-    with (
-        patch.object(sys, "argv", argv),
-        patch("standup_tool.cli._extract_jira_auth", return_value=""),
-        pytest.raises(SystemExit) as exc_info,
-    ):
+    with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as exc_info:
         cli.main()
-    assert exc_info.value.code != 0
+    assert exc_info.value.code == 1
+    assert "JIRA_API_TOKEN not set" in capsys.readouterr().err
 
 
-def test_backlog_sends_request_on_success(acme_config: Config):
+def test_backlog_exits_when_jira_cli_login_missing(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    monkeypatch.setenv("JIRA_API_TOKEN", "ATATTsecretJiraToken123")
+    _setup_jira_cli_home(tmp_path, monkeypatch, login=None)
+    argv = ["standup-tool", "backlog", "ACME-123"]
+    with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as exc_info:
+        cli.main()
+    assert exc_info.value.code == 1
+    assert "jira-cli login not found" in capsys.readouterr().err
+
+
+def test_backlog_sends_request_on_success(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    token = "ATATTsecretJiraToken123"
+    monkeypatch.setenv("JIRA_API_TOKEN", token)
+    _setup_jira_cli_home(tmp_path, monkeypatch, login="ada@example.com")
+
     argv = ["standup-tool", "backlog", "ACME-123"]
     mock_resp = type("Resp", (), {"status": 204})()
+    mock_opener = MagicMock()
+    mock_opener.open.return_value = mock_resp
+
     with (
         patch.object(sys, "argv", argv),
-        patch("standup_tool.cli._extract_jira_auth", return_value="Bearer tok"),
-        patch("standup_tool.cli._get_jira_server", return_value="https://jira.example.com"),
-        patch("standup_tool.cli.urllib.request.urlopen", return_value=mock_resp) as mock_urlopen,
+        patch("standup_tool.cli.urllib.request.build_opener", return_value=mock_opener),
     ):
         cli.main()
 
-    mock_urlopen.assert_called_once()
-    req = mock_urlopen.call_args[0][0]
-    assert req.full_url == "https://jira.example.com/rest/agile/1.0/backlog/issue"
-    assert req.get_header("Authorization") == "Bearer tok"
+    mock_opener.open.assert_called_once()
+    req = mock_opener.open.call_args[0][0]
+    expected_basic = base64.b64encode(f"ada@example.com:{token}".encode()).decode()
+    assert req.full_url == "https://acme.atlassian.net/rest/agile/1.0/backlog/issue"
+    assert req.get_header("Authorization") == f"Basic {expected_basic}"
     assert json.loads(req.data) == {"issues": ["ACME-123"]}
 
+    captured = capsys.readouterr()
+    assert token not in captured.out
+    assert token not in captured.err
 
-def test_backlog_prints_success_per_key(acme_config: Config):
+
+def test_backlog_prints_success_per_key(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("JIRA_API_TOKEN", "ATATTsecretJiraToken123")
+    _setup_jira_cli_home(tmp_path, monkeypatch, login="ada@example.com")
+
     argv = ["standup-tool", "backlog", "ACME-111", "ACME-222"]
     mock_resp = type("Resp", (), {"status": 204})()
+    mock_opener = MagicMock()
+    mock_opener.open.return_value = mock_resp
     captured = StringIO()
     with (
         patch.object(sys, "argv", argv),
-        patch("standup_tool.cli._extract_jira_auth", return_value="Bearer tok"),
-        patch("standup_tool.cli._get_jira_server", return_value="https://jira.example.com"),
-        patch("standup_tool.cli.urllib.request.urlopen", return_value=mock_resp),
+        patch("standup_tool.cli.urllib.request.build_opener", return_value=mock_opener),
         patch("sys.stdout", captured),
     ):
         cli.main()
@@ -452,24 +570,101 @@ def test_backlog_prints_success_per_key(acme_config: Config):
     assert "ACME-222: removed from sprint" in output
 
 
-def test_backlog_exits_on_http_error(acme_config: Config):
+def test_backlog_exits_on_http_error(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    token = "ATATTsecretJiraToken123"
+    monkeypatch.setenv("JIRA_API_TOKEN", token)
+    _setup_jira_cli_home(tmp_path, monkeypatch, login="ada@example.com")
+
     argv = ["standup-tool", "backlog", "ACME-123"]
+    err_fp = BytesIO(f"Bad Request with {token}".encode())
+    mock_opener = MagicMock()
+    mock_opener.open.side_effect = urllib.error.HTTPError("url", 400, "Bad Request", {}, err_fp)
+
     with (
         patch.object(sys, "argv", argv),
-        patch("standup_tool.cli._extract_jira_auth", return_value="Bearer tok"),
-        patch("standup_tool.cli._get_jira_server", return_value="https://jira.example.com"),
-        patch(
-            "standup_tool.cli.urllib.request.urlopen",
-            side_effect=urllib.error.HTTPError("url", 400, "Bad Request", {}, None),
-        ),
+        patch("standup_tool.cli.urllib.request.build_opener", return_value=mock_opener),
         pytest.raises(SystemExit) as exc_info,
     ):
         cli.main()
-    assert exc_info.value.code != 0
+    assert exc_info.value.code == 1
+    err_text = capsys.readouterr().err
+    assert token not in err_text
+    assert "ATATT[REDACTED]" in err_text
+
+
+def test_backlog_exits_and_redacts_secrets_on_url_error(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    token = "ATATTsecretJiraToken123"
+    monkeypatch.setenv("JIRA_API_TOKEN", token)
+    _setup_jira_cli_home(tmp_path, monkeypatch, login="ada@example.com")
+
+    argv = ["standup-tool", "backlog", "ACME-123"]
+    mock_opener = MagicMock()
+    mock_opener.open.side_effect = urllib.error.URLError(f"DNS lookup failed with {token}")
+
+    with (
+        patch.object(sys, "argv", argv),
+        patch("standup_tool.cli.urllib.request.build_opener", return_value=mock_opener),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main()
+    assert exc_info.value.code == 1
+    err_text = capsys.readouterr().err
+    assert token not in err_text
+    assert "ATATT[REDACTED]" in err_text
+
+
+def test_backlog_no_redirect_handler_rejects_302_without_following():
+    handler = _NoRedirectHandler()
+    req = urllib.request.Request("https://acme.atlassian.net/rest/agile/1.0/backlog/issue")
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        handler.redirect_request(
+            req,
+            None,
+            302,
+            "Found",
+            {"Location": "https://evil.example.com"},
+            "https://evil.example.com",
+        )
+    assert exc_info.value.code == 302
+
+
+def test_backlog_dry_run_prints_url_and_sends_nothing(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    token = "ATATTsecretJiraToken123"
+    monkeypatch.setenv("JIRA_API_TOKEN", token)
+    _setup_jira_cli_home(tmp_path, monkeypatch, login="ada@example.com")
+
+    argv = ["standup-tool", "backlog", "--dry-run", "ACME-123"]
+    with (
+        patch.object(sys, "argv", argv),
+        patch("standup_tool.cli.urllib.request.build_opener") as mock_build_opener,
+    ):
+        cli.main()
+
+    mock_build_opener.assert_not_called()
+    captured = capsys.readouterr()
+    assert "https://acme.atlassian.net/rest/agile/1.0/backlog/issue" in captured.out
+    assert "ACME-123" in captured.out
+    assert token not in captured.out
+    assert token not in captured.err
 
 
 # =============================================================================
-# CLI utility functions (_get_author_email, _extract_jira_auth, _get_jira_server)
+# CLI utility functions (_get_author_email, _jira_basic_auth, _get_jira_server)
 # =============================================================================
 
 
@@ -512,55 +707,10 @@ def test_get_author_email_returns_empty_on_failure(acme_config: Config):
     assert result == ""
 
 
-def test_extract_jira_auth_parses_authorization_header():
-    def fake_run(cmd, **kwargs):
-        mock = MagicMock()
-        mock.returncode = 0
-        mock.stdout = "ada@example.com\n"
-        mock.stderr = (
-            "REQUEST DETAILS\n"
-            "GET /rest/api/2/myself HTTP/1.1\n"
-            "Authorization: Basic dXNlcjp0b2tlbg==\n"
-            "Accept: application/json\n"
-        )
-        return mock
-
-    with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("JIRA_API_TOKEN", None)
-        with patch("subprocess.run", side_effect=fake_run):
-            result = _extract_jira_auth()
-
-    assert result == "Basic dXNlcjp0b2tlbg=="
-
-
-def test_extract_jira_auth_returns_empty_on_no_header():
-    def fake_run(cmd, **kwargs):
-        mock = MagicMock()
-        mock.returncode = 1
-        mock.stdout = ""
-        mock.stderr = "Error: auth failed\n"
-        return mock
-
-    with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("JIRA_API_TOKEN", None)
-        with patch("subprocess.run", side_effect=fake_run):
-            result = _extract_jira_auth()
-
-    assert result == ""
-
-
-def test_extract_jira_auth_uses_env_var(tmp_path):
-    config_file = tmp_path / ".config.yml"
-    config_file.write_text("login: ada@example.com\n")
-
-    with (
-        patch.dict(os.environ, {"JIRA_API_TOKEN": "my-token"}),
-        patch("standup_tool.cli.Path.expanduser", return_value=config_file),
-    ):
-        result = _extract_jira_auth()
-
-    import base64
-
+def test_jira_basic_auth_builds_basic_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("JIRA_API_TOKEN", "my-token")
+    _setup_jira_cli_home(tmp_path, monkeypatch, login="ada@example.com")
+    result = _jira_basic_auth()
     expected = base64.b64encode(b"ada@example.com:my-token").decode()
     assert result == f"Basic {expected}"
 
@@ -635,6 +785,7 @@ def _make_mock_session(
     session = MagicMock()
 
     auth_resp = MagicMock()
+    auth_resp.status_code = 200
     auth_resp.raise_for_status.return_value = None
     auth_data = {"ok": auth_ok, "user_id": "UEXAMPLE01"}
     if not auth_ok:
@@ -642,6 +793,7 @@ def _make_mock_session(
     auth_resp.json.return_value = auth_data
 
     dm_resp = MagicMock()
+    dm_resp.status_code = 200
     dm_resp.raise_for_status.return_value = None
     dm_data = {"ok": dm_ok, "channel": {"id": "DEXAMPLE01"}}
     if not dm_ok:
@@ -649,6 +801,7 @@ def _make_mock_session(
     dm_resp.json.return_value = dm_data
 
     post_resp = MagicMock()
+    post_resp.status_code = 200
     post_resp.raise_for_status.return_value = None
     post_data = {"ok": post_ok, "ts": "1234567890.123456"}
     if not post_ok:
@@ -668,11 +821,11 @@ def _patch_slack(session):
     def _ctx():
         with (
             patch(
-                "standup_tool.collectors.slack_activity._get_credentials",
-                return_value=(_FAKE_SLACK_TOK, None),
+                "standup_tool.cli.get_slack_credentials",
+                return_value=SlackCredentials(token=_FAKE_SLACK_TOK, cookie=_FAKE_SLACK_COOKIE),
             ),
             patch(
-                "standup_tool.collectors.slack_activity._make_session",
+                "standup_tool.cli.make_session",
                 return_value=session,
             ),
         ):
@@ -758,6 +911,7 @@ def test_post_standup_auth_http_error(tmp_path, acme_config: Config):
     standup.write_text("My standup text")
     session = MagicMock()
     auth_resp = MagicMock()
+    auth_resp.status_code = 503
     auth_resp.raise_for_status.side_effect = requests.HTTPError("503 Server Error")
     session.get.return_value = auth_resp
     argv = ["standup-tool", "post-standup", "--file", str(standup)]
@@ -911,7 +1065,7 @@ def test_collect_uses_until_clamped_to_since_when_since_is_today(acme_config: Co
         return []
 
     today = date.today().isoformat()
-    argv = ["standup-tool", "collect", "--since", today]
+    argv = ["standup-tool", "collect", "--since", today, "--output", "-"]
     captured = StringIO()
     with (
         patch.object(sys, "argv", argv),
@@ -1148,7 +1302,7 @@ def test_load_template_rejects_single_header(tmp_path: Path):
         load_template(single)
 
 
-def test_standup_history_uses_config_channels(acme_config: Config):
+def test_standup_history_uses_config_channels(cfg_dir: Path, acme_config: Config):
     searched_queries: list[str] = []
 
     def fake_search(session, query, count=20):
@@ -1156,19 +1310,38 @@ def test_standup_history_uses_config_channels(acme_config: Config):
         return []
 
     session = _make_mock_session()
-    captured = StringIO()
     argv = ["standup-tool", "standup-history", "--days", "1"]
     with (
         patch.object(sys, "argv", argv),
         _patch_slack(session),
         patch("standup_tool.collectors.slack_activity._search", side_effect=fake_search),
         patch("time.sleep"),
-        patch("sys.stdout", captured),
     ):
         cli.main()
 
     assert any("in:eng" in q for q in searched_queries)
     assert any("in:ops" in q for q in searched_queries)
+    history_out = cfg_dir / ".standup-history.json"
+    assert history_out.exists()
+    assert stat.S_IMODE(history_out.lstat().st_mode) == 0o600
+
+
+def test_standup_history_output_dash_writes_to_stdout(
+    cfg_dir: Path, acme_config: Config, capsys: pytest.CaptureFixture[str]
+):
+    session = _make_mock_session()
+    argv = ["standup-tool", "standup-history", "--days", "1", "--output", "-"]
+    with (
+        patch.object(sys, "argv", argv),
+        _patch_slack(session),
+        patch("standup_tool.collectors.slack_activity._search", return_value=[]),
+        patch("time.sleep"),
+    ):
+        cli.main()
+
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == []
+    assert not (cfg_dir / ".standup-history.json").exists()
 
 
 @pytest.mark.parametrize("bad_days", ["0", "-3", "91"])

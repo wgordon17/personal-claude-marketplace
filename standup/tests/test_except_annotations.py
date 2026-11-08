@@ -36,6 +36,7 @@ AUDITED_MODULES: tuple[Path, ...] = (
     PACKAGE_ROOT / "collectors" / "conversation_activity.py",
     PACKAGE_ROOT / "memory.py",
     PACKAGE_ROOT / "collectors" / "memory_activity.py",
+    PACKAGE_ROOT / "slack_auth.py",
 )
 
 
@@ -119,7 +120,7 @@ def test_slack_collector_propagates_auth_error_and_reports_failed(
     ctx = _make_ctx(acme_config, cfg_dir)
     col = _get_collector("slack")
     with patch(
-        "standup_tool.collectors.slack_activity._get_credentials",
+        "standup_tool.collectors.slack_activity.get_slack_credentials",
         side_effect=PermissionError("Slack auth failed: invalid_auth"),
     ):
         out, st = run_one(col, ctx, None, {}, {})
