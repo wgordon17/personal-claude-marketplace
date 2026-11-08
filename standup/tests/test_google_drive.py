@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from standup_tool.collectors import google_drive
 
 
@@ -138,11 +140,18 @@ def test_fetch_comments_returns_comments_with_replies():
     assert result[0]["replies"][0]["content"] == "Done"
 
 
-def test_fetch_comments_returns_empty_on_api_error():
+def test_fetch_comments_returns_empty_on_non_fatal_item_error():
     service = MagicMock()
-    service.comments().list().execute.side_effect = Exception("403 Forbidden")
+    service.comments().list().execute.side_effect = Exception("404 File not found")
     result = google_drive._fetch_comments(service, "file-123")
     assert result == []
+
+
+def test_fetch_comments_propagates_forbidden_error():
+    service = MagicMock()
+    service.comments().list().execute.side_effect = Exception("403 Forbidden")
+    with pytest.raises(Exception, match="403 Forbidden"):
+        google_drive._fetch_comments(service, "file-123")
 
 
 def test_fetch_comments_passes_start_modified_time():

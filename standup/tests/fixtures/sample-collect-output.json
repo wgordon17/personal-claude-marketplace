@@ -64,8 +64,15 @@
   "drive_docs": [
     {"file_name": "Widget Design Doc", "comments": [{"content": "Updated batch limits section for ACME-101", "author": "ada-example"}], "timestamp": "2026-05-04T11:30:00Z"}
   ],
-  "dev_activity": [
-    {"subject": "updates build task definitions", "file_path": "Makefile", "timestamp": "2026-05-04T08:00:00Z"}
+  "memory_activity": [
+    {
+      "repo": "widgets",
+      "memory_dir": "/Users/ada/src/widgets/hack",
+      "category": "plans",
+      "path": "plans/build-task-definitions.md",
+      "modified": "2026-05-04",
+      "title": "Updates build task definitions"
+    }
   ],
   "conversations": [
     {"context": "Worked on ACME-101 widget CLI — added create, list, describe subcommands for Widget resources. Discussed batch limits with Bo Sample.", "date": "2026-05-04"}

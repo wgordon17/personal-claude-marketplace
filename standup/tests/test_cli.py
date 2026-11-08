@@ -75,25 +75,28 @@ def test_missing_config_exits_with_onboard_hint(cfg_dir: Path, capsys):
     assert "run /standup-onboard" in captured.err
 
 
-def test_collect_outputs_json_with_all_keys(acme_config: Config):
+def test_collect_outputs_json_with_all_keys_and_status_first(acme_config: Config, capsys):
     argv = ["standup-tool", "collect", "--since", "2026-04-20"]
-    captured = StringIO()
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", return_value=[]),
-        patch("standup_tool.cli.pr_activity.collect", return_value=[]),
-        patch("standup_tool.cli.jira_activity.collect", return_value={}),
-        patch("standup_tool.cli.google_calendar.collect", return_value=[]),
-        patch("standup_tool.cli.gmail.collect", return_value=[]),
-        patch("standup_tool.cli.slack_activity.collect", return_value=[]),
-        patch("standup_tool.cli.conversation_activity.collect", return_value=[]),
-        patch("sys.stdout", captured),
+        patch("standup_tool.collectors.registry.git_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.pr_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.jira_activity.collect", return_value={}),
+        patch("standup_tool.collectors.registry.google_calendar.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.gmail.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.slack_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.memory_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.conversation_activity.collect", return_value=[]),
     ):
         cli.main()
 
-    output = json.loads(captured.getvalue())
-    assert set(output.keys()) == {
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+    keys = list(output.keys())
+    assert keys[0] == "_status"
+    assert set(keys) == {
+        "_status",
         "git_commits",
         "prs",
         "jira_activity",
@@ -101,40 +104,80 @@ def test_collect_outputs_json_with_all_keys(acme_config: Config):
         "emails",
         "slack",
         "drive_docs",
-        "dev_activity",
+        "memory_activity",
         "conversations",
     }
+    assert "COLLECTION SUMMARY:" in captured.err
+    assert "git=ran:0" in captured.err
+    assert "conversations=disabled" in captured.err
 
 
-def test_collect_continues_on_collector_failure(acme_config: Config):
+def test_collect_continues_on_collector_failure_and_skips_marker(
+    cfg_dir: Path, acme_config: Config, capsys
+):
     argv = ["standup-tool", "collect", "--since", "2026-04-20"]
-    captured = StringIO()
     with (
         patch.object(sys, "argv", argv),
-        patch("standup_tool.cli.list_repos", side_effect=Exception("workspace error")),
-        patch("standup_tool.cli.git_activity.collect", side_effect=Exception("git error")),
-        patch("standup_tool.cli.pr_activity.collect", side_effect=Exception("pr error")),
-        patch("standup_tool.cli.jira_activity.collect", side_effect=Exception("jira error")),
-        patch("standup_tool.cli.google_calendar.collect", side_effect=Exception("cal error")),
-        patch("standup_tool.cli.gmail.collect", side_effect=Exception("gmail error")),
-        patch("standup_tool.cli.slack_activity.collect", side_effect=Exception("slack error")),
+        patch("standup_tool.cli.list_repos", return_value=[]),
         patch(
-            "standup_tool.cli.conversation_activity.collect",
-            side_effect=Exception("conv error"),
+            "standup_tool.collectors.registry.git_activity.collect",
+            side_effect=Exception("git error"),
         ),
-        patch("sys.stdout", captured),
+        patch(
+            "standup_tool.collectors.registry.pr_activity.collect",
+            side_effect=Exception("pr error"),
+        ),
+        patch(
+            "standup_tool.collectors.registry.jira_activity.collect",
+            side_effect=Exception("jira error"),
+        ),
+        patch(
+            "standup_tool.collectors.registry.google_calendar.collect",
+            side_effect=Exception("cal error"),
+        ),
+        patch(
+            "standup_tool.collectors.registry.gmail.collect",
+            side_effect=Exception("gmail error"),
+        ),
+        patch(
+            "standup_tool.collectors.registry.slack_activity.collect",
+            side_effect=Exception("slack error"),
+        ),
+        patch(
+            "standup_tool.collectors.registry.memory_activity.collect",
+            side_effect=Exception("mem error"),
+        ),
     ):
         cli.main()
 
-    output = json.loads(captured.getvalue())
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
     assert output["git_commits"] == []
     assert output["prs"] == []
     assert output["jira_activity"] == {}
     assert output["calendar_events"] == []
     assert output["emails"] == []
     assert output["slack"] == []
-    assert output["dev_activity"] == []
+    assert output["memory_activity"] == []
     assert output["conversations"] == []
+    assert output["_status"]["git"]["state"] == "failed"
+    assert output["_status"]["drive"]["state"] == "failed"
+    assert output["_status"]["drive"]["reason"] == "dependency calendar failed"
+    assert "git=failed" in captured.err
+    assert "drive=failed" in captured.err
+    assert not (cfg_dir / ".last-run").exists()
+
+
+def test_collect_list_repos_failure_exits_with_config_error(acme_config: Config, capsys):
+    argv = ["standup-tool", "collect", "--since", "2026-04-20"]
+    with (
+        patch.object(sys, "argv", argv),
+        patch("standup_tool.cli.list_repos", side_effect=RuntimeError("workspace error")),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main()
+    assert exc_info.value.code == 1
+    assert "workspace error" in capsys.readouterr().err
 
 
 def test_collect_uses_until_default_yesterday(acme_config: Config):
@@ -149,13 +192,17 @@ def test_collect_uses_until_default_yesterday(acme_config: Config):
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", side_effect=fake_git_collect),
-        patch("standup_tool.cli.pr_activity.collect", return_value=[]),
-        patch("standup_tool.cli.jira_activity.collect", return_value={}),
-        patch("standup_tool.cli.google_calendar.collect", return_value=[]),
-        patch("standup_tool.cli.gmail.collect", return_value=[]),
-        patch("standup_tool.cli.slack_activity.collect", return_value=[]),
-        patch("standup_tool.cli.conversation_activity.collect", return_value=[]),
+        patch(
+            "standup_tool.collectors.registry.git_activity.collect",
+            side_effect=fake_git_collect,
+        ),
+        patch("standup_tool.collectors.registry.pr_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.jira_activity.collect", return_value={}),
+        patch("standup_tool.collectors.registry.google_calendar.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.gmail.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.slack_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.memory_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.conversation_activity.collect", return_value=[]),
         patch("sys.stdout", captured),
     ):
         cli.main()
@@ -211,13 +258,38 @@ def test_collect_runs_collectors_in_parallel(acme_config: Config):
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", side_effect=tracking_collector),
-        patch("standup_tool.cli.pr_activity.collect", side_effect=tracking_collector),
-        patch("standup_tool.cli.jira_activity.collect", side_effect=tracking_jira),
-        patch("standup_tool.cli.google_calendar.collect", side_effect=tracking_collector),
-        patch("standup_tool.cli.gmail.collect", side_effect=tracking_collector),
-        patch("standup_tool.cli.slack_activity.collect", side_effect=tracking_collector),
-        patch("standup_tool.cli.conversation_activity.collect", side_effect=tracking_collector),
+        patch(
+            "standup_tool.collectors.registry.git_activity.collect",
+            side_effect=tracking_collector,
+        ),
+        patch(
+            "standup_tool.collectors.registry.pr_activity.collect",
+            side_effect=tracking_collector,
+        ),
+        patch(
+            "standup_tool.collectors.registry.jira_activity.collect",
+            side_effect=tracking_jira,
+        ),
+        patch(
+            "standup_tool.collectors.registry.google_calendar.collect",
+            side_effect=tracking_collector,
+        ),
+        patch(
+            "standup_tool.collectors.registry.gmail.collect",
+            side_effect=tracking_collector,
+        ),
+        patch(
+            "standup_tool.collectors.registry.slack_activity.collect",
+            side_effect=tracking_collector,
+        ),
+        patch(
+            "standup_tool.collectors.registry.memory_activity.collect",
+            side_effect=tracking_collector,
+        ),
+        patch(
+            "standup_tool.collectors.registry.conversation_activity.collect",
+            side_effect=tracking_collector,
+        ),
         patch("sys.stdout", captured),
     ):
         cli.main()
@@ -251,11 +323,14 @@ def test_collect_with_collectors_flag_runs_subset(acme_config: Config):
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", side_effect=fake_git),
-        patch("standup_tool.cli.jira_activity.collect", side_effect=fake_jira),
-        patch("standup_tool.cli.pr_activity.collect", side_effect=should_not_run),
-        patch("standup_tool.cli.google_calendar.collect", side_effect=should_not_run),
-        patch("standup_tool.cli.gmail.collect", side_effect=should_not_run),
+        patch("standup_tool.collectors.registry.git_activity.collect", side_effect=fake_git),
+        patch("standup_tool.collectors.registry.jira_activity.collect", side_effect=fake_jira),
+        patch("standup_tool.collectors.registry.pr_activity.collect", side_effect=should_not_run),
+        patch(
+            "standup_tool.collectors.registry.google_calendar.collect",
+            side_effect=should_not_run,
+        ),
+        patch("standup_tool.collectors.registry.gmail.collect", side_effect=should_not_run),
         patch("sys.stdout", captured),
     ):
         cli.main()
@@ -265,9 +340,11 @@ def test_collect_with_collectors_flag_runs_subset(acme_config: Config):
     output = json.loads(captured.getvalue())
     assert "git_commits" in output
     assert output["jira_activity"] == {}
+    assert output["_status"]["git"] == {"state": "ran", "reason": None, "count": 0}
+    assert output["_status"]["jira"] == {"state": "disabled", "reason": "not selected", "count": 0}
 
 
-def test_collect_with_empty_collectors_flag_runs_all(acme_config: Config):
+def test_collect_with_empty_collectors_flag_runs_all_enabled(acme_config: Config):
     called_collectors: list = []
 
     def tracking(*args, **kwargs):
@@ -289,20 +366,27 @@ def test_collect_with_empty_collectors_flag_runs_all(acme_config: Config):
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", side_effect=tracking),
-        patch("standup_tool.cli.pr_activity.collect", side_effect=tracking),
-        patch("standup_tool.cli.jira_activity.collect", side_effect=tracking_jira),
-        patch("standup_tool.cli.google_calendar.collect", side_effect=tracking),
-        patch("standup_tool.cli.gmail.collect", side_effect=tracking),
-        patch("standup_tool.cli.slack_activity.collect", side_effect=tracking),
-        patch("standup_tool.cli.conversation_activity.collect", side_effect=tracking),
+        patch("standup_tool.collectors.registry.git_activity.collect", side_effect=tracking),
+        patch("standup_tool.collectors.registry.pr_activity.collect", side_effect=tracking),
+        patch("standup_tool.collectors.registry.jira_activity.collect", side_effect=tracking_jira),
+        patch("standup_tool.collectors.registry.google_calendar.collect", side_effect=tracking),
+        patch("standup_tool.collectors.registry.gmail.collect", side_effect=tracking),
+        patch("standup_tool.collectors.registry.slack_activity.collect", side_effect=tracking),
+        patch("standup_tool.collectors.registry.memory_activity.collect", side_effect=tracking),
+        patch(
+            "standup_tool.collectors.registry.conversation_activity.collect",
+            side_effect=tracking,
+        ),
         patch("sys.stdout", captured),
     ):
         cli.main()
 
+    # 7 enabled independent collectors in acme_config; conversations is disabled;
+    # drive skips google_drive.collect when calendar returns empty.
     assert len(called_collectors) == 7
     output = json.loads(captured.getvalue())
     assert set(output.keys()) == {
+        "_status",
         "git_commits",
         "prs",
         "jira_activity",
@@ -310,7 +394,7 @@ def test_collect_with_empty_collectors_flag_runs_all(acme_config: Config):
         "emails",
         "slack",
         "drive_docs",
-        "dev_activity",
+        "memory_activity",
         "conversations",
     }
 
@@ -762,13 +846,14 @@ def test_collect_writes_last_run_marker(cfg_dir: Path, acme_config: Config):
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", return_value=[]),
-        patch("standup_tool.cli.pr_activity.collect", return_value=[]),
-        patch("standup_tool.cli.jira_activity.collect", return_value={}),
-        patch("standup_tool.cli.google_calendar.collect", return_value=[]),
-        patch("standup_tool.cli.gmail.collect", return_value=[]),
-        patch("standup_tool.cli.slack_activity.collect", return_value=[]),
-        patch("standup_tool.cli.conversation_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.git_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.pr_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.jira_activity.collect", return_value={}),
+        patch("standup_tool.collectors.registry.google_calendar.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.gmail.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.slack_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.memory_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.conversation_activity.collect", return_value=[]),
         patch("sys.stdout", captured),
     ):
         cli.main()
@@ -792,13 +877,14 @@ def test_collect_does_not_write_marker_with_no_marker_flag(cfg_dir: Path, acme_c
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", return_value=[]),
-        patch("standup_tool.cli.pr_activity.collect", return_value=[]),
-        patch("standup_tool.cli.jira_activity.collect", return_value={}),
-        patch("standup_tool.cli.google_calendar.collect", return_value=[]),
-        patch("standup_tool.cli.gmail.collect", return_value=[]),
-        patch("standup_tool.cli.slack_activity.collect", return_value=[]),
-        patch("standup_tool.cli.conversation_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.git_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.pr_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.jira_activity.collect", return_value={}),
+        patch("standup_tool.collectors.registry.google_calendar.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.gmail.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.slack_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.memory_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.conversation_activity.collect", return_value=[]),
         patch("sys.stdout", captured),
     ):
         cli.main()
@@ -830,13 +916,17 @@ def test_collect_uses_until_clamped_to_since_when_since_is_today(acme_config: Co
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", side_effect=fake_git_collect),
-        patch("standup_tool.cli.pr_activity.collect", return_value=[]),
-        patch("standup_tool.cli.jira_activity.collect", return_value={}),
-        patch("standup_tool.cli.google_calendar.collect", return_value=[]),
-        patch("standup_tool.cli.gmail.collect", return_value=[]),
-        patch("standup_tool.cli.slack_activity.collect", return_value=[]),
-        patch("standup_tool.cli.conversation_activity.collect", return_value=[]),
+        patch(
+            "standup_tool.collectors.registry.git_activity.collect",
+            side_effect=fake_git_collect,
+        ),
+        patch("standup_tool.collectors.registry.pr_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.jira_activity.collect", return_value={}),
+        patch("standup_tool.collectors.registry.google_calendar.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.gmail.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.slack_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.memory_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.conversation_activity.collect", return_value=[]),
         patch("sys.stdout", captured),
     ):
         cli.main()
@@ -861,7 +951,7 @@ def test_collect_does_not_write_marker_on_partial_collectors(cfg_dir: Path, acme
     with (
         patch.object(sys, "argv", argv),
         patch("standup_tool.cli.list_repos", return_value=[]),
-        patch("standup_tool.cli.git_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.git_activity.collect", return_value=[]),
         patch("sys.stdout", captured),
     ):
         cli.main()

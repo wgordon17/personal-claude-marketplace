@@ -134,3 +134,26 @@ def test_get_credentials_starts_flow_when_interactive(tmp_path, monkeypatch):
 
     mock_flow.run_local_server.assert_called_once()
     assert result is mock_creds
+
+
+def test_get_credentials_refreshes_expired_token_and_saves(tmp_path, monkeypatch):
+    monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", str(tmp_path / "creds.json"))
+    token_file = tmp_path / "token.json"
+    token_file.write_text('{"token": "expired"}')
+    monkeypatch.setenv("STANDUP_GOOGLE_TOKEN", str(token_file))
+
+    mock_creds = MagicMock()
+    mock_creds.valid = False
+    mock_creds.expired = True
+    mock_creds.refresh_token = "valid_refresh"
+    mock_creds.to_json.return_value = '{"token": "refreshed"}'
+
+    with patch(
+        "standup_tool.collectors.google_auth.Credentials.from_authorized_user_file",
+        return_value=mock_creds,
+    ):
+        result = google_auth.get_credentials()
+
+    assert result is mock_creds
+    mock_creds.refresh.assert_called_once()
+    assert token_file.read_text() == '{"token": "refreshed"}'

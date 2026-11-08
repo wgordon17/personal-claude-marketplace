@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sys
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 from standup_tool.workspace import RepoInfo
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_updated_at(updated_at: str) -> datetime:
@@ -20,8 +24,13 @@ _JSON_FIELDS = (
 )
 
 
-def _gh_pr_list(repo_slug: str, extra_args: list[str]) -> list[dict]:
-    """Run gh pr list and return parsed JSON items."""
+def _gh_pr_list(
+    repo_slug: str,
+    extra_args: list[str],
+    repo_path: Path | None = None,
+) -> list[dict] | None:
+    """Run gh pr list and return parsed JSON items, or None when the repo query fails."""
+    target_label = str(repo_path) if repo_path is not None else repo_slug
     try:
         result = subprocess.run(
             [
@@ -42,14 +51,22 @@ def _gh_pr_list(repo_slug: str, extra_args: list[str]) -> list[dict]:
             text=True,
             timeout=30,
         )
+    # tolerant: skip single timed-out repository query and continue unless all repositories fail
     except subprocess.TimeoutExpired:
-        return []
+        logger.debug("gh pr list timed out for %s", target_label)
+        logger.warning("gh pr list timed out for %s", target_label)
+        return None
     if result.returncode != 0:
-        return []
+        logger.debug("gh pr list failed for %s (exit %d)", target_label, result.returncode)
+        logger.warning("gh pr list failed for %s (exit %d)", target_label, result.returncode)
+        return None
     try:
         return json.loads(result.stdout)
+    # tolerant: skip repository with malformed gh JSON output and continue unless all repos fail
     except json.JSONDecodeError:
-        return []
+        logger.debug("gh pr list returned invalid JSON for %s", target_label)
+        logger.warning("gh pr list returned invalid JSON for %s", target_label)
+        return None
 
 
 def _summarize_checks(checks_rollup: list) -> str:
@@ -124,12 +141,20 @@ def collect(
         (["--search", "reviewed-by:@me"], "reviewer"),
     ]
 
+    eligible_repos = 0
+    failed_repos = 0
+
     for repo in repos:
         if not repo.upstream_slug:
             sys.stderr.write(f"WARNING: skipping PR collection for {repo.path} (no remote slug)\n")
             continue
+        eligible_repos += 1
+        repo_failed = False
         for extra_args, role in queries:
-            items = _gh_pr_list(repo.upstream_slug, extra_args)
+            items = _gh_pr_list(repo.upstream_slug, extra_args, repo_path=repo.path)
+            if items is None:
+                repo_failed = True
+                break
             for item in items:
                 state = item.get("state", "")
                 is_open = state in ("OPEN", "open")
@@ -140,7 +165,14 @@ def collect(
                         continue
                     try:
                         updated_dt = _parse_updated_at(updated_at)
+                    # tolerant: skip closed PR with malformed updatedAt timestamp
                     except ValueError:
+                        logger.debug(
+                            "Skipping PR %s in %s with invalid updatedAt %r",
+                            item.get("number"),
+                            repo.name,
+                            updated_at,
+                        )
                         continue
                     if not (since_dt <= updated_dt <= until_dt):
                         continue
@@ -151,5 +183,10 @@ def collect(
                 if url:
                     seen_urls.add(url)
                 prs.append(_build_pr_dict(item, repo.name, role))
+        if repo_failed:
+            failed_repos += 1
+
+    if eligible_repos > 0 and failed_repos == eligible_repos:
+        raise RuntimeError(f"gh pr list failed across all {eligible_repos} configured repositories")
 
     return prs

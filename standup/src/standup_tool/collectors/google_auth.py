@@ -64,6 +64,7 @@ def get_credentials(config_dir: Path | None = None) -> Credentials:
             creds.refresh(Request())
             _save_token(creds, token_path)
             return creds
+        # fatal
         except Exception as exc:
             raise RuntimeError(
                 f"Google token expired and refresh failed: {exc}\n"

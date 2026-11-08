@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 from pathlib import Path
 
@@ -35,9 +34,9 @@ def collect(since_date: date, until_date: date, config_dir: Path | None = None) 
             )
             .execute()
         )
-    except Exception as e:
-        logging.warning("Google Calendar API error: %s", e)
-        return []
+    # fatal
+    except Exception:
+        raise
 
     events = []
     for item in result.get("items", []):

@@ -182,6 +182,39 @@ _MENTION_RE = re.compile(r"<@(U[A-Z0-9]{6,})(?:\|[^>]*)?>")
 _USER_RESOLVE_DELAY = 0.5
 
 
+def _is_fatal_slack_error(exc: BaseException) -> bool:
+    """Return True if *exc* represents an authentication, 401/403, connection, or timeout error."""
+    if isinstance(
+        exc,
+        PermissionError
+        | ConnectionError
+        | TimeoutError
+        | requests.Timeout
+        | requests.ConnectionError,
+    ):
+        return True
+    if isinstance(exc, requests.HTTPError):
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status in (401, 403):
+            return True
+    msg = str(exc).lower()
+    return any(
+        token in msg
+        for token in (
+            "401",
+            "403",
+            "unauthorized",
+            "forbidden",
+            "invalid_auth",
+            "token_revoked",
+            "account_inactive",
+            "timed out",
+            "timeout",
+            "connection",
+        )
+    )
+
+
 def _resolve_user_id(session: requests.Session, user_id: str, cache: dict[str, str]) -> str:
     """Resolve a Slack user ID to a display name, with caching."""
     if user_id in cache:
@@ -189,13 +222,21 @@ def _resolve_user_id(session: requests.Session, user_id: str, cache: dict[str, s
     time.sleep(_USER_RESOLVE_DELAY)
     try:
         resp = session.get("https://slack.com/api/users.info", params={"user": user_id})
+        if getattr(resp, "status_code", 200) in (401, 403):
+            raise PermissionError(f"Slack users.info HTTP {resp.status_code}")
         data = resp.json()
         if data.get("ok"):
             profile = data["user"].get("profile", {})
             name = profile.get("real_name") or profile.get("display_name") or user_id
         else:
+            err = data.get("error", "")
+            if err in ("invalid_auth", "token_revoked", "account_inactive"):
+                raise PermissionError(f"Slack auth failed: {err}")
             name = user_id
+    # tolerant: fall back to raw user_id when non-fatal user profile lookup fails
     except Exception as exc:
+        if _is_fatal_slack_error(exc):
+            raise
         logger.debug("User resolve failed for %s: %s", user_id, exc)
         name = user_id
     cache[user_id] = name
@@ -223,6 +264,8 @@ def _fetch_thread(session: requests.Session, channel_id: str, thread_ts: str) ->
             "https://slack.com/api/conversations.replies",
             params={"channel": channel_id, "ts": thread_ts, "limit": "10"},
         )
+        if getattr(resp, "status_code", 200) in (401, 403):
+            raise PermissionError(f"Slack conversations.replies HTTP {resp.status_code}")
         resp.raise_for_status()
         data = resp.json()
         if data.get("ok"):
@@ -230,7 +273,13 @@ def _fetch_thread(session: requests.Session, channel_id: str, thread_ts: str) ->
                 {"user": m.get("user", ""), "text": m.get("text", ""), "ts": m.get("ts", "")}
                 for m in data.get("messages", [])
             ]
+        err = data.get("error", "")
+        if err in ("invalid_auth", "token_revoked", "account_inactive"):
+            raise PermissionError(f"Slack auth failed: {err}")
+    # tolerant: skip thread enrichment for single message when non-fatal reply fetch fails
     except Exception as exc:
+        if _is_fatal_slack_error(exc):
+            raise
         logger.debug("Thread fetch failed for %s/%s: %s", channel_id, thread_ts, exc)
     return []
 
@@ -244,7 +293,9 @@ def _format_match(
     ts = match.get("ts", "0")
     try:
         msg_date = match.get("date_str", ts[:10])
+    # tolerant: use empty date string when match timestamp is malformed
     except (TypeError, IndexError):
+        logger.debug("Skipping malformed timestamp %r in Slack match", ts)
         msg_date = ""
 
     resolved_name = _resolve_channel_name(session, channel_name, cache)

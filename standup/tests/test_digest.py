@@ -8,6 +8,7 @@ from pathlib import Path
 
 from standup_tool.digest import (
     _extract_timestamp,
+    _summarize_memory,
     build_digest,
     extract_entities,
     group_into_work_units,
@@ -399,13 +400,83 @@ def test_build_digest_email_uncorrelated():
     assert len(email_uncorrelated) >= 1
 
 
-def test_build_digest_dev_activity_uncorrelated():
+def test_build_digest_memory_activity_uncorrelated():
     data = _load_fixture()
     digest = build_digest(
         data, TEAM, date(2026, 5, 4), date(2026, 5, 4), self_dm="DM with Ada Example"
     )
-    dev_uncorrelated = [u for u in digest["uncorrelated"] if u.get("source") == "dev_activity"]
-    assert len(dev_uncorrelated) >= 1
+    mem_uncorrelated = [u for u in digest["uncorrelated"] if u.get("source") == "memory_activity"]
+    assert len(mem_uncorrelated) >= 1
+    assert mem_uncorrelated[0]["text"] == "Updates build task definitions"
+    assert "timestamp" in mem_uncorrelated[0]
+
+
+def test_build_digest_memory_activity_linked_to_entity():
+    data = {
+        "memory_activity": [
+            {
+                "repo": "widgets",
+                "memory_dir": "/Users/ada/src/widgets/hack",
+                "category": "plans",
+                "path": "plans/2026-05-04-acme-plan.md",
+                "modified": "2026-05-04",
+                "title": "ACME-123: Design widget quota limits",
+            }
+        ]
+    }
+    digest = build_digest(data, TEAM, date(2026, 5, 4), date(2026, 5, 4))
+    wu = next((w for w in digest["work_units"] if w["entity"] == "ACME-123"), None)
+    assert wu is not None
+    assert "memory_activity" in wu["sources"]
+    assert wu["memory_activity"] == {
+        "repo": "widgets",
+        "category": "plans",
+        "title": "ACME-123: Design widget quota limits",
+        "path": "plans/2026-05-04-acme-plan.md",
+    }
+    assert _summarize_memory(data["memory_activity"][0])["repo"] == "widgets"
+
+
+def test_build_digest_multiple_memory_activity_items_and_uncorrelated_title_truncation():
+    long_title = "Research note " + ("x" * 250)
+    data = {
+        "memory_activity": [
+            {
+                "repo": "widgets",
+                "memory_dir": "/Users/ada/src/widgets/hack",
+                "category": "plans",
+                "path": "plans/plan-1.md",
+                "modified": "2026-05-04",
+                "title": "ACME-555 Phase 1",
+            },
+            {
+                "repo": "widgets",
+                "memory_dir": "/Users/ada/src/widgets/hack",
+                "category": "research",
+                "path": "research/spike-1.md",
+                "modified": "2026-05-04",
+                "title": "ACME-555 Spike",
+            },
+            {
+                "repo": "widgets",
+                "memory_dir": "/Users/ada/src/widgets/hack",
+                "category": "research",
+                "path": "research/general-notes.md",
+                "modified": "2026-05-04",
+                "title": long_title,
+            },
+        ]
+    }
+    digest = build_digest(data, TEAM, date(2026, 5, 4), date(2026, 5, 4))
+    wu = next((w for w in digest["work_units"] if w["entity"] == "ACME-555"), None)
+    assert wu is not None
+    assert isinstance(wu["memory_activity"], list)
+    assert len(wu["memory_activity"]) == 2
+
+    mem_uncorr = [u for u in digest["uncorrelated"] if u.get("source") == "memory_activity"]
+    assert len(mem_uncorr) == 1
+    assert len(mem_uncorr[0]["text"]) == 200
+    assert mem_uncorr[0]["text"] == long_title[:200]
 
 
 # --- Mention filtering ---

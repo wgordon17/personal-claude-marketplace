@@ -59,7 +59,7 @@ _SOURCE_FIELDS: dict[str, tuple[str, list[str]]] = {
     "jira_activity": ("jira", ["key", "summary"]),
     "calendar_events": ("calendar", ["summary", "description"]),
     "emails": ("email", ["subject", "body_snippet"]),
-    "dev_activity": ("dev_activity", ["subject", "file_path"]),
+    "memory_activity": ("memory_activity", ["title", "path"]),
     "conversations": ("conversations", ["context"]),
 }
 
@@ -87,7 +87,16 @@ def _filter_slack(items: list[dict], self_dm: str) -> list[dict]:
 
 def _extract_timestamp(item: dict) -> datetime | None:
     """Try to parse an ISO-8601 timestamp from common fields."""
-    for field in ("timestamp", "date", "ts", "created_at", "updated_at", "start_time", "start"):
+    for field in (
+        "timestamp",
+        "date",
+        "modified",
+        "ts",
+        "created_at",
+        "updated_at",
+        "start_time",
+        "start",
+    ):
         val = item.get(field)
         if not val:
             continue
@@ -297,8 +306,13 @@ def _summarize_drive(item: dict) -> dict:
     return {"file_name": item.get("file_name", ""), "comments_count": count}
 
 
-def _summarize_dev(item: dict) -> dict:
-    return {"subject": item.get("subject", "")[:100], "file_path": item.get("file_path", "")}
+def _summarize_memory(item: dict) -> dict:
+    return {
+        "repo": item.get("repo", ""),
+        "category": item.get("category", ""),
+        "title": item.get("title", "")[:100],
+        "path": item.get("path", ""),
+    }
 
 
 def _summarize_conversation(item: dict) -> dict:
@@ -440,7 +454,7 @@ _SUMMARIZERS = {
     "calendar": ("calendar", _summarize_calendar),
     "email": ("emails", _summarize_email),
     "drive": ("drive_docs", _summarize_drive),
-    "dev_activity": ("dev_activity", _summarize_dev),
+    "memory_activity": ("memory_activity", _summarize_memory),
     "conversations": ("conversations", _summarize_conversation),
 }
 
@@ -482,7 +496,7 @@ def _build_wu_output(wu: dict, conversation_cache: dict[str, dict]) -> dict:
                 for i in src_items
             ]
             out[out_key] = refs[0] if len(refs) == 1 else refs
-        elif source_label in ("calendar", "email", "drive", "dev_activity"):
+        elif source_label in ("calendar", "email", "drive", "memory_activity"):
             if len(src_items) == 1:
                 out[out_key] = summarizer(src_items[0])
             else:
@@ -553,6 +567,8 @@ def build_digest(
             entry["text"] = str(item["text"])[:200]
         elif item.get("subject"):
             entry["text"] = str(item["subject"])[:200]
+        elif item.get("title"):
+            entry["text"] = str(item["title"])[:200]
         elif item.get("context"):
             entry["text"] = str(item["context"])[:200]
         ts = _extract_timestamp(item)

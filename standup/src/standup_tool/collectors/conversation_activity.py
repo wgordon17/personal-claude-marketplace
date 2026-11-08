@@ -85,6 +85,37 @@ def _extract_repos(
     return _matches_project(dir_name, repo_keys, patterns)
 
 
+def _is_fatal_vertex_error(exc: BaseException) -> bool:
+    """Return True if *exc* is an authentication, HTTP 401/403, connection, or timeout error."""
+    if isinstance(exc, PermissionError | ConnectionError | TimeoutError):
+        return True
+    status = getattr(exc, "status_code", None)
+    if status in (401, 403):
+        return True
+    cls_name = type(exc).__name__.lower()
+    if (
+        "auth" in cls_name
+        or "permission" in cls_name
+        or "timeout" in cls_name
+        or "connection" in cls_name
+    ):
+        return True
+    msg = str(exc).lower()
+    return any(
+        tok in msg
+        for tok in (
+            "401",
+            "403",
+            "unauthorized",
+            "forbidden",
+            "unauthenticated",
+            "timed out",
+            "timeout",
+            "connection",
+        )
+    )
+
+
 def _find_conversations(
     since_date: date,
     until_date: date,
@@ -95,15 +126,15 @@ def _find_conversations(
 
     Returns list of {project_dir, file_path, mtime, repos_touched} dicts.
     """
+    if not _CLAUDE_PROJECTS_DIR.is_dir():
+        raise FileNotFoundError(f"Claude projects directory not found: {_CLAUDE_PROJECTS_DIR}")
+
     since_ts = datetime(since_date.year, since_date.month, since_date.day).timestamp()
     until_ts = datetime(until_date.year, until_date.month, until_date.day, 23, 59, 59).timestamp()
 
     conversations = []
 
-    sources = [
-        (d, d.glob("*.jsonl"))
-        for d in (_CLAUDE_PROJECTS_DIR.iterdir() if _CLAUDE_PROJECTS_DIR.is_dir() else [])
-    ] + [
+    sources = [(d, d.glob("*.jsonl")) for d in _CLAUDE_PROJECTS_DIR.iterdir()] + [
         (d, d.glob("*.jsonl"))
         for d in (_OMP_SESSIONS_DIR.iterdir() if _OMP_SESSIONS_DIR.is_dir() else [])
     ]
@@ -117,7 +148,9 @@ def _find_conversations(
         for jsonl_file in jsonl_files:
             try:
                 mtime = jsonl_file.stat().st_mtime
-            except OSError:
+            # tolerant: skip single JSONL session file whose stat call fails
+            except OSError as exc:
+                logger.debug("Skipping unreadable session file %s: %s", jsonl_file, exc)
                 continue
             if since_ts <= mtime <= until_ts:
                 conversations.append(
@@ -148,7 +181,9 @@ def _extract_context(jsonl_path: Path) -> str:
             for line in f:
                 try:
                     obj = json.loads(line)
-                except json.JSONDecodeError:
+                # tolerant: skip malformed JSON line inside session transcript
+                except json.JSONDecodeError as exc:
+                    logger.debug("Skipping malformed JSON line in %s: %s", jsonl_path, exc)
                     continue
 
                 msg_type = obj.get("type")
@@ -182,7 +217,8 @@ def _extract_context(jsonl_path: Path) -> str:
                 prefix = "User" if role == "user" else "Assistant"
                 entry = f"{prefix}: {text[:_MAX_MESSAGE_CHARS]}"
                 parts.append(entry)
-    except Exception:
+    # tolerant: skip unreadable session transcript file and return extracted lines so far
+    except OSError:
         logger.debug("Failed to read conversation %s", jsonl_path, exc_info=True)
 
     return redact_secrets("\n".join(parts))
@@ -286,16 +322,18 @@ async def _async_collect(
         or os.environ.get("GOOGLE_CLOUD_PROJECT", "")
     )
     if not project_id:
-        logger.warning("Vertex project not set; skipping conversation summaries")
-        return []
+        raise RuntimeError(
+            "Vertex project not set; configure collectors.conversations.vertex_project "
+            "or set ANTHROPIC_VERTEX_PROJECT_ID / GOOGLE_CLOUD_PROJECT"
+        )
 
     resolved_region = region or os.environ.get("CLOUD_ML_REGION", "us-east5")
 
     try:
         from anthropic import AsyncAnthropicVertex
+    # fatal
     except ImportError:
-        logger.warning("anthropic[vertex] package not installed; skipping conversation summaries")
-        return []
+        raise
 
     conversations = _find_conversations(since_date, until_date, repo_keys, patterns)
     if not conversations:
@@ -326,7 +364,11 @@ async def _async_collect(
 
         try:
             context = await _compress(client, raw_context, sem)
+        # tolerant: fall back to redacted truncated transcript on single-session error
         except Exception as exc:
+            if _is_fatal_vertex_error(exc):
+                raise
+            logger.debug("Failed to compress conversation %s: %s", conversation_id, exc)
             logger.warning("Failed to compress conversation %s: %s", conversation_id, exc)
             context = redact_secrets(raw_context[:_COMPRESS_THRESHOLD_CHARS])
         else:

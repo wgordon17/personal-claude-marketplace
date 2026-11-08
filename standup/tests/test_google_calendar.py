@@ -3,6 +3,8 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from standup_tool.collectors import google_calendar
 
 
@@ -19,7 +21,7 @@ def make_event(
     }
 
 
-def test_collect_returns_empty_on_api_error():
+def test_collect_propagates_api_error():
     mock_creds = MagicMock()
     mock_service = MagicMock()
     mock_service.events().list().execute.side_effect = Exception("API error")
@@ -27,10 +29,9 @@ def test_collect_returns_empty_on_api_error():
     with (
         patch("standup_tool.collectors.google_calendar.get_credentials", return_value=mock_creds),
         patch("standup_tool.collectors.google_calendar.build", return_value=mock_service),
+        pytest.raises(Exception, match="API error"),
     ):
-        result = google_calendar.collect(date(2026, 4, 20), date(2026, 4, 23))
-
-    assert result == []
+        google_calendar.collect(date(2026, 4, 20), date(2026, 4, 23))
 
 
 def test_collect_returns_structured_events():

@@ -13,21 +13,11 @@ import sys
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from standup_tool.collectors import (
-    conversation_activity,
-    git_activity,
-    gmail,
-    google_calendar,
-    google_drive,
-    jira_activity,
-    pr_activity,
-    slack_activity,
-)
+from standup_tool.collectors.registry import REGISTRY, Ctx, run_all
 from standup_tool.config import (
     Config,
     ConfigError,
@@ -135,146 +125,34 @@ def _collect(args: argparse.Namespace, config: Config) -> None:
 
     try:
         repos = list_repos(config)
+    except ConfigError:
+        raise
     except Exception as exc:
-        logging.warning("workspace discovery failed: %s", exc)
-        repos = []
+        raise ConfigError(f"Repository discovery failed: {exc}") from exc
 
-    def run_git() -> list[dict]:
-        try:
-            return git_activity.collect(repos, since, until, author_email=author_email)
-        except Exception as exc:
-            logging.warning("git_activity collector failed: %s", exc)
-            return []
+    selected = set(args.collectors) if args.collectors else None
+    ctx = Ctx(
+        config=config,
+        since=since,
+        until=until,
+        repos=repos,
+        author_email=author_email,
+        cfg_dir=cfg_dir,
+    )
+    outputs_by_key, status_by_name = run_all(REGISTRY, ctx, selected)
 
-    def run_pr() -> list[dict]:
-        try:
-            return pr_activity.collect(repos, since, until)
-        except Exception as exc:
-            logging.warning("pr_activity collector failed: %s", exc)
-            return []
-
-    def run_jira() -> dict:
-        try:
-            return jira_activity.collect(
-                since_date=since,
-                project=config.collectors.jira.project or "",
-            )
-        except Exception as exc:
-            logging.warning("jira_activity collector failed: %s", exc)
-            return {}
-
-    def run_calendar() -> list[dict]:
-        try:
-            return google_calendar.collect(since, until, config_dir=cfg_dir)
-        except Exception as exc:
-            logging.warning("google_calendar collector failed: %s", exc)
-            return []
-
-    def run_gmail() -> list[dict]:
-        try:
-            return gmail.collect(since, until, my_email=author_email, config_dir=cfg_dir)
-        except Exception as exc:
-            logging.warning("gmail collector failed: %s", exc)
-            return []
-
-    def run_slack() -> list[dict]:
-        try:
-            return slack_activity.collect(
-                since,
-                until,
-                token_path=secret_path("slack-token"),
-                workspace_url=config.collectors.slack.workspace_url,
-                channels=config.collectors.slack.channels,
-            )
-        except Exception as exc:
-            logging.warning("slack collector failed: %s", exc)
-            return []
-
-    def run_conversations() -> list[dict]:
-        try:
-            return conversation_activity.collect(
-                since,
-                until,
-                repo_keys=conversation_activity.build_repo_keys(repos),
-                patterns=config.collectors.conversations.project_match,
-                vertex_project=config.collectors.conversations.vertex_project,
-                region=config.collectors.conversations.region,
-            )
-        except Exception as exc:
-            logging.warning("conversation_activity collector failed: %s", exc)
-            return []
-
-    all_tasks = {
-        "git_commits": ("git", run_git),
-        "prs": ("pr", run_pr),
-        "jira_activity": ("jira", run_jira),
-        "calendar_events": ("calendar", run_calendar),
-        "emails": ("gmail", run_gmail),
-        "slack": ("slack", run_slack),
-        "conversations": ("conversations", run_conversations),
-    }
-
-    enabled = set(args.collectors) if args.collectors else None
-    tasks = {
-        key: fn
-        for key, (collector_name, fn) in all_tasks.items()
-        if enabled is None or collector_name in enabled
-    }
-
-    results: dict = {}
-    with ThreadPoolExecutor(max_workers=len(tasks) or 1) as executor:
-        future_to_key = {executor.submit(fn): key for key, fn in tasks.items()}
-        for future in as_completed(future_to_key):
-            key = future_to_key[future]
-            results[key] = future.result()
-
-    calendar_events = results.get("calendar_events", [])
-
-    drive_docs: list[dict] = []
-    if (enabled is None or "drive" in enabled) and calendar_events:
-        try:
-            drive_docs = google_drive.collect(calendar_events, since, until, config_dir=cfg_dir)
-        except Exception as exc:
-            logging.warning("google_drive collector failed: %s", exc)
-
-    output = {
-        "git_commits": results.get("git_commits", []),
-        "prs": results.get("prs", []),
-        "jira_activity": results.get("jira_activity", {}),
-        "calendar_events": calendar_events,
-        "emails": results.get("emails", []),
-        "slack": results.get("slack", []),
-        "drive_docs": drive_docs,
-        "dev_activity": [],
-        "conversations": results.get("conversations", []),
-    }
+    output = {"_status": status_by_name, **outputs_by_key}
     json.dump(output, sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
 
-    jira = output["jira_activity"]
-    jira_total = (
-        sum(len(v) for v in jira.values() if isinstance(v, list)) if isinstance(jira, dict) else 0
+    summary_tokens = " ".join(
+        f"{name}=ran:{st['count']}" if st["state"] == "ran" else f"{name}={st['state']}"
+        for name, st in status_by_name.items()
     )
-    slack_sources: dict[str, int] = {}
-    for s in output["slack"]:
-        src = s.get("source", "?")
-        slack_sources[src] = slack_sources.get(src, 0) + 1
-    slack_detail = ", ".join(f"{c} {s}" for s, c in sorted(slack_sources.items())) or "0"
+    sys.stderr.write(f"COLLECTION SUMMARY: {summary_tokens}\n")
 
-    sys.stderr.write(
-        f"COLLECTION SUMMARY: "
-        f"git={len(output['git_commits'])} "
-        f"pr={len(output['prs'])} "
-        f"jira={jira_total} "
-        f"calendar={len(output['calendar_events'])} "
-        f"email={len(output['emails'])} "
-        f"slack={len(output['slack'])} ({slack_detail}) "
-        f"drive={len(output['drive_docs'])} "
-        f"dev={len(output['dev_activity'])} "
-        f"conversations={len(output['conversations'])}\n"
-    )
-
-    if enabled is None and not args.no_marker:
+    any_failed = any(st["state"] == "failed" for st in status_by_name.values())
+    if selected is None and not args.no_marker and not any_failed:
         _write_last_run_marker(cfg_dir, until)
 
 
@@ -714,7 +592,7 @@ def build_parser() -> argparse.ArgumentParser:
     collect_parser.add_argument(
         "--collectors",
         nargs="*",
-        choices=["git", "pr", "jira", "calendar", "gmail", "slack", "drive", "conversations"],
+        choices=[c.name for c in REGISTRY],
         default=None,
         help="Collectors to run (default: all)",
     )
