@@ -27,15 +27,18 @@ if ! [ -t 0 ]; then
 fi
 
 # shellcheck source=dev-guard/hooks/lib/project-commit-format.sh disable=SC1091
-source "${SCRIPT_DIR}/lib/project-commit-format.sh"
+if ! source "${SCRIPT_DIR}/lib/project-commit-format.sh"; then
+    printf "ERROR: cannot load project-commit-format.sh — commit validation cannot run\n" >&2
+    exit 2
+fi
 
 if [[ -n "$INPUT" ]]; then
     COMMAND=$(echo "$INPUT" | jq -r ".tool_input.command // empty" 2>/dev/null || true)
     if [[ -n "$COMMAND" ]]; then
-        # The substring match is the activation gate (it also covers wrapped forms the
-        # parser cannot see); the parser only resolves -C / --git-dir / --work-tree
-        # targets and falls back to the current directory when it finds none.
-        if ! pcf_parse_command "$COMMAND" && [[ ! "$COMMAND" =~ git[[:space:]]+commit ]]; then
+        # The text match is the activation gate (it also covers wrapped forms the parser
+        # cannot see, such as `bash -c`); the parser only resolves -C / --git-dir /
+        # --work-tree / cd targets and falls back to the current directory when it finds none.
+        if ! pcf_parse_command "$COMMAND" && [[ ! "$COMMAND" =~ git.*commit ]]; then
             exit 0
         fi
     else

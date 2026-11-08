@@ -256,6 +256,42 @@ class TestActivationGate:
         assert res.returncode == 2, command
         assert "Missing Jira key or NO-ISSUE prefix" in res.stderr
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git -P commit -m x",
+            "git --no-optional-locks commit -m x",
+            'git -C "$REPO" commit -m x',
+            'cd "$WT" && git commit -m x',
+        ],
+    )
+    def test_unresolvable_or_unusual_forms_fall_back_to_the_current_repo(
+        self, tmp_path: Path, command: str
+    ) -> None:
+        repo = init_project_repo(tmp_path / "repo")
+        make_commit(repo, "adds thing without prefix")
+        res = run_validator(cwd=repo, command=command)
+        assert res.returncode == 2, command
+        assert "does not exist" not in res.stderr
+
+    def test_missing_helper_library_blocks(self, tmp_path: Path) -> None:
+        hooks = tmp_path / "hooks"
+        hooks.mkdir()
+        script = hooks / "validate-commit-message.sh"
+        script.write_text(VALIDATE_SCRIPT.read_text())
+        repo = init_project_repo(tmp_path / "repo")
+        payload = {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}
+        res = subprocess.run(
+            ["bash", str(script)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            cwd=repo,
+            check=False,
+        )
+        assert res.returncode == 2
+        assert "cannot load" in res.stderr
+
     def test_non_commit_commands_are_ignored(self, tmp_path: Path) -> None:
         repo = init_project_repo(tmp_path / "repo")
         make_commit(repo, "adds thing without prefix")
