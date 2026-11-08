@@ -548,17 +548,23 @@ export default function (pi: ExtensionAPI) {
 		let lastAskReason = "Confirmation required by dev-guard.";
 
 		for (let askRound = 0; askRound < MAX_ASK_ROUNDS; askRound++) {
-			const result = await runGuard(
-				[],
-				{
-					session_id: sessionId,
-					tool_use_id: event.toolCallId,
-					hook_event_name: "PreToolUse",
-					tool_name: claudeCodeToolName,
-					tool_input: toolInput,
-				},
-				ctx.cwd,
-			);
+			const guardPayload = {
+				session_id: sessionId,
+				tool_use_id: event.toolCallId,
+				hook_event_name: "PreToolUse",
+				tool_name: claudeCodeToolName,
+				tool_input: toolInput,
+			};
+			const [result, commitFormatResult] =
+				claudeCodeToolName === "Bash"
+					? await Promise.all([
+							runGuard([], guardPayload, ctx.cwd),
+							runScript(`${HOOKS_DIR}/enforce-project-commit-format.sh`, [], {
+								stdin: JSON.stringify(guardPayload),
+								cwd: ctx.cwd,
+							}),
+						])
+					: [await runGuard([], guardPayload, ctx.cwd), undefined];
 
 			// Dual block-signal handling: exit code 2 is an independent hard
 			// block, checked BEFORE stdout JSON — a bridge that only reads
@@ -567,8 +573,18 @@ export default function (pi: ExtensionAPI) {
 			if (result.code === 2) {
 				return { block: true, reason: result.stderr.trim() || "Blocked by dev-guard." };
 			}
+			if (commitFormatResult && commitFormatResult.code === 2) {
+				return {
+					block: true,
+					reason: commitFormatResult.stderr.trim() || "Blocked by dev-guard.",
+				};
+			}
 
-			if (result.spawnFailed || result.timedOut) {
+			if (
+				result.spawnFailed ||
+				result.timedOut ||
+				(commitFormatResult && (commitFormatResult.spawnFailed || commitFormatResult.timedOut))
+			) {
 				if (failPolicy === "fail-closed") {
 					return {
 						block: true,

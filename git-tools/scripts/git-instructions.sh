@@ -219,7 +219,13 @@ detect_conventions() {
 
 MAINLINE=$(detect_mainline)
 UPSTREAM_OWNER=$(detect_fork)
-CONVENTIONS=$(detect_conventions)
+TRAILERS_REQUIRED=$(git config --get --type=bool claude-code.commit-trailers-required 2>/dev/null || echo "false")
+SUBJECT_PATTERN=$(git config --get claude-code.commit-subject-pattern 2>/dev/null || true)
+if [ "$TRAILERS_REQUIRED" = "true" ]; then
+    CONVENTIONS="no"
+else
+    CONVENTIONS=$(detect_conventions)
+fi
 
 # Determine if this is a fork
 IS_FORK=0
@@ -244,7 +250,9 @@ DETECTED_CONFIG="mainline=\`${MAINLINE}\`"
 if [ "$IS_FORK" -eq 1 ]; then
     DETECTED_CONFIG="${DETECTED_CONFIG}, fork (upstream owner: \`${UPSTREAM_OWNER}\`)"
 fi
-if [ "$CONVENTIONS" = "yes" ]; then
+if [ "$TRAILERS_REQUIRED" = "true" ]; then
+    DETECTED_CONFIG="${DETECTED_CONFIG}, project commit format (trailers required)"
+elif [ "$CONVENTIONS" = "yes" ]; then
     DETECTED_CONFIG="${DETECTED_CONFIG}, conventional commits"
 elif [ "$CONVENTIONS" = "maybe" ]; then
     DETECTED_CONFIG="${DETECTED_CONFIG}, conventional commits (likely)"
@@ -252,7 +260,23 @@ fi
 echo "**Detected configuration:** ${DETECTED_CONFIG}"
 echo ""
 
-cat <<'GIT_SAFETY'
+if [ "$TRAILERS_REQUIRED" = "true" ]; then
+    cat <<'GIT_SAFETY_PROJECT'
+
+## Git Safety Protocol
+
+- NEVER force push to the mainline branch
+- NEVER skip hooks (--no-verify, --no-gpg-sign)
+- NEVER commit directly to mainline — always use feature branches
+- NEVER update git config
+- NEVER add Co-Authored-By trailers to commits
+- Prefer staging specific files by name over `git add -A` or `git add .`
+- Create new commits rather than amending existing ones
+- Use HEREDOC format for commit messages (see Commit Workflow below)
+
+GIT_SAFETY_PROJECT
+else
+    cat <<'GIT_SAFETY'
 
 ## Git Safety Protocol
 
@@ -266,6 +290,7 @@ cat <<'GIT_SAFETY'
 - Use HEREDOC format for commit messages (see Commit Workflow below)
 
 GIT_SAFETY
+fi
 
 # Branch workflow section with dynamic mainline
 cat <<BRANCH_WORKFLOW
@@ -305,7 +330,56 @@ Conventional commit prefixes for branch names: `feat/`, `fix/`, `docs/`, `chore/
 BRANCH_CONVENTIONAL
 fi
 
-cat <<'COMMIT_WORKFLOW'
+if [ "$TRAILERS_REQUIRED" = "true" ]; then
+    EFFECTIVE_SUBJECT_PATTERN="${SUBJECT_PATTERN:-^([A-Z][A-Z0-9]+-[0-9]+|NO-ISSUE): }"
+    cat <<COMMIT_WORKFLOW_PROJECT
+
+## Commit Workflow
+
+Follow these steps in order:
+
+1. **Status** — see what changed:
+   \`\`\`bash
+   git status
+   \`\`\`
+
+2. **Diff** — review staged and unstaged changes:
+   \`\`\`bash
+   git diff
+   git diff --staged
+   \`\`\`
+
+3. **Log** — check recent commit messages for style reference:
+   \`\`\`bash
+   git log --oneline -10
+   \`\`\`
+
+4. **Draft the commit message** — write it mentally before staging.
+
+5. **Stage specific files** — never use \`git add -A\` or \`git add .\`:
+   \`\`\`bash
+   git add path/to/file1 path/to/file2
+   \`\`\`
+
+6. **Commit with signoff and HEREDOC** — always use \`-s\` and include \`Assisted-by:\` (never inline -m for multi-word messages):
+   \`\`\`bash
+   git commit -s -m "\$(cat <<'EOF'
+   PROJ-123: short description
+
+   Assisted-by: Claude <noreply@anthropic.com>
+   EOF
+   )"
+   \`\`\`
+
+**Commit message rules:**
+- Subject line MUST match \`${EFFECTIVE_SUBJECT_PATTERN}\` (e.g., \`OSAC-123: description\` or \`NO-ISSUE: description\`)
+- Include \`Signed-off-by:\` via \`git commit -s\`
+- Include an \`Assisted-by:\` trailer line
+- NEVER include Co-Authored-By trailers
+
+COMMIT_WORKFLOW_PROJECT
+else
+    cat <<'COMMIT_WORKFLOW'
 
 ## Commit Workflow
 
@@ -349,6 +423,7 @@ Follow these steps in order:
 - NEVER include Signed-off-by, Assisted-by, or Co-Authored-By trailers
 
 COMMIT_WORKFLOW
+fi
 
 if [ "$CONVENTIONS" = "yes" ] || [ "$CONVENTIONS" = "maybe" ]; then
     cat <<'CONVENTIONAL_TABLE'

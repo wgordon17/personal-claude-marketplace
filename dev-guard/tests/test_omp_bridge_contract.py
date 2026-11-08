@@ -92,6 +92,9 @@ import uuid
 from pathlib import Path
 
 TOOL_SELECTION_GUARD = Path(__file__).parent.parent / "hooks" / "tool-selection-guard.py"
+ENFORCE_PROJECT_COMMIT_FORMAT = (
+    Path(__file__).parent.parent / "hooks" / "enforce-project-commit-format.sh"
+)
 DECISION_PERSISTENCE = Path(__file__).parent.parent / "hooks" / "decision-persistence.py"
 VALIDATE_COMMIT_MESSAGE = Path(__file__).parent.parent / "hooks" / "validate-commit-message.sh"
 STOP_HOOK = Path(__file__).parent.parent / "hooks" / "stop-hook.py"
@@ -324,6 +327,34 @@ class TestBashPreToolUsePayloadShape:
         }
         result = run_guard(payload, cwd=tmp_path)
         assert result.returncode == 0
+
+    def test_enforce_project_commit_format_payload_shape(self, tmp_path):
+        """omp-extension.ts dispatches enforce-project-commit-format.sh on Bash
+        PreToolUse with the same guardPayload shape; verify it blocks a
+        non-compliant commit (exit 2) when claude-code.commit-trailers-required=true."""
+        repo = git_repo(tmp_path)
+        subprocess.run(
+            ["git", "config", "claude-code.commit-trailers-required", "true"],
+            cwd=repo,
+            check=True,
+        )
+        payload = {
+            "session_id": str(uuid.uuid4()),
+            "tool_use_id": "tc-pcf-1",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": 'git commit -m "bad subject"'},
+        }
+        res = subprocess.run(
+            [str(ENFORCE_PROJECT_COMMIT_FORMAT)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            cwd=str(repo),
+            timeout=30,
+        )
+        assert res.returncode == 2
+        assert "Missing Jira key or NO-ISSUE prefix" in res.stderr
 
     def test_rtk_rewrite_returns_updated_input_command(self, tmp_path):
         """When rtk rewrites a compressible Bash command, tool-selection-guard.py

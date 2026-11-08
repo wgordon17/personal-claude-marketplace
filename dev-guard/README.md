@@ -22,14 +22,20 @@ Development environment policy enforcement: tool selection guard, commit validat
 - **Interactive command blocking** — Prevents `git rebase -i`, `git add -p`, and other interactive commands
 - **Plan mode redirect** — Redirects `EnterPlanMode` to incremental-planning skill
 
-### PostToolUse: Commit Message Validation
+### PreToolUse/PostToolUse: Commit Message Validation
 
-**validate-commit-message.sh** — `Bash(git commit:*)`
-- Validates Conventional Commits format
-- Enforces present indicative tense ("adds" not "add")
-- Checks subject line length (<72 chars, warn >50)
-- Blocks emoji and meta-commentary
-- **Exit 2** shows errors but commit already completed (PostToolUse limitation)
+**enforce-project-commit-format.sh** (PreToolUse, `Bash` matcher) and **validate-commit-message.sh** (PostToolUse, `Bash` matcher)
+- Validates Conventional Commits format by default, or switches to **Project commit format** when `claude-code.commit-trailers-required=true` is set in the target repository's git config
+- Enforces present indicative tense ("adds" not "add") and subject line length (<72 chars, warn >50) in Conventional Commits mode
+- Blocks emoji and `Co-authored-by` attribution trailers in both modes
+- **PreToolUse (`enforce-project-commit-format.sh`)** blocks non-compliant `git commit` calls before execution in project mode; **PostToolUse (`validate-commit-message.sh`)** validates `HEAD` after commit creation (including `-F`/`--file` commits deferred by PreToolUse)
+
+#### Project commit format
+
+When `claude-code.commit-trailers-required` is `true` in the target repository (resolved across leading global git flags such as `-C <path>`, `--git-dir`, `--work-tree`, `-c`, and `--no-pager`), both layers (`enforce-project-commit-format.sh` on PreToolUse and `validate-commit-message.sh` on PostToolUse, sharing `hooks/lib/project-commit-format.sh`) enforce three checks instead of Conventional Commits:
+- **Subject prefix** — First line must match `claude-code.commit-subject-pattern` (defaults to `^([A-Z][A-Z0-9]+-[0-9]+|NO-ISSUE): `)
+- **`Assisted-by:` trailer** — Must be present in the commit message or via `--trailer`
+- **`Signed-off-by:` trailer** — Must be present in the commit message, via `--trailer`, or via `-s` / `--signoff`
 
 ### PreToolUse/PostToolUse: AskUserQuestion Decision Persistence
 
