@@ -6,6 +6,7 @@ import argparse
 import base64
 import dataclasses
 import html
+import importlib.resources
 import json
 import logging
 import os
@@ -21,12 +22,14 @@ from typing import Any
 
 import yaml
 
+from standup_tool.collectors.google_auth import _credentials_path, get_credentials
 from standup_tool.collectors.registry import REGISTRY, Ctx, run_all
 from standup_tool.config import (
     Config,
     ConfigError,
     config_dir,
     config_path,
+    ensure_dir_mode,
     load_config,
     redact_secrets,
     secret_path,
@@ -36,6 +39,7 @@ from standup_tool.config import (
 )
 from standup_tool.slack_auth import get_slack_credentials, make_session, safe_get
 from standup_tool.template import Header, load_template
+from standup_tool.verify import VERIFY_NAMES, run_verify
 from standup_tool.workspace import list_repos
 
 _SECRET_FIELD_NAMES = frozenset({"token", "cookie", "password"})
@@ -722,7 +726,32 @@ def build_parser() -> argparse.ArgumentParser:
         "validate",
         help="Validate configuration file and repository paths.",
     )
+    config_subparsers.add_parser(
+        "path",
+        help="Print the resolved configuration directory path.",
+    )
     config_parser.set_defaults(_config_parser=config_parser)
+
+    verify_parser = subparsers.add_parser(
+        "verify",
+        help="Verify collector binaries, credentials, LDAP, and Claude Code permissions.",
+    )
+    verify_parser.add_argument(
+        "--only",
+        choices=VERIFY_NAMES,
+        default=None,
+        help="Run only a single verification check.",
+    )
+
+    subparsers.add_parser(
+        "init",
+        help="Initialize config.yaml and template.md in the config directory without overwriting.",
+    )
+
+    subparsers.add_parser(
+        "google-auth",
+        help="Run interactive Google OAuth2 flow (must be run in your own terminal).",
+    )
 
     return parser
 
@@ -743,6 +772,10 @@ def _handle_config(args: argparse.Namespace) -> None:
             config_parser.print_help(sys.stderr)
         sys.exit(2)
 
+    if subcmd == "path":
+        sys.stdout.write(f"{config_dir()}\n")
+        return
+
     if subcmd == "show":
         cfg = load_config(require_repos=False)
         raw = dataclasses.asdict(cfg)
@@ -755,6 +788,48 @@ def _handle_config(args: argparse.Namespace) -> None:
         load_config(require_repos=True)
         sys.stdout.write("ok\n")
         return
+
+
+def _init() -> None:
+    """Initialize config.yaml and template.md from packaged examples without overwriting."""
+    ensure_dir_mode()
+    examples_pkg = importlib.resources.files("standup_tool.examples")
+    cfg_target = config_path("config.yaml")
+    tpl_target = config_path("template.md")
+
+    if not cfg_target.exists():
+        cfg_text = examples_pkg.joinpath("config.example.yaml").read_text(encoding="utf-8")
+        write_private(cfg_target, cfg_text)
+
+    if not tpl_target.exists():
+        tpl_text = examples_pkg.joinpath("template.example.md").read_text(encoding="utf-8")
+        write_private(tpl_target, tpl_text)
+
+    sys.stdout.write(f"{cfg_target}\n{tpl_target}\n")
+
+
+def _google_auth() -> None:
+    """Run interactive Google OAuth2 authorization in the user's own terminal.
+
+    Must be run directly in the user's terminal because it prints a browser URL to open.
+    """
+    cfg_dir = ensure_dir_mode()
+    try:
+        get_credentials(cfg_dir, interactive=True)
+    except FileNotFoundError:
+        creds_path = _credentials_path(cfg_dir)
+        sys.stderr.write(f"credentials.json not found at {creds_path}\n")
+        sys.exit(1)
+    sys.stdout.write("ok\n")
+
+
+def _verify(args: argparse.Namespace) -> None:
+    """Verify enabled collectors, LDAP, and settings permissions."""
+    cfg = load_config(require_repos=False)
+    cfg_dir = config_dir()
+    code = run_verify(cfg, cfg_dir, only=getattr(args, "only", None))
+    if code != 0:
+        sys.exit(code)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -773,6 +848,15 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if command == "config":
             _handle_config(args)
+            return
+        if command == "init":
+            _init()
+            return
+        if command == "google-auth":
+            _google_auth()
+            return
+        if command == "verify":
+            _verify(args)
             return
 
         cfg = load_config()

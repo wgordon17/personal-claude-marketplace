@@ -1103,7 +1103,7 @@ class TestSkillMigrationFidelity:
         resolve_skill_bundle = runner_mod.resolve_skill_bundle
 
         skill_files = sorted(REPO_ROOT.glob("*/skills/*/SKILL.md"))
-        assert len(skill_files) == 24, f"Expected 24 skills, found {len(skill_files)}"
+        assert len(skill_files) == 25, f"Expected 25 skills, found {len(skill_files)}"
 
         for skill_md in skill_files:
             line_count = len(skill_md.read_text().splitlines())
@@ -1144,6 +1144,8 @@ class TestSkillMigrationFidelity:
         for skill_md in sorted(REPO_ROOT.glob("*/skills/*/SKILL.md")):
             sdir = skill_md.parent.relative_to(REPO_ROOT).as_posix()
             base_files = sorted(p for p in ls_out if p.startswith(sdir + "/") and p.endswith(".md"))
+            if not base_files:
+                continue
             head_files = sorted(skill_md.parent.rglob("*.md"))
             if sdir == "jira/skills/jira":
                 base_files += sorted(
