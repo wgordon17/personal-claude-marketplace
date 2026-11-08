@@ -99,6 +99,21 @@ Run `/standup-onboard` (or `/standup:standup-onboard`) for guided interactive se
 
 ## CLI
 
+Invoke the CLI via `uv run --directory "${CLAUDE_PLUGIN_ROOT}" standup-tool <command>`.
+
+| command | purpose | reads | writes |
+| --- | --- | --- | --- |
+| `collect` | Run enabled (or `--collectors`-selected) activity collectors across the `[--since, --until]` window and emit `_status` + collector JSON. | `<config_dir>/config.yaml`, `<config_dir>/slack-token`, `<config_dir>/credentials.json`, `<config_dir>/token.json`, `~/.config/.jira/.config.yml`, local git repos, `~/.claude/projects` | `<config_dir>/.collect-output.json` (or `--output PATH` / `-`), `<config_dir>/.last-run` (when all collectors run, `--no-marker` is omitted, and none fail) |
+| `digest` | Correlate raw collector JSON with team-member identities into entity-linked work units and uncorrelated signals. | `--file` (collector JSON), `<config_dir>/config.yaml`, `<config_dir>/team-members.yaml` | `<config_dir>/.digest.json` (or `--output PATH`) |
+| `post-standup` | Convert the approved standup markdown draft into Slack Block Kit rich text and post it to the user's Slack self-DM. | `--file` (standup draft), `<config_dir>/config.yaml`, `<config_dir>/<template_file>`, `<config_dir>/slack-token` | Slack self-DM message via `chat.postMessage` |
+| `backlog` | Move one or more Jira issue keys out of the active sprint to the backlog via the Jira Agile REST API (supports `--dry-run`). | `<config_dir>/config.yaml`, `~/.config/.jira/.config.yml`, `JIRA_API_TOKEN` | Jira Agile REST API `POST /rest/agile/1.0/backlog/issue` (unless `--dry-run`) |
+| `enrich-team` | Populate `team-members.yaml` by combining GitHub org members, optional LDAP directory lookups, and Slack workspace users (supports `--dry-run`). | `<config_dir>/config.yaml`, `<config_dir>/team-members.yaml`, `<config_dir>/slack-token`, GitHub API (`gh`), LDAP (`ldapsearch`) | `<config_dir>/team-members.yaml` (unless `--dry-run`, which writes to stdout) |
+| `standup-history` | Search the user's Slack self-DM and configured `standup_channels` over `--days` to pair prior drafts with published standups for edit learning. | `<config_dir>/config.yaml`, `<config_dir>/<template_file>`, `<config_dir>/slack-token` | `<config_dir>/.standup-history.json` (or `--output PATH` / `-`) |
+| `config` | Inspect or validate configuration: `config show` prints redacted JSON (`require_repos=False`), `config validate` verifies schema and repo `.git` paths, and `config path` prints `<config_dir>`. | `<config_dir>/config.yaml`, configured `repos[].path` (for `validate`) | stdout (`JSON`, `ok`, or `<config_dir>` path) |
+| `verify` | Run non-destructive readiness checks across the 9 collectors, `ldap`, and Claude Code `permissions` (supports `--only <name>`). | `<config_dir>/config.yaml`, `<config_dir>/*`, `~/.config/.jira/.config.yml`, `~/.claude/settings.json`, `.claude/settings.local.json` | stdout (`check \| status \| hint` table) |
+| `init` | Initialize `config.yaml` and `template.md` in `<config_dir>` from packaged examples (`0600`) without overwriting existing files. | Packaged `standup_tool.examples` (`config.example.yaml`, `template.example.md`) | `<config_dir>/config.yaml`, `<config_dir>/template.md` (when absent) |
+| `google-auth` | Run the interactive Google OAuth2 Desktop flow in the user's terminal to authorize Calendar, Gmail, and Drive scopes. | `<config_dir>/credentials.json`, `<config_dir>/token.json` | `<config_dir>/token.json` (`0600`) |
+
 ## Security notes
 
 - **Directory and file permissions:** The configuration directory (`~/.config/standup/` or `STANDUP_CONFIG_DIR`) must reside outside any git worktree and is enforced at mode `0700`. All secret files (`slack-token`, `credentials.json`, `token.json`), configuration files (`config.yaml`, `template.md`, `team-members.yaml`), and state outputs (`.collect-output.json`, `.digest.json`, `.standup-history.json`, `.last-run`) are tightened or written with `O_NOFOLLOW` and mode `0600`; symlinks are refused with `ConfigError`.

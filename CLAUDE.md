@@ -5,10 +5,11 @@
 ```bash
 make all          # Lint + test (CI runs this)
 make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
-make test         # uv run pytest (runs the tests/ dirs in pyproject.toml testpaths)
+make test         # uv run pytest (runs the tests/ dirs in pyproject.toml testpaths + make test-standup)
+make test-standup # Run standup plugin tests (cd standup && uv run --group dev pytest)
 ```
 
-Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per-plugin `tests/` directories (see `pyproject.toml` `testpaths`): currently `dev-guard/tests/` and `chai-bot/tests/`.
+Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per-plugin `tests/` directories: `dev-guard/tests/` and `chai-bot/tests/` (see root `pyproject.toml` `testpaths`), plus `standup/tests/` in its isolated UV project (`make test-standup`, wired into `make test` and `make all`).
 
 ## Critical Rules
 
@@ -27,7 +28,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per
 
 1. **Develop and test locally** — Run `make all` before committing.
 2. **Branch, commit, push, PR** — Branch from `origin/main`. Conventional commits. Show the PR link to the user.
-3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Two CI workflows run: `ci.yml` (triggers on `**/*.py`, `**.md`, `**.json`, `**.yaml`, `**.yml`, `**.sh`, `**.ts`, `**/pyproject.toml`, `**/uv.lock`, `renovate.json`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`, `chai-bot/hooks/**`) and `plugin-lint.yml` (triggers on `**.json`, `**.md`, `**.sh`, `**.yaml`, `**.yml`, `**.py`, `**.ts`, `.skillsaw.yaml`, `**/mcp.json`, `.agents/**`, plugin files, `.github/scripts/**`, `.github/workflows/**`, `renovate.json`, running `uvx skillsaw@0.21.0 lint --strict --no-plugins`). If no checks appear, merge after local `make all` passes.
+3. **Wait for CI** — `gh pr checks <number> --watch`. Do not merge on red. Three CI workflows run: `ci.yml` (triggers on `**/*.py`, `**.md`, `**.json`, `**.yaml`, `**.yml`, `**.sh`, `**.ts`, `**/pyproject.toml`, `**/uv.lock`, `renovate.json`, `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/scripts/**`, `dev-guard/hooks/**`, `dev-guard/references/**`, `chai-bot/hooks/**`), `plugin-lint.yml` (triggers on `**.json`, `**.md`, `**.sh`, `**.yaml`, `**.yml`, `**.py`, `**.ts`, `.skillsaw.yaml`, `**/mcp.json`, `.agents/**`, plugin files, `.github/scripts/**`, `.github/workflows/**`, `renovate.json`, running `uvx skillsaw@0.21.0 lint --strict --no-plugins`), and `secrets-scan.yml` (runs unfiltered Gitleaks secret scanning on every `pull_request` and `push` to `main`). If no checks appear, merge after local `make all` passes.
 4. **Wait for user to merge** — Do NOT merge automatically. Tell the user the PR is ready for review and wait for them to confirm the merge. Only proceed to step 5 after the user says it's merged.
 5. **Update local plugin** — After merge, run these commands (do not hand them to the user).
    Claude Code blocks nested `claude` CLI invocations (since v2.1.39). Prefix with `CLAUDECODE=""` to bypass:
@@ -40,7 +41,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per
 
 ## Repository Structure
 
-Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.claude-plugin/marketplace.json`.
+Personal Claude Code plugin marketplace with 14 plugins. Master registry: `.claude-plugin/marketplace.json`.
 
 - **LSP plugins (5):** `pyright-uvx`, `vtsls-npx`, `gopls-go`, `vscode-html-css-npx`, `rust-analyzer-rustup`
 - **dev-guard/** — Tool selection guard, commit validation, subagent completion verification
@@ -51,6 +52,7 @@ Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.clau
 - **drawio/** — Vendored draw.io diagram generation skill from jgraph/drawio-mcp (Apache 2.0); weekly upstream sync via GHA
 - **fetchaller-mcp/** — Pinned MCP fetch/search server for domains that block Claude Code's built-in WebFetch/WebSearch (Reddit and 15 other sites); commit-SHA pinned, never tracks main
 - **chai-bot/** — Advisory SessionStart nudge (OSAC-repo-gated) + unrestricted `/chai-bot` command for offloading OSAC research/actions or general second-opinion questions to the Red Hat-internal Chai Bot MCP server; VPN-dependent
+- **standup/** — Config-driven daily standup digest across git, PRs, Jira, Slack, Google Workspace, project memory, and coding transcripts; `/standup` and `/standup-preview` commands, `/standup-onboard` skill, 4 agents (`standup-draft`, `standup-pr-review`, `standup-priorities`, `standup-signals`), and `standup-tool` CLI
 
 Each plugin ships dual manifests: `.claude-plugin/plugin.json` (Claude Code) and root `plugin.json` (Agent Plugins v1), registered in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 
@@ -58,4 +60,4 @@ Each plugin ships dual manifests: `.claude-plugin/plugin.json` (Claude Code) and
 
 ## CI
 
-GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx skillsaw@0.21.0 lint --strict --no-plugins` configured in `.skillsaw.yaml`, plus `actionlint` for workflow YAML validation).
+GitHub Actions on PRs to main. Three workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`), `plugin-lint.yml` (plugin structure via `uvx skillsaw@0.21.0 lint --strict --no-plugins` configured in `.skillsaw.yaml`, plus `actionlint` for workflow YAML validation), and `secrets-scan.yml` (unfiltered Gitleaks secret scanning across git history on `pull_request` and `push` to `main`).
