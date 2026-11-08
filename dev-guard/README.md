@@ -37,6 +37,8 @@ When `claude-code.commit-trailers-required` is `true` in the target repository (
 - **`Assisted-by:` trailer** — Must be present in the commit message or via `--trailer`
 - **`Signed-off-by:` trailer** — Must be present in the commit message, via `--trailer`, or via `-s` / `--signoff`
 
+Trailers must begin a line; the same words inside the subject do not count. The PreToolUse parser follows `cd`, `GIT_DIR=`/`GIT_WORK_TREE=` assignments, env/`command`/`time` wrappers, path-qualified `git`, pipelines, and subshells. It cannot read `bash -c`, `eval`, or git aliases; commits made that way, and commits whose message is not in the command (`-F`, `-C`/`-c`, `--fixup`, `--amend` without `-m`), are validated by the PostToolUse hook after they land. The PreToolUse hook fails closed when its helper library cannot be loaded, when an explicit `-C`/`--git-dir`/`--work-tree` path is missing, and when `jq` is absent for a command that mentions `git commit`.
+
 ### PreToolUse/PostToolUse: AskUserQuestion Decision Persistence
 
 **decision-persistence.py** — Remembers Fix/Defer review decisions across sessions:

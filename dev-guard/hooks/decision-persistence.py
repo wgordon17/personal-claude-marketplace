@@ -18,10 +18,12 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from memory_paths import find_main_worktree, find_memory_dir  # noqa: E402
 
 # ── Constants ──
 
@@ -31,7 +33,6 @@ _MAX_DECISION_AGE_DAYS = 30
 
 METADATA_PREFIX = "▸dp:"
 DECISIONS_FILENAME = "review-decisions.json"
-MEMORY_DIR_CANDIDATES = ("hack", ".local", "scratch", ".dev")
 _CODE_HASH_WINDOW = 5  # ±N lines around finding location for staleness detection
 
 
@@ -65,28 +66,6 @@ _memory_dir_resolved = False
 _cached_memory_dir: Path | None = None
 
 
-def _find_main_worktree(git_root: Path) -> Path:
-    """Resolve the main worktree root via `git worktree list --porcelain`.
-
-    Falls back to git_root if git fails or returns non-zero (e.g., non-git tmp_path).
-    """
-    try:
-        res = subprocess.run(
-            ["git", "-C", str(git_root), "worktree", "list", "--porcelain"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if res.returncode == 0:
-            for line in res.stdout.splitlines():
-                if line.startswith("worktree "):
-                    return Path(line[len("worktree ") :].strip())
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return git_root
-
-
 def _find_memory_dir() -> Path | None:
     """Find the project memory directory (hack/, .local/, scratch/, .dev/).
 
@@ -97,21 +76,9 @@ def _find_memory_dir() -> Path | None:
     global _memory_dir_resolved, _cached_memory_dir  # noqa: PLW0603
     if _memory_dir_resolved:
         return _cached_memory_dir
-    main_root = _find_main_worktree(_find_git_root())
-
-    core_files = ("PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md")
-
-    for candidate in MEMORY_DIR_CANDIDATES:
-        candidate_path = main_root / candidate
-        if candidate_path.is_dir():
-            core_count = sum(1 for f in core_files if (candidate_path / f).is_file())
-            if core_count < 2:
-                continue  # not a validated memory directory
-            _cached_memory_dir = candidate_path
-            _memory_dir_resolved = True
-            return candidate_path
+    _cached_memory_dir = find_memory_dir(find_main_worktree(_find_git_root()))
     _memory_dir_resolved = True
-    return None
+    return _cached_memory_dir
 
 
 def _decisions_path() -> Path | None:

@@ -9,19 +9,42 @@
 #   - `Assisted-by:` trailer
 #   - `Signed-off-by:` trailer (inline, `--trailer`, or `-s`/`--signoff`)
 #
-# Fails closed (exit 2) if `jq` is missing or if an explicit `-C`/`--git-dir`/
-# `--work-tree` path does not exist on disk.
+# Commits whose message cannot be read from the command string (-F, -C/-c,
+# --fixup, --amend/--no-edit without -m, non-heredoc command substitution, no -m
+# at all) are left to the PostToolUse validator, which checks the commit that
+# landed. Forms the static parser cannot see (`bash -c`, `eval`, git aliases) are
+# covered the same way.
+#
+# Fails closed (exit 2) if the shared helper cannot be loaded, if `jq` is
+# missing and the input looks like a git commit, or if an explicit
+# `-C`/`--git-dir`/`--work-tree` path does not exist on disk.
 
-if ! command -v jq >/dev/null 2>&1; then
-    printf "ERROR: jq not found — commit format hook cannot run\n" >&2
-    exit 2
+# Builtin read: must work even when PATH has no external tools.
+INPUT=$(</dev/stdin)
+
+# Cheap O(n) pre-filter: this hook runs on every Bash call, and the tokenizer is
+# far slower on large commands (multi-KB heredocs) than on a commit line.
+if [[ "$INPUT" != *git* || "$INPUT" != *commit* ]]; then
+    exit 0
 fi
 
 SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 # shellcheck source=dev-guard/hooks/lib/project-commit-format.sh disable=SC1091
-source "${SCRIPT_DIR}/lib/project-commit-format.sh"
+if ! source "${SCRIPT_DIR}/lib/project-commit-format.sh"; then
+    printf "ERROR: cannot load project-commit-format.sh — commit format hook cannot run\n" >&2
+    exit 2
+fi
 
-CMD=$(jq -r '.tool_input.command // empty' 2>/dev/null) || CMD=""
+if ! command -v jq >/dev/null 2>&1; then
+    # Without jq the command cannot be extracted; block only input that mentions a commit.
+    if [[ "$INPUT" =~ git.*commit ]]; then
+        printf "ERROR: jq not found — commit format hook cannot run\n" >&2
+        exit 2
+    fi
+    exit 0
+fi
+
+CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || CMD=""
 if [[ -z "$CMD" ]]; then
     exit 0
 fi
@@ -30,48 +53,26 @@ if ! pcf_parse_command "$CMD"; then
     exit 0
 fi
 
-# Validate explicit target paths (exits 2 if an explicit path does not exist)
-# and load target repository config (exits 0 if target is not a git repository).
-if ! pcf_load_repo_config; then
-    exit 0
-fi
+# pcf_load_repo_config returns 1 for a non-repository target (nothing to enforce)
+# and 2 when an explicit target path is missing (fail closed; message already printed).
+pcf_load_repo_config
+case $? in
+    0) ;;
+    2) exit 2 ;;
+    *) exit 0 ;;
+esac
 
 if [[ "$PCF_TRAILERS_REQUIRED" != "true" ]]; then
     exit 0
 fi
 
-# Defer to PostToolUse when:
-# 1. --amend or --no-edit is used without -m/--message
-# 2. -F/--file is used without -m/--message
-# 3. -m uses an arbitrary command substitution other than $(cat <<...)
-if (( PCF_HAS_MSG_FLAG == 0 )); then
-    if (( PCF_HAS_AMEND || PCF_HAS_NO_EDIT || PCF_HAS_FILE_FLAG )); then
-        exit 0
-    fi
-fi
-
-if (( PCF_DEFER_TO_POST )); then
+# Defer to PostToolUse when the message cannot be read statically.
+if (( PCF_HAS_MSG_FLAG == 0 || PCF_DEFER_TO_POST )); then
     exit 0
 fi
 
-FIRST_MSG="${PCF_MSG_VALUES[0]:-}"
-SUBJECT=$(pcf_first_nonempty_line "$FIRST_MSG")
-
-COMBINED_TEXT=""
-for msg in "${PCF_MSG_VALUES[@]}"; do
-    if [[ -n "$COMBINED_TEXT" ]]; then
-        COMBINED_TEXT+=$'\n'"$msg"
-    else
-        COMBINED_TEXT="$msg"
-    fi
-done
-for tr in "${PCF_TRAILER_VALUES[@]}"; do
-    if [[ -n "$COMBINED_TEXT" ]]; then
-        COMBINED_TEXT+=$'\n'"$tr"
-    else
-        COMBINED_TEXT="$tr"
-    fi
-done
+SUBJECT=$(pcf_first_nonempty_line "${PCF_MSG_VALUES[0]:-}")
+COMBINED_TEXT=$(printf '%s\n' "${PCF_MSG_VALUES[@]}" ${PCF_TRAILER_VALUES[@]+"${PCF_TRAILER_VALUES[@]}"})
 
 if ! pcf_validate_commit_text "$SUBJECT" "$COMBINED_TEXT" "$PCF_HAS_SIGNOFF_FLAG"; then
     exit 2

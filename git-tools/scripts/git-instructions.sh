@@ -372,7 +372,7 @@ Follow these steps in order:
    \`\`\`
 
 **Commit message rules:**
-- Subject line MUST match \`${EFFECTIVE_SUBJECT_PATTERN}\` (e.g., \`OSAC-123: description\` or \`NO-ISSUE: description\`)
+- Subject line MUST match \`${EFFECTIVE_SUBJECT_PATTERN}\` (e.g., \`PROJ-123: description\` or \`NO-ISSUE: description\`)
 - Include \`Signed-off-by:\` via \`git commit -s\`
 - Include an \`Assisted-by:\` trailer line
 - NEVER include Co-Authored-By trailers

@@ -555,16 +555,17 @@ export default function (pi: ExtensionAPI) {
 				tool_name: claudeCodeToolName,
 				tool_input: toolInput,
 			};
-			const [result, commitFormatResult] =
-				claudeCodeToolName === "Bash"
-					? await Promise.all([
-							runGuard([], guardPayload, ctx.cwd),
-							runScript(`${HOOKS_DIR}/enforce-project-commit-format.sh`, [], {
+				const commitFormatRun =
+					claudeCodeToolName === "Bash"
+						? runScript(`${HOOKS_DIR}/enforce-project-commit-format.sh`, [], {
 								stdin: JSON.stringify(guardPayload),
 								cwd: ctx.cwd,
-							}),
-						])
-					: [await runGuard([], guardPayload, ctx.cwd), undefined];
+							})
+						: Promise.resolve(undefined);
+				const [result, commitFormatResult] = await Promise.all([
+					runGuard([], guardPayload, ctx.cwd),
+					commitFormatRun,
+				]);
 
 			// Dual block-signal handling: exit code 2 is an independent hard
 			// block, checked BEFORE stdout JSON — a bridge that only reads

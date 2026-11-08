@@ -12,30 +12,44 @@
 #
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=dev-guard/hooks/lib/project-commit-format.sh disable=SC1091
-source "${SCRIPT_DIR}/lib/project-commit-format.sh"
 
 # --- Hook Input Filtering ---
 # When called as a PostToolUse hook, stdin contains JSON with tool_input.
 # Only proceed for git commit commands; exit 0 for everything else.
+INPUT=""
 if ! [ -t 0 ]; then
     INPUT=$(cat)
-    COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
-    if [[ -n "$COMMAND" ]]; then
-        if ! pcf_parse_command "$COMMAND"; then
-            exit 0
-        fi
-    elif [[ -n "$INPUT" ]]; then
+    # Cheap O(n) pre-filter: this hook runs on every Bash call, and the tokenizer is
+    # far slower on large commands (multi-KB heredocs) than on a commit line.
+    if [[ -n "$INPUT" && ( "$INPUT" != *git* || "$INPUT" != *commit* ) ]]; then
         exit 0
     fi
-else
-    pcf_reset_state
+fi
+
+# shellcheck source=dev-guard/hooks/lib/project-commit-format.sh disable=SC1091
+source "${SCRIPT_DIR}/lib/project-commit-format.sh"
+
+if [[ -n "$INPUT" ]]; then
+    COMMAND=$(echo "$INPUT" | jq -r ".tool_input.command // empty" 2>/dev/null || true)
+    if [[ -n "$COMMAND" ]]; then
+        # The substring match is the activation gate (it also covers wrapped forms the
+        # parser cannot see); the parser only resolves -C / --git-dir / --work-tree
+        # targets and falls back to the current directory when it finds none.
+        if ! pcf_parse_command "$COMMAND" && [[ ! "$COMMAND" =~ git[[:space:]]+commit ]]; then
+            exit 0
+        fi
+    else
+        exit 0
+    fi
 fi
 
 # Validate explicit -C / --git-dir / --work-tree paths and load target repo config
-if ! pcf_load_repo_config; then
-    exit 0
-fi
+pcf_load_repo_config
+case $? in
+    0) ;;
+    2) exit 2 ;;
+    *) exit 0 ;;
+esac
 
 PROJECT_MODE=false
 if [[ "$PCF_TRAILERS_REQUIRED" = "true" ]]; then
