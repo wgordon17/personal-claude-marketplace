@@ -7,111 +7,30 @@ Uses search.messages API which works with Enterprise Grid org-level tokens
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
-import urllib.parse
-from collections.abc import Sequence
 from datetime import date, timedelta
 from pathlib import Path
 
 import requests
 
-from standup_tool.config import ConfigError
+from standup_tool.config import SlackConfig
+from standup_tool.slack_auth import (
+    SlackCredentials,
+    get_slack_credentials,
+    make_session,
+    safe_get,
+)
 
 logger = logging.getLogger(__name__)
 
 REQUEST_DELAY = 2.0
 _THREAD_FETCH_DELAY = 1.0
-# Slack serves the workspace bootstrap page only to browser-like clients and
-# rejects a default requests User-Agent; requests without this are answered
-# with 403.
-_BROWSER_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-)
-_XOXC_PREFIX = "xox" + "c-"
-_XOXD_PREFIX = "xox" + "d-"
-_API_TOKEN_RE = re.compile(r'"api_token"\s*:\s*"(' + _XOXC_PREFIX + r'[^"]+)"')
-_FALLBACK_TOKEN_RE = re.compile(r'"token"\s*:\s*"(' + _XOXC_PREFIX + r'[^"]+)"')
-
-
-def _bootstrap_xoxc(cookie: str, workspace_url: str | None) -> str:
-    """Extract client API token from the Slack workspace page.
-
-    The d cookie must be URL-encoded when sent via requests (browsers do this
-    transparently; the requests library does not). Slack answers this page with
-    a 403 status but still embeds the api_token in the body when the request
-    carries a browser User-Agent, so the token is parsed regardless of status.
-    """
-    if not workspace_url:
-        raise ConfigError("collectors.slack.workspace_url is required to bootstrap Slack cookie")
-    encoded = urllib.parse.quote(cookie, safe="")
-    resp = requests.get(
-        workspace_url, cookies={"d": encoded}, headers={"User-Agent": _BROWSER_UA}, timeout=30
-    )
-    match = _API_TOKEN_RE.search(resp.text)
-    if not match:
-        match = _FALLBACK_TOKEN_RE.search(resp.text)
-    if not match:
-        raise PermissionError(
-            f"Could not extract client token from Slack workspace page (HTTP {resp.status_code}). "
-            "The d cookie may be expired — grab a fresh one from your browser."
-        )
-    return match.group(1)
-
-
-def _get_credentials(token_path: Path, workspace_url: str | None = None) -> tuple[str, str | None]:
-    """Return (bearer_token, cookie_or_none).
-
-    Supports three auth modes (in priority order):
-    1. Token + cookie pair (env vars): STANDUP_SLACK_XOXC + STANDUP_SLACK_COOKIE
-    2. Standalone user token (env var): STANDUP_SLACK_TOKEN
-    3. File in config directory (slack-token):
-       - d cookie on one line → client token bootstrapped automatically
-       - client token + d cookie on two lines → explicit pair
-       - standalone user token on one line
-    """
-    xoxc = os.environ.get("STANDUP_SLACK_XOXC", "").strip()
-    cookie = os.environ.get("STANDUP_SLACK_COOKIE", "").strip()
-    if xoxc and cookie:
-        return xoxc, cookie
-
-    standalone = os.environ.get("STANDUP_SLACK_TOKEN", "").strip()
-    if standalone:
-        return standalone, None
-
-    if token_path.is_file():
-        lines = [ln.strip() for ln in token_path.read_text().splitlines() if ln.strip()]
-        if len(lines) >= 2 and lines[0].startswith(_XOXC_PREFIX):
-            return lines[0], lines[1]
-        if lines:
-            value = lines[0]
-            if value.startswith(_XOXD_PREFIX):
-                logger.info("Bootstrapping Slack client token from d cookie...")
-                xoxc_token = _bootstrap_xoxc(value, workspace_url)
-                return xoxc_token, value
-            return value, None
-
-    raise FileNotFoundError(
-        f"Slack token not found. Create {token_path} in the config directory with:\n"
-        "  Easiest (one line — just the d cookie from browser DevTools):\n"
-        "    The client token is bootstrapped automatically.\n"
-        "  Or set STANDUP_SLACK_TOKEN"
-    )
-
-
-def _make_session(bearer_token: str, cookie: str | None) -> requests.Session:
-    session = requests.Session()
-    session.headers["Authorization"] = f"Bearer {bearer_token}"
-    session.headers["Content-Type"] = "application/json; charset=utf-8"
-    session.headers["User-Agent"] = _BROWSER_UA
-    if cookie:
-        session.cookies.set("d", urllib.parse.quote(cookie, safe=""), domain=".slack.com")
-    return session
-
-
 _MAX_RETRIES = 3
+
+
+def _make_session(bearer_token: str, cookie: str) -> requests.Session:
+    return make_session(SlackCredentials(token=bearer_token, cookie=cookie))
 
 
 def _search(session: requests.Session, query: str, count: int = 100) -> list[dict]:
@@ -121,7 +40,8 @@ def _search(session: requests.Session, query: str, count: int = 100) -> list[dic
     json_retries = 0
     while True:
         for attempt in range(_MAX_RETRIES):
-            resp = session.get(
+            resp = safe_get(
+                session,
                 "https://slack.com/api/search.messages",
                 params={
                     "query": query,
@@ -177,8 +97,6 @@ def _search(session: requests.Session, query: str, count: int = 100) -> list[dic
 
 _USER_ID_RE = re.compile(r"^U[A-Z0-9]{6,}$")
 _MENTION_RE = re.compile(r"<@(U[A-Z0-9]{6,})(?:\|[^>]*)?>")
-
-
 _USER_RESOLVE_DELAY = 0.5
 
 
@@ -221,7 +139,7 @@ def _resolve_user_id(session: requests.Session, user_id: str, cache: dict[str, s
         return cache[user_id]
     time.sleep(_USER_RESOLVE_DELAY)
     try:
-        resp = session.get("https://slack.com/api/users.info", params={"user": user_id})
+        resp = safe_get(session, "https://slack.com/api/users.info", params={"user": user_id})
         if getattr(resp, "status_code", 200) in (401, 403):
             raise PermissionError(f"Slack users.info HTTP {resp.status_code}")
         data = resp.json()
@@ -260,7 +178,8 @@ def _resolve_channel_name(
 def _fetch_thread(session: requests.Session, channel_id: str, thread_ts: str) -> list[dict]:
     """Fetch thread replies for context enrichment."""
     try:
-        resp = session.get(
+        resp = safe_get(
+            session,
             "https://slack.com/api/conversations.replies",
             params={"channel": channel_id, "ts": thread_ts, "limit": "10"},
         )
@@ -331,9 +250,8 @@ def collect(
     since_date: date,
     until_date: date,
     *,
+    slack_cfg: SlackConfig,
     token_path: Path,
-    workspace_url: str | None = None,
-    channels: Sequence[str] = (),
 ) -> list[dict]:
     """Collect Slack activity via search.messages.
 
@@ -343,10 +261,11 @@ def collect(
     3. to:me — messages where the user is @mentioned (excluding target channels)
     4. from:me (excluding DMs and target channels) — threads user participated in
     """
-    bearer_token, cookie = _get_credentials(token_path, workspace_url)
-    session = _make_session(bearer_token, cookie)
+    creds = get_slack_credentials(slack_cfg, token_path)
+    session = make_session(creds)
+    channels = slack_cfg.channels
 
-    resp = session.get("https://slack.com/api/auth.test")
+    resp = safe_get(session, "https://slack.com/api/auth.test")
     resp.raise_for_status()
     auth_data = resp.json()
     if not auth_data.get("ok"):

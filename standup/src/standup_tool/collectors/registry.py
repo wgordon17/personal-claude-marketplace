@@ -221,9 +221,8 @@ REGISTRY: list[Collector] = [
         run=lambda ctx, _out: slack_activity.collect(
             ctx.since,
             ctx.until,
+            slack_cfg=ctx.config.collectors.slack,
             token_path=secret_path("slack-token"),
-            workspace_url=ctx.config.collectors.slack.workspace_url,
-            channels=ctx.config.collectors.slack.channels,
         ),
         empty=[],
     ),

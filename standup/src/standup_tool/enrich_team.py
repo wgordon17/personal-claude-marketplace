@@ -16,11 +16,48 @@ from pathlib import Path
 
 import yaml
 
-from standup_tool.config import Config, LdapConfig, config_path, secret_path
+from standup_tool.config import (
+    Config,
+    LdapConfig,
+    SlackConfig,
+    config_path,
+    secret_path,
+    write_private,
+)
+from standup_tool.slack_auth import (
+    SlackAuthError,
+    get_slack_credentials,
+    make_session,
+    safe_get,
+)
 
 log = logging.getLogger(__name__)
 
-_SAFE_USERNAME = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$")
+_GITHUB_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_LDAP_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _escape_ldap_filter_value(val: str) -> str:
+    """Escape a filter assertion value per RFC 4515."""
+    out: list[str] = []
+    for ch in val:
+        code = ord(ch)
+        if ch == "\\":
+            out.append(r"\5c")
+        elif ch == "*":
+            out.append(r"\2a")
+        elif ch == "(":
+            out.append(r"\28")
+        elif ch == ")":
+            out.append(r"\29")
+        elif code == 0:
+            out.append(r"\00")
+        elif code > 127:
+            for b in ch.encode("utf-8"):
+                out.append(f"\\{b:02x}")
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def get_github_org_members(org: str) -> list[dict]:
@@ -29,6 +66,9 @@ def get_github_org_members(org: str) -> list[dict]:
 
 
 def _members_from_gh_api(org: str) -> list[dict]:
+    if not _GITHUB_NAME_RE.match(org):
+        log.warning("Invalid GitHub org %r — skipping", org)
+        return []
     try:
         result = subprocess.run(
             ["gh", "api", f"orgs/{org}/members", "--paginate", "--jq", ".[].login"],
@@ -44,8 +84,12 @@ def _members_from_gh_api(org: str) -> list[dict]:
     members = []
     for line in result.stdout.strip().splitlines():
         login = line.strip()
-        if login:
-            members.append({"github": login})
+        if not login:
+            continue
+        if not _GITHUB_NAME_RE.match(login):
+            log.warning("Skipping invalid GitHub login %r", login)
+            continue
+        members.append({"github": login})
     return members
 
 
@@ -66,7 +110,8 @@ def enrich_from_github_profiles(
     for member in unenriched:
         gh_login = member["github"]
         existing = existing_by_gh.get(gh_login, {})
-        if not _SAFE_USERNAME.match(gh_login):
+        if not _GITHUB_NAME_RE.match(gh_login):
+            log.warning("Skipping invalid GitHub login %r", gh_login)
             continue
 
         try:
@@ -144,8 +189,10 @@ def enrich_from_ldap(
         ldap_data = github_to_ldap.get(gh_login.lower())
         if not ldap_data:
             uid_to_try = existing.get("directory_uid") or member.get("directory_uid") or gh_login
-            if _SAFE_USERNAME.match(uid_to_try):
+            if _LDAP_ID_RE.match(uid_to_try):
                 ldap_data = _ldap_lookup_uid(uid_to_try, gh_login, ldap)
+            else:
+                log.warning("Skipping invalid LDAP uid %r", uid_to_try)
 
         if not ldap_data:
             real_name = existing.get("name") or member.get("name")
@@ -197,7 +244,7 @@ def _ldap_available(ldap: LdapConfig) -> bool:
         if "GSSAPI" in result.stderr or "credentials" in result.stderr.lower():
             log.warning("LDAP auth failed — check directory credentials. Skipping LDAP.")
         else:
-            log.warning("LDAP unreachable: %s", result.stderr.strip()[:100])
+            log.warning("LDAP unreachable — skipping LDAP enrichment")
         return False
     return True
 
@@ -252,8 +299,12 @@ def _walk_up_chain(uid: str, max_levels: int, ldap: LdapConfig) -> str | None:
     manager_attr = ldap.manager_id_attr
 
     for _ in range(max_levels):
+        if not _LDAP_ID_RE.match(current_uid):
+            log.warning("Skipping invalid LDAP uid %r", current_uid)
+            break
+        escaped_uid = _escape_ldap_filter_value(current_uid)
         result = _ldap_query(
-            f"({ldap.uid_attr}={current_uid})",
+            f"({ldap.uid_attr}={escaped_uid})",
             [manager_attr, worker_attr],
             ldap,
         )
@@ -288,10 +339,14 @@ def _resolve_supervisor_uid(worker_id: str, ldap: LdapConfig) -> str | None:
     """Resolve a worker ID to a uid, handling duplicate worker IDs."""
     if not ldap.worker_id_attr:
         return None
+    if not _LDAP_ID_RE.match(worker_id):
+        log.warning("Skipping invalid LDAP worker_id %r", worker_id)
+        return None
+    escaped_wid = _escape_ldap_filter_value(worker_id)
     attrs = [ldap.uid_attr]
     if ldap.manager_id_attr:
         attrs.append(ldap.manager_id_attr)
-    sup_result = _ldap_query(f"({ldap.worker_id_attr}={worker_id})", attrs, ldap)
+    sup_result = _ldap_query(f"({ldap.worker_id_attr}={escaped_wid})", attrs, ldap)
     if not sup_result:
         return None
 
@@ -318,9 +373,13 @@ def _enumerate_reports(
     """Recursively find all reports under a worker ID, extracting GitHub URLs."""
     if _depth >= max_depth or not ldap.manager_id_attr:
         return
+    if not _LDAP_ID_RE.match(worker_id):
+        log.warning("Skipping invalid LDAP worker_id %r", worker_id)
+        return
 
+    escaped_wid = _escape_ldap_filter_value(worker_id)
     result = _ldap_query(
-        f"({ldap.manager_id_attr}={worker_id})",
+        f"({ldap.manager_id_attr}={escaped_wid})",
         _ldap_lookup_attrs(ldap),
         ldap,
     )
@@ -369,14 +428,20 @@ def _ldap_query(ldap_filter: str, attrs: list[str], ldap: LdapConfig) -> str | N
             timeout=15,
         )
     except subprocess.TimeoutExpired:
+        log.warning("LDAP lookup failed for %s", ldap_filter)
         return None
     if result.returncode != 0:
+        log.warning("LDAP lookup failed for %s", ldap_filter)
         return None
     return result.stdout
 
 
 def _ldap_lookup_uid(uid: str, gh_login: str, ldap: LdapConfig) -> dict | None:
-    stdout = _ldap_query(f"({ldap.uid_attr}={uid})", _ldap_lookup_attrs(ldap), ldap)
+    if not _LDAP_ID_RE.match(uid):
+        log.warning("Skipping invalid LDAP uid %r", uid)
+        return None
+    escaped_uid = _escape_ldap_filter_value(uid)
+    stdout = _ldap_query(f"({ldap.uid_attr}={escaped_uid})", _ldap_lookup_attrs(ldap), ldap)
     if not stdout:
         return None
     parsed = _parse_ldap_result(stdout, ldap)
@@ -391,7 +456,11 @@ def _ldap_lookup_uid(uid: str, gh_login: str, ldap: LdapConfig) -> dict | None:
 
 def _ldap_lookup_cn(cn: str, gh_login: str, ldap: LdapConfig) -> dict | None:
     """Search LDAP by cn (display name) and verify via configured social URL attribute."""
-    safe_cn = cn.replace("(", "\\28").replace(")", "\\29").replace("*", "\\2a")
+    stripped = cn.strip()
+    if not (1 <= len(stripped) <= 128) or any(ord(c) < 32 for c in cn):
+        log.warning("Skipping invalid LDAP cn for %s", gh_login)
+        return None
+    safe_cn = _escape_ldap_filter_value(stripped)
     stdout = _ldap_query(f"(cn={safe_cn})", _ldap_lookup_attrs(ldap), ldap)
     if not stdout:
         return None
@@ -469,8 +538,8 @@ def _verify_github_match(social_urls: list[str], gh_login: str) -> bool:
 def enrich_from_slack(
     members: list[dict],
     existing_by_gh: dict[str, dict],
+    slack_cfg: SlackConfig,
     token_path: Path,
-    workspace_url: str | None = None,
 ) -> list[dict]:
     """Enrich members with Slack handles by matching emails via users.list."""
     target_emails: dict[str, dict] = {}
@@ -487,18 +556,12 @@ def enrich_from_slack(
         return members
 
     try:
-        from standup_tool.collectors.slack_activity import _get_credentials, _make_session
-    except ImportError:
-        log.warning("Slack collector not available — skipping Slack enrichment")
-        return members
-
-    try:
-        token, cookie = _get_credentials(token_path, workspace_url)
-    except FileNotFoundError:
+        creds = get_slack_credentials(slack_cfg, token_path)
+    except SlackAuthError:
         log.warning("No Slack credentials — skipping Slack enrichment")
         return members
 
-    session = _make_session(token, cookie)
+    session = make_session(creds)
     email_to_slack = _build_slack_email_map(session, target_emails)
 
     found = 0
@@ -527,7 +590,7 @@ def _build_slack_email_map(session: object, target_emails: dict[str, dict]) -> d
             params["cursor"] = cursor
 
         try:
-            resp = session.get("https://slack.com/api/users.list", params=params)  # type: ignore[union-attr]
+            resp = safe_get(session, "https://slack.com/api/users.list", params=params)
             resp.raise_for_status()
             data = resp.json()
         except Exception:
@@ -633,8 +696,8 @@ def run_enrichment(
     enriched = enrich_from_slack(
         members,
         existing_by_gh,
+        config.collectors.slack,
         secret_path("slack-token"),
-        config.collectors.slack.workspace_url,
     )
 
     merged = merge_team(existing, enriched)
@@ -644,26 +707,19 @@ def run_enrichment(
     if dry_run:
         sys.stdout.write(output)
     else:
-        with open(team_file, "w") as f:
-            f.write("# Team member identity mapping\n")
-            f.write(
-                "# Maps GitHub usernames, Jira emails, and Slack IDs "
-                "for cross-system correlation.\n"
-            )
-            f.write(
-                "# Used by /standup to resolve names across PR reviews, "
-                "Jira assignments, and Slack mentions.\n"
-            )
-            f.write("#\n")
-            f.write(
-                "# To add a member: copy a block and fill in known identifiers. "
-                "Not all fields are required.\n"
-            )
-            f.write(
-                "# Set directory_uid when GitHub username differs from directory UID "
-                "(e.g. ada-example -> aexample).\n"
-            )
-            f.write(f"# GitHub usernames: gh api orgs/{target_org}/members --jq '.[].login'\n")
-            f.write("# Slack usernames: visible in collector output from team channels\n\n")
-            f.write(output)
+        header = (
+            "# Team member identity mapping\n"
+            "# Maps GitHub usernames, Jira emails, and Slack IDs "
+            "for cross-system correlation.\n"
+            "# Used by /standup to resolve names across PR reviews, "
+            "Jira assignments, and Slack mentions.\n"
+            "#\n"
+            "# To add a member: copy a block and fill in known identifiers. "
+            "Not all fields are required.\n"
+            "# Set directory_uid when GitHub username differs from directory UID "
+            "(e.g. ada-example -> aexample).\n"
+            f"# GitHub usernames: gh api orgs/{target_org}/members --jq '.[].login'\n"
+            "# Slack usernames: visible in collector output from team channels\n\n"
+        )
+        write_private(team_file, header + output)
         sys.stderr.write(f"Wrote {len(merged)} members to {team_file}\n")

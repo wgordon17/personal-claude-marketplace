@@ -38,6 +38,7 @@ from standup_tool.config import (
     tighten_mode,
     validate_https_origin_url,
     validate_workspace_url,
+    write_private,
 )
 
 STANDUP_ROOT = Path(__file__).resolve().parents[1]
@@ -894,3 +895,52 @@ def test_identity_and_missing_required_sections_validation(
     _write_config(cfg_dir, data4)
     with pytest.raises(ConfigError, match=r"^repos:"):
         load_config(require_repos=False)
+
+
+def test_write_private_creates_0600_tightens_existing_and_refuses_symlink(
+    tmp_path: Path,
+    cfg_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """write_private writes with mode 0600, tightens looser files, and rejects symlinks."""
+    import errno
+
+    target = cfg_dir / "private.json"
+    write_private(target, '{"hello": "world"}\n')
+    assert target.read_text(encoding="utf-8") == '{"hello": "world"}\n'
+    assert stat.S_IMODE(target.lstat().st_mode) == 0o600
+
+    # Pre-existing looser file is tightened to 0600 via fchmod
+    target.chmod(0o644)
+    assert stat.S_IMODE(target.lstat().st_mode) == 0o644
+    write_private(target, '{"updated": true}\n')
+    assert target.read_text(encoding="utf-8") == '{"updated": true}\n'
+    assert stat.S_IMODE(target.lstat().st_mode) == 0o600
+
+    # Symlink is rejected and target file is left untouched
+    outside = tmp_path / "outside-target.txt"
+    outside.write_text("original-content", encoding="utf-8")
+    symlink_path = cfg_dir / "symlink-out.json"
+    symlink_path.symlink_to(outside)
+
+    with pytest.raises(ConfigError, match="symlink"):
+        write_private(symlink_path, "overwritten")
+    assert outside.read_text(encoding="utf-8") == "original-content"
+
+    # Race condition where file becomes symlink after is_symlink() -> ELOOP mapped to ConfigError
+    plain = cfg_dir / "race.json"
+
+    def _raise_eloop(*_args: Any, **_kwargs: Any) -> int:
+        raise OSError(errno.ELOOP, "Too many levels of symbolic links")
+
+    monkeypatch.setattr(os, "open", _raise_eloop)
+    with pytest.raises(ConfigError, match="symlink"):
+        write_private(plain, "data")
+
+    # Non-ELOOP OSError on open is also wrapped in ConfigError
+    def _raise_eacces(*_args: Any, **_kwargs: Any) -> int:
+        raise OSError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(os, "open", _raise_eacces)
+    with pytest.raises(ConfigError, match="Failed to open"):
+        write_private(plain, "data")

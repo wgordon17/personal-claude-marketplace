@@ -10,13 +10,17 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from standup_tool.config import tighten_mode
+from standup_tool.config import ConfigError, redact_secrets, tighten_mode, write_private
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
+
+
+class GoogleAuthError(ConfigError):
+    """Raised when Google OAuth token is missing or expired in non-interactive mode."""
 
 
 def _credentials_path(config_dir: Path | None = None) -> Path:
@@ -41,12 +45,12 @@ def _token_path(config_dir: Path | None = None) -> Path:
     )
 
 
-def get_credentials(config_dir: Path | None = None) -> Credentials:
-    """Return valid Google OAuth2 credentials, refreshing or initiating flow as needed.
+def get_credentials(config_dir: Path | None = None, *, interactive: bool = False) -> Credentials:
+    """Return valid Google OAuth2 credentials, refreshing or initiating flow when interactive.
 
-    Token file is written with mode 0o600 to protect it at creation time.
-    Raises FileNotFoundError if credentials.json is absent.
-    Raises RuntimeError if token is expired and cannot be refreshed (instructs user).
+    Token file is written with mode 0o600 via write_private().
+    Raises FileNotFoundError if credentials.json is absent when no valid token is available.
+    Raises GoogleAuthError if token is missing/expired and interactive=False.
     """
     creds: Credentials | None = None
     token_path = _token_path(config_dir)
@@ -64,12 +68,14 @@ def get_credentials(config_dir: Path | None = None) -> Credentials:
             creds.refresh(Request())
             _save_token(creds, token_path)
             return creds
-        # fatal
+        # tolerant: fall back to interactive OAuth flow when interactive=True; raise otherwise
         except Exception as exc:
-            raise RuntimeError(
-                f"Google token expired and refresh failed: {exc}\n"
-                f"Delete {token_path} in the config directory and re-run to re-authenticate."
-            ) from exc
+            if not interactive:
+                detail = redact_secrets(str(exc))
+                raise GoogleAuthError(
+                    f"Google token expired and refresh failed: {detail}\n"
+                    "Run standup-tool google-auth to re-authenticate."
+                ) from exc
 
     if not creds_path.exists():
         raise FileNotFoundError(
@@ -79,21 +85,10 @@ def get_credentials(config_dir: Path | None = None) -> Credentials:
 
     tighten_mode(creds_path)
 
-    # Only start the browser-based OAuth flow when running interactively.
-    # In non-interactive contexts (e.g., /standup slash command running as a subagent),
-    # flow.run_local_server() would block indefinitely waiting for a browser callback.
-    # Instead, raise a clear error so the user knows what to do.
-    if not sys.stdin.isatty():
-        raise RuntimeError(
-            "Google OAuth required but no valid token found, and stdin is not a terminal.\n"
-            "Complete OAuth setup by running this command interactively in a terminal:\n"
-            "  standup-tool collect --since YYYY-MM-DD\n"
-            f"Then delete {token_path} in the config directory and re-run if the token is stale."
-        )
+    if not interactive:
+        raise GoogleAuthError("Google token missing or expired; run standup-tool google-auth")
 
     flow = InstalledAppFlow.from_client_secrets_file(str(creds_path), SCOPES)
-    # open_browser=False prints the auth URL to stderr instead of blocking on a browser launch.
-    # Run this manually once in a terminal.
     print(
         "Google OAuth required. Open the URL printed below in your browser, then re-run.",
         file=sys.stderr,
@@ -105,8 +100,4 @@ def get_credentials(config_dir: Path | None = None) -> Credentials:
 
 def _save_token(creds: Credentials, token_path: Path) -> None:
     token_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    # Open with O_CREAT|O_WRONLY|O_TRUNC at mode 0o600 — avoids window where
-    # file exists with world-readable permissions before chmod could be called.
-    fd = os.open(str(token_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(creds.to_json())
+    write_private(token_path, creds.to_json())
