@@ -274,6 +274,34 @@ class TestActivationGate:
         assert res.returncode == 2, command
         assert "does not exist" not in res.stderr
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git log origin/main..HEAD | grep commit",
+            'gh pr create --body "updates git-tools commit guidance"',
+        ],
+    )
+    def test_commands_that_only_mention_commits_do_not_trigger_validation(
+        self, tmp_path: Path, command: str
+    ) -> None:
+        repo = init_project_repo(tmp_path / "repo")
+        make_commit(repo, "adds thing without prefix")
+        assert run_validator(cwd=repo, command=command).returncode == 0, command
+
+    @pytest.mark.parametrize(
+        "command", ["git log --oneline -5  # recent commits", "git commit -m x"]
+    )
+    def test_only_a_freshly_created_commit_is_judged(self, tmp_path: Path, command: str) -> None:
+        """HEAD that predates the command (a teammate's commit) must not be held to the rules."""
+        repo = init_project_repo(tmp_path / "repo")
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "adds thing without prefix"],
+            cwd=repo,
+            check=True,
+            env={**os.environ, "GIT_COMMITTER_DATE": "2020-01-01T00:00:00Z"},
+        )
+        assert run_validator(cwd=repo, command=command).returncode == 0
+
     def test_missing_helper_library_blocks(self, tmp_path: Path) -> None:
         hooks = tmp_path / "hooks"
         hooks.mkdir()
