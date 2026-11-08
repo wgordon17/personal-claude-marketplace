@@ -416,14 +416,25 @@ def test_resolve_user_id_api_failure_returns_id(_mock_sleep):
 
 
 @patch("standup_tool.collectors.slack_activity.time.sleep")
-def test_resolve_user_id_network_error_returns_id(_mock_sleep):
+def test_resolve_user_id_non_fatal_parse_error_returns_id(_mock_sleep):
     session = MagicMock()
-    session.get.side_effect = ConnectionError("network down")
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.side_effect = ValueError("malformed json")
+    session.get.return_value = resp
     cache: dict[str, str] = {}
     result = slack_activity._resolve_user_id(session, "UEXAMPLE02", cache)
 
     assert result == "UEXAMPLE02"
     assert cache["UEXAMPLE02"] == "UEXAMPLE02"
+
+
+@patch("standup_tool.collectors.slack_activity.time.sleep")
+def test_resolve_user_id_network_error_propagates(_mock_sleep):
+    session = MagicMock()
+    session.get.side_effect = ConnectionError("network down")
+    with pytest.raises(ConnectionError, match="network down"):
+        slack_activity._resolve_user_id(session, "UEXAMPLE02", {})
 
 
 @patch("standup_tool.collectors.slack_activity.time.sleep")

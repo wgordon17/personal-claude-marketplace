@@ -6,6 +6,8 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from standup_tool.collectors.pr_activity import collect
 from standup_tool.workspace import RepoInfo
 
@@ -192,30 +194,66 @@ def test_collect_skips_repo_on_timeout():
     assert result[0]["repo"] == "repo-b"
 
 
-def test_collect_skips_repo_on_gh_error():
-    def fake_run(cmd, **kwargs):
+def test_collect_skips_single_repo_on_gh_error_and_raises_when_all_fail():
+    good_items = [
+        {
+            "number": 50,
+            "title": "good PR",
+            "state": "OPEN",
+            "updatedAt": "2026-04-22T10:00:00Z",
+            "url": "https://github.com/acme/repo-b/pull/50",
+            "isDraft": False,
+        }
+    ]
+
+    def partial_run(cmd, **kwargs):
+        mock = MagicMock()
+        if "acme/repo-a" in cmd:
+            mock.returncode = 1
+            mock.stdout = ""
+        else:
+            mock.returncode = 0
+            mock.stdout = json.dumps(good_items)
+        return mock
+
+    repos = [make_repo("repo-a"), make_repo("repo-b")]
+    with patch("subprocess.run", side_effect=partial_run):
+        result = collect(repos, date(2026, 4, 20), date(2026, 4, 23))
+
+    assert len(result) == 1
+    assert result[0]["repo"] == "repo-b"
+
+    def all_fail(cmd, **kwargs):
         mock = MagicMock()
         mock.returncode = 1
         mock.stdout = ""
         return mock
 
-    with patch("subprocess.run", side_effect=fake_run):
-        result = collect([make_repo()], date(2026, 4, 20), date(2026, 4, 23))
+    with patch("subprocess.run", side_effect=all_fail), pytest.raises(RuntimeError):
+        collect([make_repo()], date(2026, 4, 20), date(2026, 4, 23))
+
+
+def test_collect_skips_single_repo_on_invalid_json_and_raises_when_all_fail():
+    def partial_invalid_json(cmd, **kwargs):
+        mock = MagicMock()
+        mock.returncode = 0
+        mock.stdout = "not valid json" if "acme/repo-a" in cmd else "[]"
+        return mock
+
+    repos = [make_repo("repo-a"), make_repo("repo-b")]
+    with patch("subprocess.run", side_effect=partial_invalid_json):
+        result = collect(repos, date(2026, 4, 20), date(2026, 4, 23))
 
     assert result == []
 
-
-def test_collect_skips_invalid_json():
-    def fake_run(cmd, **kwargs):
+    def all_invalid_json(cmd, **kwargs):
         mock = MagicMock()
         mock.returncode = 0
         mock.stdout = "not valid json"
         return mock
 
-    with patch("subprocess.run", side_effect=fake_run):
-        result = collect([make_repo()], date(2026, 4, 20), date(2026, 4, 23))
-
-    assert result == []
+    with patch("subprocess.run", side_effect=all_invalid_json), pytest.raises(RuntimeError):
+        collect([make_repo()], date(2026, 4, 20), date(2026, 4, 23))
 
 
 def test_collect_includes_draft_pr():

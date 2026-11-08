@@ -3,6 +3,8 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from standup_tool.collectors.jira_activity import _run_jql, collect
 
 
@@ -16,10 +18,12 @@ def make_run(stdout: str, returncode: int = 0):
     return fake_run
 
 
-def test_run_jql_returns_empty_on_error():
-    with patch("subprocess.run", side_effect=make_run("", returncode=1)):
-        result = _run_jql("project = ACME")
-    assert result == []
+def test_run_jql_raises_on_error():
+    with (
+        patch("subprocess.run", side_effect=make_run("", returncode=1)),
+        pytest.raises(RuntimeError, match="jira issue list failed"),
+    ):
+        _run_jql("project = ACME")
 
 
 def test_run_jql_parses_tab_separated_fields():

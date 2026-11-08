@@ -138,8 +138,8 @@ def collect(
 
     try:
         raw_msgs = _search(service, query, max_results=100)
-    except Exception as exc:
-        logging.warning("Gmail search failed: %s", exc)
-        return []
+    # fatal
+    except Exception:
+        raise
 
     return [_parse_message(m, my_email) for m in raw_msgs]

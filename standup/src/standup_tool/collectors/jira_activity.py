@@ -14,7 +14,12 @@ _KEY_RE = re.compile(r"^[A-Z]+-[0-9]+$")
 
 
 def _run_jql(jql: str) -> list[dict]:
-    """Run a JQL query via jira CLI and return parsed issue dicts."""
+    """Run a JQL query via jira CLI and return parsed issue dicts.
+
+    Note: `jira issue list` exits 0 with empty output when an API token lacks
+    `/search/jql` scope; `standup-tool verify` probes `/rest/api/3/search/jql`
+    explicitly to detect that condition.
+    """
     try:
         result = subprocess.run(
             [
@@ -35,10 +40,14 @@ def _run_jql(jql: str) -> list[dict]:
             text=True,
             timeout=30,
         )
+    # fatal
     except subprocess.TimeoutExpired:
-        return []
+        raise
     if result.returncode != 0:
-        return []
+        stderr = (result.stderr or "").strip()
+        raise RuntimeError(
+            f"jira issue list failed (exit {result.returncode})" + (f": {stderr}" if stderr else "")
+        )
 
     issues = []
     for line in result.stdout.splitlines():

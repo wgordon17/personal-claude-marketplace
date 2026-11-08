@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from datetime import date, datetime, timedelta
 
 from standup_tool.workspace import RepoInfo
+
+logger = logging.getLogger(__name__)
 
 # Leading NUL (%x00) acts as a commit boundary marker. No -z flag — filenames are
 # newline-separated after a blank line. Splitting on \x00 yields one chunk per commit:
@@ -31,6 +34,7 @@ def collect(
     since_str = since_date.isoformat()
     before_str = (until_date + timedelta(days=1)).isoformat()
     commits: list[dict] = []
+    repo_errors = 0
 
     for repo in repos:
         cmd = [
@@ -54,9 +58,16 @@ def collect(
                 text=True,
                 timeout=30,
             )
+        # tolerant: skip single timed-out repository and continue unless all repositories fail
         except subprocess.TimeoutExpired:
+            logger.debug("Skipping timed-out git log in %s", repo.path)
+            logger.warning("git log timed out in %s", repo.path)
+            repo_errors += 1
             continue
         if result.returncode != 0:
+            logger.debug("Skipping failed git log in %s (exit %d)", repo.path, result.returncode)
+            logger.warning("git log failed in %s (exit %d)", repo.path, result.returncode)
+            repo_errors += 1
             continue
 
         # Leading %x00 in format string makes each commit a NUL-delimited chunk:
@@ -79,7 +90,9 @@ def collect(
             # commits from periodic upstream rebases can still leak older commits.
             try:
                 commit_day = datetime.fromisoformat(commit_date).date()
+            # tolerant: skip commit chunk with malformed ISO-8601 date
             except ValueError:
+                logger.debug("Skipping commit %s with invalid date %r", commit_hash, commit_date)
                 continue
             if not (since_date <= commit_day <= until_date):
                 continue
@@ -97,5 +110,8 @@ def collect(
                     "author_email": commit_email,
                 }
             )
+
+    if repos and repo_errors == len(repos):
+        raise RuntimeError(f"git log failed across all {len(repos)} configured repositories")
 
     return commits

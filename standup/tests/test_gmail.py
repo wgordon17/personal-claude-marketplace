@@ -4,6 +4,8 @@ import base64
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from standup_tool.collectors import gmail
 
 
@@ -64,7 +66,7 @@ def test_gmail_date_format():
     assert result == "2026/04/22"
 
 
-def test_collect_returns_empty_on_api_error():
+def test_collect_propagates_api_error():
     mock_creds = MagicMock()
     mock_service = MagicMock()
     mock_service.users().messages().list().execute.side_effect = Exception("API error")
@@ -72,10 +74,9 @@ def test_collect_returns_empty_on_api_error():
     with (
         patch("standup_tool.collectors.gmail.get_credentials", return_value=mock_creds),
         patch("standup_tool.collectors.gmail.build", return_value=mock_service),
+        pytest.raises(Exception, match="API error"),
     ):
-        result = gmail.collect(date(2026, 4, 20), date(2026, 4, 23))
-
-    assert result == []
+        gmail.collect(date(2026, 4, 20), date(2026, 4, 23))
 
 
 def test_collect_returns_parsed_messages():

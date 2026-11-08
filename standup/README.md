@@ -56,6 +56,25 @@ The standup template file (`template.md` inside the configuration directory, ini
 
 ## Collectors
 
+| Collector | Config key | Output key | Dependencies / Requirements |
+| --- | --- | --- | --- |
+| `git` | `collectors.git.enabled` | `git_commits` | `git` CLI on `PATH`; discovered local repositories from `repos[].path`. |
+| `pr` | `collectors.pr.enabled` | `prs` | Authenticated `gh` CLI (`gh auth status`) and repository remote slugs. |
+| `jira` | `collectors.jira.enabled` | `jira_activity` | `jira` CLI (`ankitpokhrel/jira-cli`), `JIRA_API_TOKEN` with `/rest/api/3/search/jql` scope, and `collectors.jira.project`. (Optional Atlassian MCP server for interactive Phase 4 review.) |
+| `calendar` | `collectors.calendar.enabled` | `calendar_events` | Google OAuth2 `credentials.json` and `token.json` in the config directory (`calendar.readonly` scope). |
+| `gmail` | `collectors.gmail.enabled` | `emails` | Google OAuth2 `credentials.json` and `token.json` in the config directory (`gmail.readonly` scope). |
+| `drive` | `collectors.drive.enabled` | `drive_docs` | Depends on `calendar` (`depends_on=("calendar",)`). Requires Google OAuth2 `credentials.json` and `token.json` (`drive.readonly` scope). Skips API calls when `calendar` returns no events; onboarding warns if `drive` is enabled while `calendar` is disabled. |
+| `slack` | `collectors.slack.enabled` | `slack` | `slack-token` cookie file (or `STANDUP_SLACK_COOKIE`) and `collectors.slack.workspace_url`. |
+| `memory` | `collectors.memory.enabled` | `memory_activity` | Local filesystem access to discovered repositories (no external credentials or network calls). |
+| `conversations` | `collectors.conversations.enabled` | `conversations` | Local `~/.claude/projects` session transcripts (optional `~/.omp/agent/sessions`), `anthropic[vertex]`, and Google Cloud Vertex AI project (`collectors.conversations.vertex_project`, `ANTHROPIC_VERTEX_PROJECT_ID`, or `GOOGLE_CLOUD_PROJECT`). |
+
+Every `standup-tool collect` run emits a top-level `"_status"` object as its first JSON key and a `COLLECTION SUMMARY:` line on stderr reporting each collector in one of three states:
+- `ran` (`name=ran:<count>`): the collector executed and returned `<count>` items (list length, or sum of list lengths for dict outputs such as `jira_activity`). Note that `jira=ran:0` alone does not prove the `JIRA_API_TOKEN` has `/rest/api/3/search/jql` scope because `jira issue list` exits `0` with empty output when that scope is missing; `standup-tool verify` probes `/rest/api/3/search/jql` directly to catch scope errors.
+- `disabled` (`name=disabled`): skipped with `count: 0` because `collectors.<name>.enabled` is `false` (`reason: "disabled in config"`), `--collectors` omitted the collector (`reason: "not selected"`), or a required dependency was disabled or not selected (`reason: "requires <dep>"`).
+- `failed` (`name=failed`): an unhandled exception or upstream dependency failure (`reason: "dependency <dep> failed"`) occurred; the collector output falls back to its empty value, secret-redacted error details are recorded in `_status.<name>.reason` and stderr, and the `.last-run` marker is not advanced.
+
+**Memory collector:** For each discovered repository, `memory` resolves the main worktree via `git -C <repo> worktree list --porcelain` (falling back to the repository path) and checks candidate directories in priority order: `hack/`, `.local/`, `scratch/`, and `.dev/` (following symlinks). The first candidate directory containing at least two of the five core project-memory files (`PROJECT.md`, `TODO.md`, `SESSIONS.md`, `NEXT.md`, `LESSONS.md`) is selected and scanned for markdown files under `plans/*.md`, `research/*.md`, and one nested component level `*/plans/*.md` and `*/research/*.md` (excluding any `done` or `archive` path segment) whose modification date falls within `[since, until]`.
+
 ## Onboarding
 
 ## Commands

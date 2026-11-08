@@ -5,6 +5,8 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from standup_tool.collectors.git_activity import collect
 from standup_tool.workspace import RepoInfo
 
@@ -111,17 +113,44 @@ def test_collect_includes_mixed_file_commits():
     assert result[0]["hash"] == "abc123"
 
 
-def test_collect_skips_repo_on_git_error():
-    def fake_run(cmd, **kwargs):
+def test_collect_skips_single_repo_on_git_error_and_raises_when_all_fail():
+    good_output = _make_log_output(
+        [
+            (
+                "def456",
+                "feat: other",
+                "2026-04-22T11:00:00+00:00",
+                "ada@example.com",
+                ["src/other.go"],
+            )
+        ]
+    )
+
+    def partial_run(cmd, **kwargs):
+        mock = MagicMock()
+        if kwargs.get("cwd") == Path("/fake/a"):
+            mock.returncode = 1
+            mock.stdout = ""
+        else:
+            mock.returncode = 0
+            mock.stdout = good_output
+        return mock
+
+    repos = [make_repo("repo-a", Path("/fake/a")), make_repo("repo-b", Path("/fake/b"))]
+    with patch("subprocess.run", side_effect=partial_run):
+        result = collect(repos, date(2026, 4, 20), date(2026, 4, 23))
+
+    assert len(result) == 1
+    assert result[0]["repo"] == "repo-b"
+
+    def all_fail_run(cmd, **kwargs):
         mock = MagicMock()
         mock.returncode = 1
         mock.stdout = ""
         return mock
 
-    with patch("subprocess.run", side_effect=fake_run):
-        result = collect([make_repo()], date(2026, 4, 20), date(2026, 4, 23))
-
-    assert result == []
+    with patch("subprocess.run", side_effect=all_fail_run), pytest.raises(RuntimeError):
+        collect([make_repo()], date(2026, 4, 20), date(2026, 4, 23))
 
 
 def test_collect_skips_repo_on_timeout():

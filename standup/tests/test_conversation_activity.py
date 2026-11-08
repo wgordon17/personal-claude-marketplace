@@ -7,6 +7,8 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from standup_tool.collectors import conversation_activity
 
 _REPO_KEYS = {"-Users-ada-src-widgets": "widgets"}
@@ -91,17 +93,16 @@ class TestFindConversations:
 
         assert result == []
 
-    def test_returns_empty_when_dir_missing(self, tmp_path):
+    def test_raises_when_claude_projects_dir_missing(self, tmp_path):
         missing = tmp_path / "nonexistent"
         with (
             patch.object(conversation_activity, "_CLAUDE_PROJECTS_DIR", missing),
             patch.object(conversation_activity, "_OMP_SESSIONS_DIR", missing),
+            pytest.raises(FileNotFoundError, match="Claude projects directory"),
         ):
-            result = conversation_activity._find_conversations(
+            conversation_activity._find_conversations(
                 date(2026, 4, 20), date(2030, 12, 31), _REPO_KEYS, ()
             )
-
-        assert result == []
 
     def test_returns_all_matching_conversations(self, tmp_path):
         project_dir = tmp_path / "-Users-ada-src-widgets"
@@ -265,15 +266,16 @@ class TestMatchesProject:
 
 
 class TestCollect:
-    def test_returns_empty_when_no_api_key(self):
-        with patch.dict("os.environ", {}, clear=True):
-            result = conversation_activity.collect(
+    def test_raises_when_no_vertex_project(self):
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(RuntimeError, match="Vertex project not set"),
+        ):
+            conversation_activity.collect(
                 date(2026, 4, 20),
                 date(2030, 12, 31),
                 repo_keys=_REPO_KEYS,
             )
-
-        assert result == []
 
     def test_returns_empty_when_no_conversations(self, tmp_path):
         with (
