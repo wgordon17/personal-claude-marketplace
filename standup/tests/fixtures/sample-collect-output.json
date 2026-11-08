@@ -1,0 +1,73 @@
+{
+  "git_commits": [
+    {"subject": "ACME-101: adds create widget command", "author": "ada-example", "timestamp": "2026-05-04T10:30:00Z", "file_path": "internal/cmd/cli/widgets/create_widget_cmd.go"},
+    {"subject": "ACME-101: adds list widget subcommand", "author": "ada-example", "timestamp": "2026-05-04T11:00:00Z", "file_path": "internal/cmd/cli/widgets/list_widget_cmd.go"},
+    {"subject": "ACME-101: adds describe widget command", "author": "ada-example", "timestamp": "2026-05-04T14:15:00Z", "file_path": "internal/cmd/cli/widgets/describe_widget_cmd.go"}
+  ],
+  "prs": [
+    {"number": 47, "repo": "widgets", "title": "ACME-101: Widget resource subcommands", "state": "open", "head_branch": "ACME-101-cli-widgets", "ci": "passing", "checks": "passing", "reviewers": [], "role": "author", "created_at": "2026-05-04T15:00:00Z"}
+  ],
+  "jira_activity": {
+    "assigned": [
+      {"key": "ACME-101", "summary": "Widget subcommands", "status": "In Progress", "type": "Story"},
+      {"key": "ACME-102", "summary": "Quota enforcement", "status": "Code Review", "type": "Story"}
+    ],
+    "recently_updated": [
+      {"key": "ACME-101", "summary": "Widget subcommands", "status": "In Progress", "type": "Story"}
+    ],
+    "in_sprint": [],
+    "created_by_me": [],
+    "unassigned_pool": []
+  },
+  "calendar_events": [
+    {"summary": "Widget design sync", "start_time": "2026-05-04T14:00:00-04:00", "description": "Discuss batch limits for ACME-101"}
+  ],
+  "emails": [
+    {"subject": "Re: Quota enforcement proposal", "body_snippet": "Bo, the integration looks good. Let's finalize the quota limits this week.", "timestamp": "2026-05-04T09:00:00Z"}
+  ],
+  "slack": [
+    {
+      "channel": "#eng",
+      "source": "participation",
+      "thread_ts": "1714834200.000100",
+      "permalink": "https://acme.slack.com/archives/CEXAMPLE01/p1714834200000100",
+      "messages": [
+        {"text": "Batch limits for ACME-101 — should we allow 100 or restrict to 50 maximum?", "user": "ada-example", "ts": "1714834200.000100"}
+      ],
+      "timestamp": "2026-05-04T13:30:00Z"
+    },
+    {
+      "channel": "DM with Bo Sample",
+      "source": "dm",
+      "messages": [
+        {"text": "Hey, can you review the widget PR when you get a chance? widgets#47", "user": "ada-example", "ts": "1714838000.000200"}
+      ],
+      "timestamp": "2026-05-04T14:30:00Z"
+    },
+    {
+      "channel": "DM with Ada Example",
+      "source": "dm",
+      "messages": [
+        {"text": "reminder: update sprint board", "user": "ada-example", "ts": "1714840000.000300"}
+      ],
+      "timestamp": "2026-05-04T15:00:00Z"
+    },
+    {
+      "channel": "#general",
+      "source": "mention",
+      "messages": [
+        {"text": "Happy Friday everyone! Don't forget the all-hands at 3pm.", "user": "someuser", "ts": "1714841000.000400"}
+      ],
+      "timestamp": "2026-05-04T15:15:00Z"
+    }
+  ],
+  "drive_docs": [
+    {"file_name": "Widget Design Doc", "comments": [{"content": "Updated batch limits section for ACME-101", "author": "ada-example"}], "timestamp": "2026-05-04T11:30:00Z"}
+  ],
+  "dev_activity": [
+    {"subject": "updates build task definitions", "file_path": "Makefile", "timestamp": "2026-05-04T08:00:00Z"}
+  ],
+  "conversations": [
+    {"context": "Worked on ACME-101 widget CLI — added create, list, describe subcommands for Widget resources. Discussed batch limits with Bo Sample.", "date": "2026-05-04"}
+  ]
+}

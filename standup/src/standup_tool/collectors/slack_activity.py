@@ -1,0 +1,385 @@
+"""Collect Slack activity from configured team channels, private DMs, and involved threads.
+
+Uses search.messages API which works with Enterprise Grid org-level tokens
+(unlike conversations.list/history which return enterprise_is_restricted).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+import time
+import urllib.parse
+from collections.abc import Sequence
+from datetime import date, timedelta
+from pathlib import Path
+
+import requests
+
+from standup_tool.config import ConfigError
+
+logger = logging.getLogger(__name__)
+
+REQUEST_DELAY = 2.0
+_THREAD_FETCH_DELAY = 1.0
+# Slack serves the workspace bootstrap page only to browser-like clients and
+# rejects a default requests User-Agent; requests without this are answered
+# with 403.
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+_XOXC_PREFIX = "xox" + "c-"
+_XOXD_PREFIX = "xox" + "d-"
+_API_TOKEN_RE = re.compile(r'"api_token"\s*:\s*"(' + _XOXC_PREFIX + r'[^"]+)"')
+_FALLBACK_TOKEN_RE = re.compile(r'"token"\s*:\s*"(' + _XOXC_PREFIX + r'[^"]+)"')
+
+
+def _bootstrap_xoxc(cookie: str, workspace_url: str | None) -> str:
+    """Extract client API token from the Slack workspace page.
+
+    The d cookie must be URL-encoded when sent via requests (browsers do this
+    transparently; the requests library does not). Slack answers this page with
+    a 403 status but still embeds the api_token in the body when the request
+    carries a browser User-Agent, so the token is parsed regardless of status.
+    """
+    if not workspace_url:
+        raise ConfigError("collectors.slack.workspace_url is required to bootstrap Slack cookie")
+    encoded = urllib.parse.quote(cookie, safe="")
+    resp = requests.get(
+        workspace_url, cookies={"d": encoded}, headers={"User-Agent": _BROWSER_UA}, timeout=30
+    )
+    match = _API_TOKEN_RE.search(resp.text)
+    if not match:
+        match = _FALLBACK_TOKEN_RE.search(resp.text)
+    if not match:
+        raise PermissionError(
+            f"Could not extract client token from Slack workspace page (HTTP {resp.status_code}). "
+            "The d cookie may be expired — grab a fresh one from your browser."
+        )
+    return match.group(1)
+
+
+def _get_credentials(token_path: Path, workspace_url: str | None = None) -> tuple[str, str | None]:
+    """Return (bearer_token, cookie_or_none).
+
+    Supports three auth modes (in priority order):
+    1. Token + cookie pair (env vars): STANDUP_SLACK_XOXC + STANDUP_SLACK_COOKIE
+    2. Standalone user token (env var): STANDUP_SLACK_TOKEN
+    3. File in config directory (slack-token):
+       - d cookie on one line → client token bootstrapped automatically
+       - client token + d cookie on two lines → explicit pair
+       - standalone user token on one line
+    """
+    xoxc = os.environ.get("STANDUP_SLACK_XOXC", "").strip()
+    cookie = os.environ.get("STANDUP_SLACK_COOKIE", "").strip()
+    if xoxc and cookie:
+        return xoxc, cookie
+
+    standalone = os.environ.get("STANDUP_SLACK_TOKEN", "").strip()
+    if standalone:
+        return standalone, None
+
+    if token_path.is_file():
+        lines = [ln.strip() for ln in token_path.read_text().splitlines() if ln.strip()]
+        if len(lines) >= 2 and lines[0].startswith(_XOXC_PREFIX):
+            return lines[0], lines[1]
+        if lines:
+            value = lines[0]
+            if value.startswith(_XOXD_PREFIX):
+                logger.info("Bootstrapping Slack client token from d cookie...")
+                xoxc_token = _bootstrap_xoxc(value, workspace_url)
+                return xoxc_token, value
+            return value, None
+
+    raise FileNotFoundError(
+        f"Slack token not found. Create {token_path} in the config directory with:\n"
+        "  Easiest (one line — just the d cookie from browser DevTools):\n"
+        "    The client token is bootstrapped automatically.\n"
+        "  Or set STANDUP_SLACK_TOKEN"
+    )
+
+
+def _make_session(bearer_token: str, cookie: str | None) -> requests.Session:
+    session = requests.Session()
+    session.headers["Authorization"] = f"Bearer {bearer_token}"
+    session.headers["Content-Type"] = "application/json; charset=utf-8"
+    session.headers["User-Agent"] = _BROWSER_UA
+    if cookie:
+        session.cookies.set("d", urllib.parse.quote(cookie, safe=""), domain=".slack.com")
+    return session
+
+
+_MAX_RETRIES = 3
+
+
+def _search(session: requests.Session, query: str, count: int = 100) -> list[dict]:
+    """Search messages with pagination and 429 retry."""
+    all_matches: list[dict] = []
+    page = 1
+    json_retries = 0
+    while True:
+        for attempt in range(_MAX_RETRIES):
+            resp = session.get(
+                "https://slack.com/api/search.messages",
+                params={
+                    "query": query,
+                    "count": str(count),
+                    "page": str(page),
+                    "sort": "timestamp",
+                },
+            )
+            if resp.status_code == 429:
+                retry_after = int(resp.headers.get("Retry-After", 5))
+                logger.warning(
+                    "Slack 429, retrying in %ds (attempt %d/%d)",
+                    retry_after,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                )
+                time.sleep(retry_after)
+                continue
+            resp.raise_for_status()
+            break
+        else:
+            logger.warning(
+                "Slack 429 persisted after %d retries, skipping query: %s", _MAX_RETRIES, query
+            )
+            break
+        data = resp.json()
+        if not data.get("ok"):
+            error = data.get("error", "unknown")
+            if error in ("invalid_auth", "token_revoked", "account_inactive"):
+                raise PermissionError(f"Slack auth failed: {error}")
+            if error == "ratelimited" and json_retries < _MAX_RETRIES:
+                json_retries += 1
+                logger.warning(
+                    "Slack ratelimited (JSON), retrying in 5s (attempt %d/%d)",
+                    json_retries,
+                    _MAX_RETRIES,
+                )
+                time.sleep(5)
+                continue
+            logger.warning("Slack search error: %s (query: %s)", error, query)
+            break
+        json_retries = 0
+        messages = data.get("messages", {})
+        matches = messages.get("matches", [])
+        all_matches.extend(matches)
+        paging = messages.get("paging", {})
+        if page >= paging.get("pages", 1):
+            break
+        time.sleep(REQUEST_DELAY)
+        page += 1
+    return all_matches
+
+
+_USER_ID_RE = re.compile(r"^U[A-Z0-9]{6,}$")
+_MENTION_RE = re.compile(r"<@(U[A-Z0-9]{6,})(?:\|[^>]*)?>")
+
+
+_USER_RESOLVE_DELAY = 0.5
+
+
+def _resolve_user_id(session: requests.Session, user_id: str, cache: dict[str, str]) -> str:
+    """Resolve a Slack user ID to a display name, with caching."""
+    if user_id in cache:
+        return cache[user_id]
+    time.sleep(_USER_RESOLVE_DELAY)
+    try:
+        resp = session.get("https://slack.com/api/users.info", params={"user": user_id})
+        data = resp.json()
+        if data.get("ok"):
+            profile = data["user"].get("profile", {})
+            name = profile.get("real_name") or profile.get("display_name") or user_id
+        else:
+            name = user_id
+    except Exception as exc:
+        logger.debug("User resolve failed for %s: %s", user_id, exc)
+        name = user_id
+    cache[user_id] = name
+    return name
+
+
+def _resolve_mentions(text: str, session: requests.Session, cache: dict[str, str]) -> str:
+    """Replace ``<@UXXXX>`` mentions in *text* with resolved display names."""
+    return _MENTION_RE.sub(lambda m: _resolve_user_id(session, m.group(1), cache), text)
+
+
+def _resolve_channel_name(
+    session: requests.Session, channel_name: str, cache: dict[str, str]
+) -> str:
+    """Resolve channel names that are user IDs (DMs) to human-readable names."""
+    if _USER_ID_RE.match(channel_name):
+        return _resolve_user_id(session, channel_name, cache)
+    return channel_name
+
+
+def _fetch_thread(session: requests.Session, channel_id: str, thread_ts: str) -> list[dict]:
+    """Fetch thread replies for context enrichment."""
+    try:
+        resp = session.get(
+            "https://slack.com/api/conversations.replies",
+            params={"channel": channel_id, "ts": thread_ts, "limit": "10"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("ok"):
+            return [
+                {"user": m.get("user", ""), "text": m.get("text", ""), "ts": m.get("ts", "")}
+                for m in data.get("messages", [])
+            ]
+    except Exception as exc:
+        logger.debug("Thread fetch failed for %s/%s: %s", channel_id, thread_ts, exc)
+    return []
+
+
+def _format_match(
+    match: dict, source: str, session: requests.Session, cache: dict[str, str]
+) -> dict:
+    """Convert a search.messages match to our standard output format."""
+    channel = match.get("channel", {})
+    channel_name = channel.get("name", "")
+    ts = match.get("ts", "0")
+    try:
+        msg_date = match.get("date_str", ts[:10])
+    except (TypeError, IndexError):
+        msg_date = ""
+
+    resolved_name = _resolve_channel_name(session, channel_name, cache)
+    if source == "dm":
+        display_channel = f"DM with {resolved_name}" if resolved_name else "DM"
+    else:
+        display_channel = f"#{resolved_name}" if resolved_name else source
+
+    raw_permalink = match.get("permalink", "")
+    parent_ts = match.get("ts", "")
+    if "thread_ts=" in raw_permalink:
+        parent_ts = raw_permalink.split("thread_ts=")[-1].split("&")[0]
+
+    return {
+        "source": source,
+        "channel": display_channel,
+        "thread_ts": parent_ts,
+        "date": msg_date,
+        "messages": [
+            {
+                "user": match.get("username", match.get("user", "")),
+                "text": _resolve_mentions(match.get("text", ""), session, cache),
+                "ts": ts,
+            }
+        ],
+        "user_participated": True,
+        "message_count": 1,
+        "permalink": match.get("permalink", ""),
+    }
+
+
+def collect(
+    since_date: date,
+    until_date: date,
+    *,
+    token_path: Path,
+    workspace_url: str | None = None,
+    channels: Sequence[str] = (),
+) -> list[dict]:
+    """Collect Slack activity via search.messages.
+
+    Runs searches across target channels plus three cross-channel queries:
+    1. in:#<channel> for each configured channel — all channel activity for team context
+    2. is:dm — DMs sent and received
+    3. to:me — messages where the user is @mentioned (excluding target channels)
+    4. from:me (excluding DMs and target channels) — threads user participated in
+    """
+    bearer_token, cookie = _get_credentials(token_path, workspace_url)
+    session = _make_session(bearer_token, cookie)
+
+    resp = session.get("https://slack.com/api/auth.test")
+    resp.raise_for_status()
+    auth_data = resp.json()
+    if not auth_data.get("ok"):
+        raise PermissionError("Slack auth.test failed — check your token")
+    user_name = auth_data.get("user", "unknown")
+    logger.info("Slack authenticated as %s", user_name)
+
+    # Slack's after:/before: are exclusive and use UTC boundaries, which
+    # silently drops local-time messages. Use on:YYYY-MM-DD per day instead
+    # — it matches messages on that calendar date regardless of UTC offset.
+    days: list[date] = []
+    current = since_date
+    while current <= until_date:
+        days.append(current)
+        current += timedelta(days=1)
+
+    def search_days(base_query: str) -> list[dict]:
+        all_matches: list[dict] = []
+        for day in days:
+            all_matches.extend(_search(session, f"{base_query} on:{day.isoformat()}"))
+        return all_matches
+
+    results: list[dict] = []
+    seen_permalinks: set[str] = set()
+    user_cache: dict[str, str] = {}
+
+    def add_matches(matches: list[dict], source: str) -> None:
+        for m in matches:
+            permalink = m.get("permalink", "")
+            if permalink and permalink in seen_permalinks:
+                continue
+            if permalink:
+                seen_permalinks.add(permalink)
+            results.append(_format_match(m, source, session, user_cache))
+
+    # 1. Target channel messages
+    for channel in channels:
+        channel_matches = search_days(f"in:#{channel}")
+        logger.info("#%s: %d messages", channel, len(channel_matches))
+        add_matches(channel_matches, "channel")
+
+    # 2. DMs (sent and received)
+    dm_matches = search_days("is:dm")
+    logger.info("DMs: %d messages", len(dm_matches))
+    add_matches(dm_matches, "dm")
+
+    # 3. Mentions (threads user is @mentioned in, outside the target channels)
+    target_set = set(channels)
+    mention_matches = search_days("to:me")
+    non_channel = [m for m in mention_matches if m.get("channel", {}).get("name") not in target_set]
+    logger.info("Mentions (to:me, non-channel): %d messages", len(non_channel))
+    add_matches(non_channel, "mention")
+
+    # 4. Participation (threads user replied in but wasn't @mentioned)
+    exclusions = "".join(f" -in:#{ch}" for ch in channels)
+    my_matches = search_days(f"from:me -is:dm{exclusions}")
+    logger.info("Participation (from:me, other channels): %d messages", len(my_matches))
+    add_matches(my_matches, "participation")
+
+    # Enrich DM, mention, and participation results with thread context
+    enriched = 0
+    for item in results:
+        if item["source"] == "channel":
+            continue
+        permalink = item.get("permalink", "")
+        parts = permalink.split("/archives/")
+        if len(parts) < 2:
+            continue
+        channel_id = parts[1].split("/")[0]
+        thread_ts = item.get("thread_ts", "")
+        if not thread_ts:
+            continue
+        time.sleep(_THREAD_FETCH_DELAY)
+        thread_msgs = _fetch_thread(session, channel_id, thread_ts)
+        if len(thread_msgs) > 1:
+            for msg in thread_msgs:
+                msg["text"] = _resolve_mentions(msg["text"], session, user_cache)
+            item["messages"] = thread_msgs
+            item["message_count"] = len(thread_msgs)
+            enriched += 1
+
+    logger.info(
+        "Slack collection complete: %d items (%d enriched with thread context)",
+        len(results),
+        enriched,
+    )
+    return results
