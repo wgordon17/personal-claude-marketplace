@@ -1,0 +1,12 @@
+# Team member identity mapping
+# Maps GitHub usernames, Jira emails, and Slack IDs for cross-system correlation.
+# Generated or updated by `standup-tool enrich-team`.
+
+- name: Ada Example
+  github: ada-example
+  jira_email: ada@example.com
+  slack_id: UEXAMPLE01
+- name: Bo Sample
+  github: bo-sample
+  jira_email: bo@example.com
+  slack_id: UEXAMPLE02
