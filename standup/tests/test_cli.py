@@ -539,6 +539,7 @@ def test_backlog_sends_request_on_success(
 
     mock_opener.open.assert_called_once()
     req = mock_opener.open.call_args[0][0]
+    assert mock_opener.open.call_args.kwargs.get("timeout") == 30
     expected_basic = base64.b64encode(f"ada@example.com:{token}".encode()).decode()
     assert req.full_url == "https://acme.atlassian.net/rest/agile/1.0/backlog/issue"
     assert req.get_header("Authorization") == f"Basic {expected_basic}"
@@ -547,6 +548,30 @@ def test_backlog_sends_request_on_success(
     captured = capsys.readouterr()
     assert token not in captured.out
     assert token not in captured.err
+
+
+def test_backlog_accepts_alphanumeric_and_underscore_project_keys(
+    acme_config: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("JIRA_API_TOKEN", "ATATTsecretJiraToken123")
+    _setup_jira_cli_home(tmp_path, monkeypatch, login="ada@example.com")
+
+    argv = ["standup-tool", "backlog", "PROJ2-42", "TEAM_A-101"]
+    mock_resp = type("Resp", (), {"status": 204})()
+    mock_opener = MagicMock()
+    mock_opener.open.return_value = mock_resp
+    captured = StringIO()
+    with (
+        patch.object(sys, "argv", argv),
+        patch("standup_tool.cli.urllib.request.build_opener", return_value=mock_opener),
+        patch("sys.stdout", captured),
+    ):
+        cli.main()
+    output = captured.getvalue()
+    assert "PROJ2-42: removed from sprint" in output
+    assert "TEAM_A-101: removed from sprint" in output
 
 
 def test_backlog_prints_success_per_key(
@@ -964,6 +989,66 @@ def test_post_standup_post_http_error(tmp_path, acme_config: Config):
     assert exc_info.value.code != 0
 
 
+def test_post_standup_catches_and_redacts_connection_errors(
+    tmp_path: Path, acme_config: Config, capsys: pytest.CaptureFixture[str]
+):
+    standup = tmp_path / "standup.txt"
+    standup.write_text("My standup text")
+
+    # 1. safe_get connection error in _slack_auth
+    session_auth_err = MagicMock()
+    session_auth_err.get.side_effect = requests.ConnectionError(
+        f"Connection aborted with {_FAKE_SLACK_TOK}"
+    )
+    argv = ["standup-tool", "post-standup", "--file", str(standup)]
+    with (
+        patch.object(sys, "argv", argv),
+        _patch_slack(session_auth_err),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main()
+    assert exc_info.value.code == 1
+    err_auth = capsys.readouterr().err
+    assert _FAKE_SLACK_TOK not in err_auth
+    assert "ERROR: Slack auth.test HTTP error:" in err_auth
+
+    # 2. session.post connection error on conversations.open
+    session_dm_err = _make_mock_session()
+    session_dm_err.post.side_effect = requests.ConnectionError(
+        f"DM open failed with {_FAKE_SLACK_COOKIE}"
+    )
+    with (
+        patch.object(sys, "argv", argv),
+        _patch_slack(session_dm_err),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main()
+    assert exc_info.value.code == 1
+    err_dm = capsys.readouterr().err
+    assert _FAKE_SLACK_COOKIE not in err_dm
+    assert "ERROR: conversations.open HTTP error:" in err_dm
+
+    # 3. session.post connection error on chat.postMessage
+    session_post_err = _make_mock_session()
+    good_dm = MagicMock()
+    good_dm.raise_for_status.return_value = None
+    good_dm.json.return_value = {"ok": True, "channel": {"id": "DEXAMPLE01"}}
+    session_post_err.post.side_effect = [
+        good_dm,
+        requests.Timeout(f"Post timed out with {_FAKE_SLACK_TOK}"),
+    ]
+    with (
+        patch.object(sys, "argv", argv),
+        _patch_slack(session_post_err),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main()
+    assert exc_info.value.code == 1
+    err_post = capsys.readouterr().err
+    assert _FAKE_SLACK_TOK not in err_post
+    assert "ERROR: chat.postMessage HTTP error:" in err_post
+
+
 # =============================================================================
 # Last-run marker (read_last_run, _write_last_run_marker)
 # =============================================================================
@@ -1091,6 +1176,79 @@ def test_collect_uses_until_clamped_to_since_when_since_is_today(acme_config: Co
     assert "since" in captured_args
     assert "until" in captured_args
     assert captured_args["until"] == captured_args["since"]
+
+
+def test_collect_and_digest_clamp_explicit_until_when_since_after_until(
+    cfg_dir: Path, acme_config: Config, tmp_path: Path
+):
+    captured_args: dict = {}
+
+    def fake_git_collect(repos, since, until, **kwargs):
+        captured_args["since"] = since
+        captured_args["until"] = until
+        return []
+
+    argv = [
+        "standup-tool",
+        "collect",
+        "--since",
+        "2026-05-05",
+        "--until",
+        "2026-05-04",
+        "--no-marker",
+        "--output",
+        "-",
+    ]
+    captured = StringIO()
+    with (
+        patch.object(sys, "argv", argv),
+        patch("standup_tool.cli.list_repos", return_value=[]),
+        patch(
+            "standup_tool.collectors.registry.git_activity.collect",
+            side_effect=fake_git_collect,
+        ),
+        patch("standup_tool.collectors.registry.pr_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.jira_activity.collect", return_value={}),
+        patch("standup_tool.collectors.registry.google_calendar.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.gmail.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.slack_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.memory_activity.collect", return_value=[]),
+        patch("standup_tool.collectors.registry.conversation_activity.collect", return_value=[]),
+        patch("sys.stdout", captured),
+    ):
+        cli.main()
+
+    assert captured_args["since"] == date(2026, 5, 5)
+    assert captured_args["until"] == date(2026, 5, 5)
+
+    in_file = tmp_path / "collect.json"
+    in_file.write_text(json.dumps({"git_commits": [], "prs": [], "jira_activity": {}}))
+    out_file = cfg_dir / ".digest.json"
+    digest_argv = [
+        "standup-tool",
+        "digest",
+        "--file",
+        str(in_file),
+        "--since",
+        "2026-05-05",
+        "--until",
+        "2026-05-04",
+        "--output",
+        str(out_file),
+    ]
+    with patch.object(sys, "argv", digest_argv):
+        cli.main()
+
+    digest_doc = json.loads(out_file.read_text(encoding="utf-8"))
+    assert digest_doc["window"]["since"] == "2026-05-05"
+    assert digest_doc["window"]["until"] == "2026-05-05"
+    assert digest_doc["window"]["days"] == 1
+
+
+def test_enrich_team_cli_subcommand_invokes_run_enrichment(acme_config: Config):
+    with patch("standup_tool.enrich_team.run_enrichment") as mock_enrich:
+        cli.main(["enrich-team", "--org", "acme", "--dry-run"])
+    mock_enrich.assert_called_once_with(acme_config, org="acme", dry_run=True)
 
 
 def test_collect_does_not_write_marker_on_partial_collectors(cfg_dir: Path, acme_config: Config):

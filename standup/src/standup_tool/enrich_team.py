@@ -62,10 +62,6 @@ def _escape_ldap_filter_value(val: str) -> str:
 
 def get_github_org_members(org: str) -> list[dict]:
     """List GitHub org members via ``gh api``."""
-    return _members_from_gh_api(org)
-
-
-def _members_from_gh_api(org: str) -> list[dict]:
     if not _GITHUB_NAME_RE.match(org):
         log.warning("Invalid GitHub org %r — skipping", org)
         return []

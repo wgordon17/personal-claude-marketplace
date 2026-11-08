@@ -10,7 +10,7 @@ from datetime import date
 from standup_tool.config import ConfigError
 
 _COLUMNS = ["KEY", "SUMMARY", "STATUS", "TYPE"]
-_KEY_RE = re.compile(r"^[A-Z]+-[0-9]+$")
+_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*-[0-9]+$")
 
 
 def _run_jql(jql: str) -> list[dict]:
@@ -20,29 +20,25 @@ def _run_jql(jql: str) -> list[dict]:
     `/search/jql` scope; `standup-tool verify` probes `/rest/api/3/search/jql`
     explicitly to detect that condition.
     """
-    try:
-        result = subprocess.run(
-            [
-                "jira",
-                "issue",
-                "list",
-                "--plain",
-                "--no-headers",
-                "--no-truncate",
-                "--columns",
-                ",".join(_COLUMNS),
-                "--paginate",
-                "0:50",
-                "--jql",
-                jql,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    # fatal
-    except subprocess.TimeoutExpired:
-        raise
+    result = subprocess.run(
+        [
+            "jira",
+            "issue",
+            "list",
+            "--plain",
+            "--no-headers",
+            "--no-truncate",
+            "--columns",
+            ",".join(_COLUMNS),
+            "--paginate",
+            "0:50",
+            "--jql",
+            jql,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
         raise RuntimeError(

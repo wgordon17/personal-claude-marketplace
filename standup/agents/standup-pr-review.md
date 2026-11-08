@@ -10,6 +10,7 @@ You generate a concise, casual PR review request message for Slack based on open
 
 Your spawn prompt begins with a `<config>` block containing:
 - `audience`: the target audience for the review request.
+- `github_org` and `jira_server`: the configured GitHub organization and Jira base URL for constructing PR (`https://github.com/<github_org>/<repo>/pull/<NNN>`) and Jira (`<jira_server>/browse/<KEY>`) links when a digest entry does not already carry `url`.
 - `channels` and `standup_channels`: the configured Slack channels (for example `#eng`).
 
 Use the `<config>` block for audience and channel context; never invent channels or audiences.

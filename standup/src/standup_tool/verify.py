@@ -204,7 +204,7 @@ def _check_slack(config: Config, cfg_dir: Path) -> tuple[VerifyStatus, str]:
         return _finish("disabled", "disabled in config")
 
     try:
-        token_file = secret_path("slack-token") if cfg_dir else secret_path("slack-token")
+        token_file = secret_path("slack-token")
         creds = get_slack_credentials(config.collectors.slack, token_file)
         session = make_session(creds)
         resp = safe_get(session, "https://slack.com/api/auth.test")
@@ -234,14 +234,11 @@ def _check_memory(config: Config) -> tuple[VerifyStatus, str]:
         repos = list_repos(config)
     # tolerant: fall back to configured repo entries when git discovery fails
     except Exception:
-        repos = [
-            RepoInfo(name=entry.path.name, path=entry.path, upstream_slug=None)
-            for entry in config.repos
-        ]
+        repos = []
 
     if not repos:
         repos = [
-            RepoInfo(name=entry.path.name, path=entry.path, upstream_slug=None)
+            RepoInfo(name=entry.path.name, path=entry.path, upstream_slug="")
             for entry in config.repos
         ]
 

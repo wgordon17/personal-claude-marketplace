@@ -232,3 +232,265 @@ def test_run_enrichment_without_slack_credential_skips_slack_and_writes_private_
     content = team_file.read_text(encoding="utf-8")
     assert "Ada Example" in content
     assert "ada-example" in content
+
+
+def test_merge_team_preserves_existing_replaces_placeholder_and_adds_new() -> None:
+    existing = [
+        {
+            "name": "ada-example",
+            "github": "ada-example",
+            "jira_email": "custom@example.com",
+        },
+        {
+            "name": "Bo Custom",
+            "github": "bo-sample",
+            "slack_id": "UBOCUSTOM",
+        },
+    ]
+    enriched = [
+        {
+            "github": "ada-example",
+            "name": "Ada Example",
+            "jira_email": "ldap@example.com",
+            "slack_id": "UADA01",
+            "directory_uid": "aexample",
+        },
+        {
+            "github": "bo-sample",
+            "name": "Bo LDAP",
+            "jira_email": "bo@example.com",
+            "slack_id": "UBOLDAP",
+        },
+        {
+            "github": "cy-new",
+            "name": "Cy New",
+            "jira_email": "cy@example.com",
+            "slack_id": "UCY01",
+            "directory_uid": "cnew",
+        },
+    ]
+    merged = enrich_team.merge_team(existing, enriched)
+    by_gh = {m["github"]: m for m in merged}
+
+    # Placeholder name matching github login is replaced; existing jira_email is preserved
+    assert by_gh["ada-example"]["name"] == "Ada Example"
+    assert by_gh["ada-example"]["jira_email"] == "custom@example.com"
+    assert by_gh["ada-example"]["slack_id"] == "UADA01"
+    assert by_gh["ada-example"]["directory_uid"] == "aexample"
+
+    # Real existing name and slack_id are preserved; missing jira_email is populated
+    assert by_gh["bo-sample"]["name"] == "Bo Custom"
+    assert by_gh["bo-sample"]["slack_id"] == "UBOCUSTOM"
+    assert by_gh["bo-sample"]["jira_email"] == "bo@example.com"
+
+    # New member is appended
+    assert by_gh["cy-new"] == {
+        "name": "Cy New",
+        "github": "cy-new",
+        "directory_uid": "cnew",
+        "jira_email": "cy@example.com",
+        "slack_id": "UCY01",
+    }
+
+
+def test_enrich_from_github_profiles_derives_directory_uid_and_handles_errors() -> None:
+    ldap = _enabled_ldap()
+    members = [{"github": "ada-example"}, {"github": "bo-sample"}]
+    existing = {"bo-sample": {"name": "Bo Sample", "jira_email": "bo@example.com"}}
+
+    def fake_run(cmd, **kwargs):
+        mock = MagicMock(returncode=0, stderr="")
+        mock.stdout = "Ada Example\taexample@EXAMPLE.COM\n"
+        return mock
+
+    with patch("subprocess.run", side_effect=fake_run):
+        res = enrich_from_github_profiles(members, existing, ldap)
+
+    assert res[0]["name"] == "Ada Example"
+    assert res[0]["directory_uid"] == "aexample"
+
+    # FileNotFoundError returns members gracefully
+    with patch("subprocess.run", side_effect=FileNotFoundError("no gh")):
+        res2 = enrich_from_github_profiles([{"github": "cy-new"}], {}, ldap)
+    assert res2 == [{"github": "cy-new"}]
+
+
+def test_build_slack_email_map_and_enrich_from_slack_pagination_and_retries(
+    tmp_path: Path,
+) -> None:
+    from standup_tool.config import SlackConfig
+    from standup_tool.slack_auth import SlackCredentials
+
+    slack_cfg = SlackConfig(
+        enabled=True,
+        workspace_url="https://acme.slack.com",
+        channels=("eng",),
+        standup_channels=("eng",),
+    )
+    tok_path = tmp_path / "slack-token"
+
+    # 1. All members already have slack_id -> skips immediately
+    already = [{"github": "ada-example", "jira_email": "ada@example.com"}]
+    existing_all = {"ada-example": {"slack_id": "UADA"}}
+    assert enrich_team.enrich_from_slack(already, existing_all, slack_cfg, tok_path) == already
+
+    # 2. Pagination + ratelimited retry + transient exception retry
+    rate_resp = MagicMock(status_code=200, headers={"Retry-After": "1"})
+    rate_resp.raise_for_status.return_value = None
+    rate_resp.json.return_value = {"ok": False, "error": "ratelimited"}
+
+    page1_resp = MagicMock(status_code=200)
+    page1_resp.raise_for_status.return_value = None
+    page1_resp.json.return_value = {
+        "ok": True,
+        "members": [{"name": "ada.slack", "profile": {"email": "Ada@Example.com"}}],
+        "response_metadata": {"next_cursor": "cursor-2"},
+    }
+
+    page2_resp = MagicMock(status_code=200)
+    page2_resp.raise_for_status.return_value = None
+    page2_resp.json.return_value = {
+        "ok": True,
+        "members": [{"name": "bo.slack", "profile": {"email": "bo@example.com"}}],
+        "response_metadata": {"next_cursor": ""},
+    }
+
+    session = MagicMock()
+    session.get.side_effect = [
+        RuntimeError("transient network error"),
+        rate_resp,
+        page1_resp,
+        page2_resp,
+    ]
+
+    members = [
+        {"github": "ada-example", "jira_email": "ada@example.com"},
+        {"github": "bo-sample", "jira_email": "bo@example.com"},
+    ]
+    with (
+        patch(
+            "standup_tool.enrich_team.get_slack_credentials",
+            return_value=SlackCredentials(token="xox" + "c-1", cookie="xox" + "d-1"),
+        ),
+        patch("standup_tool.enrich_team.make_session", return_value=session),
+        patch("standup_tool.enrich_team.time.sleep"),
+    ):
+        enriched = enrich_team.enrich_from_slack(members, {}, slack_cfg, tok_path)
+
+    assert enriched[0]["slack_id"] == "ada.slack"
+    assert enriched[1]["slack_id"] == "bo.slack"
+
+    # 3. Auth error stops pagination cleanly
+    auth_fail_resp = MagicMock(status_code=200)
+    auth_fail_resp.raise_for_status.return_value = None
+    auth_fail_resp.json.return_value = {"ok": False, "error": "invalid_auth"}
+    session_auth_fail = MagicMock()
+    session_auth_fail.get.return_value = auth_fail_resp
+    with patch("standup_tool.enrich_team.time.sleep"):
+        assert (
+            enrich_team._build_slack_email_map(
+                session_auth_fail, {"ada@example.com": {"github": "ada-example"}}
+            )
+            == {}
+        )
+
+
+def test_ldap_chain_walk_and_enrich_from_ldap_strategies() -> None:
+    ldap = _enabled_ldap()
+    members = [
+        {"github": "ada-example"},
+        {"github": "bo-sample"},
+        {"github": "cy-cn", "name": "Cy CnName"},
+        {"github": "di-done"},
+    ]
+    existing = {
+        "di-done": {
+            "name": "Di Done",
+            "jira_email": "di@example.com",
+            "directory_uid": "ddone",
+        }
+    }
+
+    def fake_ldap_query(ldap_filter: str, attrs: list[str], cfg: LdapConfig) -> str | None:
+        if ldap_filter == "(uid=ddone)":
+            return "dn: uid=ddone\nemployeeNumber: W100\nmanagerEmployeeNumber: W200\n"
+        if ldap_filter == "(employeeNumber=W200)":
+            # Two candidates to exercise _resolve_supervisor_uid disambiguation
+            return (
+                "dn: uid=mgr-inactive\nuid: mgrinact\n\n"
+                "dn: uid=mgr-active\nuid: mgract\nmanagerEmployeeNumber: W200\n"
+            )
+        if ldap_filter == "(uid=mgract)":
+            return "dn: uid=mgract\nemployeeNumber: W200\nmanagerEmployeeNumber: W200\n"
+        if ldap_filter == "(managerEmployeeNumber=W200)":
+            return (
+                "dn: uid=aexample\n"
+                "uid: aexample\n"
+                "cn: Ada Example\n"
+                "mail: ada@example.com\n"
+                "employeeNumber: W101\n"
+                "socialURL: Github->https://github.com/ada-example\n"
+            )
+        if ldap_filter == "(managerEmployeeNumber=W101)":
+            return ""
+        if ldap_filter == "(uid=bo-sample)":
+            return (
+                "dn: uid=bsample\n"
+                "cn: Bo Sample\n"
+                "mail: bo@example.com\n"
+                "socialURL: Github->https://github.com/bo-sample\n"
+            )
+        if ldap_filter == "(uid=cy-cn)":
+            return None
+        if ldap_filter == "(cn=Cy CnName)":
+            return (
+                "dn: uid=ccn\n"
+                "uid: ccn\n"
+                "cn: Cy CnName\n"
+                "mail: cy@example.com\n"
+                "socialURL: Github->https://github.com/cy-cn\n"
+            )
+        return None
+
+    with (
+        patch.object(enrich_team, "_ldap_available", return_value=True),
+        patch.object(enrich_team, "_ldap_query", side_effect=fake_ldap_query),
+    ):
+        result = enrich_from_ldap(members, existing, ldap)
+
+    by_gh = {m["github"]: m for m in result}
+    assert by_gh["ada-example"]["name"] == "Ada Example"
+    assert by_gh["ada-example"]["jira_email"] == "ada@example.com"
+    assert by_gh["ada-example"]["directory_uid"] == "aexample"
+
+    assert by_gh["bo-sample"]["name"] == "Bo Sample"
+    assert by_gh["bo-sample"]["jira_email"] == "bo@example.com"
+
+    assert by_gh["cy-cn"]["name"] == "Cy CnName"
+    assert by_gh["cy-cn"]["jira_email"] == "cy@example.com"
+    assert by_gh["cy-cn"]["directory_uid"] == "ccn"
+
+
+def test_run_enrichment_dry_run_outputs_yaml_without_writing_file(
+    acme_config: Config,
+    cfg_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("STANDUP_SLACK_COOKIE", raising=False)
+
+    def fake_gh(cmd: list[str], **kwargs):
+        mock = MagicMock(returncode=0, stderr="")
+        if "orgs/acme/members" in cmd:
+            mock.stdout = "ada-example\n"
+        else:
+            mock.stdout = "Ada Example\tada@example.com\n"
+        return mock
+
+    with patch("subprocess.run", side_effect=fake_gh):
+        run_enrichment(acme_config, dry_run=True)
+
+    captured = capsys.readouterr()
+    assert "Ada Example" in captured.out
+    assert "ada-example" in captured.out
+    assert not (cfg_dir / "team-members.yaml").exists()

@@ -8,6 +8,7 @@ before handing data to synthesis agents.
 
 from __future__ import annotations
 
+import email.utils
 import hashlib
 import re
 from datetime import UTC, date, datetime
@@ -15,9 +16,10 @@ from pathlib import Path
 
 import yaml
 
-_JIRA_KEY_RE = re.compile(r"\b[A-Z]+-\d+\b")
+_JIRA_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9_]*-\d+\b")
 _PR_REF_RE = re.compile(r"(?:[\w.-]+(?:/[\w.-]+)?)?#\d+")
-_BRANCH_RE = re.compile(r"\b[A-Z]+-\d+-[a-z0-9][-a-z0-9]*\b")
+_BRANCH_RE = re.compile(r"\b[A-Z][A-Z0-9_]*-\d+-[a-z0-9][-a-z0-9]*\b")
+_EPOCH_STR_RE = re.compile(r"^\d+(\.\d+)?$")
 
 
 def extract_entities(text: str) -> set[str]:
@@ -80,45 +82,61 @@ def _is_high_signal_slack(item: dict, self_dm: str) -> bool:
     return False
 
 
-def _filter_slack(items: list[dict], self_dm: str) -> list[dict]:
-    """Keep only high-signal Slack items."""
-    return [item for item in items if _is_high_signal_slack(item, self_dm)]
-
-
 def _extract_timestamp(item: dict) -> datetime | None:
-    """Try to parse an ISO-8601 timestamp from common fields."""
-    for field in (
-        "timestamp",
-        "date",
-        "modified",
-        "ts",
-        "created_at",
-        "updated_at",
-        "start_time",
-        "start",
-    ):
-        val = item.get(field)
-        if not val:
+    """Try to parse a timestamp from common collector fields."""
+    candidates: list[object] = [
+        item.get(field)
+        for field in (
+            "timestamp",
+            "updated_at",
+            "created_at",
+            "modified_time",
+            "modified",
+            "date",
+            "ts",
+            "thread_ts",
+            "start_time",
+            "start",
+            "event_date",
+        )
+    ]
+    msgs = item.get("messages")
+    if isinstance(msgs, list) and msgs and isinstance(msgs[0], dict):
+        candidates.append(msgs[0].get("ts"))
+
+    for val in candidates:
+        if isinstance(val, dict):
+            val = val.get("dateTime") or val.get("date")
+        if not val or isinstance(val, bool):
             continue
         if isinstance(val, int | float):
             try:
                 return datetime.fromtimestamp(val, tz=UTC)
-            except (OSError, ValueError):
+            except (OSError, ValueError, OverflowError):
                 continue
         if isinstance(val, str):
-            for fmt in (
-                "%Y-%m-%dT%H:%M:%S%z",
-                "%Y-%m-%dT%H:%M:%S.%f%z",
-                "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%d",
-            ):
+            s = val.strip()
+            if not s:
+                continue
+            if _EPOCH_STR_RE.match(s):
                 try:
-                    dt = datetime.strptime(val, fmt)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=UTC)
-                    return dt
-                except ValueError:
-                    continue
+                    return datetime.fromtimestamp(float(s), tz=UTC)
+                except (OSError, ValueError, OverflowError):
+                    pass
+            try:
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                return dt
+            except ValueError:
+                pass
+            try:
+                dt = email.utils.parsedate_to_datetime(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                return dt
+            except (TypeError, ValueError, IndexError):
+                continue
     return None
 
 
@@ -167,9 +185,8 @@ def group_into_work_units(parsed_json: dict, self_dm: str = "") -> tuple[list[di
 
     slack_items = parsed_json.get("slack")
     if isinstance(slack_items, list):
-        filtered = _filter_slack(slack_items, self_dm)
-        for item in filtered:
-            if not isinstance(item, dict):
+        for item in slack_items:
+            if not isinstance(item, dict) or not _is_high_signal_slack(item, self_dm):
                 continue
             text_entities: set[str] = set()
             for msg in item.get("messages", []):
@@ -226,7 +243,7 @@ def _compute_relevance(wu: dict, team_github_set: set[str]) -> int:
             score += 1
             break
     if any(
-        item.get("state") not in ("merged", "closed", None)
+        str(item.get("state") or "").lower() not in ("merged", "closed", "")
         for item in wu.get("items", [])
         if item.get("_source") == "pr"
     ):
@@ -261,12 +278,18 @@ def _summarize_git(items: list[dict]) -> str:
 
 
 def _summarize_pr(item: dict) -> dict:
+    number = item.get("number") if item.get("number") is not None else item.get("pr_number")
+    reviewers = item.get("reviewers") if "reviewers" in item else item.get("review_requests", [])
     return {
-        "number": item.get("number"),
+        "number": number,
         "repo": item.get("repo", item.get("repository", "")),
+        "title": item.get("title", ""),
+        "url": item.get("url", ""),
         "state": item.get("state", ""),
+        "is_draft": item.get("is_draft", False),
         "ci": item.get("ci", item.get("checks", "")),
-        "reviewers": item.get("reviewers", []),
+        "review_decision": item.get("review_decision", ""),
+        "reviewers": reviewers,
         "role": item.get("role", ""),
     }
 
@@ -285,7 +308,14 @@ def _summarize_slack(item: dict) -> dict:
     text = ""
     if msgs and isinstance(msgs, list) and isinstance(msgs[0], dict):
         text = msgs[0].get("text", "")[:100]
-    thread_replies = item.get("thread_replies", item.get("reply_count", 0))
+    if "thread_replies" in item:
+        thread_replies = item["thread_replies"]
+    elif "reply_count" in item:
+        thread_replies = item["reply_count"]
+    else:
+        default_count = len(msgs) if isinstance(msgs, list) else 0
+        raw_count = item.get("message_count", default_count)
+        thread_replies = max(0, int(raw_count) - 1) if isinstance(raw_count, int | float) else 0
     return {"channel": channel, "text": text, "thread_replies": thread_replies}
 
 
@@ -569,6 +599,21 @@ def build_digest(
             entry["text"] = str(item["subject"])[:200]
         elif item.get("title"):
             entry["text"] = str(item["title"])[:200]
+        elif item.get("summary"):
+            entry["text"] = str(item["summary"])[:200]
+        elif item.get("file_name") or item.get("comments") or item.get("text_preview"):
+            comments = item.get("comments")
+            first_comment = (
+                comments[0].get("content", "")
+                if isinstance(comments, list) and comments and isinstance(comments[0], dict)
+                else ""
+            )
+            file_name = str(item.get("file_name") or "")
+            detail = str(first_comment or item.get("text_preview") or "")
+            if file_name and detail:
+                entry["text"] = f"{file_name}: {detail}"[:200]
+            else:
+                entry["text"] = (file_name or detail)[:200]
         elif item.get("context"):
             entry["text"] = str(item["context"])[:200]
         ts = _extract_timestamp(item)

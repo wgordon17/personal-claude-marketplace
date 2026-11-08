@@ -56,7 +56,7 @@ Read-only-for-Slack preview variant of `/standup`. Runs collection with `--no-ma
 
 ## Phase B: Collect with `--no-marker` and Digest
 
-1. Determine `<since>` by reading `<config_dir>/.last-run` if present (never writing or editing it), or falling back to the previous working day (3 days ago on Monday; yesterday on Tuesday through Sunday). Set `<until>` to yesterday (`YYYY-MM-DD`).
+1. Determine `<since>` by reading `<config_dir>/.last-run` if present (never writing or editing it), or falling back to the previous working day (3 days ago on Monday; yesterday on Tuesday through Sunday). Set `<until>` to `max(<since>, yesterday)` (`YYYY-MM-DD`, so same-day runs after `.last-run` advances to today keep `<until> == <since>`).
 2. Run collection with `--no-marker` and tighten stderr permissions:
    ```bash
    uv run --directory "${CLAUDE_PLUGIN_ROOT}" standup-tool collect \
