@@ -26,7 +26,7 @@ markers = [
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-extend-exclude = ["skill-eval/codebases/dirty-flask-app"]
+extend-exclude = ["skill-eval/codebases/dirty-flask-app", "standup"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM"]

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "standup-tool"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic[vertex]",
+    "google-api-python-client",
+    "google-auth-httplib2",
+    "google-auth-oauthlib",
+    "pyyaml",
+    "requests",
+]
+
+[project.scripts]
+standup-tool = "standup_tool.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/standup_tool"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "standup",
+  "version": "0.1.0",
+  "description": "Daily standup digest from git, PRs, Jira, Slack, Google Workspace, and project memory, with config-driven collectors and a Slack-ready draft",
+  "author": {
+    "name": "wgordon17"
+  }
+}

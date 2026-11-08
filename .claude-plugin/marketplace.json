@@ -3,7 +3,7 @@
   "name": "personal-claude-marketplace",
   "metadata": {
     "description": "Personal Claude Code plugins: LSP servers (uvx/npx) and custom agents",
-    "version": "3.6.0"
+    "version": "3.7.0"
   },
   "owner": {
     "name": "wgordon17"
@@ -147,6 +147,17 @@
       "category": "productivity",
       "tags": ["mcp", "osac", "advisory", "ship-help"],
       "author": { "name": "wgordon17" }
+    },
+    {
+      "name": "standup",
+      "version": "0.1.0",
+      "source": "./standup",
+      "description": "Daily standup digest from git, PRs, Jira, Slack, Google Workspace, and project memory, with config-driven collectors and a Slack-ready draft",
+      "category": "productivity",
+      "tags": ["standup", "digest", "slack", "jira"],
+      "author": {
+        "name": "wgordon17"
+      }
     }
   ]
 }
