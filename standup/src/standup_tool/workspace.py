@@ -48,6 +48,7 @@ def _parse_remote_slug(repo_path: Path, remote: str) -> str:
             text=True,
             timeout=10,
         )
+    # tolerant: an unreadable git remote yields an empty URL
     except (OSError, subprocess.TimeoutExpired):
         return ""
     if result.returncode != 0:

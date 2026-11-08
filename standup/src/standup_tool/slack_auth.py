@@ -53,7 +53,9 @@ def make_session(creds: SlackCredentials) -> requests.Session:
     session.headers["Authorization"] = f"Bearer {creds.token}"
     session.headers["Content-Type"] = "application/json; charset=utf-8"
     session.headers["User-Agent"] = _BROWSER_UA
-    session.cookies.set("d", urllib.parse.quote(creds.cookie, safe=""), domain=".slack.com")
+    session.cookies.set(
+        "d", urllib.parse.quote(creds.cookie, safe=""), domain=".slack.com", secure=True
+    )
     return session
 
 
@@ -212,15 +214,30 @@ def _validate_slack_api_url(url: str) -> urllib.parse.SplitResult:
     return parsed
 
 
+_REQUEST_TIMEOUT = (5, 30)  # (connect, read) seconds
+
+
 def safe_get(session: Any, url: str, **kwargs: Any) -> Any:
-    """Validate *url* is https on slack.com/*.slack.com, disable redirects, and redact errors."""
+    """GET *url* via :func:`_safe_request` (https on slack.com only, no redirects)."""
+    return _safe_request(session, "GET", url, **kwargs)
+
+
+def safe_post(session: Any, url: str, **kwargs: Any) -> Any:
+    """POST to *url* via :func:`_safe_request` (https on slack.com only, no redirects)."""
+    return _safe_request(session, "POST", url, **kwargs)
+
+
+def _safe_request(session: Any, method: str, url: str, **kwargs: Any) -> Any:
+    """Validate *url* is https on slack.com/*.slack.com, disable redirects, bound the
+    request with a timeout, and redact secrets from any raised error."""
     parsed = _validate_slack_api_url(url)
     if kwargs.get("allow_redirects"):
         raise SlackAuthError("Redirects are not allowed on Slack API requests")
     kwargs.setdefault("allow_redirects", False)
+    kwargs.setdefault("timeout", _REQUEST_TIMEOUT)
 
     try:
-        resp = session.get(url, **kwargs)
+        resp = getattr(session, method.lower())(url, **kwargs)
     # fatal
     except requests.RequestException as exc:
         redacted = redact_secrets(str(exc))
@@ -241,7 +258,7 @@ def safe_get(session: Any, url: str, **kwargs: Any) -> Any:
             raise RuntimeError(redacted) from None
 
     status = getattr(resp, "status_code", 200)
-    logger.debug("GET %s -> %s", parsed.path or "/", status)
+    logger.debug("%s %s -> %s", method, parsed.path or "/", status)
     if isinstance(status, int) and 300 <= status < 400:
         raise SlackAuthError(f"Unexpected redirect (HTTP {status}) on Slack API call")
     return resp

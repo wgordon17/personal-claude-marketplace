@@ -6,6 +6,7 @@ Uses search.messages API which works with Enterprise Grid org-level tokens
 
 from __future__ import annotations
 
+import copy
 import logging
 import re
 import time
@@ -28,7 +29,7 @@ _THREAD_FETCH_DELAY = 1.0
 _MAX_RETRIES = 3
 
 
-def _search(session: requests.Session, query: str, count: int = 100) -> list[dict]:
+def search_messages(session: requests.Session, query: str, count: int = 100) -> list[dict]:
     """Search messages with pagination and 429 retry."""
     all_matches: list[dict] = []
     page = 1
@@ -280,7 +281,7 @@ def collect(
     def search_days(base_query: str) -> list[dict]:
         all_matches: list[dict] = []
         for day in days:
-            all_matches.extend(_search(session, f"{base_query} on:{day.isoformat()}"))
+            all_matches.extend(search_messages(session, f"{base_query} on:{day.isoformat()}"))
         return all_matches
 
     results: list[dict] = []
@@ -322,6 +323,7 @@ def collect(
 
     # Enrich DM, mention, and participation results with thread context
     enriched = 0
+    thread_cache: dict[tuple[str, str], list[dict]] = {}
     for item in results:
         if item["source"] == "channel":
             continue
@@ -333,12 +335,18 @@ def collect(
         thread_ts = item.get("thread_ts", "")
         if not thread_ts:
             continue
-        time.sleep(_THREAD_FETCH_DELAY)
-        thread_msgs = _fetch_thread(session, channel_id, thread_ts)
+        # Several matched messages often belong to one thread; fetch each thread once.
+        key = (channel_id, thread_ts)
+        if key not in thread_cache:
+            time.sleep(_THREAD_FETCH_DELAY)
+            thread_msgs = _fetch_thread(session, channel_id, thread_ts)
+            if len(thread_msgs) > 1:
+                for msg in thread_msgs:
+                    msg["text"] = _resolve_mentions(msg["text"], session, user_cache)
+            thread_cache[key] = thread_msgs
+        thread_msgs = thread_cache[key]
         if len(thread_msgs) > 1:
-            for msg in thread_msgs:
-                msg["text"] = _resolve_mentions(msg["text"], session, user_cache)
-            item["messages"] = thread_msgs
+            item["messages"] = copy.deepcopy(thread_msgs)
             item["message_count"] = len(thread_msgs)
             enriched += 1
 

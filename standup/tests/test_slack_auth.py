@@ -18,6 +18,7 @@ from standup_tool.slack_auth import (
     get_slack_credentials,
     make_session,
     safe_get,
+    safe_post,
 )
 
 _XOXC_VAL = "xox" + "c-bootstrapped-secret-token-999"
@@ -266,6 +267,7 @@ def test_safe_get_enforces_https_slack_host_and_no_redirects(
         "https://slack.com/api/auth.test",
         params={"secret": _XOXC_VAL},
         allow_redirects=False,
+        timeout=(5, 30),
     )
     assert "/api/auth.test" in caplog.text
     assert _XOXC_VAL not in caplog.text
@@ -304,14 +306,52 @@ def test_safe_get_redacts_secrets_in_request_exceptions() -> None:
     assert "[REDACTED]" in str(exc_info.value)
 
 
-def test_session_get_only_called_inside_safe_get() -> None:
+def test_safe_post_enforces_host_redirects_timeout_and_redaction() -> None:
+    session = MagicMock()
+    ok_resp = MagicMock(status_code=200)
+    session.post.return_value = ok_resp
+
+    assert safe_post(session, "https://slack.com/api/chat.postMessage", json={"a": 1}) is ok_resp
+    session.post.assert_called_once_with(
+        "https://slack.com/api/chat.postMessage",
+        json={"a": 1},
+        allow_redirects=False,
+        timeout=(5, 30),
+    )
+
+    session.reset_mock()
+    with pytest.raises(SlackAuthError):
+        safe_post(session, "https://evil.example.com/api/chat.postMessage", json={})
+    with pytest.raises(SlackAuthError):
+        safe_post(session, "https://slack.com/api/chat.postMessage", allow_redirects=True)
+    session.post.assert_not_called()
+
+    session.post.return_value = MagicMock(status_code=307)
+    with pytest.raises(SlackAuthError, match="307"):
+        safe_post(session, "https://slack.com/api/chat.postMessage", json={})
+
+    session.post.side_effect = requests.ConnectionError(f"boom with Bearer {_XOXC_VAL}")
+    with pytest.raises(requests.RequestException) as exc_info:
+        safe_post(session, "https://slack.com/api/chat.postMessage", json={})
+    assert _XOXC_VAL not in str(exc_info.value)
+
+
+def test_make_session_marks_the_d_cookie_secure() -> None:
+    session = make_session(SlackCredentials(token=_XOXC_VAL, cookie=_XOXD_VAL))
+    cookie = next(c for c in session.cookies if c.name == "d")
+    assert cookie.secure is True
+
+
+def test_session_requests_only_made_inside_slack_auth() -> None:
     pkg_root = Path(__file__).resolve().parents[1] / "src" / "standup_tool"
     offenders: list[str] = []
     for py_file in sorted(pkg_root.rglob("*.py")):
+        if py_file.name == "slack_auth.py":
+            continue
         for lineno, line in enumerate(py_file.read_text(encoding="utf-8").splitlines(), start=1):
-            if "session.get(" in line and py_file.name != "slack_auth.py":
+            if "session.get(" in line or "session.post(" in line:
                 offenders.append(f"{py_file.relative_to(pkg_root)}:{lineno}: {line.strip()}")
-    assert offenders == [], f"Direct session.get( calls found outside slack_auth.py: {offenders}"
+    assert offenders == [], f"Direct session requests found outside slack_auth.py: {offenders}"
 
 
 def test_get_slack_credentials_rejects_symlink_and_blank_file_and_missing_workspace_url(

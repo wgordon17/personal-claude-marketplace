@@ -30,6 +30,27 @@ _REDACT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)\b(Basic)\s+[A-Za-z0-9._~+/=-]+"), r"\1 [REDACTED]"),
     (re.compile(r"\bATATT[A-Za-z0-9._~+/=-]+"), "ATATT[REDACTED]"),
     (re.compile(r"\bya29\.[A-Za-z0-9._~+/=-]+"), "ya29.[REDACTED]"),
+    (
+        re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
+        "gh*_[REDACTED]",
+    ),
+    (re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"), "AWS-key-[REDACTED]"),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"), "sk-[REDACTED]"),
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), "jwt-[REDACTED]"),
+    (
+        re.compile(
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----"
+            r"[A-Za-z0-9+/=\s]*(?:-----END [A-Z ]*PRIVATE KEY-----)?"
+        ),
+        "[REDACTED PRIVATE KEY]",
+    ),
+    (
+        re.compile(
+            r"(?i)\b((?:password|passwd|secret|api[_-]?key|token)\s*[=:]\s*)"
+            r"(?:\"[^\"\n]{4,}\"|'[^'\n]{4,}'|[^\s\"',;]{4,})"
+        ),
+        r"\1[REDACTED]",
+    ),
 )
 
 
@@ -38,7 +59,8 @@ class ConfigError(Exception):
 
 
 def redact_secrets(text: str) -> str:
-    """Mask Slack tokens/cookies, Bearer/Basic headers, Atlassian tokens, and Google ya29 tokens."""
+    """Mask Slack tokens/cookies, Bearer/Basic headers, Atlassian/Google/GitHub/AWS/API-key
+    tokens, JWTs, PEM private keys, and ``password=``/``secret=``-style assignments."""
     result = text
     for pattern, replacement in _REDACT_PATTERNS:
         result = pattern.sub(replacement, result)
@@ -77,6 +99,7 @@ def config_dir() -> Path:
             text=True,
             check=False,
         )
+    # tolerant: a path that does not exist yet resolves to itself
     except FileNotFoundError:
         return resolved
 
@@ -95,6 +118,7 @@ def ensure_dir_mode() -> Path:
         current_mode = stat.S_IMODE(d.lstat().st_mode)
         if current_mode != 0o700:
             os.chmod(d, 0o700)
+    # fatal
     except OSError as exc:
         raise ConfigError(f"Failed to enforce 0700 mode on {d}: {exc}") from exc
     return d
@@ -112,6 +136,7 @@ def tighten_mode(path: Path) -> None:
             raise ConfigError(f"Refusing symlink at {path}")
         if (stat.S_IMODE(st.st_mode) & 0o077) != 0 or stat.S_IMODE(st.st_mode) != 0o600:
             os.chmod(path, 0o600)
+    # fatal
     except OSError as exc:
         raise ConfigError(f"Failed to tighten permissions on {path}: {exc}") from exc
 
@@ -154,6 +179,7 @@ def write_private(path: Path, text: str) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
     try:
         fd = os.open(path, flags, 0o600)
+    # fatal
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             raise ConfigError(f"Refusing symlink at {path}") from exc
@@ -162,6 +188,7 @@ def write_private(path: Path, text: str) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             os.fchmod(fd, 0o600)
             f.write(text)
+    # fatal
     except OSError as exc:
         raise ConfigError(f"Failed to write private file {path}: {exc}") from exc
 
@@ -179,6 +206,7 @@ def validate_https_origin_url(url: str, field_name: str = "url") -> None:
         if not prepared_url:
             raise ConfigError(f"{field_name}: invalid URL")
         prepared_parsed = urllib.parse.urlsplit(prepared_url)
+    # fatal
     except (ValueError, requests.exceptions.RequestException) as exc:
         raise ConfigError(f"{field_name}: invalid URL ({exc})") from exc
 
@@ -188,6 +216,7 @@ def validate_https_origin_url(url: str, field_name: str = "url") -> None:
         raise ConfigError(f"{field_name}: userinfo is not allowed")
     try:
         port = parsed.port
+    # fatal
     except ValueError as exc:
         raise ConfigError(f"{field_name}: invalid port ({exc})") from exc
     if port is not None or ":" in parsed.netloc:
@@ -732,11 +761,13 @@ def load_config(path: Path | None = None, *, require_repos: bool = True) -> Conf
 
     try:
         text = target.read_text(encoding="utf-8")
+    # fatal
     except OSError as exc:
         raise ConfigError(f"Failed to read {target}: {exc}") from exc
 
     try:
         doc = yaml.safe_load(text)
+    # fatal
     except yaml.YAMLError as exc:
         raise ConfigError(f"YAML syntax error in {target}: {exc}") from exc
 

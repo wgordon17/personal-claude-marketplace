@@ -15,10 +15,10 @@ def test_google_auth_error_subclasses_config_error():
     assert issubclass(GoogleAuthError, ConfigError)
 
 
-def test_credentials_path_uses_env_override(tmp_path, monkeypatch):
+def testcredentials_path_uses_env_override(tmp_path, monkeypatch):
     custom = str(tmp_path / "custom_creds.json")
     monkeypatch.setenv("STANDUP_GOOGLE_CREDENTIALS", custom)
-    assert google_auth._credentials_path() == Path(custom)
+    assert google_auth.credentials_path() == Path(custom)
 
 
 def test_token_path_uses_env_override(tmp_path, monkeypatch):
@@ -27,9 +27,9 @@ def test_token_path_uses_env_override(tmp_path, monkeypatch):
     assert google_auth._token_path() == Path(custom)
 
 
-def test_credentials_path_uses_config_dir(tmp_path, monkeypatch):
+def testcredentials_path_uses_config_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("STANDUP_GOOGLE_CREDENTIALS", raising=False)
-    assert google_auth._credentials_path(config_dir=tmp_path) == tmp_path / "credentials.json"
+    assert google_auth.credentials_path(config_dir=tmp_path) == tmp_path / "credentials.json"
 
 
 def test_token_path_uses_config_dir(tmp_path, monkeypatch):
@@ -37,10 +37,10 @@ def test_token_path_uses_config_dir(tmp_path, monkeypatch):
     assert google_auth._token_path(config_dir=tmp_path) == tmp_path / "token.json"
 
 
-def test_credentials_path_raises_without_env_or_config_dir(monkeypatch):
+def testcredentials_path_raises_without_env_or_config_dir(monkeypatch):
     monkeypatch.delenv("STANDUP_GOOGLE_CREDENTIALS", raising=False)
     with pytest.raises(FileNotFoundError, match="config_dir"):
-        google_auth._credentials_path()
+        google_auth.credentials_path()
 
 
 def test_token_path_raises_without_env_or_config_dir(monkeypatch):
@@ -288,3 +288,10 @@ def test_get_credentials_serializes_concurrent_refresh_across_threads(tmp_path, 
     assert len(results) == 4
     assert refresh_calls == 1
     assert token_file.read_text(encoding="utf-8") == '{"token": "refreshed"}'
+
+
+def test_authorized_http_bounds_every_request_with_a_timeout():
+    creds = MagicMock()
+    http = google_auth.authorized_http(creds)
+    assert http.http.timeout == google_auth.HTTP_TIMEOUT == 30
+    assert http.credentials is creds

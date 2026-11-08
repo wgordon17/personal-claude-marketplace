@@ -14,12 +14,10 @@ import threading
 from datetime import date
 from pathlib import Path
 
-import google_auth_httplib2
-import httplib2
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
-from standup_tool.collectors.google_auth import get_credentials
+from standup_tool.collectors.google_auth import authorized_http, get_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +26,6 @@ _DOC_RE = re.compile(
 )
 _DRIVE_RE = re.compile(r"https://drive\.google\.com/(?:file/d/|open\?id=)([a-zA-Z0-9_-]+)")
 
-_HTTP_TIMEOUT = 30  # seconds, per Drive API request
 
 _thread_local = threading.local()
 _run_generation = 0
@@ -72,10 +69,7 @@ def _get_thread_service(config_dir: Path | None = None):
         or getattr(_thread_local, "run_gen", None) != _run_generation
     ):
         creds = get_credentials(config_dir)
-        authed_http = google_auth_httplib2.AuthorizedHttp(
-            creds, http=httplib2.Http(timeout=_HTTP_TIMEOUT)
-        )
-        _thread_local.service = build("drive", "v3", http=authed_http)
+        _thread_local.service = build("drive", "v3", http=authorized_http(creds))
         _thread_local.config_dir = config_dir
         _thread_local.run_gen = _run_generation
     return _thread_local.service
@@ -323,10 +317,7 @@ def collect(
     _run_generation += 1
     _thread_local.__dict__.clear()
     creds = get_credentials(config_dir)
-    authed_http = google_auth_httplib2.AuthorizedHttp(
-        creds, http=httplib2.Http(timeout=_HTTP_TIMEOUT)
-    )
-    service = build("drive", "v3", http=authed_http)
+    service = build("drive", "v3", http=authorized_http(creds))
 
     seen: set[str] = set()
     results: list[dict] = []
@@ -366,7 +357,7 @@ def collect(
                 .list(
                     q=query,
                     fields=f"nextPageToken,files({_META_FIELDS})",
-                    pageSize=100,
+                    pageSize=1000,
                     pageToken=page_token,
                     supportsAllDrives=True,
                     includeItemsFromAllDrives=True,

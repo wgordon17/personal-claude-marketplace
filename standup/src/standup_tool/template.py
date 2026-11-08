@@ -36,6 +36,7 @@ def load_template(path: Path) -> Template:
         raise ConfigError(f"Template file not found: {path}")
     try:
         raw = path.read_text(encoding="utf-8")
+    # fatal
     except OSError as exc:
         raise ConfigError(f"Failed to read template {path}: {exc}") from exc
 

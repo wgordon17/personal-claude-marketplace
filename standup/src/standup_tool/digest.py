@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 
 _JIRA_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9_]*-\d+\b")
-_PR_REF_RE = re.compile(r"(?:[\w.-]+(?:/[\w.-]+)?)?#\d+")
+_PR_REF_RE = re.compile(r"(?:[\w.-]{1,100}(?:/[\w.-]{1,100})?)?#\d+")
 _BRANCH_RE = re.compile(r"\b[A-Z][A-Z0-9_]*-\d+-[a-z0-9][-a-z0-9]*\b")
 _EPOCH_STR_RE = re.compile(r"^\d+(\.\d+)?$")
 
@@ -112,6 +112,7 @@ def _extract_timestamp(item: dict) -> datetime | None:
         if isinstance(val, int | float):
             try:
                 return datetime.fromtimestamp(val, tz=UTC)
+            # tolerant: an out-of-range numeric timestamp is skipped for the next candidate
             except (OSError, ValueError, OverflowError):
                 continue
         if isinstance(val, str):
@@ -121,6 +122,7 @@ def _extract_timestamp(item: dict) -> datetime | None:
             if _EPOCH_STR_RE.match(s):
                 try:
                     return datetime.fromtimestamp(float(s), tz=UTC)
+                # tolerant: an unparseable epoch string falls through to the ISO/RFC 2822 parsers
                 except (OSError, ValueError, OverflowError):
                     pass
             try:
@@ -128,6 +130,7 @@ def _extract_timestamp(item: dict) -> datetime | None:
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=UTC)
                 return dt
+            # tolerant: a non-ISO timestamp falls through to the RFC 2822 parser
             except ValueError:
                 pass
             try:
@@ -135,6 +138,7 @@ def _extract_timestamp(item: dict) -> datetime | None:
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=UTC)
                 return dt
+            # tolerant: a timestamp no parser accepts is skipped for the next candidate
             except (TypeError, ValueError, IndexError):
                 continue
     return None

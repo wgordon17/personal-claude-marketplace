@@ -9,7 +9,6 @@ import logging
 import stat
 import sys
 import threading
-import time
 import urllib.error
 import urllib.request
 from datetime import date, timedelta
@@ -32,7 +31,6 @@ from standup_tool.cli import (
     _standup_to_blocks,
     _write_last_run_marker,
     build_parser,
-    read_last_run,
     subcommand_names,
 )
 from standup_tool.config import Config, ConfigError, IdentityConfig, JiraConfig
@@ -294,19 +292,17 @@ def test_collect_rejects_invalid_until_date(acme_config: Config):
 
 
 def test_collect_runs_collectors_in_parallel(acme_config: Config):
-    active_threads: set = set()
     lock = threading.Lock()
-    max_concurrent = [0]
     running = [0]
+    two_running = threading.Event()
 
     def tracking_collector(*args, **kwargs):
-        tid = threading.get_ident()
         with lock:
-            active_threads.add(tid)
             running[0] += 1
-            if running[0] > max_concurrent[0]:
-                max_concurrent[0] = running[0]
-        time.sleep(0.05)
+            if running[0] >= 2:
+                two_running.set()
+        # Passes only if another collector is in flight at the same time.
+        two_running.wait(timeout=5)
         with lock:
             running[0] -= 1
         return []
@@ -356,7 +352,7 @@ def test_collect_runs_collectors_in_parallel(acme_config: Config):
     ):
         cli.main()
 
-    assert max_concurrent[0] >= 2
+    assert two_running.is_set()
 
 
 def test_collect_with_collectors_flag_runs_subset(acme_config: Config):
@@ -371,7 +367,9 @@ def test_collect_with_collectors_flag_runs_subset(acme_config: Config):
         jira_called.append(True)
         return {}
 
-    should_not_run = RuntimeError("collector should not have been called")
+    # run_one turns a collector exception into state=failed, so an exception guard would let a
+    # wrongly executed collector pass; record calls instead.
+    should_not_run = MagicMock(return_value=[])
 
     argv = [
         "standup-tool",
@@ -389,23 +387,26 @@ def test_collect_with_collectors_flag_runs_subset(acme_config: Config):
         patch("standup_tool.cli.list_repos", return_value=[]),
         patch("standup_tool.collectors.registry.git_activity.collect", side_effect=fake_git),
         patch("standup_tool.collectors.registry.jira_activity.collect", side_effect=fake_jira),
-        patch("standup_tool.collectors.registry.pr_activity.collect", side_effect=should_not_run),
-        patch(
-            "standup_tool.collectors.registry.google_calendar.collect",
-            side_effect=should_not_run,
-        ),
-        patch("standup_tool.collectors.registry.gmail.collect", side_effect=should_not_run),
+        patch("standup_tool.collectors.registry.pr_activity.collect", should_not_run),
+        patch("standup_tool.collectors.registry.google_calendar.collect", should_not_run),
+        patch("standup_tool.collectors.registry.gmail.collect", should_not_run),
         patch("sys.stdout", captured),
     ):
         cli.main()
 
     assert len(git_called) == 1
     assert len(jira_called) == 0
+    should_not_run.assert_not_called()
     output = json.loads(captured.getvalue())
     assert "git_commits" in output
     assert output["jira_activity"] == {}
     assert output["_status"]["git"] == {"state": "ran", "reason": None, "count": 0}
-    assert output["_status"]["jira"] == {"state": "disabled", "reason": "not selected", "count": 0}
+    for name in ("jira", "pr", "calendar", "gmail"):
+        assert output["_status"][name] == {
+            "state": "disabled",
+            "reason": "not selected",
+            "count": 0,
+        }
 
 
 def test_collect_with_empty_collectors_flag_runs_all_enabled(acme_config: Config):
@@ -756,7 +757,9 @@ def _config_without_jira_server(acme_config: Config) -> Config:
 def test_get_jira_server_prefers_config_server(acme_config: Config, tmp_path):
     config_file = tmp_path / ".config.yml"
     config_file.write_text("server: https://other-jira.example.com\n")
-    assert _get_jira_server(acme_config, config_path=config_file) == "https://acme.atlassian.net"
+    assert (
+        _get_jira_server(acme_config, jira_cli_config=config_file) == "https://acme.atlassian.net"
+    )
 
 
 def test_get_jira_server_reads_from_jira_cli_config(acme_config: Config, tmp_path):
@@ -764,7 +767,7 @@ def test_get_jira_server_reads_from_jira_cli_config(acme_config: Config, tmp_pat
     config_file = tmp_path / ".config.yml"
     config_file.write_text("server: https://my-jira.example.com\nlogin: ada@example.com\n")
 
-    result = _get_jira_server(cfg, config_path=config_file)
+    result = _get_jira_server(cfg, jira_cli_config=config_file)
     assert result == "https://my-jira.example.com"
 
 
@@ -772,7 +775,7 @@ def test_get_jira_server_raises_config_error_when_missing(acme_config: Config, t
     cfg = _config_without_jira_server(acme_config)
     missing = tmp_path / "nonexistent"
     with pytest.raises(ConfigError, match="Jira server URL"):
-        _get_jira_server(cfg, config_path=missing)
+        _get_jira_server(cfg, jira_cli_config=missing)
 
 
 def test_get_jira_server_rejects_non_https(acme_config: Config, tmp_path):
@@ -781,7 +784,7 @@ def test_get_jira_server_rejects_non_https(acme_config: Config, tmp_path):
     config_file.write_text("server: http://insecure.example.com\n")
 
     with pytest.raises(ConfigError, match="https"):
-        _get_jira_server(cfg, config_path=config_file)
+        _get_jira_server(cfg, jira_cli_config=config_file)
 
 
 def test_get_jira_server_handles_yaml_quoted_value(acme_config: Config, tmp_path):
@@ -789,7 +792,7 @@ def test_get_jira_server_handles_yaml_quoted_value(acme_config: Config, tmp_path
     config_file = tmp_path / ".config.yml"
     config_file.write_text('server: "https://my-jira.example.com"\n')
 
-    result = _get_jira_server(cfg, config_path=config_file)
+    result = _get_jira_server(cfg, jira_cli_config=config_file)
     assert result == "https://my-jira.example.com"
 
 
@@ -798,7 +801,7 @@ def test_get_jira_server_handles_single_quoted_value(acme_config: Config, tmp_pa
     config_file = tmp_path / ".config.yml"
     config_file.write_text("server: 'https://my-jira.example.com'\n")
 
-    result = _get_jira_server(cfg, config_path=config_file)
+    result = _get_jira_server(cfg, jira_cli_config=config_file)
     assert result == "https://my-jira.example.com"
 
 
@@ -1050,29 +1053,8 @@ def test_post_standup_catches_and_redacts_connection_errors(
 
 
 # =============================================================================
-# Last-run marker (read_last_run, _write_last_run_marker)
+# Last-run marker (_write_last_run_marker)
 # =============================================================================
-
-
-def test_read_last_run_returns_date(tmp_path):
-    marker = tmp_path / ".last-run"
-    marker.write_text("2026-04-25\n")
-
-    result = read_last_run(tmp_path)
-    assert result == date(2026, 4, 25)
-
-
-def test_read_last_run_returns_none_when_missing(tmp_path):
-    result = read_last_run(tmp_path)
-    assert result is None
-
-
-def test_read_last_run_returns_none_on_invalid_date(tmp_path):
-    marker = tmp_path / ".last-run"
-    marker.write_text("not-a-date\n")
-
-    result = read_last_run(tmp_path)
-    assert result is None
 
 
 def test_collect_writes_last_run_marker(cfg_dir: Path, acme_config: Config):
@@ -1475,7 +1457,7 @@ def test_standup_history_uses_config_channels(cfg_dir: Path, acme_config: Config
     with (
         patch.object(sys, "argv", argv),
         _patch_slack(session),
-        patch("standup_tool.collectors.slack_activity._search", side_effect=fake_search),
+        patch("standup_tool.collectors.slack_activity.search_messages", side_effect=fake_search),
         patch("time.sleep"),
     ):
         cli.main()
@@ -1495,7 +1477,7 @@ def test_standup_history_output_dash_writes_to_stdout(
     with (
         patch.object(sys, "argv", argv),
         _patch_slack(session),
-        patch("standup_tool.collectors.slack_activity._search", return_value=[]),
+        patch("standup_tool.collectors.slack_activity.search_messages", return_value=[]),
         patch("time.sleep"),
     ):
         cli.main()

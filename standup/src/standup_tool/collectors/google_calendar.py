@@ -7,7 +7,7 @@ from pathlib import Path
 
 from googleapiclient.discovery import build
 
-from standup_tool.collectors.google_auth import get_credentials
+from standup_tool.collectors.google_auth import authorized_http, get_credentials
 
 
 def collect(since_date: date, until_date: date, config_dir: Path | None = None) -> list[dict]:
@@ -16,7 +16,7 @@ def collect(since_date: date, until_date: date, config_dir: Path | None = None) 
     Each dict: {summary, start, end, attendees, organizer, response_status}
     """
     creds = get_credentials(config_dir)
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", http=authorized_http(creds))
 
     time_min = f"{since_date.isoformat()}T00:00:00Z"
     time_max = f"{until_date.isoformat()}T23:59:59Z"

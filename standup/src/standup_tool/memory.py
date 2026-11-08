@@ -34,11 +34,16 @@ def _resolve_main_worktree(repo_path: Path) -> Path:
         return repo_path
 
     if result.returncode == 0:
-        for line in result.stdout.splitlines():
-            if line.startswith("worktree "):
-                wt_str = line.removeprefix("worktree ").strip()
-                if wt_str:
-                    return Path(wt_str)
+        # A bare-clone layout lists the bare directory first; it holds no checkout.
+        for block in result.stdout.split("\n\n"):
+            lines = block.splitlines()
+            if "bare" in lines:
+                continue
+            for line in lines:
+                if line.startswith("worktree "):
+                    wt_str = line.removeprefix("worktree ").strip()
+                    if wt_str:
+                        return Path(wt_str)
     return repo_path
 
 

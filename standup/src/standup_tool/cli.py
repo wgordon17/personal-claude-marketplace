@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
@@ -22,7 +23,8 @@ from typing import Any
 
 import yaml
 
-from standup_tool.collectors.google_auth import _credentials_path, get_credentials
+from standup_tool.collectors import slack_activity
+from standup_tool.collectors.google_auth import credentials_path, get_credentials
 from standup_tool.collectors.registry import REGISTRY, Ctx, run_all
 from standup_tool.config import (
     Config,
@@ -37,7 +39,7 @@ from standup_tool.config import (
     validate_https_origin_url,
     write_private,
 )
-from standup_tool.slack_auth import get_slack_credentials, make_session, safe_get
+from standup_tool.slack_auth import get_slack_credentials, make_session, safe_get, safe_post
 from standup_tool.template import Header, load_template
 from standup_tool.verify import VERIFY_NAMES, run_verify
 from standup_tool.workspace import list_repos
@@ -76,27 +78,33 @@ def _get_author_email(config: Config) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _get_jira_server(config: Config, config_path: Path | None = None) -> str:
+_JIRA_CLI_CONFIG = Path("~/.config/.jira/.config.yml")
+
+
+def _load_jira_cli_config(path: Path | None = None) -> dict[str, Any]:
+    """Return the jira-cli config mapping, or {} when it is absent, unreadable, or malformed."""
+    cfg_file = (path if path is not None else _JIRA_CLI_CONFIG).expanduser()
+    try:
+        if cfg_file.exists():
+            doc = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
+            if isinstance(doc, dict):
+                return doc
+    # tolerant: an unreadable or malformed jira-cli config is treated as absent
+    except (OSError, yaml.YAMLError):
+        pass
+    return {}
+
+
+def _get_jira_server(config: Config, jira_cli_config: Path | None = None) -> str:
     """Return configured Jira server URL or read & validate it from jira-cli config."""
     if config.collectors.jira.server:
         return config.collectors.jira.server.rstrip("/")
 
-    jira_cfg = (
-        config_path if config_path is not None else Path("~/.config/.jira/.config.yml").expanduser()
-    )
-    try:
-        if jira_cfg.exists():
-            parsed = yaml.safe_load(jira_cfg.read_text(encoding="utf-8"))
-            if isinstance(parsed, dict):
-                raw_server = parsed.get("server")
-                if isinstance(raw_server, str) and raw_server.strip():
-                    server = raw_server.strip().rstrip("/")
-                    validate_https_origin_url(server, "jira-cli server")
-                    return server
-    except ConfigError:
-        raise
-    except (OSError, yaml.YAMLError):
-        pass
+    raw_server = _load_jira_cli_config(jira_cli_config).get("server")
+    if isinstance(raw_server, str) and raw_server.strip():
+        server = raw_server.strip().rstrip("/")
+        validate_https_origin_url(server, "jira-cli server")
+        return server
 
     raise ConfigError(
         "Jira server URL is not configured; set collectors.jira.server in config.yaml "
@@ -107,6 +115,7 @@ def _get_jira_server(config: Config, config_path: Path | None = None) -> str:
 def _parse_date_range(since_raw: str, until_raw: str | None) -> tuple[date, date]:
     try:
         since = date.fromisoformat(since_raw)
+    # fatal
     except ValueError:
         sys.stderr.write(
             f"ERROR: Invalid --since date '{since_raw}'. Expected format: YYYY-MM-DD\n"
@@ -116,6 +125,7 @@ def _parse_date_range(since_raw: str, until_raw: str | None) -> tuple[date, date
     if until_raw:
         try:
             until = date.fromisoformat(until_raw)
+        # fatal
         except ValueError:
             sys.stderr.write(
                 f"ERROR: Invalid --until date '{until_raw}'. Expected format: YYYY-MM-DD\n"
@@ -137,8 +147,10 @@ def _collect(args: argparse.Namespace, config: Config) -> None:
 
     try:
         repos = list_repos(config)
+    # fatal
     except ConfigError:
         raise
+    # fatal
     except Exception as exc:
         raise ConfigError(f"Repository discovery failed: {exc}") from exc
 
@@ -154,13 +166,7 @@ def _collect(args: argparse.Namespace, config: Config) -> None:
     outputs_by_key, status_by_name = run_all(REGISTRY, ctx, selected)
 
     output = {"_status": status_by_name, **outputs_by_key}
-    serialized = json.dumps(output, indent=2, default=str) + "\n"
-    out_arg = getattr(args, "output", None)
-    if out_arg == "-":
-        sys.stdout.write(serialized)
-    else:
-        out_path = Path(out_arg) if out_arg else state_path(".collect-output.json")
-        write_private(out_path, serialized)
+    _emit_json(output, getattr(args, "output", None), ".collect-output.json")
 
     summary_tokens = " ".join(
         f"{name}=ran:{st['count']}" if st["state"] == "ran" else f"{name}={st['state']}"
@@ -176,22 +182,13 @@ def _collect(args: argparse.Namespace, config: Config) -> None:
 _LAST_RUN_FILE = ".last-run"
 
 
-def read_last_run(config_dir: Path) -> date | None:
-    """Read the last-run marker date from `.last-run` in the config directory."""
-    marker = config_dir / _LAST_RUN_FILE
-    try:
-        text = marker.read_text().strip()
-        return date.fromisoformat(text)
-    except (OSError, ValueError):
-        return None
-
-
-def _write_last_run_marker(config_dir: Path, until_date: date) -> None:
+def _write_last_run_marker(directory: Path, until_date: date) -> None:
     """Write the day after until_date as the next collection start date."""
-    marker = config_dir / _LAST_RUN_FILE
+    marker = directory / _LAST_RUN_FILE
     next_start = until_date + timedelta(days=1)
     try:
         write_private(marker, next_start.isoformat() + "\n")
+    # tolerant: a failed last-run marker write only logs a warning
     except (OSError, ConfigError) as exc:
         logging.warning("Failed to write last-run marker: %s", exc)
 
@@ -203,17 +200,8 @@ def _jira_basic_auth() -> str:
         sys.stderr.write("ERROR: JIRA_API_TOKEN not set\n")
         sys.exit(1)
 
-    cfg_file = Path("~/.config/.jira/.config.yml").expanduser()
-    login = ""
-    if cfg_file.exists():
-        try:
-            doc = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
-            if isinstance(doc, dict):
-                raw_login = doc.get("login")
-                if isinstance(raw_login, str):
-                    login = raw_login.strip()
-        except (OSError, yaml.YAMLError):
-            login = ""
+    raw_login = _load_jira_cli_config().get("login")
+    login = raw_login.strip() if isinstance(raw_login, str) else ""
 
     if not login:
         sys.stderr.write("ERROR: jira-cli login not found\n")
@@ -230,20 +218,33 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
 
 
+def _slack_call(
+    session: Any, url: str, what: str, *, json_body: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Call a Slack API endpoint (POST when *json_body* is given, else GET) and return
+    its JSON. Exits with a redacted error on a transport failure or ``ok: false``."""
+    try:
+        if json_body is None:
+            resp = safe_get(session, url)
+        else:
+            resp = safe_post(session, url, json=json_body)
+        resp.raise_for_status()
+    # fatal
+    except Exception as exc:
+        sys.stderr.write(redact_secrets(f"ERROR: {what} HTTP error: {exc}\n"))
+        sys.exit(1)
+    data = resp.json()
+    if not data.get("ok"):
+        sys.stderr.write(f"ERROR: {what} failed: {data.get('error')}\n")
+        sys.exit(1)
+    return data
+
+
 def _slack_auth(config: Config) -> tuple:
     """Return (session, user_id), exit on auth failure."""
     creds = get_slack_credentials(config.collectors.slack, secret_path("slack-token"))
     session = make_session(creds)
-    try:
-        resp = safe_get(session, "https://slack.com/api/auth.test")
-        resp.raise_for_status()
-    except Exception as exc:
-        sys.stderr.write(redact_secrets(f"ERROR: Slack auth.test HTTP error: {exc}\n"))
-        sys.exit(1)
-    auth_data = resp.json()
-    if not auth_data.get("ok"):
-        sys.stderr.write(f"ERROR: Slack auth failed: {auth_data.get('error')}\n")
-        sys.exit(1)
+    auth_data = _slack_call(session, "https://slack.com/api/auth.test", "Slack auth.test")
     return session, auth_data["user_id"]
 
 
@@ -355,43 +356,29 @@ def _post_standup(args: argparse.Namespace, config: Config) -> None:
     headers = load_template(config_path(config.standup.template_file)).headers
     session, user_id = _slack_auth(config)
 
-    try:
-        dm_resp = session.post(
-            "https://slack.com/api/conversations.open",
-            json={"users": user_id},
-        )
-        dm_resp.raise_for_status()
-    except Exception as exc:
-        sys.stderr.write(redact_secrets(f"ERROR: conversations.open HTTP error: {exc}\n"))
-        sys.exit(1)
-    dm_data = dm_resp.json()
-    if not dm_data.get("ok"):
-        sys.stderr.write(f"ERROR: Could not open self-DM: {dm_data.get('error')}\n")
-        sys.exit(1)
+    dm_data = _slack_call(
+        session,
+        "https://slack.com/api/conversations.open",
+        "conversations.open",
+        json_body={"users": user_id},
+    )
     channel_id = dm_data["channel"]["id"]
 
     blocks = _standup_to_blocks(text, headers)
     fallback = text.replace("• ", "- ").replace("* ", "- ")
 
-    try:
-        post_resp = session.post(
-            "https://slack.com/api/chat.postMessage",
-            json={
-                "channel": channel_id,
-                "text": fallback,
-                "blocks": blocks,
-                "unfurl_links": False,
-                "unfurl_media": False,
-            },
-        )
-        post_resp.raise_for_status()
-    except Exception as exc:
-        sys.stderr.write(redact_secrets(f"ERROR: chat.postMessage HTTP error: {exc}\n"))
-        sys.exit(1)
-    post_data = post_resp.json()
-    if not post_data.get("ok"):
-        sys.stderr.write(f"ERROR: Failed to post: {post_data.get('error')}\n")
-        sys.exit(1)
+    post_data = _slack_call(
+        session,
+        "https://slack.com/api/chat.postMessage",
+        "chat.postMessage",
+        json_body={
+            "channel": channel_id,
+            "text": fallback,
+            "blocks": blocks,
+            "unfurl_links": False,
+            "unfurl_media": False,
+        },
+    )
 
     ts = post_data.get("ts", "")
     sys.stdout.write(f"Posted to self-DM (channel {channel_id}, ts {ts})\n")
@@ -415,6 +402,28 @@ def _build_standup_queries(headers: Sequence[Header]) -> list[str]:
     return queries
 
 
+def _emit_json(payload: Any, out_arg: str | None, default_name: str) -> None:
+    """Write *payload* as JSON to stdout (``-``), *out_arg*, or the default state file."""
+    serialized = json.dumps(payload, indent=2, default=str) + "\n"
+    if out_arg == "-":
+        sys.stdout.write(serialized)
+    else:
+        write_private(Path(out_arg) if out_arg else state_path(default_name), serialized)
+
+
+def _find_standup_text(
+    session: Any, scope: str, queries: Sequence[str], headers: Sequence[Header], day_str: str
+) -> str | None:
+    """Search one day under *scope* (e.g. ``from:<@U> in:#chan``) and return the text of the
+    first message that looks like a standup, pausing between unsuccessful queries."""
+    for sq in queries:
+        for m in slack_activity.search_messages(session, f"{scope} {sq} on:{day_str}", count=20):
+            if _is_standup(m.get("text", ""), headers):
+                return m["text"]
+        time.sleep(slack_activity.REQUEST_DELAY)
+    return None
+
+
 def _standup_history(args: argparse.Namespace, config: Config) -> None:
     """Fetch recent standup pairs (draft + published) from Slack for edit learning."""
     days = args.days
@@ -426,10 +435,6 @@ def _standup_history(args: argparse.Namespace, config: Config) -> None:
         sys.stderr.write("ERROR: --days maximum is 90\n")
         sys.exit(1)
 
-    import time
-
-    from standup_tool.collectors.slack_activity import REQUEST_DELAY, _search
-
     headers = load_template(config_path(config.standup.template_file)).headers
     standup_queries = _build_standup_queries(headers)
     standup_channels = config.collectors.slack.standup_channels
@@ -440,47 +445,29 @@ def _standup_history(args: argparse.Namespace, config: Config) -> None:
     drafts_by_date: dict[str, str] = {}
     published_by_date: dict[str, str] = {}
 
+    delay = slack_activity.REQUEST_DELAY
     try:
         for day_offset in range(days):
-            d = end - timedelta(days=day_offset + 1)
-            day_str = d.isoformat()
+            day_str = (end - timedelta(days=day_offset + 1)).isoformat()
 
-            for sq in standup_queries:
-                for m in _search(
-                    session,
-                    f"from:<@{user_id}> to:<@{user_id}> {sq} on:{day_str}",
-                    count=20,
-                ):
-                    if _is_standup(m.get("text", ""), headers) and day_str not in drafts_by_date:
-                        drafts_by_date[day_str] = m["text"]
-                        break
-                if day_str in drafts_by_date:
-                    break
-                time.sleep(REQUEST_DELAY)
-
-            time.sleep(REQUEST_DELAY)
+            draft = _find_standup_text(
+                session, f"from:<@{user_id}> to:<@{user_id}>", standup_queries, headers, day_str
+            )
+            if draft:
+                drafts_by_date[day_str] = draft
+            time.sleep(delay)
 
             for ch in standup_channels:
-                for sq in standup_queries:
-                    for m in _search(
-                        session,
-                        f"from:<@{user_id}> in:{ch} {sq} on:{day_str}",
-                        count=20,
-                    ):
-                        if (
-                            _is_standup(m.get("text", ""), headers)
-                            and day_str not in published_by_date
-                        ):
-                            published_by_date[day_str] = m["text"]
-                            break
-                    if day_str in published_by_date:
-                        break
-                    time.sleep(REQUEST_DELAY)
-                if day_str in published_by_date:
+                published = _find_standup_text(
+                    session, f"from:<@{user_id}> in:{ch}", standup_queries, headers, day_str
+                )
+                if published:
+                    published_by_date[day_str] = published
                     break
 
             if day_offset < days - 1:
-                time.sleep(REQUEST_DELAY)
+                time.sleep(delay)
+    # fatal
     except PermissionError as exc:
         sys.stderr.write(redact_secrets(f"ERROR: {exc}\n"))
         sys.exit(1)
@@ -495,13 +482,7 @@ def _standup_history(args: argparse.Namespace, config: Config) -> None:
         for d in all_dates
     ]
 
-    serialized = json.dumps(pairs, indent=2, default=str) + "\n"
-    out_arg = getattr(args, "output", None)
-    if out_arg == "-":
-        sys.stdout.write(serialized)
-    else:
-        out_path = Path(out_arg) if out_arg else state_path(".standup-history.json")
-        write_private(out_path, serialized)
+    _emit_json(pairs, getattr(args, "output", None), ".standup-history.json")
 
     sys.stderr.write(
         f"STANDUP HISTORY: {len(pairs)} day(s) with standup data over {days}-day window\n"
@@ -537,15 +518,18 @@ def _backlog(args: argparse.Namespace, config: Config) -> None:
                 sys.stdout.write(f"{key}: removed from sprint\n")
         else:
             sys.stdout.write(f"Unexpected status: {resp.status}\n")
+    # fatal
     except urllib.error.HTTPError as e:
         body = ""
         if e.fp is not None:
             try:
                 body = e.read().decode(errors="replace")
+            # tolerant: an unreadable HTTP error body is reported as empty
             except Exception:
                 body = ""
         sys.stderr.write(redact_secrets(f"ERROR: {e.code} — {body}\n"))
         sys.exit(1)
+    # fatal
     except urllib.error.URLError as e:
         sys.stderr.write(redact_secrets(f"ERROR: {e.reason}\n"))
         sys.exit(1)
@@ -798,8 +782,9 @@ def _google_auth() -> None:
     cfg_dir = ensure_dir_mode()
     try:
         get_credentials(cfg_dir, interactive=True)
+    # fatal
     except FileNotFoundError:
-        creds_path = _credentials_path(cfg_dir)
+        creds_path = credentials_path(cfg_dir)
         sys.stderr.write(f"credentials.json not found at {creds_path}\n")
         sys.exit(1)
     sys.stdout.write("ok\n")
@@ -856,6 +841,7 @@ def main(argv: list[str] | None = None) -> None:
             from standup_tool.enrich_team import run_enrichment
 
             run_enrichment(cfg, org=args.org, dry_run=args.dry_run)
+    # fatal
     except ConfigError as exc:
         sys.stderr.write(f"{exc}\n")
         sys.exit(1)

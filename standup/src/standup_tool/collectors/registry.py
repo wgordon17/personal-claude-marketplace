@@ -58,6 +58,11 @@ def _count_output(output: Any) -> int:
     return 0
 
 
+def _skipped(collector: Collector, state: str, reason: str) -> tuple[Any, dict[str, Any]]:
+    """Result for a collector that did not produce output: its empty value and a status."""
+    return copy.deepcopy(collector.empty), {"state": state, "reason": reason, "count": 0}
+
+
 def run_one(
     collector: Collector,
     ctx: Ctx,
@@ -71,57 +76,34 @@ def run_one(
     """
     cfg_entry = getattr(ctx.config.collectors, collector.name, None)
     if cfg_entry is not None and not cfg_entry.enabled:
-        return copy.deepcopy(collector.empty), {
-            "state": "disabled",
-            "reason": "disabled in config",
-            "count": 0,
-        }
+        return _skipped(collector, "disabled", "disabled in config")
 
     if selected is not None and collector.name not in selected:
-        return copy.deepcopy(collector.empty), {
-            "state": "disabled",
-            "reason": "not selected",
-            "count": 0,
-        }
+        return _skipped(collector, "disabled", "not selected")
 
     for dep in collector.depends_on:
         dep_status = status.get(dep)
         if dep_status is not None:
             dep_state = dep_status.get("state")
             if dep_state == "disabled":
-                return copy.deepcopy(collector.empty), {
-                    "state": "disabled",
-                    "reason": f"requires {dep}",
-                    "count": 0,
-                }
+                return _skipped(collector, "disabled", f"requires {dep}")
             if dep_state == "failed":
-                return copy.deepcopy(collector.empty), {
-                    "state": "failed",
-                    "reason": f"dependency {dep} failed",
-                    "count": 0,
-                }
+                return _skipped(collector, "failed", f"dependency {dep} failed")
         else:
             dep_cfg = getattr(ctx.config.collectors, dep, None)
             if (dep_cfg is not None and not dep_cfg.enabled) or (
                 selected is not None and dep not in selected
             ):
-                return copy.deepcopy(collector.empty), {
-                    "state": "disabled",
-                    "reason": f"requires {dep}",
-                    "count": 0,
-                }
+                return _skipped(collector, "disabled", f"requires {dep}")
 
     try:
         output = collector.run(ctx, outputs)
+    # tolerant: one collector failing is recorded as state=failed; the others still run
     except Exception as exc:
         reason = redact_secrets(f"{type(exc).__name__}: {exc}")[:300]
         redacted_tb = redact_secrets(traceback.format_exc())
-        sys.stderr.write(f"ERROR in collector '{collector.name}':\n{redacted_tb}")
-        return copy.deepcopy(collector.empty), {
-            "state": "failed",
-            "reason": reason,
-            "count": 0,
-        }
+        sys.stderr.write(f"ERROR in collector {collector.name!r}:\n{redacted_tb}")
+        return _skipped(collector, "failed", reason)
 
     return output, {
         "state": "ran",

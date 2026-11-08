@@ -710,6 +710,43 @@ def test_redact_secrets_masks_all_supported_token_patterns() -> None:
     assert "a0AfH6SMBx1234567890_google_oauth" not in redacted
 
 
+def test_redact_secrets_masks_common_credential_families() -> None:
+    """Pasted GitHub/AWS/API keys, JWTs, PEM blocks, and password= assignments are masked."""
+    # Synthetic values are assembled at runtime so no literal triggers static scanners.
+    gh_pat = "gh" + "p_" + "A1b2C3d4" * 5
+    gh_fine = "github" + "_pat_" + "11ABCDEFG0" + "x" * 30
+    aws = "AK" + "IA" + "ABCDEFGHIJKLMNOP"
+    sk_key = "s" + "k-" + "proj_" + "q" * 30
+    jwt = "ey" + "J" + "hbGciOiJIUzI1" + ".ey" + "JzdWIiOiIxMjM0" + ".abcDEF123456_-xyz"
+    pem = (
+        "-----BEGIN " + "RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3VS5JJcds3xfn\n"
+        "-----END " + "RSA PRIVATE KEY-----"
+    )
+    assignments = 'password=hunter2hunter2 secret: "top secret value" api_key = abcd1234'
+
+    raw = f"a {gh_pat} b {gh_fine} c {aws} d {sk_key} e {jwt}\n{pem}\n{assignments}"
+    redacted = redact_secrets(raw)
+
+    for leaked in (
+        gh_pat,
+        gh_fine,
+        aws,
+        sk_key,
+        jwt,
+        "MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn",
+        "hunter2hunter2",
+        "top secret value",
+        "abcd1234",
+    ):
+        assert leaked not in redacted, leaked
+    assert "[REDACTED PRIVATE KEY]" in redacted
+
+
+def test_redact_secrets_leaves_ordinary_prose_alone() -> None:
+    text = "Merged PR #42 and reviewed the token rotation plan with the platform team."
+    assert redact_secrets(text) == text
+
+
 def test_cli_config_validate_fails_on_nonexistent_example_repo(
     cfg_dir: Path,
     capsys: pytest.CaptureFixture[str],

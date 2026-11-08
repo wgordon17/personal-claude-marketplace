@@ -1,7 +1,14 @@
 ---
 description: Run the daily standup workflow — validate config, collect activity, build digest, review Jira, synthesize standup and PR review drafts, resolve failures, and surface priorities.
 allowed-tools:
-  - Bash
+  - Bash(uv run --directory:*)
+  - Bash(chmod 600:*)
+  - Bash(jq:*)
+  - Bash(git -C:*)
+  - Bash(gh pr checks:*)
+  - Bash(gh run view:*)
+  - Bash(command -v:*)
+  - Bash(test -f:*)
   - Read
   - Write
   - Edit
@@ -127,7 +134,7 @@ If a spawned subagent (`standup:standup-draft`, `standup:standup-pr-review`, `st
    ```
    If `standup-history` fails, log the error and continue without history.
 2. **Edit-debrief loop:**
-   `Read` `${CLAUDE_PLUGIN_ROOT}/references/debrief.md` (Part 1) and run the edit-debrief loop on the most recent undebriefed `{date, draft, published}` pair (skip option first, max 3 questions via `AskUserQuestion`, 90-day prune on `<config_dir>/.standup-annotations.json`, and `chmod 600 "<config_dir>/.standup-annotations.json"` after writing).
+   `Read` `${CLAUDE_PLUGIN_ROOT}/references/debrief.md` (Part 1) and run the edit-debrief loop on the most recent undebriefed `{date, draft, published}` pair (then `chmod 600 "<config_dir>/.standup-annotations.json"`).
 3. **Prepare `<config>` block and spawn `standup:standup-draft`:**
    `Read` `<config_dir>/<standup.template_file>` verbatim (including all `<!-- criteria: ... -->` comments). Spawn `standup:standup-draft` with `<config>` placed **before** the data-boundary instruction:
    ```text
