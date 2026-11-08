@@ -1,10 +1,22 @@
 """Tests for PostToolUse project-format mode in validate-commit-message.sh."""
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 VALIDATE_SCRIPT = Path(__file__).parent.parent / "hooks" / "validate-commit-message.sh"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the developer's global git config and GIT_* variables out of these tests."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        monkeypatch.delenv(var, raising=False)
 
 
 def init_project_repo(
@@ -110,7 +122,7 @@ class TestValidateCommitMessageProjectFormat:
         )
         res = run_validator(cwd=repo)
         assert res.returncode == 2
-        assert "Missing Jira key or NO-ISSUE prefix (e.g., OSAC-123: or NO-ISSUE:)" in res.stderr
+        assert "Missing Jira key or NO-ISSUE prefix (e.g., PROJ-123: or NO-ISSUE:)" in res.stderr
 
     def test_missing_assisted_by_exits_2(self, tmp_path: Path) -> None:
         repo = init_project_repo(tmp_path / "repo")
@@ -222,3 +234,45 @@ class TestValidateCommitMessageProjectFormat:
         res_bad = run_validator(cwd=repo)
         assert res_bad.returncode == 2
         assert "Conventional Commits format" in res_bad.stderr
+
+
+class TestActivationGate:
+    """The post-hook keeps firing for commit forms the static parser cannot read."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "bash -c \"git commit -m 'x'\"",
+            "eval 'git commit -m x'",
+            "sudo -u dev git commit -m x",
+            "git commit -m x",
+            "git -C . commit -m x",
+        ],
+    )
+    def test_validates_head_for_wrapped_commit_forms(self, tmp_path: Path, command: str) -> None:
+        repo = init_project_repo(tmp_path / "repo")
+        make_commit(repo, "adds thing without prefix")
+        res = run_validator(cwd=repo, command=command)
+        assert res.returncode == 2, command
+        assert "Missing Jira key or NO-ISSUE prefix" in res.stderr
+
+    def test_non_commit_commands_are_ignored(self, tmp_path: Path) -> None:
+        repo = init_project_repo(tmp_path / "repo")
+        make_commit(repo, "adds thing without prefix")
+        assert run_validator(cwd=repo, command="git status").returncode == 0
+        assert run_validator(cwd=repo, command="ls -la").returncode == 0
+
+    def test_cd_into_project_repo_validates_that_repo(self, tmp_path: Path) -> None:
+        project = init_project_repo(tmp_path / "project")
+        make_commit(project, "adds thing without prefix")
+        other = tmp_path / "other"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=other, check=True)
+        res = run_validator(cwd=other, command=f"cd {project} && git commit -m x")
+        assert res.returncode == 2
+
+    def test_trailer_words_inside_subject_do_not_count(self, tmp_path: Path) -> None:
+        repo = init_project_repo(tmp_path / "repo")
+        make_commit(repo, "OSAC-1: fix Assisted-by: and Signed-off-by: handling")
+        res = run_validator(cwd=repo)
+        assert res.returncode == 2

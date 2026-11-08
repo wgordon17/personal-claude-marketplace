@@ -5,39 +5,26 @@
 # Sourced by both:
 #   - dev-guard/hooks/validate-commit-message.sh (PostToolUse)
 #   - dev-guard/hooks/enforce-project-commit-format.sh (PreToolUse)
+#
+# The parser is a static best-effort reader of `git commit` command strings. It
+# understands env assignments, wrapper commands, path-qualified git, pipelines,
+# subshells, `cd`, and git's global path options. It does not evaluate shell:
+# `bash -c`, `eval`, and git aliases are invisible to it, which is why the
+# PostToolUse hook re-validates the commit that actually landed.
 
 PCF_DEFAULT_SUBJECT_PATTERN='^([A-Z][A-Z0-9]+-[0-9]+|NO-ISSUE): '
 
-PCF_ERR_PREFIX="Missing Jira key or NO-ISSUE prefix (e.g., OSAC-123: or NO-ISSUE:)"
-PCF_ERR_ASSISTED_BY="Missing Assisted-by trailer (e.g., Assisted-by: Codex <noreply@openai.com>)"
+PCF_ERR_PREFIX="Missing Jira key or NO-ISSUE prefix (e.g., PROJ-123: or NO-ISSUE:)"
+PCF_ERR_ASSISTED_BY="Missing Assisted-by trailer (e.g., Assisted-by: Claude <noreply@anthropic.com>)"
 PCF_ERR_SIGNED_OFF_BY="Missing Signed-off-by trailer (use -s flag: git commit -s -m ...)"
 
-PCF_IS_GIT_COMMIT=0
-PCF_TARGET_DIR=""
-PCF_TARGET_GIT_DIR=""
-PCF_TARGET_WORK_TREE=""
-PCF_EXPLICIT_PATHS=()
-PCF_HAS_AMEND=0
-PCF_HAS_NO_EDIT=0
-PCF_HAS_SIGNOFF_FLAG=0
-PCF_HAS_FILE_FLAG=0
-PCF_HAS_MSG_FLAG=0
-PCF_DEFER_TO_POST=0
-PCF_MSG_VALUES=()
-PCF_TRAILER_VALUES=()
-PCF_TRAILERS_REQUIRED="false"
-PCF_SUBJECT_PATTERN="$PCF_DEFAULT_SUBJECT_PATTERN"
-
 pcf_reset_state() {
-    PCF_IS_GIT_COMMIT=0
+    PCF_CD_DIR=""
     PCF_TARGET_DIR=""
     PCF_TARGET_GIT_DIR=""
     PCF_TARGET_WORK_TREE=""
     PCF_EXPLICIT_PATHS=()
-    PCF_HAS_AMEND=0
-    PCF_HAS_NO_EDIT=0
     PCF_HAS_SIGNOFF_FLAG=0
-    PCF_HAS_FILE_FLAG=0
     PCF_HAS_MSG_FLAG=0
     PCF_DEFER_TO_POST=0
     PCF_MSG_VALUES=()
@@ -45,6 +32,7 @@ pcf_reset_state() {
     PCF_TRAILERS_REQUIRED="false"
     PCF_SUBJECT_PATTERN="$PCF_DEFAULT_SUBJECT_PATTERN"
 }
+pcf_reset_state
 
 pcf_expand_tilde() {
     local p="$1"
@@ -69,9 +57,9 @@ pcf_join_dir() {
     fi
 }
 
-# Tokenize a shell command string into tokens separated by NUL bytes,
-# emitting "\x1f" tokens at unquoted command separators (;, &&, ||)
-# and stripping unquoted # comments through end-of-line.
+# Tokenize a shell command string into tokens, emitting "\x1f" tokens at
+# unquoted command separators (; & && | || ( ) and newline) and stripping
+# unquoted # comments through end-of-line.
 # Preserves inner $(cat <<...) blocks inside double-quoted tokens so
 # heredoc bodies containing quotes or hashes are kept intact.
 PCF_TOKENS=()
@@ -196,26 +184,20 @@ pcf_tokenize_command() {
             continue
         fi
 
-        # Command separators: ;, &&, ||, or newline
-        if [[ "$ch" == ";" || "$ch" == $'\n' ]]; then
+        # Command separators: ; & && | || ( ) and newline
+        if [[ "$ch" == ";" || "$ch" == $'\n' || "$ch" == "&" || "$ch" == "|" \
+              || "$ch" == "(" || "$ch" == ")" ]]; then
             if (( has_cur )); then
                 PCF_TOKENS+=("$cur")
                 cur=""
                 has_cur=0
             fi
             PCF_TOKENS+=($'\x1f')
-            (( i++ ))
-            continue
-        fi
-
-        if [[ ( "$ch" == "&" && "$next_ch" == "&" ) || ( "$ch" == "|" && "$next_ch" == "|" ) ]]; then
-            if (( has_cur )); then
-                PCF_TOKENS+=("$cur")
-                cur=""
-                has_cur=0
+            if [[ ( "$ch" == "&" || "$ch" == "|" ) && "$next_ch" == "$ch" ]]; then
+                (( i += 2 ))
+            else
+                (( i++ ))
             fi
-            PCF_TOKENS+=($'\x1f')
-            (( i += 2 ))
             continue
         fi
 
@@ -279,32 +261,71 @@ pcf_unwrap_message_arg() {
     fi
 }
 
+# Record one -m / --message value.
+pcf_add_message() {
+    PCF_HAS_MSG_FLAG=1
+    pcf_unwrap_message_arg "$1"
+    PCF_MSG_VALUES+=("$PCF_UNWRAPPED_MSG")
+}
+
+# Apply one of git's global path options (-C, --git-dir, --work-tree) to the
+# current segment's target. An empty value is recorded as an explicit path so
+# pcf_check_target_paths fails closed on it.
+pcf_apply_global_path() {
+    local opt="$1" raw="$2" val
+    case "$opt" in
+        -C)
+            PCF_TARGET_DIR=$(pcf_join_dir "$PCF_TARGET_DIR" "$raw")
+            PCF_EXPLICIT_PATHS+=("$PCF_TARGET_DIR")
+            ;;
+        --git-dir)
+            val=$(pcf_expand_tilde "$raw")
+            PCF_TARGET_GIT_DIR="$val"
+            PCF_EXPLICIT_PATHS+=("$val")
+            ;;
+        --work-tree)
+            val=$(pcf_expand_tilde "$raw")
+            PCF_TARGET_WORK_TREE="$val"
+            PCF_TARGET_DIR="$val"
+            PCF_EXPLICIT_PATHS+=("$val")
+            ;;
+    esac
+}
+
 # Parse a command segment (array of tokens) to see if it is a `git commit` invocation.
+# On success the PCF_* state describes the commit; on failure the target state is
+# stale and callers must treat the parse as "not a commit" (pcf_parse_command resets).
 pcf_try_parse_segment() {
     local seg=("$@")
     local n=${#seg[@]}
     local idx=0
     local tok
 
-    # Skip leading KEY=VALUE env assignments
+    PCF_TARGET_DIR="$PCF_CD_DIR"
+    PCF_TARGET_GIT_DIR=""
+    PCF_TARGET_WORK_TREE=""
+    PCF_EXPLICIT_PATHS=()
+
+    # Skip env assignments, wrapper commands, and shell keywords before the command word
     while (( idx < n )); do
         tok="${seg[idx]}"
-        if [[ "$tok" =~ ^[A-Za-z_][A-Za-z0-9_]*=.*$ ]]; then
-            (( idx++ ))
-        else
-            break
-        fi
+        case "$tok" in
+            GIT_DIR=*) PCF_TARGET_GIT_DIR=$(pcf_expand_tilde "${tok#GIT_DIR=}") ;;
+            GIT_WORK_TREE=*)
+                PCF_TARGET_WORK_TREE=$(pcf_expand_tilde "${tok#GIT_WORK_TREE=}")
+                PCF_TARGET_DIR="$PCF_TARGET_WORK_TREE"
+                ;;
+            [A-Za-z_]*=*) ;;
+            command|exec|time|nohup|env|'!'|'{'|if|then|do|else|elif|while|until|-*) ;;
+            *) break ;;
+        esac
+        (( idx++ ))
     done
 
-    if (( idx >= n )) || [[ "${seg[idx]}" != "git" ]]; then
+    if (( idx >= n )) || [[ "${seg[idx]}" != "git" && "${seg[idx]}" != */git ]]; then
         return 1
     fi
     (( idx++ ))
-
-    local target_dir=""
-    local target_git_dir=""
-    local target_work_tree=""
-    local explicit_paths=()
 
     # Parse leading global git options before the subcommand
     while (( idx < n )); do
@@ -313,63 +334,22 @@ pcf_try_parse_segment() {
             commit)
                 break
                 ;;
-            -C)
-                (( idx++ ))
-                if (( idx >= n )); then
-                    explicit_paths+=("")
-                    break
-                fi
-                target_dir=$(pcf_join_dir "$target_dir" "${seg[idx]}")
-                explicit_paths+=("$target_dir")
+            -C|--git-dir|--work-tree)
+                pcf_apply_global_path "$tok" "${seg[idx+1]:-}"
+                (( idx += 2 ))
+                ;;
+            -C?*)
+                pcf_apply_global_path -C "${tok#-C}"
                 (( idx++ ))
                 ;;
-            -C*)
-                target_dir=$(pcf_join_dir "$target_dir" "${tok#-C}")
-                explicit_paths+=("$target_dir")
-                (( idx++ ))
-                ;;
-            --git-dir)
-                (( idx++ ))
-                if (( idx >= n )); then
-                    explicit_paths+=("")
-                    break
-                fi
-                target_git_dir=$(pcf_expand_tilde "${seg[idx]}")
-                explicit_paths+=("$target_git_dir")
-                (( idx++ ))
-                ;;
-            --git-dir=*)
-                target_git_dir=$(pcf_expand_tilde "${tok#--git-dir=}")
-                explicit_paths+=("$target_git_dir")
-                (( idx++ ))
-                ;;
-            --work-tree)
-                (( idx++ ))
-                if (( idx >= n )); then
-                    explicit_paths+=("")
-                    break
-                fi
-                target_work_tree=$(pcf_expand_tilde "${seg[idx]}")
-                target_dir="$target_work_tree"
-                explicit_paths+=("$target_work_tree")
-                (( idx++ ))
-                ;;
-            --work-tree=*)
-                target_work_tree=$(pcf_expand_tilde "${tok#--work-tree=}")
-                target_dir="$target_work_tree"
-                explicit_paths+=("$target_work_tree")
+            --git-dir=*|--work-tree=*)
+                pcf_apply_global_path "${tok%%=*}" "${tok#*=}"
                 (( idx++ ))
                 ;;
             -c)
                 (( idx += 2 ))
                 ;;
-            -c*)
-                (( idx++ ))
-                ;;
-            --no-pager|-p|--paginate|--bare|--no-replace-objects|--literal-pathspecs)
-                (( idx++ ))
-                ;;
-            --*=*)
+            -c?*|--no-pager|-p|--paginate|--bare|--no-replace-objects|--literal-pathspecs|--*=*)
                 (( idx++ ))
                 ;;
             *)
@@ -383,117 +363,74 @@ pcf_try_parse_segment() {
     fi
     (( idx++ ))
 
-    PCF_IS_GIT_COMMIT=1
-    PCF_TARGET_DIR="$target_dir"
-    PCF_TARGET_GIT_DIR="$target_git_dir"
-    PCF_TARGET_WORK_TREE="$target_work_tree"
-    if (( ${#explicit_paths[@]} > 0 )); then
-        PCF_EXPLICIT_PATHS=("${explicit_paths[@]}")
-    else
-        PCF_EXPLICIT_PATHS=()
-    fi
-
-    # Parse git commit options
+    # Parse git commit options. Message-bearing options that cannot be read
+    # statically (-F, -C/-c, --fixup, ...) defer to the PostToolUse check.
+    local flags ch rest j
     while (( idx < n )); do
         tok="${seg[idx]}"
+        (( idx++ ))
         case "$tok" in
             --)
                 break
                 ;;
-            --amend)
-                PCF_HAS_AMEND=1
-                (( idx++ ))
-                ;;
-            --no-edit)
-                PCF_HAS_NO_EDIT=1
-                (( idx++ ))
-                ;;
             --signoff)
                 PCF_HAS_SIGNOFF_FLAG=1
-                (( idx++ ))
                 ;;
-            -m|--message)
-                PCF_HAS_MSG_FLAG=1
+            --message)
+                pcf_add_message "${seg[idx]:-}"
                 (( idx++ ))
-                if (( idx < n )); then
-                    pcf_unwrap_message_arg "${seg[idx]}"
-                    PCF_MSG_VALUES+=("$PCF_UNWRAPPED_MSG")
-                    (( idx++ ))
-                else
-                    PCF_MSG_VALUES+=("")
-                fi
                 ;;
             --message=*)
-                PCF_HAS_MSG_FLAG=1
-                pcf_unwrap_message_arg "${tok#--message=}"
-                PCF_MSG_VALUES+=("$PCF_UNWRAPPED_MSG")
-                (( idx++ ))
-                ;;
-            -m*)
-                PCF_HAS_MSG_FLAG=1
-                pcf_unwrap_message_arg "${tok#-m}"
-                PCF_MSG_VALUES+=("$PCF_UNWRAPPED_MSG")
-                (( idx++ ))
-                ;;
-            -F|--file)
-                PCF_HAS_FILE_FLAG=1
-                (( idx += 2 ))
-                ;;
-            --file=*|-F*)
-                PCF_HAS_FILE_FLAG=1
-                (( idx++ ))
+                pcf_add_message "${tok#--message=}"
                 ;;
             --trailer)
+                PCF_TRAILER_VALUES+=("${seg[idx]:-}")
                 (( idx++ ))
-                if (( idx < n )); then
-                    PCF_TRAILER_VALUES+=("${seg[idx]}")
-                    (( idx++ ))
-                fi
                 ;;
             --trailer=*)
                 PCF_TRAILER_VALUES+=("${tok#--trailer=}")
+                ;;
+            --file|--reuse-message|--reedit-message|--fixup|--squash|--template|--pathspec-from-file)
+                PCF_DEFER_TO_POST=1
                 (( idx++ ))
                 ;;
-            -c|-C|--reuse-message|--reedit-message|--fixup|--squash|--author|--date|--cleanup|-t|--template|--pathspec-from-file)
-                (( idx += 2 ))
+            --file=*|--reuse-message=*|--reedit-message=*|--fixup=*|--squash=*|--template=*|--pathspec-from-file=*)
+                PCF_DEFER_TO_POST=1
                 ;;
-            -[a-zA-Z]*)
-                local flags="${tok#-}"
-                if [[ "$flags" == *s* ]]; then
-                    PCF_HAS_SIGNOFF_FLAG=1
-                fi
-                if [[ "$flags" == *F* ]]; then
-                    PCF_HAS_FILE_FLAG=1
-                    if [[ "$flags" == *F ]]; then
-                        (( idx += 2 ))
-                    else
-                        (( idx++ ))
-                    fi
-                    continue
-                fi
-                if [[ "$flags" == *m* ]]; then
-                    PCF_HAS_MSG_FLAG=1
-                    if [[ "$flags" == *m ]]; then
-                        (( idx++ ))
-                        if (( idx < n )); then
-                            pcf_unwrap_message_arg "${seg[idx]}"
-                            PCF_MSG_VALUES+=("$PCF_UNWRAPPED_MSG")
-                            (( idx++ ))
-                        else
-                            PCF_MSG_VALUES+=("")
-                        fi
-                    else
-                        local after_m="${flags#*m}"
-                        pcf_unwrap_message_arg "$after_m"
-                        PCF_MSG_VALUES+=("$PCF_UNWRAPPED_MSG")
-                        (( idx++ ))
-                    fi
-                    continue
-                fi
+            --author|--date|--cleanup)
                 (( idx++ ))
                 ;;
-            *)
-                (( idx++ ))
+            --*)
+                ;;
+            -?*)
+                # Short-flag cluster (e.g. -asm "msg", -am"msg"): scan left to right
+                # and stop at the first flag that takes a value; the rest of the
+                # token (or the next token) is that value, never more flags.
+                flags="${tok#-}"
+                for (( j = 0; j < ${#flags}; j++ )); do
+                    ch="${flags:j:1}"
+                    rest="${flags:j+1}"
+                    case "$ch" in
+                        s)
+                            PCF_HAS_SIGNOFF_FLAG=1
+                            ;;
+                        m|F|C|c|t)
+                            if [[ -z "$rest" ]]; then
+                                rest="${seg[idx]:-}"
+                                (( idx++ ))
+                            fi
+                            if [[ "$ch" == "m" ]]; then
+                                pcf_add_message "$rest"
+                            else
+                                PCF_DEFER_TO_POST=1
+                            fi
+                            break
+                            ;;
+                        u|S)
+                            break
+                            ;;
+                    esac
+                done
                 ;;
         esac
     done
@@ -501,49 +438,53 @@ pcf_try_parse_segment() {
     return 0
 }
 
+# Return 0 and set PCF_* state when the command contains a `git commit`
+# invocation; otherwise return 1 with the state reset.
 pcf_parse_command() {
     local cmd="$1"
+    local seg=()
+    local tok
     pcf_reset_state
     if [[ -z "$cmd" ]]; then
         return 1
     fi
 
     pcf_tokenize_command "$cmd"
+    PCF_TOKENS+=($'\x1f')
 
-    local seg=()
-    local tok
     for tok in "${PCF_TOKENS[@]}"; do
-        if [[ "$tok" == $'\x1f' ]]; then
-            if (( ${#seg[@]} > 0 )); then
-                if pcf_try_parse_segment "${seg[@]}"; then
-                    return 0
-                fi
-                seg=()
-            fi
-        else
+        if [[ "$tok" != $'\x1f' ]]; then
             seg+=("$tok")
+            continue
+        fi
+        if (( ${#seg[@]} > 0 )); then
+            if pcf_try_parse_segment "${seg[@]}"; then
+                return 0
+            fi
+            if [[ "${seg[0]}" == "cd" && -n "${seg[1]:-}" && "${seg[1]}" != -* ]]; then
+                PCF_CD_DIR=$(pcf_join_dir "$PCF_CD_DIR" "${seg[1]}")
+            fi
+            seg=()
         fi
     done
 
-    if (( ${#seg[@]} > 0 )); then
-        if pcf_try_parse_segment "${seg[@]}"; then
-            return 0
-        fi
-    fi
-
+    pcf_reset_state
     return 1
 }
 
-pcf_validate_target_paths() {
+# Fail closed (return 2) when an explicit -C / --git-dir / --work-tree path is
+# missing, so a typo cannot silently disable enforcement.
+pcf_check_target_paths() {
+    local p
     if (( ${#PCF_EXPLICIT_PATHS[@]} > 0 )); then
-        local p
         for p in "${PCF_EXPLICIT_PATHS[@]}"; do
             if [[ -z "$p" || ! -e "$p" ]]; then
-                echo "ERROR: Target repository path does not exist: ${p:-<empty>}" >&2
-                exit 2
+                printf 'ERROR: Target repository path does not exist: %s\n' "${p:-<empty>}" >&2
+                return 2
             fi
         done
     fi
+    return 0
 }
 
 pcf_run_git() {
@@ -560,8 +501,11 @@ pcf_run_git() {
     git "${git_args[@]}" "$@"
 }
 
+# Load the target repository's commit-format config into PCF_TRAILERS_REQUIRED
+# and PCF_SUBJECT_PATTERN. Returns 0 on success, 1 when the target is not a git
+# repository, and 2 when an explicit target path does not exist (fail closed).
 pcf_load_repo_config() {
-    pcf_validate_target_paths
+    pcf_check_target_paths || return 2
     if ! pcf_run_git rev-parse --git-dir >/dev/null 2>&1; then
         return 1
     fi
@@ -587,6 +531,8 @@ pcf_first_nonempty_line() {
     done <<< "$text"
 }
 
+# Validate a commit's subject and trailers. Trailers must start a line; the same
+# words inside the subject or prose do not count.
 pcf_validate_commit_text() {
     local subject="$1"
     local full_text="$2"
@@ -601,11 +547,11 @@ pcf_validate_commit_text() {
         errors="${errors}\n  - ${PCF_ERR_PREFIX}"
     fi
 
-    if ! printf '%s\n' "$full_text" | grep -qE '(^|[[:space:]])Assisted-by:'; then
+    if ! printf '%s\n' "$full_text" | grep -qE '^[[:space:]]*Assisted-by:'; then
         errors="${errors}\n  - ${PCF_ERR_ASSISTED_BY}"
     fi
 
-    if (( ! has_signoff_flag )) && ! printf '%s\n' "$full_text" | grep -qE '(^|[[:space:]])Signed-off-by:'; then
+    if (( ! has_signoff_flag )) && ! printf '%s\n' "$full_text" | grep -qE '^[[:space:]]*Signed-off-by:'; then
         errors="${errors}\n  - ${PCF_ERR_SIGNED_OFF_BY}"
     fi
 

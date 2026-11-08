@@ -5,7 +5,20 @@ import os
 import subprocess
 from pathlib import Path
 
-ENFORCE_SCRIPT = Path(__file__).parent.parent / "hooks" / "enforce-project-commit-format.sh"
+import pytest
+
+HOOKS_DIR = Path(__file__).parent.parent / "hooks"
+ENFORCE_SCRIPT = HOOKS_DIR / "enforce-project-commit-format.sh"
+ASSISTED = '--trailer "Assisted-by: Claude <noreply@anthropic.com>"'
+
+
+@pytest.fixture(autouse=True)
+def _isolated_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the developer's global git config and GIT_* variables out of these tests."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        monkeypatch.delenv(var, raising=False)
 
 
 def init_repo(
@@ -163,16 +176,210 @@ class TestEnforceProjectCommitFormat:
             == 0
         )
 
-    def test_fails_closed_when_jq_missing(self, tmp_path: Path) -> None:
+
+class TestParserForms:
+    """Command shapes the static parser must recognise (or deliberately defer)."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            f'git commit -am"bad subject" {ASSISTED}',
+            f'git commit -am"Fix: no prefix" -s {ASSISTED}',
+            f'/usr/bin/git commit -m "bad" {ASSISTED}',
+            f'command git commit -m "bad" {ASSISTED}',
+            f'env GIT_PAGER=cat git commit -m "bad" {ASSISTED}',
+            f'time git commit -m "bad" {ASSISTED}',
+            f'FOO=1 git commit -m "bad" {ASSISTED}',
+            f'true | git commit -m "bad" {ASSISTED}',
+            f'true & git commit -m "bad" {ASSISTED}',
+            f'(git commit -m "bad" {ASSISTED})',
+            f'{{ git commit -m "bad" {ASSISTED}; }}',
+            f'git add x && git commit -m "bad" {ASSISTED}',
+            f'git add x; git commit -m "bad" {ASSISTED}',
+            f'git commit -m "bad" {ASSISTED} 2>&1',
+        ],
+    )
+    def test_blocks_noncompliant_commit_in_any_recognised_form(
+        self, tmp_path: Path, command: str
+    ) -> None:
         repo = init_repo(tmp_path / "repo")
+        res = run_enforce(command, cwd=repo)
+        assert res.returncode == 2, command
+
+    def test_attached_message_text_does_not_set_signoff(self, tmp_path: Path) -> None:
+        """The 's' in 'issues' belongs to the message, not to a -s flag."""
+        repo = init_repo(tmp_path / "repo")
+        res = run_enforce(f'git commit -am"OSAC-1: fixes issues" {ASSISTED}', cwd=repo)
+        assert res.returncode == 2
+        assert "Missing Signed-off-by trailer" in res.stderr
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            f'git commit -sm "OSAC-1: adds thing" {ASSISTED}',
+            f'git commit -asm "OSAC-1: adds thing" {ASSISTED}',
+            f'git commit -am"OSAC-1: adds thing" -s {ASSISTED}',
+            f'git commit --signoff --message="OSAC-1: adds thing" {ASSISTED}',
+            f'git commit -s -m "OSAC-1: adds thing" -m "body" {ASSISTED}',
+            'git commit -s --trailer="Assisted-by: Claude" -m "OSAC-1: adds thing"',
+            f'git -C . commit -s -m "OSAC-1: adds thing" {ASSISTED}',
+        ],
+    )
+    def test_allows_compliant_commit_in_any_recognised_form(
+        self, tmp_path: Path, command: str
+    ) -> None:
+        repo = init_repo(tmp_path / "repo")
+        res = run_enforce(command, cwd=repo)
+        assert res.returncode == 0, res.stderr
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git commit",
+            "git commit -C HEAD",
+            "git commit -c HEAD",
+            "git commit --reuse-message=HEAD",
+            "git commit --fixup=HEAD",
+            "git commit --squash HEAD",
+            "git commit -F msg.txt",
+            "git commit -aF msg.txt",
+            "git commit --amend --no-edit",
+        ],
+    )
+    def test_defers_commits_without_a_readable_message(self, tmp_path: Path, command: str) -> None:
+        repo = init_repo(tmp_path / "repo")
+        assert run_enforce(command, cwd=repo).returncode == 0, command
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git commit-tree abc123",
+            'echo "git commit -m bad"',
+            'git log --grep="git commit"',
+            "git status && git diff",
+        ],
+    )
+    def test_ignores_commands_that_only_mention_commit(self, tmp_path: Path, command: str) -> None:
+        repo = init_repo(tmp_path / "repo")
+        assert run_enforce(command, cwd=repo).returncode == 0, command
+
+    def test_heredoc_body_with_quotes_and_hashes_is_read_intact(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        cmd = (
+            "git commit -m \"$(cat <<'EOF'\n"
+            'OSAC-1: handles (parens) and "quotes" # not a comment\n\n'
+            "Assisted-by: Claude <noreply@anthropic.com>\n"
+            "Signed-off-by: Dev Example <dev@example.com>\n"
+            "EOF\n"
+            ')"'
+        )
+        res = run_enforce(cmd, cwd=repo)
+        assert res.returncode == 0, res.stderr
+
+    def test_trailer_words_inside_subject_do_not_count(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        res = run_enforce('git commit -s -m "OSAC-1: fix Assisted-by: handling"', cwd=repo)
+        assert res.returncode == 2
+        assert "Missing Assisted-by trailer" in res.stderr
+
+    def test_cd_changes_the_enforced_repository(self, tmp_path: Path) -> None:
+        project = init_repo(tmp_path / "project")
+        other = init_repo(tmp_path / "other", trailers_required=False)
+        assert run_enforce(f'cd {project} && git commit -m "bad"', cwd=other).returncode == 2
+        assert run_enforce(f'cd {other} && git commit -m "bad"', cwd=project).returncode == 0
+
+    def test_git_dir_assignment_changes_the_enforced_repository(self, tmp_path: Path) -> None:
+        project = init_repo(tmp_path / "project")
+        other = init_repo(tmp_path / "other", trailers_required=False)
+        res = run_enforce(f'GIT_DIR={project}/.git git commit -m "bad"', cwd=other)
+        assert res.returncode == 2
+
+    def test_git_dir_and_work_tree_options(self, tmp_path: Path) -> None:
+        project = init_repo(tmp_path / "project")
+        other = init_repo(tmp_path / "other", trailers_required=False)
+        res = run_enforce(f'git --git-dir={project}/.git commit -m "bad"', cwd=other)
+        assert res.returncode == 2
+        missing = tmp_path / "nowhere"
+        res = run_enforce(f'git --git-dir {missing} commit -m "bad"', cwd=project)
+        assert res.returncode == 2
+        assert "does not exist" in res.stderr
+        res = run_enforce(f'git --work-tree={missing} commit -m "bad"', cwd=project)
+        assert res.returncode == 2
+
+
+class TestSubjectPattern:
+    def test_custom_pattern_accepts_and_rejects(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo", subject_pattern="CUSTOM-[0-9]+: ")
+        ok = run_enforce(f'git commit -s -m "CUSTOM-1: adds thing" {ASSISTED}', cwd=repo)
+        assert ok.returncode == 0, ok.stderr
+        bad = run_enforce(f'git commit -s -m "OSAC-1: adds thing" {ASSISTED}', cwd=repo)
+        assert bad.returncode == 2
+
+    def test_unanchored_pattern_is_anchored_to_the_subject_start(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo", subject_pattern="CUSTOM-[0-9]+: ")
+        res = run_enforce(f'git commit -s -m "xx CUSTOM-1: adds thing" {ASSISTED}', cwd=repo)
+        assert res.returncode == 2
+
+
+class TestFailClosed:
+    @staticmethod
+    def _env_without_tools(tmp_path: Path) -> dict[str, str]:
+        """An environment whose PATH holds only bash, so jq and coreutils are unavailable."""
         empty_bin = tmp_path / "empty_bin"
         empty_bin.mkdir()
-        # Symlink only bash so jq is unavailable on PATH
         bash_path = Path("/bin/bash")
         if bash_path.exists():
             (empty_bin / "bash").symlink_to(bash_path)
         env = {**os.environ, "PATH": str(empty_bin)}
         env.pop("BASH_ENV", None)
+        return env
+
+    def test_missing_jq_does_not_block_unrelated_commands(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        env = self._env_without_tools(tmp_path)
+        assert run_enforce("ls -la", cwd=repo, env=env).returncode == 0
+
+    def test_missing_jq_blocks_commit_commands(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        env = self._env_without_tools(tmp_path)
         res = run_enforce('git commit -m "OSAC-1: test"', cwd=repo, env=env)
         assert res.returncode == 2
         assert "jq" in res.stderr
+
+    def test_missing_helper_library_blocks(self, tmp_path: Path) -> None:
+        """A hook that cannot load its parser must not silently pass commits."""
+        hooks = tmp_path / "hooks"
+        hooks.mkdir()
+        script = hooks / "enforce-project-commit-format.sh"
+        script.write_text(ENFORCE_SCRIPT.read_text())
+        repo = init_repo(tmp_path / "repo")
+        payload = {"tool_name": "Bash", "tool_input": {"command": 'git commit -m "x"'}}
+        res = subprocess.run(
+            ["bash", str(script)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            cwd=repo,
+            check=False,
+        )
+        assert res.returncode == 2
+        assert "cannot load" in res.stderr
+
+
+class TestWiring:
+    """Tests that call the script directly still pass if nothing invokes it."""
+
+    def test_hooks_json_registers_the_pre_tool_use_bash_hook(self) -> None:
+        config = json.loads((HOOKS_DIR / "hooks.json").read_text())
+        commands = [
+            hook["command"]
+            for entry in config["hooks"]["PreToolUse"]
+            if entry.get("matcher") == "Bash"
+            for hook in entry["hooks"]
+        ]
+        assert any("enforce-project-commit-format.sh" in c for c in commands)
+
+    def test_omp_bridge_runs_the_hook_and_honours_exit_2(self) -> None:
+        source = (HOOKS_DIR.parent / "omp-extension.ts").read_text()
+        assert "enforce-project-commit-format.sh" in source
+        assert "commitFormatResult.code === 2" in source
