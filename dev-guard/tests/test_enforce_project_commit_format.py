@@ -307,6 +307,91 @@ class TestParserForms:
         assert res.returncode == 2
 
 
+class TestDynamicTargets:
+    """Targets that depend on shell expansion cannot be resolved; they must not false-block."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'git -C "$REPO" commit -m "bad"',
+            'git -C "$(git rev-parse --show-toplevel)" commit -m "bad"',
+            'git --git-dir="$GD" commit -m "bad"',
+            'GIT_DIR="$GD" git commit -m "bad"',
+            'cd "$WT" && git commit -m "bad"',
+        ],
+    )
+    def test_defers_instead_of_failing_closed(self, tmp_path: Path, command: str) -> None:
+        repo = init_repo(tmp_path / "repo")
+        res = run_enforce(command, cwd=repo)
+        assert res.returncode == 0, res.stderr
+        assert "does not exist" not in res.stderr
+
+    def test_relative_paths_resolve_against_the_target_directory(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        (repo / "sub").mkdir()
+        res = run_enforce('git -C sub commit -m "bad"', cwd=repo)
+        assert res.returncode == 2
+        assert "Missing Jira key" in res.stderr
+        res = run_enforce(f'git -C {repo} --git-dir=.git commit -m "bad"', cwd=tmp_path)
+        assert res.returncode == 2
+        assert "does not exist" not in res.stderr
+        assert "Missing Jira key" in res.stderr
+        res = run_enforce(f'cd {repo} && git --git-dir=.git commit -m "bad"', cwd=tmp_path)
+        assert "does not exist" not in res.stderr
+        assert res.returncode == 2
+
+
+class TestParserRobustness:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'git -P commit -m "bad"',
+            'git --no-optional-locks commit -m "bad"',
+            'git --no-advice commit -m "bad"',
+            'git --namespace ns commit -m "bad"',
+        ],
+    )
+    def test_skips_valueless_and_valued_global_options(self, tmp_path: Path, command: str) -> None:
+        repo = init_repo(tmp_path / "repo")
+        assert run_enforce(command, cwd=repo).returncode == 2, command
+
+    def test_heredoc_body_is_not_parsed_as_shell(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        body_with_commit = "cat > notes.md <<'EOF'\ngit commit -m \"WIP\"\nEOF"
+        assert run_enforce(body_with_commit, cwd=repo).returncode == 0
+
+    def test_apostrophe_in_heredoc_body_does_not_hide_a_later_commit(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        cmd = f"cat <<'EOF'\ndon't do this\nEOF\ngit commit -m \"bad\" {ASSISTED}"
+        assert run_enforce(cmd, cwd=repo).returncode == 2
+
+    def test_stripped_tab_heredoc_terminator(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        cmd = f'cat <<-EOF\n\tgit commit -m x\n\tEOF\ngit commit -m "bad" {ASSISTED}'
+        assert run_enforce(cmd, cwd=repo).returncode == 2
+
+    def test_every_commit_in_a_command_is_checked(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        good = f'git commit -s -m "OSAC-1: adds thing" {ASSISTED}'
+        assert run_enforce(f"{good} && {good}", cwd=repo).returncode == 0
+        res = run_enforce(f'{good} && git commit -m "bad" {ASSISTED}', cwd=repo)
+        assert res.returncode == 2
+
+    def test_ansi_c_quoted_message_defers(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        cmd = "git commit -m $'NO-ISSUE: x\\n\\nAssisted-by: c\\nSigned-off-by: d'"
+        assert run_enforce(cmd, cwd=repo).returncode == 0
+
+    def test_trailer_with_equals_separator(self, tmp_path: Path) -> None:
+        repo = init_repo(tmp_path / "repo")
+        cmd = (
+            'git commit -m "OSAC-1: adds thing" '
+            '--trailer "Assisted-by=Claude" --trailer "Signed-off-by=Dev <d@example.com>"'
+        )
+        res = run_enforce(cmd, cwd=repo)
+        assert res.returncode == 0, res.stderr
+
+
 class TestSubjectPattern:
     def test_custom_pattern_accepts_and_rejects(self, tmp_path: Path) -> None:
         repo = init_repo(tmp_path / "repo", subject_pattern="CUSTOM-[0-9]+: ")
