@@ -183,7 +183,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ### For All Non-LSP Plugins
 
-- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), code-quality (test-runner, uv-python), git-tools (hook installation), and fetchaller-mcp (`uvx --from git+`)
+- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard and chai-bot (all hooks use `uv run`), code-quality (test-runner, uv-python), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`), and standup (`standup-tool` CLI via `uv run`)
 
 ### For GitHub MCP
 
@@ -271,7 +271,7 @@ Plugins in this marketplace have external tool requirements and optional MCP ser
 
 | Tool | Required By | Purpose |
 |------|------------|---------|
-| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`) |
+| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`), standup (`standup-tool` CLI via `uv run`) |
 | [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
 | [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
 | [`betterleaks`](https://github.com/betterleaks/betterleaks) | git-tools | Global `prepare-commit-msg` secret scanner hook and rule-overlay compiler |
