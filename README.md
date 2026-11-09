@@ -1,6 +1,6 @@
 # Personal Claude Marketplace
 
-Personal Claude Code and Agent Plugins v1 marketplace with 13 plugins: LSP servers, code quality agents and orchestration skills, development policy guards, git tools, GitHub MCP integration, Jira issue tracking, draw.io diagramming, Fetchaller web fetching, and Red Hat Chai Bot integration.
+Personal Claude Code and Agent Plugins v1 marketplace with 14 plugins: LSP servers, code quality agents and orchestration skills, development policy guards, git tools, GitHub MCP integration, Jira issue tracking, draw.io diagramming, Fetchaller web fetching, Red Hat Chai Bot integration, and daily standup digests.
 
 ## Dual-Harness Support (Claude Code + OMP + Agent Plugins v1)
 
@@ -13,7 +13,7 @@ Python/shell scripts — no enforcement or session logic is reimplemented in Typ
 (tool-name/field-name mapping, interactive `"ask"` trust approval, Bash `updatedInput` forwarding, MCP re-encoding, event mapping, and known limitations); git-tools,
 github-mcp, and chai-bot cover their own single-hook bridges directly in their own READMEs.
 
-All 13 plugins also ship dual manifests: Claude Code manifests in `<plugin>/.claude-plugin/plugin.json` (plus `.claude-plugin/marketplace.json`) and [Agent Plugins v1](https://agent-plugins.org) manifests in `<plugin>/plugin.json` (plus `<plugin>/mcp.json` and `.agents/plugins/marketplace.json`).
+All 14 plugins also ship dual manifests: Claude Code manifests in `<plugin>/.claude-plugin/plugin.json` (plus `.claude-plugin/marketplace.json`) and [Agent Plugins v1](https://agent-plugins.org) manifests in `<plugin>/plugin.json` (plus `<plugin>/mcp.json` and `.agents/plugins/marketplace.json`).
 
 ## Plugins
 
@@ -131,6 +131,12 @@ Uses Atlassian Rovo MCP for all Jira operations. Defaults to OSAC scope (project
 |--------|-------------|------------|------|
 | chai-bot | Advisory `SessionStart` nudge (for OSAC repos) and unrestricted `/chai-bot` command for offloading OSAC research/actions or general second-opinion questions to the Red Hat-internal Chai Bot MCP server | MCP server, 1 command, 2 hooks | [README](chai-bot/README.md) |
 
+### Standup
+
+| Plugin | Description | Components | Docs |
+|--------|-------------|------------|------|
+| standup | Daily standup digest from git, PRs, Jira, Slack, Google Workspace, and project memory, with config-driven collectors and a Slack-ready draft | 2 commands, 1 skill, 4 agents | [README](standup/README.md) |
+
 ### Development Guard
 
 | Plugin | Description | Components | Docs |
@@ -163,6 +169,7 @@ claude plugin install jira@personal-claude-marketplace
 claude plugin install drawio@personal-claude-marketplace
 claude plugin install fetchaller-mcp@personal-claude-marketplace
 claude plugin install chai-bot@personal-claude-marketplace
+claude plugin install standup@personal-claude-marketplace
 
 # Install LSP plugins (pick what you need)
 claude plugin install pyright-uvx@personal-claude-marketplace
@@ -176,7 +183,7 @@ claude plugin install rust-analyzer-rustup@personal-claude-marketplace
 
 ### For All Non-LSP Plugins
 
-- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard (all hooks use `uv run`), code-quality (test-runner, uv-python), git-tools (hook installation), and fetchaller-mcp (`uvx --from git+`)
+- **uv**: `brew install uv` or `pip install uv` — Required by dev-guard and chai-bot (all hooks use `uv run`), code-quality (test-runner, uv-python), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`), and standup (`standup-tool` CLI via `uv run`)
 
 ### For GitHub MCP
 
@@ -264,7 +271,7 @@ Plugins in this marketplace have external tool requirements and optional MCP ser
 
 | Tool | Required By | Purpose |
 |------|------------|---------|
-| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`) |
+| [`uv`](https://docs.astral.sh/uv/) | **All Python/MCP plugins** | dev-guard and chai-bot hooks (`uv run`), code-quality (`test-runner`, `uv-python`), git-tools (hook installation), fetchaller-mcp (`uvx --from git+`), standup (`standup-tool` CLI via `uv run`) |
 | [`uv`](https://docs.astral.sh/uv/) | pyright-uvx | Runs Pyright via `uvx` |
 | [`git-branchless`](https://github.com/arxanas/git-branchless) | git-tools | `/git-history` skill, `/git-tools:review-commits` command |
 | [`betterleaks`](https://github.com/betterleaks/betterleaks) | git-tools | Global `prepare-commit-msg` secret scanner hook and rule-overlay compiler |
@@ -319,6 +326,7 @@ Rows = plugins, columns = dependencies. **HARD** = breaks without it. **soft** =
 | **drawio** | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 | **fetchaller-mcp** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
 | **chai-bot** | -- | -- | -- | -- | -- | HARD | -- | -- | -- |
+| **standup** | -- | -- | -- | -- | -- | HARD | -- | -- | soft |
 | **LSP plugins** | -- | -- | -- | -- | -- | HARD* | -- | -- | -- |
 
 *pyright-uvx requires uv/uvx; other LSP plugins require npm/npx, Go, or Rust toolchains.

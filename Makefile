@@ -1,17 +1,23 @@
-.PHONY: all lint format test test-llm test-live typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
+.PHONY: all lint lint-standup format test test-standup test-llm test-live typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
-lint:  ## Ruff lint + format check
+lint: lint-standup  ## Ruff lint + format check
 	uv run ruff check .
 	uv run ruff format --check .
+
+lint-standup:  ## Ruff lint + format check for standup plugin
+	cd standup && uv run --group dev ruff check . && uv run --group dev ruff format --check .
 
 format:  ## Auto-format with ruff
 	uv run ruff format .
 	uv run ruff check --fix .
 
-test:  ## Run pytest (excludes LLM integration and live/network tests)
+test: test-standup  ## Run pytest (excludes LLM integration and live/network tests)
 	uv run pytest -m "not llm and not eval and not slow"
+
+test-standup:  ## Run standup plugin tests
+	cd standup && uv run --group dev pytest
 
 test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 	uv run --group dev --group llm pytest -m llm -v

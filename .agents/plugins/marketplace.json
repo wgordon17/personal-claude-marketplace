@@ -156,6 +156,18 @@
         "authentication": "ON_INSTALL"
       },
       "category": "productivity"
+    },
+    {
+      "name": "standup",
+      "source": {
+        "source": "local",
+        "path": "./standup"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "productivity"
     }
   ]
 }

@@ -1,0 +1,37 @@
+version: 1
+identity:
+  email: null                 # null -> `git config user.email` from repos[0]
+github:
+  org: example-org            # GitHub org for team enrichment, nested-clone discovery, and PR queries
+repos:                        # explicit list; nested direct child clones matching github.org are auto-discovered
+  - path: ~/src/example-repo
+collectors:
+  git:           {enabled: true}
+  pr:            {enabled: true}
+  jira:          {enabled: true, project: PROJ, server: null}   # server null -> jira-cli config (must be https://)
+  calendar:      {enabled: true}
+  gmail:         {enabled: true}
+  drive:         {enabled: true}
+  slack:
+    enabled: true
+    workspace_url: https://example-workspace.slack.com   # required when slack is enabled; the d cookie is bootstrapped against it
+    channels: [eng, ops]      # channels scanned for activity
+    standup_channels: [eng]   # channels searched for posted standups (edit history)
+    self_dm_name: null        # null -> derived from identity
+  memory:        {enabled: true}
+  conversations: {enabled: false, project_match: [example-repo], vertex_project: null, region: null}
+                              # region null -> CLOUD_ML_REGION env, else us-east5; vertex_project null -> env vars
+standup:
+  audience: team              # free text passed to the draft agent
+  template_file: template.md  # plain filename inside the config dir
+                              # (post-standup always posts to the self-DM; there is no channel key)
+ldap:
+  enabled: false
+  host: null                  # ldaps://... only
+  base_dn: null
+  email_domain: null          # e.g. example.com; used to derive directory UIDs from emails
+  auth_mech: GSSAPI           # SASL mechanism passed to ldapsearch -Y (or null for simple/anonymous -x)
+  uid_attr: uid               # directory UID attribute
+  worker_id_attr: null        # optional employee ID attribute for manager-chain resolution
+  manager_id_attr: null       # optional manager ID attribute referencing worker_id_attr
+  social_url_attr: null       # optional attribute holding GitHub profile URLs
