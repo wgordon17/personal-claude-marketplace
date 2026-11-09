@@ -1246,7 +1246,7 @@ class TestRenovateConfig:
         non_pypi_rules = [
             r
             for r in package_rules
-            if r.get("excludeDatasources") == ["pypi"] and "postUpgradeTasks" in r
+            if r.get("matchDatasources") == ["!pypi"] and "postUpgradeTasks" in r
         ]
         assert len(pypi_rules) == 1, f"Expected 1 pypi postUpgradeTasks rule, got {len(pypi_rules)}"
         assert len(non_pypi_rules) == 1, (
