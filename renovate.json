@@ -84,8 +84,8 @@
         "fetchaller-mcp/**",
         "chai-bot/**"
       ],
-      "excludeDatasources": [
-        "pypi"
+      "matchDatasources": [
+        "!pypi"
       ],
       "postUpgradeTasks": {
         "commands": [
