@@ -2179,7 +2179,7 @@ Look for: what categories of issues the Fixer had to address; any deferred findi
 ```
 Read("{run_dir}/.swarm-run")
 ```
-Look for: Phase 2.5 skip/run decision and reason; human checkpoint responses.
+Look for: Phase 2.5 skip/run decision and reason; user answers to clarifying questions.
 
 ## Step 3: Extract Lessons
 

@@ -343,7 +343,7 @@ After fixes, re-submit through the full Review → Test cycle.
 
 ## Review Finding Schema
 
-Used by all Phase 4 reviewers (Security, QA, Code-Reviewer, Performance, and optional domain
+Used by all Phase 4 reviewers (Security, QA, Code-Reviewer, Performance, and the domain
 reviewers). Each reviewer writes a `ReviewFindings` object to `{run_dir}/reviews/<name>.json`
 and sends a summary to the Lead.
 
@@ -679,9 +679,9 @@ hack/swarm/
         ├── qa.json                 # QA reviewer findings (ReviewFindings)
         ├── code-reviewer.json      # Code-Reviewer findings (ReviewFindings)
         ├── performance.json        # Performance reviewer findings (ReviewFindings)
-        ├── ui.json                 # UI reviewer findings (if triggered)
-        ├── api.json                # API reviewer findings (if triggered)
-        ├── db.json                 # DB reviewer findings (if triggered)
+        ├── ui.json                 # UI reviewer findings
+        ├── api.json                # API reviewer findings
+        ├── db.json                 # DB reviewer findings
         ├── structural-concurrency.json  # Phase 4.5 Concurrency & State analyst findings
         ├── structural-integration.json  # Phase 4.5 Integration & Contract analyst findings
         └── docs-review.json            # Docs Reviewer findings (Phase 6, if run)

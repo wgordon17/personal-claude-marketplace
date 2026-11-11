@@ -245,18 +245,18 @@ For each phase:
 
 **Intra-plan PR boundaries and mixed phases:** When a source plan has `**Workflow:** incremental`, each PR boundary becomes a sequential track (`PR 1`, `PR 2`) within a single phase per `[{skill_dir}/references/phase-schema.md](./references/phase-schema.md)`. The `PR 1`, `PR 2` labels in the table are internal plumbing — each PR created from a boundary is standalone work described by what it accomplishes, never "Part X of Y".
 
-### User checkpoint
+### Grouping summary (no approval gate)
 
-After constructing phase groupings but before writing the document, use `AskUserQuestion`:
+After constructing phase groupings, state them in chat and proceed straight to Phase 4 — do NOT
+ask the user to approve the grouping. The roadmap is an editable file; the user adjusts it by
+replying or by running the Update mode.
 
-> "I've organized [N] plans into [M] phases. Phase 1 runs [tracks] in parallel.
-> Phase 2 requires Phase 1 to complete first. Does this grouping make sense, or should
-> I adjust?"
+> "Organized [N] plans into [M] phases. Phase 1 runs [tracks] in parallel; Phase 2 requires
+> Phase 1. Writing the roadmap."
 
-Options:
-- "Looks correct, write the roadmap"
-- "Adjust the grouping"
-- "Let me reconsider one of the dependency edges"
+Use `AskUserQuestion` here only when the dependency analysis hit a genuine ambiguity it cannot
+resolve from the plan files (e.g., two plans edit the same file and neither declares an order
+that the code itself would decide).
 
 ---
 
@@ -341,7 +341,7 @@ Follow `[{skill_dir}/references/lifecycle-modes.md](./references/lifecycle-modes
 
 ```
 Phase 0: Detect & Route (HITL, requires project memory dir) →
-  [New]     Phase 1 → Phase 2 → Phase 3 (checkpoint) → Phase 4 (incremental) → Phase 5
+  [New]     Phase 1 → Phase 2 → Phase 3 → Phase 4 (incremental) → Phase 5
   [Update]  Completion Check → Phase 1-5 (re-ingest, completed phases preserved)
   [Status]  Completion Check → Drift Detection → Report → offer Update/Cleanup/Exit
   [Cleanup] Completion Check → Archive plans → Delete branches → Update roadmap doc
@@ -351,7 +351,7 @@ Phase 0: Detect & Route (HITL, requires project memory dir) →
 ### What Goes Where
 
 ```
-CHAT: Mode routing, ingest summary, dependency edges, checkpoint questions,
+CHAT: Mode routing, ingest summary, dependency edges, grouping summary,
       per-phase write confirmations, status/drift report, completion validation verdicts
 FILE: Full roadmap document (header + phase blocks, optional Status/Last updated fields)
 NEVER IN CHAT: Full roadmap content, raw table data, raw diff content from subagent validators

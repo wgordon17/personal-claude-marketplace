@@ -86,7 +86,7 @@ After completing all tasks in the current PR boundary (all components for tasks 
 `**PR:** {current_pr}`):
 1. Run Phase 4 reviews scoped to the current boundary's files only. The Lead spawns the
    same core review agents as full Phase 4 (Security, QA, Code-Reviewer, Performance, plus
-   any auto-detected domain reviewers from Phase 1) with `pr_boundary_files` — NOT via
+   the domain reviewers from Phase 1) with `pr_boundary_files` — NOT via
    /pr-review skill, which reviews existing PRs. Plan Adherence and Phase 4.5 structural
    analysts also run at boundary stops (structural analysts receive scoped-review briefing
    per the Phase 4.5 incremental workflow section).

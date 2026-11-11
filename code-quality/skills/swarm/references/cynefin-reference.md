@@ -97,8 +97,8 @@ or external communication. Component decomposition should be thorough — use de
 - Resolving emergent security vulnerabilities in complex data flows
 
 **Response strategy:** Probe design. The Architect's primary output is a set of experiments or
-signals rather than a full implementation plan. Prefer smaller components with explicit checkpoints.
-More check-ins with Lead. Phase 2.5 Security Design Review is mandatory regardless of surface area.
+signals rather than a full implementation plan. Prefer smaller components, each verified before the next starts.
+More check-ins with Lead (agent-to-Lead, never extra user prompts). Phase 2.5 Security Design Review is mandatory regardless of surface area.
 
 Probe design means:
 - Identify what information is missing that prevents confident planning
@@ -207,7 +207,7 @@ Are outcomes uncertain even after analysis? Does the solution space
 feel unbounded, or do experts disagree on whether the problem is
 solvable as stated?
        |
-      YES --> [Complex] Probe design. Smaller iterations. More checkpoints.
+      YES --> [Complex] Probe design. Smaller iterations.
        |
       NO --> [Complex] (default — classify higher when uncertain).
 ```
@@ -221,7 +221,7 @@ solvable as stated?
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
 | Phase 0: Pre-flight & Setup | Yes | Brief. |
-| Phase 1: Clarify & Checkpoint | Yes | Confirm scope is truly bounded. |
+| Phase 1: Clarify | Yes | Confirm scope is truly bounded. |
 | Phase 2: Architect | Yes | Can be short. Single-pass decomposition. |
 | Phase 2.5: Security Design Review | Optional | Skip unless auth/data/external API is involved. |
 | Phase 2.7: Speculative Fork | Skip | Overhead exceeds value for Clear-domain tasks. |
@@ -237,7 +237,7 @@ solvable as stated?
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
 | Phase 0: Pre-flight & Setup | Yes | Standard. |
-| Phase 1: Clarify & Checkpoint | Yes | Confirm scope and identify expert needs. |
+| Phase 1: Clarify | Yes | Confirm scope and identify expert needs. |
 | Phase 2: Architect | Yes | Full decomposition with dependency graph. |
 | Phase 2.5: Security Design Review | Conditional | Mandatory if auth/data/external API involved. |
 | Phase 2.7: Speculative Fork | Conditional | Recommended when architect identifies competing approaches. |
@@ -253,11 +253,11 @@ solvable as stated?
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
 | Phase 0: Pre-flight & Setup | Yes | Standard. |
-| Phase 1: Clarify & Checkpoint | Yes | Flag complexity. Set probe objectives. |
+| Phase 1: Clarify | Yes | Flag complexity. Set probe objectives. |
 | Phase 2: Architect | Yes | Probe design output, not full plan. Define signals. |
 | Phase 2.5: Security Design Review | Yes | Always mandatory for Complex tasks. |
 | Phase 2.7: Speculative Fork | Recommended | Complex-domain tasks benefit most from speculative execution. |
-| Phase 3: Pipelined Implementation | Yes | Smaller components. Explicit checkpoints between. |
+| Phase 3: Pipelined Implementation | Yes | Smaller components. Verify each before the next. |
 | Phase 4: Parallel Review | Yes | Reviewer assesses probe results, not just correctness. |
 | Phase 4.5: Structural Design Review | Yes | Always runs. Probe results may reveal structural issues. |
 | Phase 5: Fix, Test Coverage & Simplify | Conditional | Only if Phase 4/4.5 finds any issues. |
@@ -269,7 +269,7 @@ solvable as stated?
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
 | Phase 0: Pre-flight & Setup | Yes | Emergency triage only. |
-| Phase 1: Clarify & Checkpoint | Yes | Identify stabilization target. |
+| Phase 1: Clarify | Yes | Identify stabilization target. |
 | Phase 2: Architect | Yes | Stabilization brief only. No full decomposition. |
 | Phase 2.5: Security Design Review | Deferred | Resume after stabilization. |
 | Phase 2.7: Speculative Fork | Skip | Crisis mode — no time for competing implementations. |
@@ -285,7 +285,7 @@ solvable as stated?
 | Phase | Mandatory | Notes |
 |-------|-----------|-------|
 | Phase 0: Pre-flight & Setup | Yes | Standard. |
-| Phase 1: Clarify & Checkpoint | Yes | Identify what information is missing. |
+| Phase 1: Clarify | Yes | Identify what information is missing. |
 | Phase 2: Architect | Yes | Investigation plan, not implementation plan. |
 | Phase 2.5: Security Design Review | Deferred | Re-evaluate after classification. |
 | Phase 2.7: Speculative Fork | Deferred | Re-evaluate after classification. |

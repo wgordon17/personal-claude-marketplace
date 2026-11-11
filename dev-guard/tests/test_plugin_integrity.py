@@ -1068,10 +1068,15 @@ class TestRoadmapBugsContractIntegrity:
 class TestSkillMigrationFidelity:
     """Deterministic check that progressive-disclosure skill extractions preserve
     all reference files in resolved bundles, keep every SKILL.md under 500 lines,
-    and maintain >=94.5% per-skill / >=99.0% overall line-level fidelity against
-    the pre-migration baseline commit (5b7dbebf9555c68c976d5ad906d41ec6cc374c07)."""
+    and that the migration commit kept >=94.5% per-skill / >=99.0% overall
+    line-level fidelity against its parent (the pre-migration baseline).
+
+    Fidelity compares the two fixed commits, not the working tree: later PRs that
+    deliberately remove skill content are reviewed on their own and must not
+    consume a shared deletion budget measured against a historical snapshot."""
 
     PRE_MIGRATION_BASE = "5b7dbebf9555c68c976d5ad906d41ec6cc374c07"
+    MIGRATION_COMMIT = "f6fe88cecd94ee0ad9126addc1bf28a1f2650e75"
 
     @staticmethod
     def _norm_mechanical(line: str) -> str:
@@ -1124,42 +1129,53 @@ class TestSkillMigrationFidelity:
     def test_line_level_fidelity_against_pre_migration_baseline(self):
         import subprocess
 
-        # Skip only in shallow CI clones where the pre-migration commit is not fetched
-        check = subprocess.run(
-            ["git", "cat-file", "-e", f"{self.PRE_MIGRATION_BASE}^{{commit}}"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-        )
-        if check.returncode != 0:
-            pytest.skip(f"Pre-migration commit {self.PRE_MIGRATION_BASE} not in shallow clone")
+        # Skip only in shallow CI clones where either fixed commit is not fetched
+        for commit in (self.PRE_MIGRATION_BASE, self.MIGRATION_COMMIT):
+            check = subprocess.run(
+                ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+            )
+            if check.returncode != 0:
+                pytest.skip(f"Commit {commit} not in shallow clone")
 
-        ls_out = subprocess.check_output(
-            ["git", "ls-tree", "-r", "--name-only", self.PRE_MIGRATION_BASE],
-            cwd=REPO_ROOT,
-            text=True,
-        ).splitlines()
+        def ls_tree(commit: str) -> list[str]:
+            return subprocess.check_output(
+                ["git", "ls-tree", "-r", "--name-only", commit],
+                cwd=REPO_ROOT,
+                text=True,
+            ).splitlines()
+
+        def show(commit: str, paths: list[str]) -> str:
+            return "\n".join(
+                subprocess.check_output(["git", "show", f"{commit}:{p}"], cwd=REPO_ROOT, text=True)
+                for p in paths
+            )
+
+        ls_base = ls_tree(self.PRE_MIGRATION_BASE)
+        ls_head = ls_tree(self.MIGRATION_COMMIT)
+        skill_dirs = sorted(
+            p.removesuffix("/SKILL.md")
+            for p in ls_head
+            if re.fullmatch(r"[^/]+/skills/[^/]+/SKILL\.md", p)
+        )
+        assert skill_dirs, f"No skills found at {self.MIGRATION_COMMIT}"
 
         total_base = 0
         total_matched = 0
-        for skill_md in sorted(REPO_ROOT.glob("*/skills/*/SKILL.md")):
-            sdir = skill_md.parent.relative_to(REPO_ROOT).as_posix()
-            base_files = sorted(p for p in ls_out if p.startswith(sdir + "/") and p.endswith(".md"))
-            head_files = sorted(skill_md.parent.rglob("*.md"))
-            if sdir == "jira/skills/jira":
-                base_files += sorted(
-                    p for p in ls_out if p.startswith("jira/reference/") and p.endswith(".md")
-                )
-                head_files += sorted((REPO_ROOT / "jira" / "references").glob("*.md"))
 
-            base_text = "\n".join(
-                subprocess.check_output(
-                    ["git", "show", f"{self.PRE_MIGRATION_BASE}:{bf}"],
-                    cwd=REPO_ROOT,
-                    text=True,
-                )
-                for bf in base_files
-            )
-            head_text = "\n".join(hf.read_text() for hf in head_files)
+        def md_under(tree: list[str], prefix: str) -> list[str]:
+            return sorted(p for p in tree if p.startswith(prefix) and p.endswith(".md"))
+
+        for sdir in skill_dirs:
+            base_files = md_under(ls_base, sdir + "/")
+            head_files = md_under(ls_head, sdir + "/")
+            if sdir == "jira/skills/jira":
+                base_files += md_under(ls_base, "jira/reference/")
+                head_files += md_under(ls_head, "jira/references/")
+
+            base_text = show(self.PRE_MIGRATION_BASE, base_files)
+            head_text = show(self.MIGRATION_COMMIT, head_files)
 
             base_lines = [
                 self._norm_mechanical(line)
