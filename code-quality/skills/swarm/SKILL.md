@@ -6,10 +6,10 @@ description: >-
   Implementer, Reviewer, Test-Writer, Test-Runner, Boundary Updater, Security, QA,
   Code-Reviewer, Performance, Plan Adherence, Fixer, Test Coverage Agent,
   Code-Simplifier, Docs, Docs Reviewer, Lessons Extractor, Verifier, BDD-Step-Writer) with structured JSON
-  communication, Cynefin domain classification, audit trails, and early user
-  checkpoint. Use when asked to "swarm this", "full team", "agent team",
-  "full send", or when maximum rigor is needed on an implementation task.
-  Auto-detects optional domain reviewers (UI, API, DB) from codebase analysis.
+  communication, Cynefin domain classification, and audit trails. Use when asked
+  to "swarm this", "full team", "agent team", "full send", or when maximum rigor
+  is needed on an implementation task. Always includes the UI, API, and DB domain
+  reviewers; adds plugin and skill reviewers when the repo ships plugins.
 compatibility: Requires Claude Code with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for multi-agent teammate messaging
 allowed-tools: Read Write Edit Bash Agent AskUserQuestion SendMessage TaskCreate TaskUpdate TaskList TaskGet CronCreate CronDelete Skill
 ---
@@ -61,13 +61,13 @@ not join a shared implicit team and `SendMessage` routing between them will not 
 | 6 | Lessons Extractor | general-purpose | sonnet | Yes | Extract principle-level lessons from swarm run |
 | 7 | Verifier | code-quality:test-runner | haiku | No | Final test suite + lint verification |
 
-### Optional Domain Reviewers (auto-detected in Phase 1)
+### Domain Reviewers (Phase 4)
 
 | Role | Agent Type | Model | Trigger |
 |------|------------|-------|---------|
-| UI Reviewer | general-purpose | sonnet | Glob finds `*.tsx`, `*.vue`, `*.svelte`, `*.css` files |
-| API Reviewer | general-purpose | sonnet | Grep finds router/endpoint/handler patterns |
-| DB Reviewer | general-purpose | sonnet | Grep finds migration/schema/model/query patterns |
+| UI Reviewer | general-purpose | sonnet | Always |
+| API Reviewer | general-purpose | sonnet | Always |
+| DB Reviewer | general-purpose | sonnet | Always |
 | Plugin Validator | general-purpose | sonnet | `Glob("**/.claude-plugin/plugin.json")` finds results |
 | Skill Reviewer | general-purpose | sonnet | `Glob("**/skills/*/SKILL.md")` finds results |
 
@@ -84,7 +84,7 @@ not join a shared implicit team and `SendMessage` routing between them will not 
 | 3.5 | BDD-Step-Writer | general-purpose | sonnet | Yes | (conditional) BDD step definition writing |
 
 **Detection:** BDD-Step-Writer is spawned when the plan file `## Test Plan` section includes a
-`**Feature Files:**` path. It is distinct from the read-only optional domain reviewers — it has
+`**Feature Files:**` path. It is distinct from the read-only domain reviewers — it has
 write access and runs as a pipeline agent in Phase 3.5, not as a Phase 4 reviewer.
 
 ---
@@ -106,9 +106,9 @@ If `incremental`:
 - Set `{workflow_mode}` = `incremental`, `{pr_boundaries}` = parsed mapping
 - Follow `[{skill_dir}/references/incremental-workflow.md](./references/incremental-workflow.md)` for checkpoint discovery, initial branch naming (`feat/{plan-slug}-pr1`), resume, and `--fresh`. If `fast` or absent, use fire-and-forget behavior.
 
-### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
+### Phase 1: Clarify (fire-and-forget from here)
 
-Use `AskUserQuestion` to resolve ambiguities and approve the swarm composition (core agents + auto-detected optional reviewers + Phase 3.5 BDD-Step-Writer if `**Feature Files:**` is present). After Phase 1 approval, the swarm runs autonomously except for architect blockers, max-retry escalations, or `needs-input` triage (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 1).
+Use `AskUserQuestion` only for genuine task ambiguities; if there are none, ask nothing. Never ask the user to approve the swarm composition — announce it in chat (core agents + all domain reviewers + Phase 3.5 BDD-Step-Writer if `**Feature Files:**` is present) and proceed. From here the swarm runs autonomously except for architect blockers, max-retry escalations, or `needs-input` triage (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Phase 1).
 - **jira:jira-agent** (conditional): Spawned at Phase 7 when `{tracker}` is `jira:PROJ-N` (see `[{skill_dir}/../../../jira/agents/jira-agent.md](../../../jira/agents/jira-agent.md)`).
 
 ### Phase 2: Architect (opus)
@@ -130,7 +130,7 @@ Spawn `code-quality:security` (opus) for a STRIDE review of `architect-plan.json
 
 ### Phase 2.7: Speculative Fork (conditional)
 
-**Skip unless:** `speculative_fork_recommended: true` in `architect-plan.json`, OR 2+ incompatible design choices exist (proactively recommend for Complex-domain tasks). Never trigger for Clear-domain or single-component tasks without trade-offs. Ask via `AskUserQuestion` whether to run `/speculative` or pick directly; if `/speculative`, fork contested components in worktrees (with a 60s `CronCreate` watchdog torn down via `CronDelete` on all paths), judge with opus, and write the winner into `architect-plan.json` (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Step 2.7).
+**Skip unless:** `speculative_fork_recommended: true` in `architect-plan.json`, OR 2+ incompatible design choices exist (proactively recommend for Complex-domain tasks). Never trigger for Clear-domain or single-component tasks without trade-offs. When triggered, run it without asking: fork contested components in worktrees (with a 60s `CronCreate` watchdog torn down via `CronDelete` on all paths), judge with opus, and write the winner into `architect-plan.json` (`[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Step 2.7).
 
 ### Phase 2.8: Pre-Implementation Simplification Review
 
@@ -152,7 +152,7 @@ When triggered after Phase 3, follow `[{skill_dir}/references/bdd-pipeline.md](.
 
 ### Phase 4: Parallel Review
 
-Shut down Phase 3 agents and the Architect, then spawn ALL review agents simultaneously in read-only mode: Security (opus), QA (opus), Code-Reviewer (sonnet), Performance (sonnet), auto-detected domain reviewers, and `code-quality:plan-adherence` (opus, if an incremental plan file exists). Each writes `ReviewFindings` JSON to `{run_dir}/reviews/` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`).
+Shut down Phase 3 agents and the Architect, then spawn ALL review agents simultaneously in read-only mode: Security (opus), QA (opus), Code-Reviewer (sonnet), Performance (sonnet), UI/API/DB domain reviewers, Plugin Validator and Skill Reviewer (when detected), and `code-quality:plan-adherence` (opus, if an incremental plan file exists). Each writes `ReviewFindings` JSON to `{run_dir}/reviews/` (`[{skill_dir}/references/communication-schema.md](./references/communication-schema.md)`).
 
 **Escalation Routing (before Phase 5):** Route findings per `[{skill_dir}/references/orchestration-playbook.md](./references/orchestration-playbook.md)` Step 4.5:
 - **Design-level** → Phase 2 Architect | **Security design** → Phase 2.5 (capped at `design_escalation_count < 2` across Phases 4/4.5, logged to `{run_dir}/escalations.json`; escalate via `AskUserQuestion` at cap)

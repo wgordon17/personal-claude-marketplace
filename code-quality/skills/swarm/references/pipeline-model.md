@@ -349,7 +349,8 @@ Lead spawns (all at once):
   qa          (code-quality:qa, opus)              -- reads all modified files
   code-reviewer (code-quality:code-reviewer, sonnet) -- reads all modified files
   performance (code-quality:performance, sonnet)   -- reads all modified files
-  [optional] ui-reviewer, api-reviewer, db-reviewer
+  ui-reviewer, api-reviewer, db-reviewer             -- always
+  [if detected] plugin-validator, skill-reviewer
 ```
 
 All Phase 4 reviewers are read-only. They operate on the final state of all files after Phase 3
@@ -417,4 +418,4 @@ Single agent, shut down after it sends `VerificationResult`.
 Phases never overlap. The Lead shuts down each phase's agents before spawning the next phase.
 This keeps the active teammate count bounded and prevents context cross-contamination between
 phases. The maximum active count at any point is 11 (Lead + up to 10 Phase 4 reviewers with all
-optional domain reviewers).
+domain reviewers).

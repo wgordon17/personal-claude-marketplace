@@ -11,7 +11,7 @@ point is documented here.
 | Phase | Name | Mode | Agents |
 |-------|------|------|--------|
 | 0 | Pre-flight & Setup | Lead direct | None |
-| 1 | Clarify & Checkpoint | Lead direct | None (AskUserQuestion) |
+| 1 | Clarify | Lead direct | None (AskUserQuestion only for genuine ambiguities) |
 | 2 | Architect | Single agent | architect (opus) |
 | 2.5 | Security Design Review | Single agent (conditional) | security-design (opus) |
 | 2.7 | Speculative Fork | N competitors + judge (conditional) | competitor-N (sonnet, worktree), judge (opus) |
@@ -274,7 +274,7 @@ Create all tasks in a single batch before spawning any agents. Wire dependencies
 
 ```
 t0 = TaskCreate("Phase 0: Pre-flight complete", "Setup done. Branch: <branch>. Run dir: {run_dir}")
-t1 = TaskCreate("Phase 1: Clarify & checkpoint", "User approval for swarm composition",
+t1 = TaskCreate("Phase 1: Clarify", "Resolve task ambiguities; announce composition",
                 activeForm="Clarifying requirements")
 t2 = TaskCreate("Phase 2: Architect designs solution", "Spawn architect, review plan",
                 activeForm="Architecting solution") → addBlockedBy: [t1]
@@ -314,10 +314,11 @@ directly via the output file.
 
 ---
 
-## Phase 1: Clarify & Checkpoint
+## Phase 1: Clarify
 
-This is the ONLY phase where the user is interrupted before fire-and-forget. Conduct it quickly
-and thoroughly — no ambiguities should survive past this phase.
+This is the ONLY phase where the user may be interrupted before fire-and-forget, and only when
+the task has a genuine ambiguity. If the task is unambiguous, ask nothing and proceed. No
+ambiguities should survive past this phase.
 
 ### Step 1.1: Ambiguity Resolution
 
@@ -333,24 +334,16 @@ Parse the task description for any of these signals:
 | Multiple valid approaches | "add search" | Present top 2-3 options, ask for choice |
 
 Batch ALL ambiguities into a single AskUserQuestion call. Do not ask one question at a time.
+If no signal applies, skip the call entirely.
 
-### Step 1.2: Auto-detect Optional Reviewers
+### Step 1.2: Determine Reviewer Composition
 
-Run these detection checks in parallel before presenting to user:
+The UI, API, and DB domain reviewers are ALWAYS included in Phase 4 — no detection, no opt-in.
+Each reports zero findings when the change has nothing in its domain.
+
+The plugin-specific reviewers are added automatically when detected:
 
 ```
-# UI reviewer: frontend framework files present
-Glob("**/*.tsx")     → any results?
-Glob("**/*.vue")     → any results?
-Glob("**/*.svelte")  → any results?
-Glob("**/*.css")     → significant results (>5 files)?
-
-# API reviewer: routing/endpoint patterns present
-Grep("router|endpoint|handler|@api|@route", glob="**/*.{py,ts,js,go}")
-
-# DB reviewer: persistence layer present
-Grep("migration|schema|model.*query|\.sql$", glob="**/*.{py,ts,js,go,sql}")
-
 # Plugin Validator: plugin manifest files present
 Glob("**/.claude-plugin/plugin.json")  → any results?
 
@@ -363,45 +356,22 @@ has SendMessage in its tool set. Use `general-purpose` agent type with the valid
 in the prompt, rather than `plugin-dev:plugin-validator` or `plugin-dev:skill-reviewer`, which
 lack SendMessage and cannot participate in team communication.
 
-Record which optional reviewers are triggered. These become candidates for Phase 4.
+Record the final reviewer set for Phase 4: ui-reviewer, api-reviewer, db-reviewer, plus
+plugin-validator and skill-reviewer when detected.
 
-### Step 1.3: Present Composition to User
+### Step 1.3: Announce Composition
 
-Build the AskUserQuestion with the full swarm composition. Combine ambiguity questions (Step 1.1)
-and composition approval (this step) into as few calls as possible — ideally one.
+State the composition in chat as a one-line status update — do NOT ask for approval and do NOT
+wait for a reply. The user stops the run by interrupting, not by answering a gate:
 
-Format:
 ```
-AskUserQuestion(questions=[
-  # ... any ambiguity questions first ...
-  {
-    "question": "Ready to launch the swarm. Here's the composition:\n\n"
-                "Core agents (always): architect, implementer, reviewer, test-writer, "
-                "test-runner, security (opus), qa (opus), code-reviewer, performance, "
-                "fixer, code-simplifier, docs, verifier\n\n"
-                "Optional (auto-detected): [ui-reviewer / api-reviewer / db-reviewer]\n\n"
-                "Estimated agent count: N\n\n"
-                "After approval, the swarm runs autonomously. You'll only be interrupted "
-                "if the architect raises blockers or errors occur.",
-    "header": "Swarm Composition",
-    "options": [
-      {"label": "Proceed", "description": "Launch swarm with detected composition"},
-      {"label": "Add UI reviewer", "description": "Include ui-reviewer even if not auto-detected"},
-      {"label": "Add API reviewer", "description": "Include api-reviewer"},
-      {"label": "Add DB reviewer", "description": "Include db-reviewer"},
-      {"label": "Skip optional reviewers", "description": "Core agents only, no domain reviewers"},
-      {"label": "Abort", "description": "Cancel — I'll adjust the task description"}
-    ],
-    "multiSelect": true
-  }
-])
+Launching swarm: 21 core agents + ui/api/db reviewers [+ plugin-validator, skill-reviewer]
+[+ BDD-Step-Writer]. Running autonomously from here.
 ```
-
-Record the user's selections. If they selected "Add X reviewer", include it in Phase 4.
 
 ### Step 1.4: Fire-and-Forget Gate
 
-After Step 1.3 approval, commit to full autonomy. The ONLY allowed interruptions are:
+After Step 1.3, commit to full autonomy. The ONLY allowed interruptions are:
 
 1. **Architect raises blockers** — unclear/risky design decisions (Phase 2)
 2. **Error escalation after max retries** — a component is permanently blocked (Phase 3/5/7)
@@ -633,16 +603,9 @@ Evaluate whether this phase applies before spawning any agents:
 
 If skipping: note the reason in the audit trail (`.swarm-run` entry) and proceed to Phase 3.
 
-### Step 2.7.0.5: User Checkpoint
-
-Present the competing approaches to the user via `AskUserQuestion`:
-
-"The architect identified N competing approaches for [component(s)] (all vetted by security
-review in Phase 2.5). Want to run /speculative to compare them, or pick one directly?"
-
-- If user chooses `/speculative`: proceed to Step 2.7.1.
-- If user picks one approach directly: update `architect-plan.json` with the chosen approach,
-  skip the rest of Phase 2.7, and proceed to Phase 3.
+If running: proceed straight to Step 2.7.1. Do NOT ask the user whether to fork or to pick an
+approach — the skip table above already requires a positive signal, and the judge (Step 2.7.6)
+makes the selection. Announce in chat which components are being forked and why.
 
 ### Step 2.7.1: Identify Contested Components
 
@@ -1366,7 +1329,7 @@ Agent(name="performance-reviewer", subagent_type="code-quality:performance", mod
         prompt="[context bundle]\n\n[performance-reviewer prompt from agent-prompts.md]")
 ```
 
-**Optional reviewers (spawn if auto-detected or user-requested in Phase 1):**
+**Domain reviewers (UI/API/DB always; plugin-validator and skill-reviewer when detected in Phase 1):**
 ```
 Agent(name="ui-reviewer", subagent_type="general-purpose", model="sonnet",
         prompt="[context bundle]\n\n[ui-reviewer prompt from agent-prompts.md]")
@@ -1959,7 +1922,7 @@ project memory directory detected per `[{skill_dir}/../../references/project-mem
 - `{run_dir}/reviews/` — recurring finding patterns across reviewers
 - `{run_dir}/escalations.json` — escalation events (if the file exists)
 - `{run_dir}/fix-summary.json` — what the Fixer had to address (if the file exists)
-- Human checkpoint feedback from Phase 1 and Phase 2 (logged in `.swarm-run`)
+- User answers to Phase 1 and Phase 2 questions (logged in `.swarm-run`)
 
 Lessons are principle-level only (no file paths, no implementation details). Each lesson uses the
 format from `[{skill_dir}/../incremental-planning/references/lessons-template.md](../../incremental-planning/references/lessons-template.md)`:
@@ -2274,8 +2237,9 @@ If a plan file was detected in Phase 0.4, adopt its commit strategy exactly. The
 
 Only agents that need Write/Edit access use `bypassPermissions`. Read-only agents use default mode.
 
-Maximum agent count: 27 (21 core + 5 optional domain reviewers + 1 optional BDD-Step-Writer).
-Minimum agent count: 21 (all domain reviewers skipped, all conditional phases run).
+Maximum agent count: 27 (21 core + 3 UI/API/DB reviewers + 2 plugin/skill reviewers + 1
+optional BDD-Step-Writer).
+Minimum agent count: 24 (21 core + 3 UI/API/DB reviewers, all conditional phases run).
 
 Agents are spawned and shut down per-phase to manage resource usage. The pipeline team (Phase 3)
 and reviewer team (Phase 4) are never active simultaneously.
@@ -2309,10 +2273,9 @@ Phase 0: Pre-flight
        +-- [fast / absent] --> existing behavior unchanged
      |
      v
-Phase 1: Clarify & Checkpoint <-- AskUserQuestion (ambiguity resolution)
-  +-- Auto-detect optional reviewers
-  +-- Present composition to user
-  +-- User approves -------------- FIRE-AND-FORGET AFTER THIS
+Phase 1: Clarify <-- AskUserQuestion only if the task is ambiguous
+  +-- UI/API/DB reviewers always; detect plugin/skill reviewers
+  +-- Announce composition in chat (no approval) -- FIRE-AND-FORGET AFTER THIS
      |
      v
 Phase 2: Architect (opus)
@@ -2512,7 +2475,8 @@ After escalation, wait for user input before proceeding.
 | Phase 2.7: Speculative Fork | Architect did NOT flag `speculative_fork_recommended: true` AND Lead does not identify 2+ incompatible approach choices. Skip for single-component tasks and tasks where the user specified an approach. |
 | Phase 2.8: Reduction Review | Config-only, docs-only, or test-only changes. Tasks where architect plan modifies fewer than 3 files total. |
 | Test-Writer | `--skip-tests` flag provided, or changes are purely config/docs with no logic |
-| Domain Reviewers (UI/API/DB) | Not auto-detected from codebase analysis |
+| Domain Reviewers (UI/API/DB) | Never skipped |
+| Plugin Validator / Skill Reviewer | No `.claude-plugin/plugin.json` / no `skills/*/SKILL.md` in the repo |
 | Phase 3.5: BDD Step Writing | No `## Test Plan` section in plan file, OR `## Test Plan` has no `**Feature Files:**` path, OR test plan path validation failed (test plan or Feature Files path escapes `{memory_dir}/test-plans/`). |
 | Phase 5: Fix | ALL Phase 4 AND Phase 4.5 review agents report zero findings |
 | Test Coverage Agent | No Phase 4 or 4.5 reviewer identified any test coverage gaps |
@@ -2608,20 +2572,17 @@ tracker state '{tracker}'. Run /incremental-planning Phase 6 to resolve it, or s
 to skip issue tracking." Do not proceed to Phase 1 until the tracker is resolved or set to
 `none`.
 
-### Phase 1: Clarify & Checkpoint (EARLY — fire-and-forget after approval)
+### Phase 1: Clarify (fire-and-forget from here)
 
-Use `AskUserQuestion` to resolve any ambiguity in the task before spawning agents. Auto-detect
-optional reviewers: Glob for UI files (`*.tsx`, `*.vue`, `*.svelte`, `*.html`, `*.css`); Grep
-for API patterns (`router`, `endpoint`, `handler`, `@api`); Grep for DB patterns (`migration`,
-`schema`, `model`, `query`). Present the proposed swarm composition to the user — list all core
-agents plus any auto-detected optional reviewers. Allow the user to add or remove reviewers.
-After the user approves the composition and confirms they understand the scope, proceed without
-further checkpoints. The user can walk away after Phase 1 approval.
+Use `AskUserQuestion` only to resolve genuine ambiguity in the task before spawning agents; if
+there is none, ask nothing. The UI, API, and DB domain reviewers are always included; Plugin
+Validator and Skill Reviewer are added when plugin manifests or skill files exist. Announce the
+composition in chat — never ask the user to approve it. The user can walk away from here.
 
 Announce BDD-Step-Writer as part of the composition if Phase 0 discovered a plan file with a
 `**Feature Files:**` path in its `## Test Plan` section. BDD-Step-Writer is a Phase 3.5 pipeline
-agent with write access — it is distinct from read-only optional domain reviewers and does not
-run in Phase 4. Include it in the composition count presented to the user.
+agent with write access — it is distinct from the read-only domain reviewers and does not run in
+Phase 4. Include it in the announced composition.
 
 **jira:jira-agent** (conditional) — Spawned at Phase 7 completion when `{tracker}` contains
 `jira:PROJ-N`. Verifies card status and transitions to In Progress. Cross-plugin agent
@@ -2635,8 +2596,8 @@ The architect begins by classifying the task using the Cynefin framework
 (see `[{skill_dir}/references/cynefin-reference.md](./cynefin-reference.md)`), then designs the solution accordingly:
 
 - **Clear / Complicated:** Standard decomposition into independent components with dependency graph.
-- **Complex:** Probe design — experiments and signals rather than a full plan. Smaller components
-  with explicit checkpoints. Phase 2.5 Security Design Review is mandatory regardless of surface area.
+- **Complex:** Probe design — experiments and signals rather than a full plan. Smaller components,
+  each verified before the next. Phase 2.5 Security Design Review is mandatory regardless of surface area.
 - **Chaotic:** Stabilization brief only — immediate action plan to stop the bleeding. Phase 2.5
   is deferred until stabilization completes. Single Implementer, no pipeline parallelism.
 - **Disorder:** Investigation plan first; classify domain before committing to implementation.
@@ -2702,21 +2663,17 @@ is the architect explicitly flagging `speculative_fork_recommended: true` in
 `architect-plan.json`, OR the Lead identifying 2+ incompatible design choices in the plan that
 would significantly affect outcomes.
 
-When triggered, the Lead presents the competing approaches to the user via `AskUserQuestion`:
-"The architect identified N competing approaches for [component] (all vetted by security review).
-Want to run /speculative to compare them, or pick one directly?"
-
-If the user chooses `/speculative`, the Lead acts as the speculative orchestrator:
+When triggered, the Lead runs the fork without asking the user and acts as the speculative
+orchestrator:
 
 1. Extract the contested component(s) from `architect-plan.json`
 2. Define evaluation criteria based on the architect's stated trade-offs
 3. Run `/speculative` Phases 1–3 (competitors fork in isolated worktrees, judge evaluates,
-   winning approach merged back)
+   winning approach merged back). The judge's verdict is applied directly — do not present
+   the scoring matrix for user approval inside a swarm run.
 4. The winning approach is written back into `architect-plan.json` as the implementation spec
    for that component, replacing the ambiguous description
 5. Proceed to Phase 3 with the now-resolved plan
-
-If the user picks one approach directly, skip /speculative and continue to Phase 3 as normal.
 
 **Scope:** Only the contested component(s) go through the speculative fork. Uncontested
 components proceed directly to Phase 3 without waiting (if pipeline-feasible).
@@ -2819,8 +2776,8 @@ tasks. The Lead decides based on the dependency graph — never based on cost or
 
 ### Phase 4: Parallel Review
 
-Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, and any
-auto-detected optional reviewers (UI, API, DB). Also spawn the Plan Adherence reviewer if an
+Spawn ALL review agents simultaneously: Security, QA, Code-Reviewer, Performance, the UI, API,
+and DB domain reviewers (always), and Plugin Validator / Skill Reviewer when detected. Also spawn the Plan Adherence reviewer if an
 incremental plan file is found (see below). All reviewers operate in read-only mode on the
 completed implementation. Each writes structured JSON findings to `{run_dir}/reviews/`
 (see schema in `[{skill_dir}/references/communication-schema.md](./communication-schema.md)`). The Lead collects all findings and

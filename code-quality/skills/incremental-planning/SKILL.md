@@ -64,7 +64,7 @@ valid approaches exist)?
 
 Are outcomes uncertain even after analysis? Does the solution space feel
 unbounded, or do experts disagree on whether the problem is solvable as stated?
-  YES → Complex: Probe design. Smaller iterations. More checkpoints.
+  YES → Complex: Probe design. Smaller iterations.
 ```
 
 **Domain summaries:**
@@ -164,8 +164,8 @@ If the user selects "Link existing" for either GH or Jira, follow up with an
 
 ### Workflow Question
 
-After the Tracker Question, detect the project's workflow mode. This question does NOT count
-toward the 3-round minimum.
+After the Tracker Question, detect the project's workflow mode. This is detection, not a
+question — do NOT use `AskUserQuestion` for it, and it does NOT count toward the 3-round minimum.
 
 1. Check WORK_ETHIC.md for `**Workflow:**` field
 2. Check project CLAUDE.md for `## Workflow` section
@@ -174,8 +174,8 @@ toward the 3-round minimum.
 4. If not found or set to `fast`, inform the user: "Using fast workflow (no PR boundaries).
    You can override this by setting `**Workflow:** incremental` in your WORK_ETHIC.md,
    or adding a `## Workflow` section with `mode: incremental` to your project CLAUDE.md."
-5. Allow the user to override via `AskUserQuestion` if they want to change the detected mode
-   for this specific plan.
+5. Use the detected mode. If the user replies asking for the other mode for this specific plan,
+   switch to it.
 
 ### Exit Condition
 

@@ -55,20 +55,20 @@ After completing scope definition, determine whether the research topic is **Sci
 
 ### Phase 1.5: Research Mode Classification
 
-After completing Phase 1.25 domain classification, classify the research mode via `AskUserQuestion` before proceeding.
+After completing Phase 1.25 domain classification, classify the research mode yourself before proceeding. Do NOT ask the user to pick a mode — state the chosen mode and a one-line reason in chat, then continue. The user can redirect by replying.
 
 **Argument parsing:**
-- **Detection rule:** If the skill argument ends with `Mode: External` or `Mode: Bridged` (case-insensitive, after a period or newline), use that mode directly and skip the `AskUserQuestion` call below. Example suffix: `[research question]. Mode: Bridged`.
+- **Detection rule:** If the skill argument ends with `Mode: External` or `Mode: Bridged` (case-insensitive, after a period or newline), use that mode directly. Example suffix: `[research question]. Mode: Bridged`.
 - **Negative-match guard (critical):** The `Mode:` prefix is required — do not match bare `External` or `Bridged` keywords appearing anywhere in the research question text itself.
-- **Fallback:** If no `Mode:` suffix is found, proceed with the interactive `AskUserQuestion` as before.
+- **Fallback:** If no `Mode:` suffix is found, classify from the question using the definitions below. When the question mentions this project's code, files, patterns, or architecture — or asks how to do something *in this repo* — choose Bridged; otherwise choose External.
 
-**Present two options to the user:**
+**Modes:**
 
 - **External** — Pure external research (web sources, documentation, community). Use when the question is about topics, patterns, or decisions unrelated to this codebase (technology comparisons, cooking techniques, home maintenance, legal questions, etc.).
 - **Bridged** — Internal investigation first, then external research informed by the internal findings. Use when the question references this project's code, patterns, or architecture.
 
 **Routing:**
-- Both selections proceed to Phase 1.6 next.
+- Both modes proceed to Phase 1.6 next.
 
 ### Phase 1.6: Initial Research
 
