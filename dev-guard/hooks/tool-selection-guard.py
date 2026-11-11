@@ -15,6 +15,7 @@ import functools
 import json
 import os
 import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -2014,10 +2015,12 @@ GIT_ASK_RULES: list[GitRule] = [
 # ── SafeDep PMG bypass rules ──
 #
 # PMG (github.com/safedep/pmg) wraps package managers with a malware scan and a
-# dependency cooldown. Its shims only intercept the bare command names (`pip`,
-# `pip3`, `npm`, `uv`, ...), and its behavior can be weakened via environment
-# variables and a CLI flag. These rules hard-block those escape hatches and,
-# like GIT_DENY_RULES, are enforced even under GUARD_BYPASS=1.
+# dependency cooldown. Its shims (and wrappers such as ~/.config/fish/bin/uv that
+# route through them) only intercept the bare command names found on PATH
+# (`pip`, `npm`, `uv`, ...). PMG reads every config key from a matching PMG_*
+# environment variable unless a root-managed config enables lockdown, and its
+# CLI can remove the shims or rewrite the config. These rules hard-block those
+# escape hatches and, like GIT_DENY_RULES, are enforced even under GUARD_BYPASS=1.
 
 _PMG_GUIDANCE_SUFFIX = (
     " This bypasses SafeDep PMG supply-chain protection (malware scan + dependency "
@@ -2030,8 +2033,7 @@ _PMG_GUIDANCE_SUFFIX = (
 # grep patterns), not argv tokens. Single-token quoted strings are unquoted so
 # `env "PMG_CONFIG_DIR=x" npm i` or `"$VENV"/bin/pip install` are still seen.
 _PMG_QUOTED_RE = re.compile(r"""'[^']*'|"(?:\\.|[^"\\])*\"""")
-_PMG_ENV_VARS = ("PMG_INSECURE_INSTALLATION", "PMG_PROXY_INSTALL_ONLY", "PMG_CONFIG_DIR")
-_PMG_ENV_ASSIGN_START_RE = re.compile(rf"^\s*(?:{'|'.join(_PMG_ENV_VARS)})=")
+_PMG_ENV_ASSIGN_START_RE = re.compile(r"^\s*PMG_[A-Z0-9_]+=")
 
 
 def _sanitize_pmg_args(cmd: str) -> str:
@@ -2046,23 +2048,179 @@ def _sanitize_pmg_args(cmd: str) -> str:
     return _PMG_QUOTED_RE.sub(_repl, cmd)
 
 
-def _sets_pmg_env(cmd: str, var: str) -> bool:
-    """Return True if cmd assigns/exports ``var`` (any value).
+_SH_SEPARATORS = frozenset({";", ";;", "&", "&&", "|", "||", "|&", "(", ")", "((", "))", "$"})
+_SH_OUTPUT_REDIRECTS = frozenset({">", ">>", ">|", "&>", "&>>", ">&"})
+# Words that run the command after them, with the options that take an argument.
+_SH_PREFIX_WORDS: dict[str, frozenset[str]] = {
+    "sudo": frozenset({"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"}),
+    "env": frozenset({"-u", "-C", "-S", "-P"}),
+    "nice": frozenset({"-n"}),
+    "export": frozenset(),
+    "declare": frozenset(),
+    "typeset": frozenset(),
+    "local": frozenset(),
+    "readonly": frozenset(),
+    "command": frozenset(),
+    "builtin": frozenset(),
+    "exec": frozenset({"-a"}),
+    "nohup": frozenset(),
+    "time": frozenset(),
+    "caffeinate": frozenset(),
+}
+_SH_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "fish"})
+_SH_ASSIGN_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
 
-    Covers `VAR=x cmd`, `env VAR=x cmd`, `export VAR=x`, `declare -x VAR=x`,
-    `sudo VAR=x cmd`, and `launchctl setenv VAR x`. Reading the variable
-    (`echo $VAR`, `printenv VAR`, `grep VAR file`, `unset VAR`) is allowed.
-    Any assigned value is blocked (fail closed) rather than replicating PMG's
-    truthiness parsing.
+
+_SimpleCommand = tuple[tuple[tuple[str, str], ...], tuple[str, ...]]
+
+
+@functools.lru_cache(maxsize=64)
+def _pmg_parse(cmd: str, depth: int = 0) -> tuple[_SimpleCommand, ...]:
+    """Split cmd into simple commands as ``(assignments, argv)`` pairs.
+
+    Assignments are the leading ``VAR=value`` words (including those after
+    `env`, `sudo`, `export`, `declare -x`, ...); argv starts at the command word.
+    `$(...)`, backticks, pipes, and lists start new commands, and `sh -c '...'`
+    bodies are parsed recursively. Raises ValueError on unbalanced quotes.
     """
-    sanitized = _sanitize_pmg_args(cmd)
-    if re.search(rf"(?:^|[\s(]){var}=", sanitized):
-        return True
-    return bool(re.search(rf"(?:^|\s)setenv\s+{var}(?!\S)", sanitized))
+    lexer = shlex.shlex(
+        cmd.replace("`", " ; ").replace("\n", " ; "), posix=True, punctuation_chars=True
+    )
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    groups: list[list[str]] = [[]]
+    for tok in lexer:
+        if tok in _SH_SEPARATORS:
+            groups.append([])
+        else:
+            groups[-1].append(tok)
+
+    parsed: list[_SimpleCommand] = []
+    for tokens in groups:
+        assigns: list[tuple[str, str]] = []
+        argv: list[str] = []
+        i, n, in_prefix = 0, len(tokens), True
+        while i < n:
+            tok = tokens[i]
+            if tok and set(tok) <= set("<>&|0123456789") and ("<" in tok or ">" in tok):
+                argv.append(tok)  # kept so the file-write check can see it; skips its target
+                i += 2
+                continue
+            if in_prefix:
+                m = _SH_ASSIGN_RE.match(tok)
+                if m:
+                    assigns.append((m.group(1), m.group(2)))
+                    i += 1
+                    continue
+                opts = _SH_PREFIX_WORDS.get(tok.rsplit("/", 1)[-1])
+                if opts is not None:
+                    i += 1
+                    while i < n and tokens[i].startswith("-") and tokens[i] != "-":
+                        if tokens[i] == "--":
+                            i += 1
+                            break
+                        i += 2 if tokens[i] in opts else 1
+                    continue
+                in_prefix = False
+            argv.append(tok)
+            i += 1
+        parsed.append((tuple(assigns), tuple(argv)))
+
+        if depth < 3 and argv and argv[0].rsplit("/", 1)[-1] in _SH_SHELLS:
+            for j, arg in enumerate(argv[1:-1], start=1):
+                if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", arg):
+                    parsed.extend(_pmg_parse(argv[j + 1], depth + 1))
+                    break
+    return tuple(parsed)
 
 
-# Package-manager command names PMG guards (shim names plus pmg itself).
-_PMG_GUARDED_CMDS = r"(?:pmg|npm|npx|pnpm|pnpx|yarn|bun|pip|pip3|pipx|poetry|uv|uvx|aube|aubr|aubx)"
+def _pmg_argvs(cmd: str) -> list[tuple[str, ...]]:
+    """argv of every simple command in cmd (redirect operators included); [] if unparseable."""
+    try:
+        return [argv for _, argv in _pmg_parse(cmd) if argv]
+    except ValueError:
+        return []
+
+
+_PMG_VAR_TEXT_RE = re.compile(
+    r"(?<![A-Za-z0-9_$])(PMG_[A-Z0-9_]+)=|setenv\s+(PMG_[A-Z0-9_]+)|set\s+-\S*x\S*\s+(PMG_[A-Z0-9_]+)"
+)
+
+
+def _pmg_vars_in_text(cmd: str) -> list[tuple[str, str | None]]:
+    return [(next(g for g in m.groups() if g), None) for m in _PMG_VAR_TEXT_RE.finditer(cmd)]
+
+
+@functools.lru_cache(maxsize=64)
+def _pmg_env_assignments(cmd: str) -> tuple[tuple[str, str | None], ...]:
+    """Every PMG_* variable cmd sets, as ``(name, value)``; value is None when unknown.
+
+    Covers `VAR=x cmd`, `env VAR=x`, `export`/`declare -x`, `sudo VAR=x`,
+    `launchctl setenv VAR x`, fish `set -gx VAR x`, and writing an assignment into a
+    file (`>> ~/.zshrc`, `| tee -a ~/.config/fish/config.fish`). Reading a variable
+    (`echo $VAR`, `printenv VAR`, `grep 'VAR=' file`, `unset VAR`) is not a write.
+    Unparseable commands fall back to a text scan (fail closed).
+    """
+    try:
+        parsed = _pmg_parse(cmd)
+    except ValueError:
+        return tuple(_pmg_vars_in_text(cmd))
+
+    found: list[tuple[str, str | None]] = []
+    writes_file = False
+    for assigns, argv in parsed:
+        found += [(var, val) for var, val in assigns if var.startswith("PMG_")]
+        if not argv:
+            continue
+        exe = argv[0].rsplit("/", 1)[-1]
+        writes_file = writes_file or exe == "tee" or any(a in _SH_OUTPUT_REDIRECTS for a in argv)
+        if exe == "launchctl" and argv[1:2] == ("setenv",):
+            pairs = argv[2:]
+            found += [
+                (var, pairs[k + 1] if k + 1 < len(pairs) else None)
+                for k, var in enumerate(pairs)
+                if k % 2 == 0 and var.startswith("PMG_")
+            ]
+        elif exe == "set":
+            flags = [a for a in argv[1:] if a.startswith("-")]
+            names = [a for a in argv[1:] if not a.startswith("-")]
+            exported = any(f == "--export" or (not f.startswith("--") and "x" in f) for f in flags)
+            if exported and names and names[0].startswith("PMG_"):
+                found.append((names[0], " ".join(names[1:]) or None))
+    if writes_file:
+        found += _pmg_vars_in_text(cmd)
+    return tuple(found)
+
+
+def _sets_pmg_env(cmd: str, var: str) -> bool:
+    """Return True if cmd sets ``var`` to any value (see _pmg_env_assignments)."""
+    return any(name == var for name, _ in _pmg_env_assignments(cmd))
+
+
+_PMG_TRUE = frozenset({"1", "t", "T", "true", "TRUE", "True"})
+_PMG_FALSE = frozenset({"0", "f", "F", "false", "FALSE", "False"})
+# Overrides that only make PMG stricter or quieter. PMG_PROXY_INSTALL_ONLY=false routes
+# every command through the proxy, so lookups such as `npm outdated` see the cooldown.
+_PMG_TIGHTENING_ENV: dict[str, frozenset[str]] = {
+    "PMG_PARANOID": _PMG_TRUE,
+    "PMG_PROXY_INSTALL_ONLY": _PMG_FALSE,
+    "PMG_DISABLE_TELEMETRY": _PMG_TRUE,
+}
+_PMG_DEDICATED_ENV_RULES = frozenset({"PMG_INSECURE_INSTALLATION", "PMG_CONFIG_DIR"})
+
+
+def _overrides_pmg_env(cmd: str) -> bool:
+    """Return True if cmd sets any other PMG_* config override to a non-tightening value."""
+    return any(
+        name not in _PMG_DEDICATED_ENV_RULES and value not in _PMG_TIGHTENING_ENV.get(name, ())
+        for name, value in _pmg_env_assignments(cmd)
+    )
+
+
+# Package-manager command names PMG guards (shim names, fish-config wrappers, pmg itself).
+_PMG_GUARDED_CMDS = (
+    r"(?:pmg|npm|npx|pnpm|pnpx|yarn|bun|bunx|pip|pip3|pipx|poetry|uv|uvx|aube|aubr|aubx)"
+)
 _PMG_SKIP_COOLDOWN_RE = re.compile(
     rf"(?:^|[\s(/]){_PMG_GUARDED_CMDS}(?![\w.-])[^|;&<>\n]*?"
     r"(?<!\S)--skip-dependency-cooldown(?![\w-])"
@@ -2093,6 +2251,14 @@ _UV_RUN_PIP_RE = re.compile(
     rf"[^|;&<>\n]*?{_PIP_FETCH_SUBCMD}"
 )
 _PMG_SHIM_DIR_MARKER = "/safedep/pmg/bin/"
+# Directories whose package-manager executables route through PMG.
+_PMG_TRUSTED_DIR_MARKERS = (_PMG_SHIM_DIR_MARKER, "/.config/fish/bin/")
+# pip/pip3 by path are covered by pip-unshimmed, which also allows non-fetching use.
+_PMG_PATH_GUARDED = frozenset(
+    {"npm", "npx", "pnpm", "pnpx", "yarn", "bun", "bunx", "pipx", "poetry", "uv", "uvx"}
+    | {"aube", "aubr", "aubx"}
+)
+_PMG_PATH_SHIMMED = _PMG_PATH_GUARDED | {"pip", "pip3"}
 
 
 def _is_unshimmed_pip_install(cmd: str) -> bool:
@@ -2105,6 +2271,73 @@ def _is_unshimmed_pip_install(cmd: str) -> bool:
     )
 
 
+def _is_pmg_routed_path(exe: str) -> bool:
+    """True for the PMG shim dir, ~/.config/fish/bin, or `bin/` of any fish-config checkout.
+
+    A checkout (including a worktree) is recognized by its `scripts/uv-wrapper.sh`, so
+    `bin/uv` run from inside one resolves to the same wrapper.
+    """
+    if any(marker in exe for marker in _PMG_TRUSTED_DIR_MARKERS):
+        return True
+    if "$" in exe:
+        return False
+    bin_dir = os.path.dirname(os.path.abspath(os.path.expanduser(exe)))
+    return os.path.basename(bin_dir) == "bin" and os.path.isfile(
+        os.path.join(os.path.dirname(bin_dir), "scripts", "uv-wrapper.sh")
+    )
+
+
+def _runs_unshimmed_package_manager(cmd: str) -> bool:
+    """Return True if a PMG-guarded package manager runs where PATH lookup can't route it.
+
+    That is an explicit path outside the PMG shim and fish-config wrapper directories
+    (`/opt/homebrew/bin/uv add x`, `node_modules/.bin/npm i`), or a bare name with PATH
+    overridden for that command (`PATH=/opt/homebrew/bin:$PATH uv add x`).
+    """
+    try:
+        parsed = _pmg_parse(cmd)
+    except ValueError:
+        return False
+    for assigns, argv in parsed:
+        if not argv:
+            continue
+        exe = argv[0]
+        name = exe.rsplit("/", 1)[-1]
+        if "/" in exe:
+            if name in _PMG_PATH_GUARDED and not _is_pmg_routed_path(exe):
+                return True
+        elif name in _PMG_PATH_SHIMMED and any(var == "PATH" for var, _ in assigns):
+            return True
+    return False
+
+
+_PMG_FLAGS_WITH_VALUE = frozenset({"--log", "--sandbox-allow", "--sandbox-profile"})
+_PMG_DISABLING_SUBCOMMANDS = (
+    ("remove",),
+    ("setup", "remove"),
+    ("setup", "cert", "uninstall"),
+    ("config", "set"),
+    ("config", "edit"),
+)
+
+
+def _pmg_disables_protection(cmd: str) -> bool:
+    """Return True for pmg subcommands that remove its shims/CA or rewrite its config."""
+    for argv in _pmg_argvs(cmd):
+        if argv[0].rsplit("/", 1)[-1] != "pmg":
+            continue
+        words: list[str] = []
+        args = iter(argv[1:])
+        for arg in args:
+            if arg in _PMG_FLAGS_WITH_VALUE:
+                next(args, None)
+            elif not arg.startswith("-"):
+                words.append(arg)
+        if any(tuple(words[: len(sub)]) == sub for sub in _PMG_DISABLING_SUBCOMMANDS):
+            return True
+    return False
+
+
 PMG_DENY_RULES: list[GitRule] = [
     GitRule(
         "pmg-insecure-env",
@@ -2113,16 +2346,18 @@ PMG_DENY_RULES: list[GitRule] = [
         "and installs packages without malware checks." + _PMG_GUIDANCE_SUFFIX,
     ),
     GitRule(
-        "pmg-proxy-mode-env",
-        lambda cmd: _sets_pmg_env(cmd, "PMG_PROXY_INSTALL_ONLY"),
-        "Setting PMG_PROXY_INSTALL_ONLY is FORBIDDEN — it changes PMG's proxy "
-        "interception mode." + _PMG_GUIDANCE_SUFFIX,
-    ),
-    GitRule(
         "pmg-config-dir-env",
         lambda cmd: _sets_pmg_env(cmd, "PMG_CONFIG_DIR"),
         "Setting PMG_CONFIG_DIR is FORBIDDEN — it loads an alternate PMG config "
         "that can disable protections." + _PMG_GUIDANCE_SUFFIX,
+    ),
+    GitRule(
+        "pmg-env-override",
+        _overrides_pmg_env,
+        "Setting PMG_* environment variables is FORBIDDEN — PMG reads every config key "
+        "(dependency_cooldown.*, proxy.*, sandbox.*, ...) from them, so they can turn its "
+        "checks off. Only PMG_PARANOID=true and PMG_PROXY_INSTALL_ONLY=false (which make "
+        "PMG stricter) are allowed." + _PMG_GUIDANCE_SUFFIX,
     ),
     GitRule(
         "pmg-skip-cooldown",
@@ -2136,6 +2371,21 @@ PMG_DENY_RULES: list[GitRule] = [
         "Running pip via `python -m pip`, a path (e.g. `.venv/bin/pip`), a versioned "
         "name (e.g. `pip3.12`), or `uv run pip` is FORBIDDEN for install/download/wheel "
         "— PMG's shim only intercepts the bare `pip`/`pip3` commands." + _PMG_GUIDANCE_SUFFIX,
+    ),
+    GitRule(
+        "pm-unshimmed-path",
+        _runs_unshimmed_package_manager,
+        "Running a package manager by path (e.g. `/opt/homebrew/bin/uv`) or with PATH "
+        "overridden is FORBIDDEN — only the bare name resolves to the PMG shim or the "
+        "wrapper that routes through it." + _PMG_GUIDANCE_SUFFIX,
+    ),
+    GitRule(
+        "pmg-teardown",
+        _pmg_disables_protection,
+        "`pmg remove`, `pmg setup remove`, `pmg setup cert uninstall`, and "
+        "`pmg config set|edit` are FORBIDDEN — they remove PMG's shims or CA, or rewrite "
+        "the config that enables its checks. Ask the user to make PMG changes."
+        + _PMG_GUIDANCE_SUFFIX,
     ),
 ]
 

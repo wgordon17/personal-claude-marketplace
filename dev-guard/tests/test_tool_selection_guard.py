@@ -2462,12 +2462,22 @@ class TestPmgBypassDeny:
             ("export PMG_INSECURE_INSTALLATION=1 && uv add requests", "pmg-insecure-env"),
             ("bash -c 'PMG_INSECURE_INSTALLATION=1 npm ci'", "pmg-insecure-env"),
             ("echo $(PMG_INSECURE_INSTALLATION=1 npm ci)", "pmg-insecure-env"),
-            ("PMG_PROXY_INSTALL_ONLY=false npm install left-pad", "pmg-proxy-mode-env"),
-            ("export PMG_PROXY_INSTALL_ONLY=false", "pmg-proxy-mode-env"),
+            ("PMG_PROXY_INSTALL_ONLY=true npm install left-pad", "pmg-env-override"),
+            ("export PMG_PROXY_INSTALL_ONLY=1", "pmg-env-override"),
+            ("PMG_DEPENDENCY_COOLDOWN_ENABLED=false uv add requests", "pmg-env-override"),
+            ("env PMG_PROXY_ENABLED=false npm ci", "pmg-env-override"),
+            ("launchctl setenv PMG_SANDBOX_ENABLED false", "pmg-env-override"),
+            ("tee -a ~/.zshrc <<< 'export PMG_INSECURE_INSTALLATION=1'", "pmg-insecure-env"),
             ("PMG_CONFIG_DIR=hack/pmg pip install requests", "pmg-config-dir-env"),
             ("env PMG_CONFIG_DIR=$HOME/.alt-pmg pnpm add left-pad", "pmg-config-dir-env"),
             ("pmg --skip-dependency-cooldown npm install left-pad", "pmg-skip-cooldown"),
             ("npm install left-pad --skip-dependency-cooldown", "pmg-skip-cooldown"),
+            ("bunx --skip-dependency-cooldown cowsay hi", "pmg-skip-cooldown"),
+            ("/opt/homebrew/bin/uv add requests", "pm-unshimmed-path"),
+            ("/opt/homebrew/bin/npm install left-pad", "pm-unshimmed-path"),
+            ("PATH=/opt/homebrew/bin:$PATH uv add requests", "pm-unshimmed-path"),
+            ("pmg setup remove", "pmg-teardown"),
+            ("pmg config set dependency_cooldown.enabled false", "pmg-teardown"),
             ("python3 -m pip install requests", "pip-unshimmed"),
             ("python3.12 -m pip install requests", "pip-unshimmed"),
             ("uv run python -m pip install requests", "pip-unshimmed"),
@@ -2483,12 +2493,22 @@ class TestPmgBypassDeny:
             "insecure-export-chain",
             "insecure-bash-c",
             "insecure-subshell",
-            "proxy-mode-prefix",
-            "proxy-mode-export",
+            "proxy-install-only-true",
+            "proxy-install-only-export-1",
+            "cooldown-disabled-env",
+            "proxy-disabled-env-cmd",
+            "sandbox-launchctl-setenv",
+            "insecure-written-to-rc",
             "config-dir-prefix",
             "config-dir-env-cmd",
             "skip-cooldown-pmg",
             "skip-cooldown-shimmed-npm",
+            "skip-cooldown-bunx-wrapper",
+            "homebrew-uv-path",
+            "homebrew-npm-path",
+            "path-override-uv",
+            "pmg-setup-remove",
+            "pmg-config-set",
             "python3-m-pip",
             "python-versioned-m-pip",
             "uv-run-python-m-pip",
@@ -2521,6 +2541,13 @@ class TestPmgBypassDeny:
             "uv add requests",
             ".venv/bin/pip list",
             "uv run python -m pip list",
+            "grep -rn 'PMG_CONFIG_DIR=' docs/",
+            "PMG_PROXY_INSTALL_ONLY=false npm outdated -g",
+            "PMG_PARANOID=true npm install left-pad",
+            "~/.config/fish/bin/uv tool list --outdated",
+            "pmg config get dependency_cooldown",
+            "pmg setup info",
+            "ls /opt/homebrew/bin/uv",
         ],
         ids=[
             "grep-config-dir-name",
@@ -2537,6 +2564,13 @@ class TestPmgBypassDeny:
             "uv-add",
             "venv-pip-list",
             "uv-run-m-pip-list",
+            "grep-quoted-assignment-literal",
+            "proxy-install-only-false-tightens",
+            "paranoid-true-tightens",
+            "fish-wrapper-by-path",
+            "pmg-config-get",
+            "pmg-setup-info",
+            "ls-homebrew-uv",
         ],
     )
     def test_allowed(self, command):
@@ -2949,10 +2983,96 @@ class TestPmgBypassHelpers:
             ("XPMG_CONFIG_DIR=1 make", "PMG_CONFIG_DIR", False),
             ("launchctl getenv PMG_CONFIG_DIR", "PMG_CONFIG_DIR", False),
             ('gh pr create --body "never set PMG_CONFIG_DIR=x"', "PMG_CONFIG_DIR", False),
+            ("grep 'PMG_CONFIG_DIR=' file", "PMG_CONFIG_DIR", False),
+            ("npm i --foo PMG_CONFIG_DIR=x", "PMG_CONFIG_DIR", False),
+            ("echo $(PMG_CONFIG_DIR=x npm ci)", "PMG_CONFIG_DIR", True),
+            ("ls; `PMG_CONFIG_DIR=x npm ci`", "PMG_CONFIG_DIR", True),
+            ("bash -c 'PMG_CONFIG_DIR=x npm ci'", "PMG_CONFIG_DIR", True),
+            ("fish -c 'set -gx PMG_CONFIG_DIR x'", "PMG_CONFIG_DIR", True),
+            ("set -x PMG_CONFIG_DIR x", "PMG_CONFIG_DIR", True),
+            ("sudo -u root env -u HOME PMG_CONFIG_DIR=x npm i", "PMG_CONFIG_DIR", True),
+            ("ls\nPMG_CONFIG_DIR=x npm i", "PMG_CONFIG_DIR", True),
+            ("echo 'export PMG_CONFIG_DIR=x' >> ~/.zshrc", "PMG_CONFIG_DIR", True),
+            ("grep PMG_CONFIG_DIR= f | tee out.txt", "PMG_CONFIG_DIR", True),
+            ("PMG_CONFIG_DIR='unbalanced npm i", "PMG_CONFIG_DIR", True),
         ],
     )
     def test_sets_pmg_env(self, cmd, var, expected):
         assert _mod._sets_pmg_env(cmd, var) is expected
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            ("PMG_DEPENDENCY_COOLDOWN_ENABLED=false npm i", True),
+            ("PMG_DEPENDENCY_COOLDOWN_DAYS=0 uv add x", True),
+            ("PMG_PROXY_INSTALL_ONLY=true npm i", True),
+            ("PMG_PROXY_INSTALL_ONLY= npm i", True),
+            ("PMG_PARANOID=false npm i", True),
+            ("export PMG_TRUSTED_PACKAGES=x", True),
+            ("launchctl setenv PMG_PROXY_ENABLED", True),
+            ("PMG_PROXY_INSTALL_ONLY=false npm outdated -g", False),
+            ("env PMG_PROXY_INSTALL_ONLY=0 npm view x", False),
+            ("PMG_PARANOID=true PMG_DISABLE_TELEMETRY=1 npm i", False),
+            ("PMG_INSECURE_INSTALLATION=1 npm i", False),
+            ("PMG_CONFIG_DIR=x npm i", False),
+            ("printenv PMG_DEPENDENCY_COOLDOWN_ENABLED", False),
+        ],
+    )
+    def test_overrides_pmg_env(self, cmd, expected):
+        assert _mod._overrides_pmg_env(cmd) is expected
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            ("/opt/homebrew/bin/uv add x", True),
+            ("/opt/homebrew/bin/uvx ruff", True),
+            ("./node_modules/.bin/pnpm i", True),
+            ("sudo /opt/homebrew/bin/npm i -g x", True),
+            ("ls && /opt/homebrew/bin/bunx cowsay", True),
+            ("PATH=/opt/homebrew/bin uv sync", True),
+            ("env PATH=/usr/bin:/opt/homebrew/bin pip install x", True),
+            ("uv add x", False),
+            ("/Users/me/.config/fish/bin/uv add x", False),
+            ("~/.config/fish/bin/bunx cowsay", False),
+            ('"/Users/me/Library/Application Support/safedep/pmg/bin/npm" i', False),
+            ("ls -la /opt/homebrew/bin/uv", False),
+            ("PATH=/x make build", False),
+            ("/opt/homebrew/bin/pmg npm i", False),
+        ],
+    )
+    def test_runs_unshimmed_package_manager(self, cmd, expected):
+        assert _mod._runs_unshimmed_package_manager(cmd) is expected
+
+    def test_fish_config_checkout_wrapper_is_trusted(self, tmp_path, monkeypatch):
+        checkout = tmp_path / "wt"
+        (checkout / "scripts").mkdir(parents=True)
+        (checkout / "scripts" / "uv-wrapper.sh").touch()
+        monkeypatch.chdir(checkout)
+        assert _mod._runs_unshimmed_package_manager("bin/uv sync --frozen") is False
+        assert _mod._runs_unshimmed_package_manager(f"{checkout}/bin/uvx ruff") is False
+        (checkout / "scripts" / "uv-wrapper.sh").unlink()
+        assert _mod._runs_unshimmed_package_manager("bin/uv sync --frozen") is True
+
+    @pytest.mark.parametrize(
+        "cmd, expected",
+        [
+            ("pmg remove", True),
+            ("pmg setup remove", True),
+            ("pmg --verbose setup remove", True),
+            ("/opt/homebrew/bin/pmg setup cert uninstall", True),
+            ("pmg config set proxy.install_only true", True),
+            ("pmg --log x.log config edit", True),
+            ("pmg setup install", False),
+            ("pmg setup info", False),
+            ("pmg config get dependency_cooldown", False),
+            ("pmg config path", False),
+            ("pmg npm remove left-pad", False),
+            ("pmg uv remove requests", False),
+            ("grep 'pmg setup remove' README.md", False),
+        ],
+    )
+    def test_pmg_disables_protection(self, cmd, expected):
+        assert _mod._pmg_disables_protection(cmd) is expected
 
     @pytest.mark.parametrize(
         "cmd, expected",
@@ -2963,6 +3083,7 @@ class TestPmgBypassHelpers:
             ("/opt/homebrew/bin/pmg --skip-dependency-cooldown uv add x", True),
             ("uv add x --skip-dependency-cooldown", True),
             ("yarn add x --skip-dependency-cooldown", True),
+            ("bunx --skip-dependency-cooldown x", True),
             ("pmg npm install x", False),
             ("pmg --paranoid npm install x", False),
             ("grep -- --skip-dependency-cooldown README.md", False),
