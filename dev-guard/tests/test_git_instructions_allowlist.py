@@ -204,3 +204,27 @@ class TestParseUrlOwnerRepo:
 
     def test_empty_url(self):
         assert _call_bash_func("parse_url_owner_repo", "") == ""
+
+
+class TestProjectCommitFormatGate:
+    """Verify git-instructions.sh output when claude-code.commit-trailers-required=true."""
+
+    def test_project_commit_format_requires_assisted_by_and_signoff(self, tmp_path: Path):
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        subprocess.run(
+            ["git", "config", "claude-code.commit-trailers-required", "true"],
+            cwd=tmp_path,
+            check=True,
+        )
+        res = subprocess.run(
+            ["bash", str(GIT_INSTRUCTIONS_SH)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert "Assisted-by:" in res.stdout
+        assert "git commit -s" in res.stdout
+        assert "NEVER add Signed-off-by" not in res.stdout
+        assert "NEVER include Signed-off-by" not in res.stdout
+        assert "NEVER add Co-Authored-By" in res.stdout

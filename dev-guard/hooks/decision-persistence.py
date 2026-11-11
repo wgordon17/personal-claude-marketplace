@@ -22,6 +22,9 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from memory_paths import find_main_worktree, find_memory_dir  # noqa: E402
+
 # ── Constants ──
 
 DEFER_LABEL = "Defer"
@@ -30,7 +33,6 @@ _MAX_DECISION_AGE_DAYS = 30
 
 METADATA_PREFIX = "▸dp:"
 DECISIONS_FILENAME = "review-decisions.json"
-MEMORY_DIR_CANDIDATES = ("hack", ".local", "scratch", ".dev")
 _CODE_HASH_WINDOW = 5  # ±N lines around finding location for staleness detection
 
 
@@ -67,27 +69,16 @@ _cached_memory_dir: Path | None = None
 def _find_memory_dir() -> Path | None:
     """Find the project memory directory (hack/, .local/, scratch/, .dev/).
 
-    Finds git root by walking up from CWD, then checks for candidates at root level.
+    Finds git root by walking up from CWD, resolves the main worktree root,
+    then checks for candidates at root level.
     Cached per-process alongside _find_git_root.
     """
     global _memory_dir_resolved, _cached_memory_dir  # noqa: PLW0603
     if _memory_dir_resolved:
         return _cached_memory_dir
-    git_root = _find_git_root()
-
-    core_files = ("PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md")
-
-    for candidate in MEMORY_DIR_CANDIDATES:
-        candidate_path = git_root / candidate
-        if candidate_path.is_dir():
-            core_count = sum(1 for f in core_files if (candidate_path / f).is_file())
-            if core_count < 2:
-                continue  # not a validated memory directory
-            _cached_memory_dir = candidate_path
-            _memory_dir_resolved = True
-            return candidate_path
+    _cached_memory_dir = find_memory_dir(find_main_worktree(_find_git_root()))
     _memory_dir_resolved = True
-    return None
+    return _cached_memory_dir
 
 
 def _decisions_path() -> Path | None:
