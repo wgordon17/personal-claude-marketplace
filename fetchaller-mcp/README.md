@@ -40,7 +40,7 @@ fetchaller-mcp omits the `executable_path` argument when constructing
 `wafer-py`'s `BrowserSolver` (confirmed directly in fetchaller-mcp's
 `server.py` at the pinned commit), and `BrowserSolver` itself then falls back
 to its own OS-standard Chrome auto-detection — confirmed directly in
-`wafer-py`'s own `browser/_solver.py` at the pinned `0.4.4` version
+`wafer-py`'s own `browser/_solver.py` at the pinned `0.7.14` version
 (`_browser_executable()` calls `_system_chrome_executable()` when no
 executable path was configured). On macOS that fallback checks exactly
 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. If a Chrome
@@ -51,52 +51,46 @@ Always set this variable explicitly.
 
 **WARNING — use a dedicated, logged-out Chrome install or profile, not your
 daily-driver browser.** fetchaller-mcp/`wafer-py[browser]` runs real
-browser-automation against `BROWSER_EXECUTABLE_PATH` with no profile
-isolation option. We investigated this directly (checked fetchaller-mcp's
-README at the pinned commit, its documented environment variables, and
-`wafer-py`'s `BrowserSolver` API on PyPI): fetchaller-mcp exposes no
+browser-automation against `BROWSER_EXECUTABLE_PATH` with no user-configurable
+profile-directory option. We investigated this directly (checked
+fetchaller-mcp's README at the pinned commit, its documented environment
+variables, and `wafer-py`'s `BrowserSolver` API): fetchaller-mcp exposes no
 `CHROME_ARGS`-style environment variable or launch-flag passthrough, and
 `wafer-py`'s `BrowserSolver` only accepts `executable_path`, `headless`,
-`idle_timeout`, and `solve_timeout` — no `user_data_dir` or equivalent
-profile-isolation parameter, even though the underlying Patchright library
-supports one internally. There is currently no way to force an isolated
-profile through this integration. If `BROWSER_EXECUTABLE_PATH` points at your
-normal Chrome, this MCP server's automation runs against a profile carrying
-your live cookies, active sessions, and saved passwords for every site
-you're logged into — a session-hijacking-adjacent exposure if fetchaller-mcp
-or its dependencies were ever compromised or misbehaved. Install a second,
-separate Chrome (or Chrome for Testing) that you never log in with, and point
-`BROWSER_EXECUTABLE_PATH` at that instead.
+`idle_timeout`, `solve_timeout`, `egress_guard_proxy`, `proxy_server`, and
+`timezone` — no `user_data_dir` parameter (though Patchright's
+`chromium.launch()` creates a fresh temporary profile directory internally).
+As defense-in-depth against any upstream regression that attaches to a
+persistent user profile, install a second, separate Chrome (or Chrome for
+Testing) that you never log in with, and point `BROWSER_EXECUTABLE_PATH` at
+that instead.
 
 ## Pinned version
 
 Pinned to commit
-[`a74501c7e`](https://github.com/Averyy/fetchaller-mcp/commit/a74501c7eac721a0604782f73ccfef5cab1975df)
-(`a74501c7eac721a0604782f73ccfef5cab1975df`) rather than tracking `main`,
+[`500078f7f`](https://github.com/Averyy/fetchaller-mcp/commit/500078f7f349d080de1fb7f231cd5d11f3fc42d2)
+(`500078f7f349d080de1fb7f231cd5d11f3fc42d2`, v3.8.12) rather than tracking `main`,
 because:
-- Solo maintainer, project is ~7 months old
+- Solo maintainer, fast-moving scraper/WAF surface
 - No PyPI release for the MCP server itself — only installable via
   `uvx --from git+<url>@<sha>`
-- Its `[browser]` extra depends on `wafer-py`, a fast-churning,
-  trust-critical dependency (TLS-fingerprint impersonation + bot-challenge
-  solving) with no upper version bound in fetchaller-mcp's own
-  `pyproject.toml`
+- Depends on `wafer-py[browser]`, a fast-churning, trust-critical dependency
+  (TLS-fingerprint impersonation + bot-challenge solving)
 
-`.mcp.json` additionally pins `--with "wafer-py[browser]==0.4.4"` — the exact
-version fetchaller-mcp's own `uv.lock` resolves to at this commit. This
-second pin is required, not redundant with the commit SHA: `uvx --from git+`
-does not consult the target repository's own `uv.lock` when resolving
-dependencies (confirmed by a `uv` maintainer,
-[astral-sh/uv#13414](https://github.com/astral-sh/uv/issues/13414)), so
-without the explicit `--with` pin, `wafer-py` would re-resolve to whatever
-the latest PyPI release compatible with `>=0.4.4` is at install time —
-silently drifting on every fresh `uv` cache miss despite the commit SHA
-pin holding fetchaller-mcp's own code fixed.
+`.mcp.json` additionally pins `--with "wafer-py[browser]==0.7.14"` — the exact
+version fetchaller-mcp's own `uv.lock` (and `pyproject.toml`) resolves to at
+this commit. This explicit `--with` pin is kept as defense-in-depth:
+`uvx --from git+` does not consult the target repository's own `uv.lock` when
+resolving dependencies (confirmed by a `uv` maintainer,
+[astral-sh/uv#13414](https://github.com/astral-sh/uv/issues/13414)), so if an
+upstream commit ever uses a `>=` floor in `pyproject.toml` without `--with`,
+`wafer-py` would silently drift on fresh `uv` cache misses despite the commit
+SHA pin holding fetchaller-mcp's own code fixed.
 
-The combined `uvx --from git+...@a74501c7e --with "wafer-py[browser]==0.4.4"
-fetchaller-mcp` invocation was independently live-verified (via `--help`) to
-resolve and start cleanly before this pin was merged (2026-08-01). This
-verification is also a permanent regression test —
+The combined `uvx --from git+...@500078f7f --with "wafer-py[browser]==0.7.14"
+fetchaller-mcp` invocation was independently live-verified (via `--help`,
+Reddit reads, and `web.archive.org`) to resolve and start cleanly (2026-11-15).
+This verification is also a permanent regression test —
 `dev-guard/tests/test_plugin_integrity.py::TestFetchallerMcpConfigSecurity::test_live_uvx_invocation_resolves_and_starts`,
 opt-in via `make test-live`.
 
@@ -140,32 +134,56 @@ Never auto-track `main`. To bump the pin:
   shared/multi-tenant environment.
 
 **Tool capability audit** (performed at the pinned commit,
-`a74501c7eac721a0604782f73ccfef5cab1975df`, and re-required on every future
-SHA bump per the manual update process above):
+`500078f7f349d080de1fb7f231cd5d11f3fc42d2`, covering all 28 registered MCP
+tools, and re-required on every future SHA bump per the manual update process
+above):
 
 - **`fetch`** is a generic authenticated HTTP client — `tools/fetch.py`
-  allows both GET and POST, up to 32 custom headers (including
-  `authorization`), and request bodies up to 1MB. Because of that, it is
-  deliberately *not* included in `dev-guard`'s blanket `MCP_READ_ONLY`
-  allow-list. Instead, `tool-selection-guard.py` gates each call: a plain GET
-  with no custom headers or body is auto-approved (the normal
-  blocked-domain-redirect case this plugin exists for), while a POST or any
-  call carrying custom headers/body asks for confirmation first. **This gate
-  depends on fetchaller's `fetch` tool using exactly the parameter names
-  `method`/`headers`/`body`** — if a future commit renames these, the gate
-  silently fails open (auto-approves) instead of failing closed. Re-verify
-  these parameter names against `tools/fetch.py`'s actual signature on every
-  SHA bump.
-- **`search`** is a plain HTTP GET against Google or DuckDuckGo
-  (`search/google.py`, `search/ddg.py`) — no browser automation, no state.
-  It's included in `MCP_READ_ONLY`, and is in fact a safer tool than several
-  others already on that list.
-- **The remaining 10 tools** (`browse_reddit`, `search_reddit`,
+  allows both GET and POST (`ALLOWED_METHODS = {"GET", "POST"}`), up to 32
+  custom headers (including `authorization`), request bodies up to 1MB, plus
+  enum-validated read options (`redditComments`, `redditSort`). Because of
+  `method`/`headers`/`body`, it is deliberately *not* included in
+  `dev-guard`'s blanket `MCP_READ_ONLY` allow-list. Instead,
+  `tool-selection-guard.py` gates each call: a plain GET with no custom headers
+  or body is auto-approved (the normal blocked-domain-redirect case this plugin
+  exists for), while a POST or any call carrying custom headers/body asks for
+  confirmation first. **This gate depends on fetchaller's `fetch` tool using
+  exactly the parameter names `method`/`headers`/`body`** — if a future commit
+  renames these, the gate silently fails open (auto-approves) instead of
+  failing closed. Re-verify these parameter names against `tools/fetch.py`'s
+  actual signature on every SHA bump.
+- **`get_unifi_manual`** (`ubiquiti/manual.py`) is restricted to
+  `ui.com`/`dl.ui.com` `/qig/<slug>` installation guides, but writes
+  reconstructed `.pdf`/`.png`/`.svg` files to local disk under
+  `~/.local/share/fetchaller/manuals/<slug>/`. Because `MCP_READ_ONLY` covers
+  side-effect-free reads with no local disk writes, it is deliberately excluded
+  from `MCP_READ_ONLY`.
+- **`search_oracle_jobs`** (`oracle_recruiting/employers.py`,
+  `oracle_recruiting/api.py`) accepts arbitrary `http://`/`https://` careers
+  URLs in its `employer` parameter and calls `session.get(careers_url)` in
+  `discover_host()` without passing through `security.ssrf.check_host()`.
+  Although response bodies are not returned directly unless an
+  `*.fa.*.oraclecloud.com` host is matched, it is deliberately excluded from
+  `MCP_READ_ONLY` so arbitrary-URL discovery cannot issue unprompted requests
+  to internal/loopback hosts. (`search_uber_jobs` hardcodes `EMPLOYER = "uber"`
+  and does not accept a caller URL.)
+- **`search`** (`search/google.py`, `search/ddg.py`, `search/brave.py`) issues
+  anonymous web search requests (`provider` in `google`/`ddg`/`brave`/`all`)
+  via public Google Docs research-search JSON, DuckDuckGo HTML, and Brave
+  Search (with browser-solver PoW challenge fallback). Included in
+  `MCP_READ_ONLY`.
+- **The remaining 24 tools** (`browse_reddit`, `search_reddit`,
   `search_marketplace`, `search_realtor`, `search_linkedin_jobs`,
   `get_linkedin_job`, `get_aliexpress_product`, `search_aliexpress`,
-  `get_alibaba_product`, `search_alibaba`) are read-only at the MCP schema
-  level — only query/filter/ID parameters, `additionalProperties: False`, no
-  mutation-shaped fields anywhere. Facebook Marketplace was additionally
-  spot-checked at the source level (`facebook_marketplace/graphql.py`) and
-  confirmed to use only hardcoded, non-mutating GraphQL query IDs, not
-  caller-controlled queries. All 10 are included in `MCP_READ_ONLY`.
+  `get_alibaba_product`, `search_alibaba`, `search_eightfold_jobs`,
+  `search_workday_jobs`, `search_amazon_jobs`, `search_google_jobs`,
+  `search_apple_jobs`, `search_meta_jobs`, `search_uber_jobs`,
+  `search_gojobs`, `get_gojobs_job`, `search_indeed`, `get_indeed_job`,
+  `search_jobbank`, `search_gcjobs`, `get_gcjobs_job`) are read-only at both
+  the MCP schema and transport levels — `additionalProperties: False`, only
+  query/filter/ID/timeout parameters, no mutation-shaped fields, and outbound
+  requests restricted to hardcoded public origins or strict ATS hostname
+  regexes (`*.eightfold.ai`, `*.wd<N>.myworkdayjobs.com`). GraphQL clients
+  (`facebook_marketplace/graphql.py`, `meta_careers/api.py`) use hardcoded,
+  non-mutating query operations rather than caller-controlled queries. All 24
+  are included in `MCP_READ_ONLY`.

@@ -7046,6 +7046,20 @@ class TestMCPReadOnlyFrozenset:
 
         assert mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__fetch") not in MCP_READ_ONLY
 
+    def test_fetchaller_disk_and_unguarded_host_tools_absent(self):
+        """fetchaller tools that write to local disk (`get_unifi_manual`) or
+        fetch caller-supplied URLs without `security.ssrf.check_host()`
+        (`search_oracle_jobs`) must stay out of `MCP_READ_ONLY`."""
+        from mcp_constants import MCP_READ_ONLY, mcp_key
+
+        assert (
+            mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__get_unifi_manual") not in MCP_READ_ONLY
+        )
+        assert (
+            mcp_key("mcp__plugin_fetchaller-mcp_fetchaller__search_oracle_jobs")
+            not in MCP_READ_ONLY
+        )
+
     def test_fetchaller_search_tool_present(self):
         """fetchaller's generic `search` tool -- distinct from `fetch` (see
         test_fetchaller_fetch_tool_absent above) -- must stay in the

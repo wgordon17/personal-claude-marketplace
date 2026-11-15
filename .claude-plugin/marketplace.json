@@ -66,7 +66,7 @@
     },
     {
       "name": "dev-guard",
-      "version": "1.72.0",
+      "version": "1.72.1",
       "source": "./dev-guard",
       "description": "Development environment policy enforcement: tool selection guard, commit validation, URL fetch guard, trust management, oc/kubectl introspection, subagent completion verification, decision persistence, anti-deferral enforcement, shared behavioral feedback, path hallucination guard, narrative comment guard, token efficiency guidance",
       "category": "quality",
@@ -132,7 +132,7 @@
     },
     {
       "name": "fetchaller-mcp",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "source": "./fetchaller-mcp",
       "description": "Pinned MCP fetch/search server for domains that block Claude's built-in WebFetch/WebSearch (Reddit and 15 other sites), verified live against Reddit and web.archive.org",
       "category": "productivity",
