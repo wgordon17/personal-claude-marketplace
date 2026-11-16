@@ -6,9 +6,9 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/Averyy/fetchaller-mcp@a74501c7eac721a0604782f73ccfef5cab1975df",
+        "git+https://github.com/Averyy/fetchaller-mcp@500078f7f349d080de1fb7f231cd5d11f3fc42d2",
         "--with",
-        "wafer-py[browser]==0.4.4",
+        "wafer-py[browser]==0.7.14",
         "fetchaller-mcp"
       ],
       "env": {

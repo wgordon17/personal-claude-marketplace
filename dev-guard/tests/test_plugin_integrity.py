@@ -780,8 +780,8 @@ class TestFetchallerMcpConfigSecurity:
         against it being accidentally dropped during a future SHA bump."""
         args = self._load_args(mcp_path)
         with_index = args.index("--with")
-        assert args[with_index + 1] == "wafer-py[browser]==0.4.4", (
-            f"{mcp_path.relative_to(REPO_ROOT)} must pin 'wafer-py[browser]==0.4.4' via --with, "
+        assert args[with_index + 1] == "wafer-py[browser]==0.7.14", (
+            f"{mcp_path.relative_to(REPO_ROOT)} must pin 'wafer-py[browser]==0.7.14' via --with, "
             f"got: {args[with_index + 1]!r}"
         )
 

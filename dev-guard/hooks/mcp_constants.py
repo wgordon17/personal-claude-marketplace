@@ -87,36 +87,54 @@ MCP_READ_ONLY: frozenset[str] = frozenset(
         ["get_cluster_info", "get_cluster_cves", "list_clusters"],
     )
     # fetchaller-mcp: unlike the stateless-by-design entries above (Serena,
-    # context7, etc.), these tools drive real browser automation (Playwright/
-    # wafer-py) against live third-party sites. Read-only status here is a
-    # manual audit finding, not an inherent property — verified at pinned SHA
-    # a74501c7eac721a0604782f73ccfef5cab1975df (github.com/Averyy/fetchaller-mcp):
-    # every tool below has a fixed, query/filter-only MCP schema with no
-    # mutation-shaped parameters (no vote/comment/apply/message/save/submit
-    # fields), and the one deep-traced internal client (Facebook Marketplace's
-    # GraphQL layer) uses hardcoded read-only doc_ids, not caller-controlled
-    # queries. See fetchaller-mcp/README.md's "Tool capability audit" section
-    # for the full re-verification process required on every SHA bump.
+    # context7, etc.), these tools drive TLS impersonation and browser
+    # automation (Patchright/wafer-py) against live third-party sites.
+    # Read-only status here is a manual audit finding, not an inherent
+    # property — verified at pinned SHA
+    # 500078f7f349d080de1fb7f231cd5d11f3fc42d2 (github.com/Averyy/fetchaller-mcp):
+    # every tool below has a fixed, query/filter/ID-only MCP schema with
+    # additionalProperties=False, no mutation-shaped parameters, hardcoded
+    # public origins or strict ATS hostname regexes (*.eightfold.ai,
+    # *.wd<N>.myworkdayjobs.com), and hardcoded read-only GraphQL operation
+    # IDs (Facebook Marketplace, Meta Careers). See fetchaller-mcp/README.md's
+    # "Tool capability audit" section for the full re-verification process
+    # required on every SHA bump.
     #
-    # `fetch` is deliberately NOT in this list: it's a generic HTTP client
-    # (caller-controlled method/headers/body) that can issue authenticated
-    # POST requests to arbitrary public URLs. It gets its own call-time gate
-    # in tool-selection-guard.py's _handle_mcp_tool() instead, which inspects
-    # the actual method/headers/body before deciding allow vs. ask.
+    # Three of fetchaller's 28 tools are deliberately NOT in this list:
+    # - `fetch`: generic HTTP client (caller-controlled method/headers/body);
+    #   call-time gated in tool-selection-guard.py's _handle_mcp_tool().
+    # - `get_unifi_manual`: writes reconstructed PDF/PNG/SVG files to local
+    #   disk under ~/.local/share/fetchaller/manuals/.
+    # - `search_oracle_jobs`: accepts arbitrary http(s) URLs in `employer` and
+    #   fetches them in discover_host() without security.ssrf.check_host().
     + _qualify(
         "plugin_fetchaller-mcp_fetchaller",
         [
             "browse_reddit",
-            "search_reddit",
-            "search",
-            "search_marketplace",
-            "search_realtor",
-            "search_linkedin_jobs",
-            "get_linkedin_job",
-            "get_aliexpress_product",
-            "search_aliexpress",
             "get_alibaba_product",
+            "get_aliexpress_product",
+            "get_gcjobs_job",
+            "get_gojobs_job",
+            "get_indeed_job",
+            "get_linkedin_job",
+            "search",
             "search_alibaba",
+            "search_aliexpress",
+            "search_amazon_jobs",
+            "search_apple_jobs",
+            "search_eightfold_jobs",
+            "search_gcjobs",
+            "search_gojobs",
+            "search_google_jobs",
+            "search_indeed",
+            "search_jobbank",
+            "search_linkedin_jobs",
+            "search_marketplace",
+            "search_meta_jobs",
+            "search_realtor",
+            "search_reddit",
+            "search_uber_jobs",
+            "search_workday_jobs",
         ],
     )
     + _qualify(
