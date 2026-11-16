@@ -747,10 +747,16 @@ class TestDevGuardDescriptionSync:
 
 FETCHALLER_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / ".mcp.json"
 FETCHALLER_AGENT_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / "mcp.json"
+FETCHALLER_README = REPO_ROOT / "fetchaller-mcp" / "README.md"
 
 
 class TestFetchallerMcpConfigSecurity:
     """Structural guardrails on fetchaller-mcp/.mcp.json and fetchaller-mcp/mcp.json."""
+
+    README_PIN_RE = re.compile(
+        r"\[`(?P<version>v\d+\.\d+\.\d+)`\]"
+        r"\(https://github\.com/Averyy/fetchaller-mcp/commit/(?P<sha>[0-9a-f]{40})\)"
+    )
 
     def _load_args(self, path: Path = FETCHALLER_MCP_JSON) -> list[str]:
         data = json.loads(path.read_text())
@@ -764,6 +770,25 @@ class TestFetchallerMcpConfigSecurity:
         ref = from_arg.rsplit("@", 1)[-1]
         assert re.match(r"^[0-9a-f]{40}$", ref), (
             f"{mcp_path.relative_to(REPO_ROOT)} must pin to a full 40-char commit SHA, got: {ref!r}"
+        )
+
+    @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
+    def test_readme_pinned_sha_matches_mcp_json(self, mcp_path: Path):
+        """README.md's Renovate-tracked tag/SHA line must match .mcp.json and mcp.json --
+        causes monthly Renovate audit-trigger PRs to fail CI closed until manually audited."""
+        readme_text = FETCHALLER_README.read_text(encoding="utf-8")
+        match = self.README_PIN_RE.search(readme_text)
+        assert match is not None, (
+            "fetchaller-mcp/README.md must declare the pinned tag and 40-char commit SHA "
+            "as [`vX.Y.Z`](https://github.com/Averyy/fetchaller-mcp/commit/<40-char-sha>)"
+        )
+        args = self._load_args(mcp_path)
+        from_arg = args[args.index("--from") + 1]
+        mcp_sha = from_arg.rsplit("@", 1)[-1]
+        assert match.group("sha") == mcp_sha, (
+            f"fetchaller-mcp/README.md pinned SHA ({match.group('sha')}) does not match "
+            f"{mcp_path.relative_to(REPO_ROOT)} ({mcp_sha}). Complete the security audit "
+            "in fetchaller-mcp/README.md before aligning pins."
         )
 
     @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
@@ -1349,4 +1374,83 @@ class TestRenovateConfig:
 
         assert len(set(all_extracted_versions)) == 1, (
             f"skillsaw version drift across tracked files: {set(all_extracted_versions)}"
+        )
+
+    def test_fetchaller_monthly_audit_trigger_custom_managers_and_package_rule(self):
+        """fetchaller-mcp and wafer-py custom regex managers must extract valid versions/digests
+        matching the checked-in pins, and packageRules must group them onto a monthly,
+        non-automerged schedule."""
+        cfg = self._load_renovate_config()
+        managers_by_dep = {
+            m.get("depNameTemplate"): m
+            for m in cfg.get("customManagers", [])
+            if m.get("depNameTemplate") in {"Averyy/fetchaller-mcp", "wafer-py"}
+        }
+        assert set(managers_by_dep) == {"Averyy/fetchaller-mcp", "wafer-py"}, (
+            "Expected customManagers for Averyy/fetchaller-mcp and wafer-py, "
+            f"got {set(managers_by_dep)}"
+        )
+
+        fetchaller_mgr = managers_by_dep["Averyy/fetchaller-mcp"]
+        assert fetchaller_mgr.get("customType") == "regex"
+        assert fetchaller_mgr.get("datasourceTemplate") == "github-tags"
+        readme_file_rxs = [
+            re.compile(p.strip("/")) for p in fetchaller_mgr.get("managerFilePatterns", [])
+        ]
+        assert any(rx.search("fetchaller-mcp/README.md") for rx in readme_file_rxs)
+        readme_match_rxs = [
+            re.compile(
+                ms.replace("(?<currentValue>", "(?P<currentValue>").replace(
+                    "(?<currentDigest>", "(?P<currentDigest>"
+                )
+            )
+            for ms in fetchaller_mgr.get("matchStrings", [])
+        ]
+        readme_content = FETCHALLER_README.read_text(encoding="utf-8")
+        readme_hits = [m for rx in readme_match_rxs for m in rx.finditer(readme_content)]
+        assert len(readme_hits) == 1, (
+            f"Expected 1 fetchaller-mcp match in README.md, got {len(readme_hits)}"
+        )
+        assert re.match(r"^v\d+\.\d+\.\d+$", readme_hits[0].group("currentValue"))
+        assert re.match(r"^[0-9a-f]{40}$", readme_hits[0].group("currentDigest"))
+
+        wafer_mgr = managers_by_dep["wafer-py"]
+        assert wafer_mgr.get("customType") == "regex"
+        assert wafer_mgr.get("datasourceTemplate") == "pypi"
+        wafer_file_rxs = [
+            re.compile(p.strip("/")) for p in wafer_mgr.get("managerFilePatterns", [])
+        ]
+        wafer_match_rxs = [
+            re.compile(ms.replace("(?<currentValue>", "(?P<currentValue>"))
+            for ms in wafer_mgr.get("matchStrings", [])
+        ]
+        wafer_versions = []
+        for rel_mcp in ("fetchaller-mcp/.mcp.json", "fetchaller-mcp/mcp.json"):
+            assert any(rx.search(rel_mcp) for rx in wafer_file_rxs), (
+                f"{rel_mcp} is not matched by wafer-py managerFilePatterns"
+            )
+            mcp_text = (REPO_ROOT / rel_mcp).read_text(encoding="utf-8")
+            hits = [
+                m.group("currentValue") for rx in wafer_match_rxs for m in rx.finditer(mcp_text)
+            ]
+            assert len(hits) == 1, f"Expected 1 wafer-py match in {rel_mcp}, got {hits}"
+            assert re.match(r"^\d+\.\d+\.\d+$", hits[0])
+            wafer_versions.append(hits[0])
+        assert len(set(wafer_versions)) == 1
+
+        fetchaller_rules = [
+            r
+            for r in cfg.get("packageRules", [])
+            if set(r.get("matchPackageNames", [])) == {"Averyy/fetchaller-mcp", "wafer-py"}
+        ]
+        assert len(fetchaller_rules) == 1, (
+            "Expected 1 packageRule grouping Averyy/fetchaller-mcp and wafer-py, "
+            f"got {len(fetchaller_rules)}"
+        )
+        rule = fetchaller_rules[0]
+        assert rule.get("groupName") == "fetchaller-mcp"
+        assert rule.get("automerge") is False, "fetchaller-mcp rule must disable global automerge"
+        assert rule.get("schedule") == ["* 0-8 1-7 * 1"]
+        assert rule.get("prBodyNotes"), (
+            "fetchaller-mcp rule must include security audit prBodyNotes"
         )

@@ -67,9 +67,9 @@ that instead.
 
 ## Pinned version
 
-Pinned to commit
-[`500078f7f`](https://github.com/Averyy/fetchaller-mcp/commit/500078f7f349d080de1fb7f231cd5d11f3fc42d2)
-(`500078f7f349d080de1fb7f231cd5d11f3fc42d2`, v3.8.12) rather than tracking `main`,
+Pinned to
+[`v3.8.12`](https://github.com/Averyy/fetchaller-mcp/commit/500078f7f349d080de1fb7f231cd5d11f3fc42d2)
+rather than tracking `main`,
 because:
 - Solo maintainer, fast-moving scraper/WAF surface
 - No PyPI release for the MCP server itself — only installable via
@@ -96,18 +96,25 @@ opt-in via `make test-live`.
 
 ## Manual update process
 
-Never auto-track `main`. To bump the pin:
+Never auto-track `main`. Renovate (`renovate.json`) checks tagged
+`Averyy/fetchaller-mcp` releases (in `README.md`) and `wafer-py` releases (in
+`.mcp.json` / `mcp.json`) on the first Monday of each month (`automerge: false`,
+14-day release cooldown) and opens a **fail-closed audit-trigger PR** whose CI
+intentionally fails (`TestFetchallerMcpConfigSecurity`) until the manual audit
+below is completed. To bump the pin:
 
 1. Diff `git log <old-sha>..<new-sha>` on
    [`Averyy/fetchaller-mcp`](https://github.com/Averyy/fetchaller-mcp) and
    review every commit.
 2. Diff `uv.lock` between the two commits on GitHub, specifically for
    `wafer-py`/`wreq` version changes.
-3. Update `.mcp.json`'s `--with "wafer-py[browser]==<version>"` to match the
-   new commit's resolved `wafer-py` version.
+3. Align `README.md`, `.mcp.json`, and `mcp.json` to the candidate commit SHA
+   and `--with "wafer-py[browser]==<version>"` matching the commit's resolved
+   `wafer-py` version, and update `test_wafer_py_version_pinned` in
+   `dev-guard/tests/test_plugin_integrity.py`.
 4. Re-verify against a real Reddit URL and a `web.archive.org` URL (this
    plugin's live-test pattern from planning) against the candidate SHA
-   before updating `.mcp.json`.
+   before merging.
 5. Redo the **Tool capability audit** below against the new commit (new or
    removed tools, changed schemas, the `fetch` parameter-name check). Update
    the audit section and `dev-guard/hooks/mcp_constants.py`'s `MCP_READ_ONLY`
@@ -120,9 +127,11 @@ Never auto-track `main`. To bump the pin:
   (`dev-guard/tests/test_plugin_integrity.py::TestFetchallerMcpConfigSecurity`)
   asserts `--http` never appears in the checked-in args and that the git ref
   is always a full 40-character commit SHA.
-- **No vendored source, no auto-sync.** The server runs directly from the
-  pinned upstream commit via `uvx --from git+`; nothing is copied into this
-  marketplace, and there is no scheduled job re-pinning to a newer commit.
+- **No vendored source, no unattended updates.** The server runs directly from
+  the pinned upstream commit via `uvx --from git+`; nothing is copied into this
+  marketplace, and monthly Renovate PRs (`automerge: false`) are blocked by
+  fail-closed `TestFetchallerMcpConfigSecurity` assertions until manually
+  audited.
 - **Runs arbitrary third-party Python with local browser-automation
   privileges.** Mitigated by the commit-SHA pin, the `wafer-py` version pin,
   and the manual (never automatic) update process above.
