@@ -656,8 +656,9 @@ class TestPluginVersionParity:
         )
 
     def test_modified_plugins_have_version_bump_vs_origin_main(self):
-        """Any plugin with non-test file changes relative to origin/main must have a bumped
-        version across .claude-plugin/plugin.json, plugin.json, and marketplace.json."""
+        """Any plugin with runtime file changes relative to origin/main (excluding tests/ and
+        non-runtime root docs like README.md) must have a bumped version across
+        .claude-plugin/plugin.json, plugin.json, and marketplace.json."""
         verify_proc = subprocess.run(
             ["git", "rev-parse", "--verify", "origin/main"],
             cwd=REPO_ROOT,
