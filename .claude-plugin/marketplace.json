@@ -132,7 +132,7 @@
     },
     {
       "name": "fetchaller-mcp",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "source": "./fetchaller-mcp",
       "description": "Pinned MCP fetch/search server for domains that block Claude's built-in WebFetch/WebSearch (Reddit and 15 other sites), verified live against Reddit and web.archive.org",
       "category": "productivity",
