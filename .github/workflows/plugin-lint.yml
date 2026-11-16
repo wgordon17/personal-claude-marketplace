@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7
       - run: git fetch origin main
-      - run: uvx skillsaw@0.21.0 lint --strict --no-plugins
+      - run: uvx skillsaw@0.22.0 lint --strict --no-plugins
 
       - name: No README in skill directories
         run: |
