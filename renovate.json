@@ -76,7 +76,7 @@
         "* 0-8 1-7 * 1"
       ],
       "prBodyNotes": [
-        "**Security audit required before merge (CI fails closed by design):** Follow `fetchaller-mcp/README.md` (`Manual update process`) — review every upstream commit and `uv.lock` diff, align `.mcp.json` / `mcp.json` / `README.md` pins, re-audit all MCP tools against `dev-guard/hooks/mcp_constants.py` (`MCP_READ_ONLY` + `fetch` parameter names), run `make test-live`, and update `TestFetchallerMcpConfigSecurity` in `dev-guard/tests/test_plugin_integrity.py`."
+        "**Security audit required before merge (CI fails closed by design):** Follow `fetchaller-mcp/README.md` (`Manual update process`) — review every upstream commit and `uv.lock` diff, align `.mcp.json` / `mcp.json` / `README.md` pins, re-audit all MCP tools and update attested commit SHAs in `fetchaller-mcp/README.md` (`Tool capability audit`) and `dev-guard/hooks/mcp_constants.py` (`MCP_READ_ONLY` + `fetch` parameter names), run `uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix` and `make test-live`, and update `TestFetchallerMcpConfigSecurity` in `dev-guard/tests/test_plugin_integrity.py`."
       ]
     },
     {

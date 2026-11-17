@@ -24,6 +24,7 @@ AGENT_MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
 EXPECTED_AUTHOR: dict[str, str] = {"name": "wgordon17"}
 MCP_PLUGINS: frozenset[str] = frozenset({"jira", "fetchaller-mcp", "github-mcp", "chai-bot"})
 MCP_SERVER_FIELDS: tuple[str, ...] = ("command", "args", "env", "url", "headers")
+NON_RUNTIME_PLUGIN_FILES: frozenset[str] = frozenset({"README.md", "OMP-COMPAT.md", "UPSTREAM.md"})
 SUPPLY_CHAIN_MARKER = ".khepri-supply-chain-blocked"
 SUPPLY_CHAIN_ABORT_MSG = (
     "[SUPPLY_CHAIN_BLOCK] Aborting manifest fix: .khepri-supply-chain-blocked present"
@@ -109,6 +110,11 @@ def _resolve_base_sha(repo_root: Path, base_ref: str) -> str | None:
     return base_sha
 
 
+def _is_non_runtime_plugin_path(rest: str) -> bool:
+    """Return True for plugin paths (tests and root docs) that do not affect runtime behavior."""
+    return rest == "tests" or rest.startswith("tests/") or rest in NON_RUNTIME_PLUGIN_FILES
+
+
 def get_modified_plugins(
     repo_root: Path,
     base_ref: str = "origin/main",
@@ -116,7 +122,7 @@ def get_modified_plugins(
     registered_plugins: set[str] | None = None,
     base_sha: str | None = None,
 ) -> set[str]:
-    """Return set of marketplace plugins with non-test file changes relative to base_ref."""
+    """Return set of marketplace plugins with runtime file changes relative to base_ref."""
     resolved_root = repo_root.resolve()
     _validate_base_ref(base_ref)
 
@@ -136,10 +142,17 @@ def get_modified_plugins(
     if not resolved_sha:
         return set()
 
+    mb_proc = _run_git(resolved_root, ["merge-base", resolved_sha, "HEAD"])
+    diff_base = (
+        mb_proc.stdout.strip()
+        if mb_proc.returncode == 0 and mb_proc.stdout.strip()
+        else resolved_sha
+    )
+    _validate_base_ref(diff_base)
+
     changed_paths: set[str] = set()
     for git_args in (
-        ["diff", "--name-only", f"{base_ref}...HEAD"],
-        ["diff", "--name-only", "HEAD"],
+        ["diff", "--name-only", diff_base],
         ["ls-files", "--others", "--exclude-standard"],
     ):
         proc = _run_git(resolved_root, git_args)
@@ -155,7 +168,7 @@ def get_modified_plugins(
         if len(parts) != 2:
             continue
         plugin_name, rest = parts
-        if plugin_name in registered and rest != "tests" and not rest.startswith("tests/"):
+        if plugin_name in registered and not _is_non_runtime_plugin_path(rest):
             modified.add(plugin_name)
 
     return modified

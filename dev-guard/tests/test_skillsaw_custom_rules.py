@@ -399,6 +399,64 @@ class TestSkillsawCustomRules:
         assert RULES_MOD.get_modified_plugins(repo) == set()
         assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 0
 
+    @pytest.mark.parametrize("doc_name", ["README.md", "OMP-COMPAT.md", "UPSTREAM.md"])
+    def test_modifying_only_non_runtime_plugin_docs_does_not_require_version_bump(
+        self, tmp_path: Path, doc_name: str
+    ) -> None:
+        """5b. Modifying only non-runtime root plugin docs (README.md, OMP-COMPAT.md, UPSTREAM.md)
+        does NOT trigger a version-bump violation or auto-bump on --fix."""
+        repo = _init_repo(tmp_path)
+        doc_file = repo / "dev-guard" / doc_name
+        doc_file.write_text("# Human documentation\n", encoding="utf-8")
+
+        assert RULES_MOD.get_modified_plugins(repo) == set()
+        assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 0
+        assert RULES_MOD.main(["--fix", "--repo-root", str(repo)]) == 0
+
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-m", f"docs: add {doc_name}")
+        assert RULES_MOD.get_modified_plugins(repo) == set()
+        assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 0
+        assert (
+            json.loads((repo / "dev-guard/.claude-plugin/plugin.json").read_text(encoding="utf-8"))[
+                "version"
+            ]
+            == "1.0.0"
+        )
+
+    def test_working_tree_revert_to_merge_base_clears_modified_plugin(self, tmp_path: Path) -> None:
+        """5c. Reverting an earlier branch commit's change in the working tree yields net-zero
+        diff against merge-base, so pre-commit / --check passes before the revert is committed."""
+        repo = _init_repo(tmp_path)
+        orig_claude = (repo / "drawio/.claude-plugin/plugin.json").read_text(encoding="utf-8")
+        orig_agent = (repo / "drawio/plugin.json").read_text(encoding="utf-8")
+        orig_mkt = (repo / ".claude-plugin/marketplace.json").read_text(encoding="utf-8")
+
+        # Branch commit bumps drawio to 1.0.1 alongside a README edit
+        _write_plugin_manifests(
+            repo,
+            "drawio",
+            version="1.0.1",
+            description="Draw.io diagram generation skill, synced weekly",
+        )
+        (repo / ".claude-plugin/marketplace.json").write_text(
+            RULES_MOD._update_marketplace_plugin_in_place(
+                orig_mkt, "drawio", target_version="1.0.1"
+            ),
+            encoding="utf-8",
+        )
+        (repo / "drawio/README.md").write_text("# Doc update\n", encoding="utf-8")
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-m", "chore: bump drawio")
+
+        # Working tree reverts the 3 manifests back to 1.0.0 (matching merge-base)
+        (repo / "drawio/.claude-plugin/plugin.json").write_text(orig_claude, encoding="utf-8")
+        (repo / "drawio/plugin.json").write_text(orig_agent, encoding="utf-8")
+        (repo / ".claude-plugin/marketplace.json").write_text(orig_mkt, encoding="utf-8")
+
+        assert RULES_MOD.get_modified_plugins(repo) == set()
+        assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 0
+
     def test_rebase_absorption_scenario_flags_and_bumps_again(self, tmp_path: Path) -> None:
         """6. Rebase absorption: origin/main and branch both at 1.0.1 with changes -> 1.0.2."""
         repo = _init_repo(tmp_path)
@@ -423,10 +481,12 @@ class TestSkillsawCustomRules:
         _git(repo, "commit", "-m", "chore: bump drawio to 1.0.1 on main")
         _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
 
-        # Branch now modifies a non-test file in drawio while still at 1.0.1
-        (repo / "drawio" / "README.md").write_text("# Updated Drawio\n", encoding="utf-8")
+        # Branch now modifies a runtime skill file in drawio while still at 1.0.1
+        skill_path = repo / "drawio" / "skills" / "drawio" / "SKILL.md"
+        skill_path.parent.mkdir(parents=True, exist_ok=True)
+        skill_path.write_text("# Updated Drawio Skill\n", encoding="utf-8")
         _git(repo, "add", ".")
-        _git(repo, "commit", "-m", "feat(drawio): update readme")
+        _git(repo, "commit", "-m", "feat(drawio): update skill")
 
         assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 1
         assert RULES_MOD.main(["--fix", "--repo-root", str(repo)]) == 0

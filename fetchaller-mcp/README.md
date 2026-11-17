@@ -117,8 +117,11 @@ below is completed. To bump the pin:
    before merging.
 5. Redo the **Tool capability audit** below against the new commit (new or
    removed tools, changed schemas, the `fetch` parameter-name check). Update
-   the audit section and `dev-guard/hooks/mcp_constants.py`'s `MCP_READ_ONLY`
-   list accordingly if anything changed.
+   the attested commit SHA in both the audit section below and
+   `dev-guard/hooks/mcp_constants.py` (`test_audit_attestation_shas_match_mcp_json`),
+   update `MCP_READ_ONLY` if any tool classifications changed, and run
+   `uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix`
+   so `dev-guard`'s manifests are bumped alongside `fetchaller-mcp`'s.
 
 ## Security posture
 

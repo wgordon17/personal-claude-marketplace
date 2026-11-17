@@ -13,7 +13,7 @@ Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per
 ## Critical Rules
 
 - **Never edit `~/.claude/plugins/` or `~/.claude/plugins/cache/`** — those directories contain installed/cached versions. Always edit this source repository. Changes in `~/.claude/plugins/` will be lost on update and are never committed.
-- **Always bump plugin versions and synchronize descriptions across all three manifest files** when modifying a plugin:
+- **Always bump plugin versions and synchronize descriptions across all three manifest files** when modifying a plugin's runtime files (`<plugin>/tests/` and non-runtime root docs `README.md`, `OMP-COMPAT.md`, and `UPSTREAM.md` are exempt):
   - `<plugin>/.claude-plugin/plugin.json` (Claude Code manifest)
   - `<plugin>/plugin.json` (Agent Plugins v1 manifest — `uvx skillsaw@0.22.0 fix --no-plugins` via the `plugin-manifest-sync` custom rule in `.skillsaw.yaml`, or `uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix`, auto-syncs `version` and `description` across all three manifest files and auto-bumps patch versions on modified plugins; `skillsaw port --to agent-plugin .` only generates missing root manifests on initial creation)
   - `.claude-plugin/marketplace.json` (the plugin's entry, NOT `metadata.version`)

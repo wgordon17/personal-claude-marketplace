@@ -19,13 +19,14 @@ They guard against accidental deletion of rules and references, and against
 version drift between plugin manifests.
 """
 
+import fnmatch
 import importlib.util
 import json
 import os
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -655,8 +656,9 @@ class TestPluginVersionParity:
         )
 
     def test_modified_plugins_have_version_bump_vs_origin_main(self):
-        """Any plugin with non-test file changes relative to origin/main must have a bumped
-        version across .claude-plugin/plugin.json, plugin.json, and marketplace.json."""
+        """Any plugin with runtime file changes relative to origin/main (excluding tests/ and
+        non-runtime root docs like README.md) must have a bumped version across
+        .claude-plugin/plugin.json, plugin.json, and marketplace.json."""
         verify_proc = subprocess.run(
             ["git", "rev-parse", "--verify", "origin/main"],
             cwd=REPO_ROOT,
@@ -748,14 +750,25 @@ class TestDevGuardDescriptionSync:
 FETCHALLER_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / ".mcp.json"
 FETCHALLER_AGENT_MCP_JSON = REPO_ROOT / "fetchaller-mcp" / "mcp.json"
 FETCHALLER_README = REPO_ROOT / "fetchaller-mcp" / "README.md"
+MCP_CONSTANTS_PY = REPO_ROOT / "dev-guard" / "hooks" / "mcp_constants.py"
 
 
 class TestFetchallerMcpConfigSecurity:
     """Structural guardrails on fetchaller-mcp/.mcp.json and fetchaller-mcp/mcp.json."""
 
+    FETCHALLER_README = FETCHALLER_README
+    MCP_CONSTANTS_PY = MCP_CONSTANTS_PY
     README_PIN_RE = re.compile(
         r"\[`(?P<version>v\d+\.\d+\.\d+)`\]"
         r"\(https://github\.com/Averyy/fetchaller-mcp/commit/(?P<sha>[0-9a-f]{40})\)"
+    )
+    README_AUDIT_SHA_RE = re.compile(
+        r"\*\*Tool capability audit\*\*\s*\(performed at the pinned commit,\s*"
+        r"`(?P<sha>[0-9a-f]{40})`"
+    )
+    MCP_CONSTANTS_AUDIT_SHA_RE = re.compile(
+        r"verified at pinned SHA(?:\s|#)+(?P<sha>[0-9a-f]{40})\s+"
+        r"\(github\.com/Averyy/fetchaller-mcp\)"
     )
 
     def _load_args(self, path: Path = FETCHALLER_MCP_JSON) -> list[str]:
@@ -776,12 +789,15 @@ class TestFetchallerMcpConfigSecurity:
     def test_readme_pinned_sha_matches_mcp_json(self, mcp_path: Path):
         """README.md's Renovate-tracked tag/SHA line must match .mcp.json and mcp.json --
         causes monthly Renovate audit-trigger PRs to fail CI closed until manually audited."""
-        readme_text = FETCHALLER_README.read_text(encoding="utf-8")
-        match = self.README_PIN_RE.search(readme_text)
-        assert match is not None, (
+        readme_text = self.FETCHALLER_README.read_text(encoding="utf-8")
+        matches = list(self.README_PIN_RE.finditer(readme_text))
+        assert len(matches) == 1, (
             "fetchaller-mcp/README.md must declare the pinned tag and 40-char commit SHA "
-            "as [`vX.Y.Z`](https://github.com/Averyy/fetchaller-mcp/commit/<40-char-sha>)"
+            "exactly once as "
+            "[`vX.Y.Z`](https://github.com/Averyy/fetchaller-mcp/commit/<40-char-sha>), "
+            f"found {len(matches)}"
         )
+        match = matches[0]
         args = self._load_args(mcp_path)
         from_arg = args[args.index("--from") + 1]
         mcp_sha = from_arg.rsplit("@", 1)[-1]
@@ -790,6 +806,159 @@ class TestFetchallerMcpConfigSecurity:
             f"{mcp_path.relative_to(REPO_ROOT)} ({mcp_sha}). Complete the security audit "
             "in fetchaller-mcp/README.md before aligning pins."
         )
+
+    @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
+    def test_audit_attestation_shas_match_mcp_json(self, mcp_path: Path):
+        """Security-audit attestation SHAs in fetchaller-mcp/README.md ('Tool capability audit')
+        and dev-guard/hooks/mcp_constants.py ('verified at pinned SHA') must match .mcp.json and
+        mcp.json so aligning pins cannot turn CI green with stale audit attestations."""
+        args = self._load_args(mcp_path)
+        mcp_sha = args[args.index("--from") + 1].rsplit("@", 1)[-1]
+
+        readme_text = self.FETCHALLER_README.read_text(encoding="utf-8")
+        readme_matches = list(self.README_AUDIT_SHA_RE.finditer(readme_text))
+        assert len(readme_matches) == 1, (
+            "fetchaller-mcp/README.md must contain exactly 1 'Tool capability audit' "
+            f"40-char commit SHA attestation, found {len(readme_matches)}"
+        )
+        readme_audit_sha = readme_matches[0].group("sha")
+        assert readme_audit_sha == mcp_sha, (
+            f"fetchaller-mcp/README.md Tool capability audit SHA ({readme_audit_sha}) does not "
+            f"match {mcp_path.relative_to(REPO_ROOT)} ({mcp_sha}). Re-audit all MCP tools at the "
+            "new commit and update the Tool capability audit attestation in README.md."
+        )
+
+        mcp_constants_text = self.MCP_CONSTANTS_PY.read_text(encoding="utf-8")
+        const_matches = list(self.MCP_CONSTANTS_AUDIT_SHA_RE.finditer(mcp_constants_text))
+        assert len(const_matches) == 1, (
+            "dev-guard/hooks/mcp_constants.py must contain exactly 1 fetchaller-mcp "
+            f"'verified at pinned SHA' 40-char attestation, found {len(const_matches)}"
+        )
+        const_audit_sha = const_matches[0].group("sha")
+        assert const_audit_sha == mcp_sha, (
+            f"dev-guard/hooks/mcp_constants.py verified SHA ({const_audit_sha}) does not match "
+            f"{mcp_path.relative_to(REPO_ROOT)} ({mcp_sha}). Re-audit MCP_READ_ONLY and fetch "
+            "parameter names against the new commit before updating mcp_constants.py."
+        )
+
+    def test_fail_closed_rejects_renovate_bumps_and_stale_attestations(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Simulated Renovate regex rewrites and partial manual alignments must fail closed
+        until README.md, .mcp.json/mcp.json, and both audit attestations are all updated."""
+        renovate_cfg = json.loads((REPO_ROOT / "renovate.json").read_text(encoding="utf-8"))
+        mgrs = {
+            m["depNameTemplate"]: m
+            for m in renovate_cfg["customManagers"]
+            if m.get("depNameTemplate") in {"Averyy/fetchaller-mcp", "wafer-py"}
+        }
+        orig_readme = FETCHALLER_README.read_text(encoding="utf-8")
+        orig_mcp = FETCHALLER_MCP_JSON.read_text(encoding="utf-8")
+        orig_consts = MCP_CONSTANTS_PY.read_text(encoding="utf-8")
+
+        tmp_readme = tmp_path / "README.md"
+        tmp_mcp = tmp_path / "fetchaller-mcp" / ".mcp.json"
+        tmp_mcp.parent.mkdir(parents=True)
+        tmp_consts = tmp_path / "mcp_constants.py"
+        monkeypatch.setattr(self, "FETCHALLER_README", tmp_readme)
+        monkeypatch.setattr(self, "MCP_CONSTANTS_PY", tmp_consts)
+        monkeypatch.setattr(sys.modules[__name__], "REPO_ROOT", tmp_path)
+
+        new_sha = "a" * 40
+        fetchaller_rx = re.compile(
+            mgrs["Averyy/fetchaller-mcp"]["matchStrings"][0]
+            .replace("(?<currentValue>", "(?P<currentValue>")
+            .replace("(?<currentDigest>", "(?P<currentDigest>")
+        )
+        bumped_readme, count = fetchaller_rx.subn(
+            f"[`v9.9.9`](https://github.com/Averyy/fetchaller-mcp/commit/{new_sha})",
+            orig_readme,
+        )
+        assert count == 1
+        audit_hits = list(self.README_AUDIT_SHA_RE.finditer(bumped_readme))
+        assert len(audit_hits) == 1 and audit_hits[0].group("sha") != new_sha
+
+        tmp_readme.write_text(bumped_readme, encoding="utf-8")
+        tmp_mcp.write_text(orig_mcp, encoding="utf-8")
+        tmp_consts.write_text(orig_consts, encoding="utf-8")
+        with pytest.raises(AssertionError, match="pinned SHA"):
+            self.test_readme_pinned_sha_matches_mcp_json(tmp_mcp)
+
+        # Duplicate or missing README pin must also fail closed
+        tmp_readme.write_text(
+            orig_readme
+            + f"\n[`v9.9.9`](https://github.com/Averyy/fetchaller-mcp/commit/{new_sha})\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="found 2"):
+            self.test_readme_pinned_sha_matches_mcp_json(tmp_mcp)
+        tmp_readme.write_text("# missing pin\n", encoding="utf-8")
+        with pytest.raises(AssertionError, match="found 0"):
+            self.test_readme_pinned_sha_matches_mcp_json(tmp_mcp)
+
+        # Aligning .mcp.json to new_sha without updating README/mcp_constants attestations fails
+        old_sha = self.README_PIN_RE.search(orig_readme).group("sha")  # type: ignore[union-attr]
+        aligned_mcp = orig_mcp.replace(old_sha, new_sha)
+        tmp_readme.write_text(bumped_readme, encoding="utf-8")
+        tmp_mcp.write_text(aligned_mcp, encoding="utf-8")
+        self.test_readme_pinned_sha_matches_mcp_json(tmp_mcp)
+        with pytest.raises(AssertionError, match="Tool capability audit SHA"):
+            self.test_audit_attestation_shas_match_mcp_json(tmp_mcp)
+
+        # Updating README attestation while leaving mcp_constants.py stale still fails closed
+        audited_readme = self.README_AUDIT_SHA_RE.sub(
+            f"**Tool capability audit** (performed at the pinned commit, `{new_sha}`",
+            bumped_readme,
+        )
+        tmp_readme.write_text(audited_readme, encoding="utf-8")
+        with pytest.raises(AssertionError, match="verified SHA"):
+            self.test_audit_attestation_shas_match_mcp_json(tmp_mcp)
+
+        # Missing or duplicate attestations fail closed on both README.md and mcp_constants.py
+        tmp_readme.write_text("# no audit attestation\n", encoding="utf-8")
+        with pytest.raises(AssertionError, match="found 0"):
+            self.test_audit_attestation_shas_match_mcp_json(tmp_mcp)
+        tmp_readme.write_text(
+            audited_readme
+            + f"\n**Tool capability audit** (performed at the pinned commit, `{new_sha}`)\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="found 2"):
+            self.test_audit_attestation_shas_match_mcp_json(tmp_mcp)
+        tmp_readme.write_text(audited_readme, encoding="utf-8")
+
+        tmp_consts.write_text("# no attestation\n", encoding="utf-8")
+        with pytest.raises(AssertionError, match="found 0"):
+            self.test_audit_attestation_shas_match_mcp_json(tmp_mcp)
+        tmp_consts.write_text(
+            orig_consts
+            + f"\n# verified at pinned SHA {new_sha} (github.com/Averyy/fetchaller-mcp)\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="found 2"):
+            self.test_audit_attestation_shas_match_mcp_json(tmp_mcp)
+
+        # Updating mcp_constants.py attestation completes the audit and turns green
+        audited_consts = self.MCP_CONSTANTS_AUDIT_SHA_RE.sub(
+            f"verified at pinned SHA\n    # {new_sha} (github.com/Averyy/fetchaller-mcp)",
+            orig_consts,
+        )
+        tmp_consts.write_text(audited_consts, encoding="utf-8")
+        self.test_audit_attestation_shas_match_mcp_json(tmp_mcp)
+
+        # Simulated Renovate wafer-py bump in .mcp.json produces valid JSON and fails closed
+        orig_args = json.loads(orig_mcp)["mcpServers"]["fetchaller"]["args"]
+        orig_with_arg = orig_args[orig_args.index("--with") + 1]
+        assert orig_with_arg != "wafer-py[browser]==9.9.9"
+        wafer_rx = re.compile(
+            mgrs["wafer-py"]["matchStrings"][0].replace("(?<currentValue>", "(?P<currentValue>")
+        )
+        bumped_wafer_mcp, w_count = wafer_rx.subn('"wafer-py[browser]==9.9.9"', orig_mcp)
+        assert w_count == 1
+        json.loads(bumped_wafer_mcp)
+        tmp_mcp.write_text(bumped_wafer_mcp, encoding="utf-8")
+        with pytest.raises(AssertionError, match=f"must pin {re.escape(repr(orig_with_arg))}"):
+            self.test_wafer_py_version_pinned(tmp_mcp)
 
     @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
     def test_no_http_mode_flag(self, mcp_path: Path):
@@ -1236,6 +1405,93 @@ class TestRenovateConfig:
         assert self.RENOVATE_JSON.exists(), f"Missing {self.RENOVATE_JSON}"
         return json.loads(self.RENOVATE_JSON.read_text(encoding="utf-8"))
 
+    _UNSUPPORTED_MINIMATCH_TOKENS = ("{", "}", "+(", "@(", "!(", "*(", "?(", "[^")
+    _RENOVATE_REGEX_RE = re.compile(r"^/(?P<body>.+)/(?P<flags>[a-zA-Z]*)\Z", re.DOTALL)
+    _REGEX_FLAG_MAP = {"i": re.IGNORECASE, "m": re.MULTILINE, "s": re.DOTALL}
+    _REMOVED_EXCLUDE_KEYS = frozenset(
+        {"excludePackageNames", "excludePackagePatterns", "excludeDatasources", "excludeUrls"}
+    )
+
+    @classmethod
+    def _pattern_matches(
+        cls,
+        pattern: str,
+        value: str,
+        *,
+        is_path: bool = False,
+        default_on_unsupported: bool = True,
+        _negated: bool = False,
+    ) -> bool:
+        if pattern == "*" and not _negated:
+            return True
+        if pattern.startswith("!"):
+            if _negated or pattern.startswith("!!"):
+                return default_on_unsupported
+            return not cls._pattern_matches(
+                pattern[1:],
+                value,
+                is_path=is_path,
+                default_on_unsupported=not default_on_unsupported,
+                _negated=True,
+            )
+        rx_match = cls._RENOVATE_REGEX_RE.match(pattern)
+        if rx_match is not None:
+            raw_flags = rx_match.group("flags")
+            if any(ch not in cls._REGEX_FLAG_MAP for ch in raw_flags):
+                return default_on_unsupported
+            compiled_flags = 0
+            for ch in raw_flags:
+                compiled_flags |= cls._REGEX_FLAG_MAP[ch]
+            return bool(re.search(rx_match.group("body"), value, compiled_flags))
+        if any(tok in pattern for tok in cls._UNSUPPORTED_MINIMATCH_TOKENS):
+            return default_on_unsupported
+        if is_path:
+            return PurePosixPath(value.lower()).full_match(pattern.lower())
+        return fnmatch.fnmatchcase(value.lower(), pattern.lower())
+
+    @classmethod
+    def _selector_matches(cls, patterns: list[str], value: str, *, is_path: bool = False) -> bool:
+        if not patterns:
+            return False
+        pos = [p for p in patterns if not p.startswith("!")]
+        neg = [p for p in patterns if p.startswith("!")]
+        if pos and not any(
+            cls._pattern_matches(p, value, is_path=is_path, default_on_unsupported=True)
+            for p in pos
+        ):
+            return False
+        return all(
+            cls._pattern_matches(n, value, is_path=is_path, default_on_unsupported=True)
+            for n in neg
+        )
+
+    @classmethod
+    def _rule_can_match_dep(
+        cls,
+        rule: dict,
+        *,
+        pkg: str,
+        rel_file: str,
+        datasource: str,
+    ) -> bool:
+        """Conservative Renovate packageRule matcher: returns False only when a valid Renovate
+        v44 package, file, datasource, or manager selector provably excludes this dependency."""
+        if "matchPackageNames" in rule and not cls._selector_matches(
+            rule["matchPackageNames"], pkg
+        ):
+            return False
+        if "matchDatasources" in rule and not cls._selector_matches(
+            rule["matchDatasources"], datasource
+        ):
+            return False
+        if "matchFileNames" in rule and not cls._selector_matches(
+            rule["matchFileNames"], rel_file, is_path=True
+        ):
+            return False
+        return "matchManagers" not in rule or any(
+            cls._selector_matches(rule["matchManagers"], mgr) for mgr in ("custom.regex", "regex")
+        )
+
     def test_renovate_json_schema_and_ignore_paths(self):
         """renovate.json must parse as valid JSON and exclude skill-eval/codebases/**."""
         cfg = self._load_renovate_config()
@@ -1376,28 +1632,44 @@ class TestRenovateConfig:
             f"skillsaw version drift across tracked files: {set(all_extracted_versions)}"
         )
 
-    def test_fetchaller_monthly_audit_trigger_custom_managers_and_package_rule(self):
-        """fetchaller-mcp and wafer-py custom regex managers must extract valid versions/digests
-        matching the checked-in pins, and packageRules must group them onto a monthly,
-        non-automerged schedule."""
+    def test_fetchaller_custom_manager_tracks_readme_pin(self):
+        """Averyy/fetchaller-mcp custom regex manager must match fetchaller-mcp/README.md only,
+        stay in lockstep with README_PIN_RE, and leave .mcp.json/mcp.json/mcp_constants.py
+        untouched."""
         cfg = self._load_renovate_config()
-        managers_by_dep = {
-            m.get("depNameTemplate"): m
-            for m in cfg.get("customManagers", [])
-            if m.get("depNameTemplate") in {"Averyy/fetchaller-mcp", "wafer-py"}
-        }
-        assert set(managers_by_dep) == {"Averyy/fetchaller-mcp", "wafer-py"}, (
-            "Expected customManagers for Averyy/fetchaller-mcp and wafer-py, "
-            f"got {set(managers_by_dep)}"
+        custom_managers = cfg.get("customManagers", [])
+        fetchaller_mgrs = [
+            m for m in custom_managers if m.get("depNameTemplate") == "Averyy/fetchaller-mcp"
+        ]
+        assert len(fetchaller_mgrs) == 1, (
+            f"Expected 1 Averyy/fetchaller-mcp customManager, got {len(fetchaller_mgrs)}"
         )
-
-        fetchaller_mgr = managers_by_dep["Averyy/fetchaller-mcp"]
+        fetchaller_mgr = fetchaller_mgrs[0]
         assert fetchaller_mgr.get("customType") == "regex"
         assert fetchaller_mgr.get("datasourceTemplate") == "github-tags"
-        readme_file_rxs = [
-            re.compile(p.strip("/")) for p in fetchaller_mgr.get("managerFilePatterns", [])
-        ]
+
+        raw_readme_patterns = fetchaller_mgr.get("managerFilePatterns", [])
+        assert raw_readme_patterns and all(
+            p.startswith("/") and p.endswith("/") and len(p) >= 2 for p in raw_readme_patterns
+        ), "Averyy/fetchaller-mcp managerFilePatterns must be non-empty /regex/ strings"
+        readme_file_rxs = [re.compile(p[1:-1]) for p in raw_readme_patterns]
         assert any(rx.search("fetchaller-mcp/README.md") for rx in readme_file_rxs)
+
+        for mgr in custom_managers:
+            mgr_patterns = mgr.get("managerFilePatterns", [])
+            assert not any(
+                self._pattern_matches(p, "dev-guard/hooks/mcp_constants.py", is_path=True)
+                for p in mgr_patterns
+            ), "No customManager may match dev-guard/hooks/mcp_constants.py"
+            if mgr is not fetchaller_mgr:
+                assert not any(
+                    self._pattern_matches(p, "fetchaller-mcp/README.md", is_path=True)
+                    for p in mgr_patterns
+                ), (
+                    f"Non-fetchaller customManager ({mgr.get('depNameTemplate')!r}) must not "
+                    "match fetchaller-mcp/README.md"
+                )
+
         readme_match_rxs = [
             re.compile(
                 ms.replace("(?<currentValue>", "(?P<currentValue>").replace(
@@ -1406,20 +1678,62 @@ class TestRenovateConfig:
             )
             for ms in fetchaller_mgr.get("matchStrings", [])
         ]
+        assert readme_match_rxs, "Averyy/fetchaller-mcp customManager must define matchStrings"
+        translated_patterns = [
+            ms.replace("(?<currentValue>", "(?P<version>").replace("(?<currentDigest>", "(?P<sha>")
+            for ms in fetchaller_mgr.get("matchStrings", [])
+        ]
+        assert translated_patterns == [TestFetchallerMcpConfigSecurity.README_PIN_RE.pattern], (
+            "renovate.json Averyy/fetchaller-mcp matchStrings drifted from "
+            "TestFetchallerMcpConfigSecurity.README_PIN_RE"
+        )
+
         readme_content = FETCHALLER_README.read_text(encoding="utf-8")
         readme_hits = [m for rx in readme_match_rxs for m in rx.finditer(readme_content)]
         assert len(readme_hits) == 1, (
             f"Expected 1 fetchaller-mcp match in README.md, got {len(readme_hits)}"
         )
-        assert re.match(r"^v\d+\.\d+\.\d+$", readme_hits[0].group("currentValue"))
-        assert re.match(r"^[0-9a-f]{40}$", readme_hits[0].group("currentDigest"))
+        assert re.fullmatch(r"v\d+\.\d+\.\d+", readme_hits[0].group("currentValue"))
+        assert re.fullmatch(r"[0-9a-f]{40}", readme_hits[0].group("currentDigest"))
 
-        wafer_mgr = managers_by_dep["wafer-py"]
+        for rel_mcp in ("fetchaller-mcp/.mcp.json", "fetchaller-mcp/mcp.json"):
+            mcp_raw = (REPO_ROOT / rel_mcp).read_text(encoding="utf-8")
+            assert not any(rx.search(mcp_raw) for rx in readme_match_rxs), (
+                f"Averyy/fetchaller-mcp matchStrings must not match {rel_mcp} "
+                "(would bypass fail-closed TestFetchallerMcpConfigSecurity gate)"
+            )
+
+    def test_wafer_py_custom_manager_tracks_mcp_manifests(self):
+        """wafer-py custom regex manager must extract exact --with pins from both MCP manifests
+        and no other customManager may match .mcp.json or mcp.json."""
+        cfg = self._load_renovate_config()
+        custom_managers = cfg.get("customManagers", [])
+        wafer_mgrs = [m for m in custom_managers if m.get("depNameTemplate") == "wafer-py"]
+        assert len(wafer_mgrs) == 1, f"Expected 1 wafer-py customManager, got {len(wafer_mgrs)}"
+        wafer_mgr = wafer_mgrs[0]
+
+        for other_mgr in custom_managers:
+            if other_mgr is wafer_mgr:
+                continue
+            other_patterns = other_mgr.get("managerFilePatterns", [])
+            for rel_mcp in ("fetchaller-mcp/.mcp.json", "fetchaller-mcp/mcp.json"):
+                assert not any(
+                    self._pattern_matches(p, rel_mcp, is_path=True) for p in other_patterns
+                ), (
+                    f"Non-wafer-py customManager ({other_mgr.get('depNameTemplate')!r}) must not "
+                    f"match {rel_mcp} (would bypass fail-closed TestFetchallerMcpConfigSecurity)"
+                )
+
         assert wafer_mgr.get("customType") == "regex"
         assert wafer_mgr.get("datasourceTemplate") == "pypi"
-        wafer_file_rxs = [
-            re.compile(p.strip("/")) for p in wafer_mgr.get("managerFilePatterns", [])
-        ]
+        raw_wafer_patterns = wafer_mgr.get("managerFilePatterns", [])
+        assert raw_wafer_patterns and all(
+            p.startswith("/") and p.endswith("/") and len(p) >= 2 for p in raw_wafer_patterns
+        ), "wafer-py managerFilePatterns must be non-empty /regex/ strings"
+        wafer_file_rxs = [re.compile(p[1:-1]) for p in raw_wafer_patterns]
+        assert all("currentDigest" not in ms for ms in wafer_mgr.get("matchStrings", [])), (
+            "wafer-py customManager must not capture currentDigest"
+        )
         wafer_match_rxs = [
             re.compile(ms.replace("(?<currentValue>", "(?P<currentValue>"))
             for ms in wafer_mgr.get("matchStrings", [])
@@ -1434,23 +1748,149 @@ class TestRenovateConfig:
                 m.group("currentValue") for rx in wafer_match_rxs for m in rx.finditer(mcp_text)
             ]
             assert len(hits) == 1, f"Expected 1 wafer-py match in {rel_mcp}, got {hits}"
-            assert re.match(r"^\d+\.\d+\.\d+$", hits[0])
+            assert re.fullmatch(r"\d+\.\d+\.\d+", hits[0])
+            mcp_args = json.loads(mcp_text)["mcpServers"]["fetchaller"]["args"]
+            with_arg = mcp_args[mcp_args.index("--with") + 1]
+            assert with_arg == f"wafer-py[browser]=={hits[0]}", (
+                f"wafer-py custom manager extracted {hits[0]!r} from {rel_mcp}, "
+                f"expected match against --with arg {with_arg!r}"
+            )
             wafer_versions.append(hits[0])
         assert len(set(wafer_versions)) == 1
 
-        fetchaller_rules = [
-            r
-            for r in cfg.get("packageRules", [])
+    def test_fetchaller_package_rule_monthly_schedule_and_precedence(self):
+        """packageRules must group Averyy/fetchaller-mcp and wafer-py onto a monthly,
+        non-automerged schedule with no root, earlier-rule, or later-rule overrides."""
+        cfg = self._load_renovate_config()
+        assert cfg.get("enabled") is not False, "Root renovate.json must not disable Renovate"
+        package_rules = cfg.get("packageRules", [])
+        fetchaller_rule_indices = [
+            idx
+            for idx, r in enumerate(package_rules)
             if set(r.get("matchPackageNames", [])) == {"Averyy/fetchaller-mcp", "wafer-py"}
         ]
-        assert len(fetchaller_rules) == 1, (
+        assert len(fetchaller_rule_indices) == 1, (
             "Expected 1 packageRule grouping Averyy/fetchaller-mcp and wafer-py, "
-            f"got {len(fetchaller_rules)}"
+            f"got {len(fetchaller_rule_indices)}"
         )
-        rule = fetchaller_rules[0]
+        fetchaller_rule_idx = fetchaller_rule_indices[0]
+        rule = package_rules[fetchaller_rule_idx]
         assert rule.get("groupName") == "fetchaller-mcp"
         assert rule.get("automerge") is False, "fetchaller-mcp rule must disable global automerge"
         assert rule.get("schedule") == ["* 0-8 1-7 * 1"]
         assert rule.get("prBodyNotes"), (
             "fetchaller-mcp rule must include security audit prBodyNotes"
+        )
+
+        fetchaller_targets = (
+            ("Averyy/fetchaller-mcp", "fetchaller-mcp/README.md", "github-tags"),
+            ("wafer-py", "fetchaller-mcp/.mcp.json", "pypi"),
+            ("wafer-py", "fetchaller-mcp/mcp.json", "pypi"),
+        )
+        protected_keys = {
+            "automerge",
+            "schedule",
+            "groupName",
+            "groupSlug",
+            "prBodyNotes",
+            "minimumReleaseAge",
+            "internalChecksFilter",
+            "extends",
+            "enabled",
+        }
+        unset_protected_keys = protected_keys - set(rule.keys())
+        inherited_root_keys = (unset_protected_keys - {"enabled"}) & cfg.keys()
+        assert not inherited_root_keys, (
+            f"Root renovate.json sets {sorted(inherited_root_keys)} inherited by fetchaller-mcp"
+        )
+        for idx, candidate_rule in enumerate(package_rules):
+            removed_keys = sorted(self._REMOVED_EXCLUDE_KEYS & candidate_rule.keys())
+            assert not removed_keys, (
+                f"packageRules[{idx}] uses removed Renovate v44 keys {removed_keys} "
+                "(use '!' prefix in match* instead)"
+            )
+            if not any(
+                self._rule_can_match_dep(
+                    candidate_rule, pkg=pkg, rel_file=rel_file, datasource=datasource
+                )
+                for pkg, rel_file, datasource in fetchaller_targets
+            ):
+                continue
+            assert candidate_rule.get("enabled") is not False, (
+                f"packageRules[{idx}] disables fetchaller-mcp/wafer-py updates"
+            )
+            if idx < fetchaller_rule_idx:
+                inherited = sorted(unset_protected_keys & candidate_rule.keys())
+                assert not inherited, (
+                    f"packageRules[{idx}] matches fetchaller-mcp/wafer-py before "
+                    f"packageRules[{fetchaller_rule_idx}] and sets inherited {inherited}"
+                )
+            elif idx > fetchaller_rule_idx:
+                overridden = sorted(protected_keys & candidate_rule.keys())
+                assert not overridden, (
+                    f"packageRules[{idx}] matches fetchaller-mcp/wafer-py after "
+                    f"packageRules[{fetchaller_rule_idx}] and overrides {overridden}"
+                )
+
+    def test_rule_can_match_dep_conservative_matching(self):
+        """_rule_can_match_dep and _pattern_matches must match Renovate's matchRegexOrGlob
+        semantics (top-level '*', nocase globs, negated patterns, flagged regexes, and
+        conservative fallback on unsupported minimatch syntax)."""
+        wafer_target = {
+            "pkg": "wafer-py",
+            "rel_file": "fetchaller-mcp/.mcp.json",
+            "datasource": "pypi",
+        }
+        fetchaller_target = {
+            "pkg": "Averyy/fetchaller-mcp",
+            "rel_file": "fetchaller-mcp/README.md",
+            "datasource": "github-tags",
+        }
+        assert self._rule_can_match_dep({"matchFileNames": ["*"]}, **wafer_target)
+        assert self._rule_can_match_dep({"matchFileNames": ["!*"]}, **wafer_target)
+        assert self._rule_can_match_dep({"matchFileNames": ["fetchaller-mcp/**"]}, **wafer_target)
+        assert self._rule_can_match_dep(
+            {"matchFileNames": ["fetchaller-mcp/readme.md"]}, **fetchaller_target
+        )
+        assert self._rule_can_match_dep({"matchPackageNames": ["averyy/*"]}, **fetchaller_target)
+        assert self._rule_can_match_dep({"matchDatasources": ["PYPI"]}, **wafer_target)
+        assert self._rule_can_match_dep(
+            {"matchFileNames": ["fetchaller-mcp/{.mcp.json,mcp.json}"]}, **wafer_target
+        )
+        assert self._rule_can_match_dep(
+            {"matchFileNames": ["fetchaller-mcp/[^x]mcp.json"]}, **wafer_target
+        )
+        assert self._rule_can_match_dep({"matchPackageNames": ["/^wafer/"]}, **wafer_target)
+        assert self._rule_can_match_dep({"matchPackageNames": ["/WAFER-PY/i"]}, **wafer_target)
+        assert self._rule_can_match_dep({"matchPackageNames": ["/wafer-py/u"]}, **wafer_target)
+        assert self._rule_can_match_dep({"matchUpdateTypes": ["minor", "patch"]}, **wafer_target)
+        assert self._rule_can_match_dep(
+            {"matchFileNames": ["fetchaller-mcp/**", "!fetchaller-mcp/README.md"]}, **wafer_target
+        )
+        assert self._rule_can_match_dep({"matchManagers": ["custom.regex"]}, **wafer_target)
+        assert self._rule_can_match_dep({"matchManagers": ["!pep723"]}, **wafer_target)
+        assert self._rule_can_match_dep({"excludePackageNames": ["wafer-*"]}, **wafer_target)
+        assert self._rule_can_match_dep({"excludeDatasources": ["pypi"]}, **wafer_target)
+        assert self._rule_can_match_dep(
+            {"matchDatasources": ["!pypi"], "matchFileNames": ["fetchaller-mcp/**"]},
+            **fetchaller_target,
+        )
+        assert self._pattern_matches("!other.json", "fetchaller-mcp/.mcp.json", is_path=True)
+        assert self._pattern_matches("!/other/", "fetchaller-mcp/.mcp.json", is_path=True)
+        assert self._pattern_matches("!!other.json", "fetchaller-mcp/.mcp.json", is_path=True)
+
+        assert not self._rule_can_match_dep({"matchPackageNames": []}, **wafer_target)
+        assert not self._rule_can_match_dep({"matchPackageNames": ["skillsaw"]}, **wafer_target)
+        assert not self._rule_can_match_dep({"matchDatasources": ["!pypi"]}, **wafer_target)
+        assert not self._rule_can_match_dep({"matchDatasources": ["!PYPI"]}, **wafer_target)
+        assert not self._rule_can_match_dep({"matchManagers": ["pep723"]}, **wafer_target)
+        assert not self._rule_can_match_dep(
+            {"matchFileNames": ["fetchaller-mcp/**", "!fetchaller-mcp/.mcp.json"]}, **wafer_target
+        )
+        assert not self._rule_can_match_dep({"matchDatasources": ["pypi"]}, **fetchaller_target)
+        assert not self._pattern_matches(
+            "!/fetchaller-mcp/", "fetchaller-mcp/.mcp.json", is_path=True
+        )
+        assert self._rule_can_match_dep(
+            {"matchFileNames": ["!fetchaller-mcp/{.mcp.json,mcp.json}"]}, **wafer_target
         )
