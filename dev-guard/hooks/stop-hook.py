@@ -30,6 +30,7 @@ from typing import NoReturn
 
 sys.path.insert(0, str(Path(__file__).parent))
 from mcp_constants import MCP_READ_ONLY, MCP_THINK_PREFIX, mcp_key  # noqa: E402
+from memory_paths import find_main_worktree, find_memory_dir  # noqa: E402
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -548,25 +549,13 @@ def _detect_research_tools(tool_calls: list[str]) -> bool:
     return False
 
 
-_CORE_MEMORY_FILES = ("PROJECT.md", "TODO.md", "SESSIONS.md", "NEXT.md", "LESSONS.md")
-
-
 def _check_hack_dir_modified(cwd: str) -> dict[str, bool]:
     """Check if plans/ or research/ files were recently modified in the memory dir."""
     result = {"plans": False, "research": False}
     now = time.time()
     recent_threshold = _HACK_RECENT_SECONDS
     try:
-        # Detect memory directory (priority order per project-memory-reference.md)
-        memory_path = None
-        for dirname in ("hack", ".local", "scratch", ".dev"):
-            candidate = Path(cwd) / dirname
-            if candidate.is_dir():
-                core_count = sum(1 for f in _CORE_MEMORY_FILES if (candidate / f).is_file())
-                if core_count < 2:
-                    continue  # not a validated memory directory
-                memory_path = candidate
-                break
+        memory_path = find_memory_dir(find_main_worktree(cwd))
         if memory_path is None:
             return result
         for subdir, key in [("plans", "plans"), ("research", "research")]:

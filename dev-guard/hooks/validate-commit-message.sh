@@ -11,34 +11,76 @@
 #   2 = Error (blocks the commit)
 #
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # --- Hook Input Filtering ---
 # When called as a PostToolUse hook, stdin contains JSON with tool_input.
 # Only proceed for git commit commands; exit 0 for everything else.
+INPUT=""
 if ! [ -t 0 ]; then
     INPUT=$(cat)
-    COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
-    if [[ ! "$COMMAND" =~ git[[:space:]]+commit ]]; then
+    # Cheap O(n) pre-filter: this hook runs on every Bash call, and the tokenizer is
+    # far slower on large commands (multi-KB heredocs) than on a commit line.
+    if [[ -n "$INPUT" && ( "$INPUT" != *git* || "$INPUT" != *commit* ) ]]; then
         exit 0
     fi
 fi
 
-# Early exit if not in a git repository
-if ! git rev-parse --git-dir &>/dev/null; then
-    exit 0
+# shellcheck source=dev-guard/hooks/lib/project-commit-format.sh disable=SC1091
+if ! source "${SCRIPT_DIR}/lib/project-commit-format.sh"; then
+    printf "ERROR: cannot load project-commit-format.sh — commit validation cannot run\n" >&2
+    exit 2
 fi
 
-# Defer entirely to project-level commit format enforcement
-if [[ "$(git config --get --type=bool claude-code.commit-trailers-required 2>/dev/null)" = "true" ]]; then
-    exit 0
+if [[ -n "$INPUT" ]]; then
+    COMMAND=$(echo "$INPUT" | jq -r ".tool_input.command // empty" 2>/dev/null || true)
+    if [[ -n "$COMMAND" ]]; then
+        # The text match is the activation gate (it also covers wrapped forms the parser
+        # cannot see, such as `bash -c`); the parser only resolves -C / --git-dir /
+        # --work-tree / cd targets and falls back to the current directory when it finds none.
+        # `git` must be a standalone word followed, on the same line, by whitespace-separated
+        # options and then the word `commit` (so `git-tools commit` and `git log # commits`
+        # do not match, while `bash -c "git -C r commit"` does).
+        COMMIT_RE=$'(^|[[:space:];&|("\'])git([ \t]+[^[:space:];&|<>]+)*[ \t]+commit([[:space:]]|$)'
+        if ! pcf_parse_command "$COMMAND" && [[ ! "$COMMAND" =~ $COMMIT_RE ]]; then
+            exit 0
+        fi
+    else
+        exit 0
+    fi
+fi
+
+# Validate explicit -C / --git-dir / --work-tree paths and load target repo config
+pcf_load_repo_config
+case $? in
+    0) ;;
+    2) exit 2 ;;
+    *) exit 0 ;;
+esac
+
+PROJECT_MODE=false
+if [[ "$PCF_TRAILERS_REQUIRED" = "true" ]]; then
+    PROJECT_MODE=true
 fi
 
 # Get commit message (optional SHA argument, defaults to HEAD)
 SHA="${1:-HEAD}"
-COMMIT_MSG=$(git log -1 --pretty=%B "$SHA" 2>/dev/null || echo "")
+COMMIT_MSG=$(pcf_run_git log -1 --pretty=%B "$SHA" 2>/dev/null || echo "")
 
 # If we can't get a commit message, this isn't a git commit operation
 if [[ -z "$COMMIT_MSG" ]]; then
     exit 0
+fi
+
+# As a hook, only judge a commit this command just created. A command that merely
+# mentions `git ... commit` (git log, grep, a PR body) must not be held to the format
+# rules for whatever HEAD already was.
+if [[ -n "$INPUT" ]]; then
+    COMMIT_TS=$(pcf_run_git log -1 --format=%ct "$SHA" 2>/dev/null || echo 0)
+    NOW_TS=$(date +%s)
+    if (( NOW_TS - COMMIT_TS > 120 )); then
+        exit 0
+    fi
 fi
 
 # Now enable strict error handling for the actual validation
@@ -73,6 +115,14 @@ if echo "$COMMIT_MSG" | grep -qiE "^[[:space:]]*co-authored-by:"; then
     echo "ERROR: Commit contains Co-authored-by trailer"
     echo "Remove all Co-authored-by trailers. Attribution trailers are not permitted."
     exit 2
+fi
+
+if [[ "$PROJECT_MODE" = "true" ]]; then
+    if ! pcf_validate_commit_text "$SUBJECT" "$COMMIT_MSG" 0; then
+        exit 2
+    fi
+    echo "✓ Commit message valid: $SUBJECT"
+    exit 0
 fi
 
 # Check for Signed-off-by referencing AI/Claude/Anthropic
