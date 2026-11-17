@@ -546,7 +546,7 @@ class TestPluginVersionParity:
 
     def test_codex_marketplace_entries_match_claude_marketplace(self):
         """Both .claude-plugin/marketplace.json and .agents/plugins/marketplace.json must
-        register the exact same 13 plugins in order, with valid source, policy, and category."""
+        register the exact same 14 plugins in order, with valid source, policy, and category."""
         codex_marketplace_path = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
         assert codex_marketplace_path.exists(), f"Missing {codex_marketplace_path}"
 
@@ -558,7 +558,7 @@ class TestPluginVersionParity:
         )
         claude_names = [entry["name"] for entry in claude_marketplace["plugins"]]
         codex_names = [entry["name"] for entry in codex_marketplace["plugins"]]
-        assert len(claude_names) == 13, f"Expected 13 plugins, got {len(claude_names)}"
+        assert len(claude_names) == 14, f"Expected 14 plugins, got {len(claude_names)}"
         assert codex_names == claude_names, (
             f"Marketplace registration mismatch: claude={claude_names} vs codex={codex_names}"
         )
@@ -1302,7 +1302,7 @@ class TestSkillMigrationFidelity:
         resolve_skill_bundle = runner_mod.resolve_skill_bundle
 
         skill_files = sorted(REPO_ROOT.glob("*/skills/*/SKILL.md"))
-        assert len(skill_files) == 24, f"Expected 24 skills, found {len(skill_files)}"
+        assert len(skill_files) == 25, f"Expected 25 skills, found {len(skill_files)}"
 
         for skill_md in skill_files:
             line_count = len(skill_md.read_text().splitlines())
@@ -1526,13 +1526,13 @@ class TestRenovateConfig:
         )
 
     def test_all_marketplace_plugins_in_post_upgrade_tasks_and_pypi_split_invariants(self):
-        """Both pypi and non-pypi plugin packageRules must cover all 13 marketplace plugins,
+        """Both pypi and non-pypi plugin packageRules must cover all 14 marketplace plugins,
         and pypi rule must run khepri-verify-pypi-source before skillsaw_custom_rules.py --fix
         without restricting fileFilters."""
         cfg = self._load_renovate_config()
         marketplace = json.loads(MARKETPLACE_JSON.read_text(encoding="utf-8"))
         expected_globs = {f"{entry['name']}/**" for entry in marketplace["plugins"]}
-        assert len(expected_globs) == 13
+        assert len(expected_globs) == 14
 
         package_rules = cfg.get("packageRules", [])
         pypi_rules = [

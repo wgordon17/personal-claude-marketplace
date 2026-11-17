@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+paths = ['''(^|/)\.venv/''', '''(^|/)\.cache/''']
+
+[[rules]]
+id = "slack-session-cookie-or-token"
+description = "Slack xoxc session token or xoxd d-cookie"
+regex = '''\bxox[cd]-[A-Za-z0-9%_.\-]{20,}'''
+keywords = ["xoxc-", "xoxd-"]

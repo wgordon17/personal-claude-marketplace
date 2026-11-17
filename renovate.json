@@ -94,7 +94,8 @@
         "jira/**",
         "drawio/**",
         "fetchaller-mcp/**",
-        "chai-bot/**"
+        "chai-bot/**",
+        "standup/**"
       ],
       "matchDatasources": [
         "pypi"
@@ -122,7 +123,8 @@
         "jira/**",
         "drawio/**",
         "fetchaller-mcp/**",
-        "chai-bot/**"
+        "chai-bot/**",
+        "standup/**"
       ],
       "matchDatasources": [
         "!pypi"
