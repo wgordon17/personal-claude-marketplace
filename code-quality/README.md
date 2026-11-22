@@ -54,9 +54,35 @@ in the environment or `settings.json`.
 | `/code-quality:review-project` | Comprehensive TODO validation |
 | `/code-quality:lsp-status` | Check LSP server status |
 
+## `review-rules` CLI
+
+The isolated Python package in `code-quality/review-rules/` provides the `review-rules` CLI for managing the local private store and validating learned review rules from the pinned `origin/main` commit of the private rules repository:
+
+```bash
+UV_PROJECT_ENVIRONMENT="${REVIEW_RULES_VENV:-$HOME/.cache/review-rules/venv}" \
+  uv run --frozen --project code-quality/review-rules review-rules <command>
+```
+
+| Subcommand | Purpose |
+|------------|---------|
+| `init` | Create the `0700` store directory (`~/.local/share/review-rules/`), `0600` SQLite DB (`review.db`) and `config.toml`, and print permission guidance |
+| `doctor` | Prune scratch dirs older than 1 day (without following symlinks), verify `0700`/`0600` modes via `lstat`, check `schema_version`, and report optional checks (`REVIEW_RULES_REPO`, `anthropic.key`, `gh auth status`, `spool.jsonl`) |
+| `scratch` | Create and print a `0700` per-run scratch directory under `~/.local/share/review-rules/scratch/<uuid>/` |
+| `lint` | Validate learned rule YAML files from pinned `refs/remotes/origin/main^{commit}` (`--no-fetch` skips `git fetch`), or locally via `--worktree` / `--dir PATH` |
+
+**Store security & permissions:**
+
+- Store directory `~/.local/share/review-rules/` and `scratch/` are enforced at mode `0700`; `review.db` (`-wal`/`-shm`), `config.toml`, `spool.jsonl`, and `anthropic.key` are enforced at mode `0600` via `os.lstat` / `O_NOFOLLOW`.
+- Keep the virtualenv outside the plugin cache via `REVIEW_RULES_VENV` (defaults to `~/.cache/review-rules/venv`) so `uv` does not pre-create `~/.local/share/review-rules` with `0755` permissions.
+- `review-rules init` prints an optional allow rule for `~/.claude/settings.json` `permissions.allow`:
+  - `Edit(~/.local/share/review-rules/scratch/**)` — governs `Edit`, `Write`, `NotebookEdit`, and `MultiEdit`.
+  - **Do not use `Write(~/.local/share/review-rules/scratch/**)`** — `Write(path)` is a no-op that triggers a startup warning in Claude Code v2.1.210+.
+  - If `permissions.blockWritesOutsideWorkingDirectories: true` is enabled (Claude Code v2.1.314+), also add `~/.local/share/review-rules/scratch` to `permissions.additionalDirectories`.
+
 ## Requirements
 
 - **At least one LSP plugin** — Required for `/lsp-navigation` (pyright-uvx, vtsls-npx, gopls-go, etc.).
+- **`uv` and `gh` CLI** — Required for running `review-rules` (`uv run --frozen`) and GitHub CLI checks in `review-rules doctor`.
 - **Context7 MCP** — Required for `/file-audit` library validation (deprecated APIs, wrong signatures).
 - **Serena MCP** — Optional. Enhances `/incremental-planning` Phase 1 and `/deep-research` Bridged mode with `get_symbols_overview`.
 - **Sequential-Thinking MCP** — Optional. Used in `/incremental-planning` and `/roadmap` for scope boundary reasoning.

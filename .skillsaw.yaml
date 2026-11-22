@@ -5,6 +5,7 @@ custom-rules:
 exclude:
   - "skill-eval/codebases/**"
   - "skill-eval/fixtures/**"
+  - "code-quality/review-rules/**"
 
 rules:
   plugin-manifest-sync:

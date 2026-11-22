@@ -102,7 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6
       - name: Verify Local Markdown Links
-        uses: lycheeverse/lychee-action@v2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8  # v2.9.0
         with:
-          args: --offline --no-progress '**/*.md'
+          args: --offline --no-progress --exclude-path '(^|/)code-quality/review-rules/' '**/*.md'
           fail: true

@@ -1,17 +1,23 @@
-.PHONY: all lint format test test-llm test-live typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check
+.PHONY: all lint format test test-llm test-live typecheck prek prek-install eval eval-changed eval-update-baselines eval-coverage-check lint-review-rules typecheck-review-rules test-review-rules
 
 all: lint test typecheck  ## Full check suite (lint + test + typecheck)
 
-lint:  ## Ruff lint + format check
+lint: lint-review-rules  ## Ruff lint + format check
 	uv run ruff check .
 	uv run ruff format --check .
+
+lint-review-rules:  ## Lock check + Ruff lint/format check for code-quality/review-rules
+	cd code-quality/review-rules && uv lock --check && uv run --group dev ruff check . && uv run --group dev ruff format --check .
 
 format:  ## Auto-format with ruff
 	uv run ruff format .
 	uv run ruff check --fix .
 
-test:  ## Run pytest (excludes LLM integration and live/network tests)
+test: test-review-rules  ## Run pytest (excludes LLM integration and live/network tests)
 	uv run pytest -m "not llm and not eval and not slow"
+
+test-review-rules:  ## Run code-quality/review-rules tests
+	cd code-quality/review-rules && uv run --group dev pytest
 
 test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 	uv run --group dev --group llm pytest -m llm -v
@@ -19,8 +25,11 @@ test-llm:  ## Run LLM integration tests (requires Vertex AI credentials)
 test-live:  ## Run live/network-dependent smoke tests (requires network access)
 	RUN_LIVE_TESTS=1 uv run pytest -m slow -v
 
-typecheck:  ## Pyright type checking (dev-guard/hooks)
+typecheck: typecheck-review-rules  ## Pyright type checking (dev-guard/hooks)
 	uv run pyright
+
+typecheck-review-rules:  ## Pyright typecheck for code-quality/review-rules
+	cd code-quality/review-rules && uv run --group dev pyright
 
 prek:  ## Run pre-commit on all files
 	uvx prek run --all-files
