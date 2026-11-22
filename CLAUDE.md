@@ -54,8 +54,6 @@ Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.clau
 
 Each plugin ships dual manifests: `.claude-plugin/plugin.json` (Claude Code) and root `plugin.json` (Agent Plugins v1), registered in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
 
-**OMP dual-harness bridge (standing requirement):** every plugin that ships `hooks/hooks.json` must also ship an `omp-extension.ts` + `package.json` OMP dual-harness bridge, so its hooks also work under the OMP harness (`@oh-my-pi/pi-coding-agent`), not just Claude Code. This applies to every future hooks.json-owning plugin, not just the ones already bridged (`dev-guard/`, `git-tools/`, `github-mcp/`, `chai-bot/`). See `dev-guard/omp-extension.ts` for the shell-out pattern to follow when a plugin's hooks have real logic, and `dev-guard/OMP-COMPAT.md` for confirmed OMP behaviors (stdin handling, MCP tool-name re-encoding, event mapping).
-
 ## CI
 
 GitHub Actions on PRs to main. Two workflows: `ci.yml` (Python checks via `make all`, `uv sync --group dev`) and `plugin-lint.yml` (plugin structure via `uvx skillsaw@0.22.0 lint --strict --no-plugins` configured in `.skillsaw.yaml`, plus `actionlint` for workflow YAML validation).
