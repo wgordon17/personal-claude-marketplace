@@ -1,4 +1,4 @@
-version: "0.22.0"
+version: "0.23.0"
 strict: true
 custom-rules:
   - ".github/scripts/skillsaw_custom_rules.py"
