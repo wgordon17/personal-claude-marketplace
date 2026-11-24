@@ -11,7 +11,7 @@ repos:
       - id: skillsaw
         name: skillsaw
         language: system
-        entry: uvx skillsaw@0.22.0 lint --strict --no-plugins
+        entry: uvx skillsaw@0.23.0 lint --strict --no-plugins
         pass_filenames: false
         files: \.(json|md|yaml|yml|py|sh|ts)$
 
