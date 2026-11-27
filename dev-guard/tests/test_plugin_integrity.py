@@ -979,6 +979,22 @@ class TestFetchallerMcpConfigSecurity:
             f"got: {args[with_index + 1]!r}"
         )
 
+    @pytest.mark.parametrize("mcp_path", [FETCHALLER_MCP_JSON, FETCHALLER_AGENT_MCP_JSON])
+    def test_python_version_capped_for_onnxruntime(self, mcp_path: Path):
+        """uvx must cap Python below 3.15 because wafer-py[browser]'s onnxruntime
+        dependency does not publish cp315 wheels; without --python, uv selects
+        managed CPython 3.15 when present and fails resolution."""
+        args = self._load_args(mcp_path)
+        assert "--python" in args, (
+            f"{mcp_path.relative_to(REPO_ROOT)} must pass --python to prevent uvx from "
+            "selecting CPython 3.15 (unsupported by onnxruntime)"
+        )
+        python_spec = args[args.index("--python") + 1]
+        assert python_spec == "<3.15", (
+            f"{mcp_path.relative_to(REPO_ROOT)} must cap Python via '--python <3.15', "
+            f"got: {python_spec!r}"
+        )
+
     @pytest.mark.slow
     @pytest.mark.skipif(
         not os.environ.get("RUN_LIVE_TESTS"),

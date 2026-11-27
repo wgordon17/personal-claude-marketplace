@@ -87,7 +87,12 @@ upstream commit ever uses a `>=` floor in `pyproject.toml` without `--with`,
 `wafer-py` would silently drift on fresh `uv` cache misses despite the commit
 SHA pin holding fetchaller-mcp's own code fixed.
 
-The combined `uvx --from git+...@500078f7f --with "wafer-py[browser]==0.7.14"
+`.mcp.json` also caps Python via `--python "<3.15"` because
+`wafer-py[browser]==0.7.14` depends on `onnxruntime`, which does not yet publish
+`cp315` wheels — without the cap, `uvx` selects managed CPython 3.15 when
+installed and fails to resolve dependencies.
+
+The combined `uvx --python "<3.15" --from git+...@500078f7f --with "wafer-py[browser]==0.7.14"
 fetchaller-mcp` invocation was independently live-verified (via `--help`,
 Reddit reads, and `web.archive.org`) to resolve and start cleanly (2026-11-15).
 This verification is also a permanent regression test —
