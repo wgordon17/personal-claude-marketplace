@@ -112,7 +112,7 @@ def _resolve_base_sha(repo_root: Path, base_ref: str) -> str | None:
 
 def _is_non_runtime_plugin_path(rest: str) -> bool:
     """Return True for plugin paths (tests and root docs) that do not affect runtime behavior."""
-    return rest == "tests" or rest.startswith("tests/") or rest in NON_RUNTIME_PLUGIN_FILES
+    return "tests" in rest.split("/") or rest in NON_RUNTIME_PLUGIN_FILES
 
 
 def get_modified_plugins(

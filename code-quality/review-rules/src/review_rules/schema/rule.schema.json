@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wgordon17/review-rules/schema/rule.schema.json",
+  "title": "Learned Review Rule",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "status",
+    "trial",
+    "category",
+    "statement",
+    "rationale",
+    "do_not_apply_when",
+    "scope",
+    "evidence",
+    "provenance",
+    "review_by"
+  ],
+  "if": {
+    "properties": {
+      "status": {
+        "const": "active"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "approved"
+    ]
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^r-[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 100
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "candidate",
+        "active",
+        "retired"
+      ]
+    },
+    "trial": {
+      "type": "boolean"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "correctness",
+        "security",
+        "testing",
+        "performance",
+        "architecture",
+        "docs",
+        "style",
+        "process"
+      ]
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 200,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "rationale": {
+      "type": "string",
+      "maxLength": 600
+    },
+    "do_not_apply_when": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repos",
+        "globs",
+        "languages",
+        "reviewers",
+        "skills"
+      ],
+      "properties": {
+        "repos": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^(\\*|[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)$"
+          }
+        },
+        "globs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "python",
+              "typescript",
+              "javascript",
+              "go",
+              "rust",
+              "java",
+              "kotlin",
+              "c",
+              "cpp",
+              "ruby",
+              "php",
+              "sql",
+              "html",
+              "css",
+              "shell",
+              "yaml",
+              "json",
+              "toml",
+              "ini",
+              "markdown",
+              "terraform",
+              "docker",
+              "make"
+            ]
+          }
+        },
+        "reviewers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "security",
+              "qa",
+              "performance",
+              "code-quality",
+              "correctness",
+              "plan-adherence",
+              "*"
+            ]
+          }
+        },
+        "skills": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "pr-review",
+              "plan-review",
+              "quality-gate",
+              "fix",
+              "*"
+            ]
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "kind",
+          "strength",
+          "author_class"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "pattern": "^(?:ev|seed)-[0-9a-f]{16}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "user-correction",
+              "review-thread",
+              "seed",
+              "decision"
+            ]
+          },
+          "strength": {
+            "type": "string",
+            "enum": [
+              "strong",
+              "weak"
+            ]
+          },
+          "author_class": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "member",
+              "coderabbit",
+              "bot",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "created_by",
+        "created_at"
+      ],
+      "properties": {
+        "created_by": {
+          "type": "string",
+          "enum": [
+            "human",
+            "classifier"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "prompt_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "created_at": {
+          "$ref": "#/$defs/date"
+        }
+      }
+    },
+    "approved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "by",
+        "at"
+      ],
+      "properties": {
+        "by": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "auto-activate"
+          ]
+        },
+        "at": {
+          "$ref": "#/$defs/date"
+        }
+      }
+    },
+    "review_by": {
+      "$ref": "#/$defs/date"
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "ref"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string",
+          "enum": [
+            "ast-grep",
+            "ruff",
+            "semgrep",
+            "hook"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    }
+  },
+  "$defs": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  }
+}

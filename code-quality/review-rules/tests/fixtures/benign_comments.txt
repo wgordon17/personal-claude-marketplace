@@ -1,0 +1,61 @@
+Check commit 4a2f8c9e1b3d5a7f0e2c4b6a8d1e3f5a7b9c0d1e before cherry-picking.
+
+Verify checksum e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 matches the release artifact.
+
+Pin the base layer to sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 in the Dockerfile.
+
+Track correlation ID 550e8400-e29b-41d4-a716-446655440000 in the audit middleware.
+
+Keep integrity="sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC" on the CDN script tag.
+
+Use sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg== for subresource integrity.
+
+Verify go.sum entry h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU= matches upstream.
+
+Bump image tag to quay.io/org/MyService:v1.2.3 in the deployment manifest.
+
+Pin image to quay.io/org/MyService@sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 for reproducibility.
+
+Import github.com/osac-project/fulfillment-service/internal/handlers instead of duplicating the helper.
+
+Update the RBAC rule for apiextensions.k8s.io/v1/CustomResourceDefinition and networking.k8s.io/v1/Ingress.
+
+Read the schema from ./code-quality/review-rules/src/review_rules/schema/rule.schema.json or ~/Projects/review-rules/rules.
+
+Check /usr/local/share/certs/ca-bundle.crt permissions before loading TLS config.
+
+Rename validate_closed_form_strengthen_only_statement_compliance to check_statement_rules.
+
+Refactor AbstractKubernetesResourceReconciliationControllerFactory into smaller hooks.
+
+Authorization: required on all endpoints before GA.
+
+Note on cookie: ensure SameSite=Lax and HttpOnly are documented in the API guide.
+
+Use basic error-handling-wrapper around subprocess calls in this module.
+
+secretName: my-registry-credentials
+
+secretName: my-oauth2-credentials
+
+token = get_token(request)
+
+Override replicaCount in values.local.yaml when testing locally.
+
+Move helper types into pkg.internal.x before exporting the public API.
+
+Clone from git@github.com:org/repo when testing SSH push access.
+
+See https://github.com/osac-project/fulfillment-service/pull/42 for context.
+
+Inspect https://github.com/org/repo/blob/main/src/ServiceV2.py#L42 for the handler.
+
+Follow https://docs.python.org/3.13/library/re.html for regex character classes.
+
+- Require explicit error handling on all subprocess calls
+- Avoid broad except Exception handlers in CLI entrypoints
+- Keep timeout values configurable via environment variables
+
+The password rotation policy requires at least fourteen days between updates.
+
+Verify that bearer authentication headers are stripped from access logs.

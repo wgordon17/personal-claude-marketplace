@@ -3,17 +3,20 @@
 ## Development Commands
 
 ```bash
-make all          # Lint + test (CI runs this)
-make format       # Auto-fix: uv run ruff format . && uv run ruff check --fix .
-make test         # uv run pytest (runs the tests/ dirs in pyproject.toml testpaths)
+make all                  # Lint + test + typecheck (CI runs this)
+make format               # Auto-fix: uv run ruff format . && uv run ruff check --fix .
+make test                 # uv run pytest + make test-review-rules
+make lint-review-rules    # uv lock --check + ruff check/format for code-quality/review-rules
+make typecheck-review-rules  # Pyright typecheck for code-quality/review-rules
+make test-review-rules    # Run isolated uv project tests in code-quality/review-rules/tests/
 ```
 
-Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per-plugin `tests/` directories (see `pyproject.toml` `testpaths`): currently `dev-guard/tests/` and `chai-bot/tests/`.
+Python 3.13+. Ruff line-length 100, select `E,W,F,I,UP,B,SIM`. Tests live in per-plugin `tests/` directories (see `pyproject.toml` `testpaths`): `dev-guard/tests/` and `chai-bot/tests/`, plus `code-quality/review-rules/tests/` in its isolated `uv` project (`make test-review-rules`, wired into `make test` and `make all`).
 
 ## Critical Rules
 
 - **Never edit `~/.claude/plugins/` or `~/.claude/plugins/cache/`** — those directories contain installed/cached versions. Always edit this source repository. Changes in `~/.claude/plugins/` will be lost on update and are never committed.
-- **Always bump plugin versions and synchronize descriptions across all three manifest files** when modifying a plugin's runtime files (`<plugin>/tests/` and non-runtime root docs `README.md`, `OMP-COMPAT.md`, and `UPSTREAM.md` are exempt):
+- **Always bump plugin versions and synchronize descriptions across all three manifest files** when modifying a plugin's runtime files (nested `**/tests/` directories inside plugins and non-runtime root docs `README.md`, `OMP-COMPAT.md`, and `UPSTREAM.md` are exempt):
   - `<plugin>/.claude-plugin/plugin.json` (Claude Code manifest)
   - `<plugin>/plugin.json` (Agent Plugins v1 manifest — `uvx skillsaw@0.23.0 fix --no-plugins` via the `plugin-manifest-sync` custom rule in `.skillsaw.yaml`, or `uv run --no-project python -I .github/scripts/skillsaw_custom_rules.py --fix`, auto-syncs `version` and `description` across all three manifest files and auto-bumps patch versions on modified plugins; `skillsaw port --to agent-plugin .` only generates missing root manifests on initial creation)
   - `.claude-plugin/marketplace.json` (the plugin's entry, NOT `metadata.version`)
@@ -53,8 +56,6 @@ Personal Claude Code plugin marketplace with 13 plugins. Master registry: `.clau
 - **chai-bot/** — Advisory SessionStart nudge (OSAC-repo-gated) + unrestricted `/chai-bot` command for offloading OSAC research/actions or general second-opinion questions to the Red Hat-internal Chai Bot MCP server; VPN-dependent
 
 Each plugin ships dual manifests: `.claude-plugin/plugin.json` (Claude Code) and root `plugin.json` (Agent Plugins v1), registered in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Hooks register in `hooks/hooks.json`. Skills live in `skills/*/SKILL.md`.
-
-**OMP dual-harness bridge (standing requirement):** every plugin that ships `hooks/hooks.json` must also ship an `omp-extension.ts` + `package.json` OMP dual-harness bridge, so its hooks also work under the OMP harness (`@oh-my-pi/pi-coding-agent`), not just Claude Code. This applies to every future hooks.json-owning plugin, not just the ones already bridged (`dev-guard/`, `git-tools/`, `github-mcp/`, `chai-bot/`). See `dev-guard/omp-extension.ts` for the shell-out pattern to follow when a plugin's hooks have real logic, and `dev-guard/OMP-COMPAT.md` for confirmed OMP behaviors (stdin handling, MCP tool-name re-encoding, event mapping).
 
 ## CI
 

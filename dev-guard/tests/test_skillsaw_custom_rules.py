@@ -399,6 +399,40 @@ class TestSkillsawCustomRules:
         assert RULES_MOD.get_modified_plugins(repo) == set()
         assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 0
 
+    def test_modifying_only_nested_plugin_tests_directory_does_not_require_version_bump(
+        self, tmp_path: Path
+    ) -> None:
+        """5a. Test-only edits under code-quality/review-rules/tests/ do NOT require a bump."""
+        repo = _init_repo(
+            tmp_path,
+            plugins={
+                "code-quality": ("1.0.0", "Code quality agents and review-rules CLI"),
+            },
+        )
+        nested_test = repo / "code-quality" / "review-rules" / "tests" / "test_paths.py"
+        nested_test.parent.mkdir(parents=True, exist_ok=True)
+        nested_test.write_text("def test_paths():\n    assert True\n", encoding="utf-8")
+
+        assert RULES_MOD.get_modified_plugins(repo) == set()
+        assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 0
+        assert RULES_MOD.main(["--fix", "--repo-root", str(repo)]) == 0
+
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-m", "test: add nested review-rules unit test")
+        assert RULES_MOD.get_modified_plugins(repo) == set()
+        assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 0
+        cq_claude = json.loads(
+            (repo / "code-quality/.claude-plugin/plugin.json").read_text(encoding="utf-8")
+        )
+        assert cq_claude["version"] == "1.0.0"
+
+        # Runtime edits under code-quality/review-rules/src/ DO trigger a bump violation.
+        nested_src = repo / "code-quality" / "review-rules" / "src" / "review_rules" / "paths.py"
+        nested_src.parent.mkdir(parents=True, exist_ok=True)
+        nested_src.write_text("VALUE = 1\n", encoding="utf-8")
+        assert RULES_MOD.get_modified_plugins(repo) == {"code-quality"}
+        assert RULES_MOD.main(["--check", "--repo-root", str(repo)]) == 1
+
     @pytest.mark.parametrize("doc_name", ["README.md", "OMP-COMPAT.md", "UPSTREAM.md"])
     def test_modifying_only_non_runtime_plugin_docs_does_not_require_version_bump(
         self, tmp_path: Path, doc_name: str

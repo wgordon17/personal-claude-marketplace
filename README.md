@@ -13,6 +13,8 @@ Python/shell scripts — no enforcement or session logic is reimplemented in Typ
 (tool-name/field-name mapping, interactive `"ask"` trust approval, Bash `updatedInput` forwarding, MCP re-encoding, event mapping, and known limitations); git-tools,
 github-mcp, and chai-bot cover their own single-hook bridges directly in their own READMEs.
 
+New plugins that ship hooks are not required to ship an omp bridge; the four bridges above are maintained as-is.
+
 All 13 plugins also ship dual manifests: Claude Code manifests in `<plugin>/.claude-plugin/plugin.json` (plus `.claude-plugin/marketplace.json`) and [Agent Plugins v1](https://agent-plugins.org) manifests in `<plugin>/plugin.json` (plus `<plugin>/mcp.json` and `.agents/plugins/marketplace.json`).
 
 ## Plugins

@@ -300,6 +300,15 @@ class TestBetterleaksHookSubprocess:
         path.chmod(0o755)
         return path
 
+    @staticmethod
+    def _isolated_env(bin_dir: Path | None = None) -> dict[str, str]:
+        env = os.environ.copy()
+        env.pop("BASH_ENV", None)
+        env.pop("ENV", None)
+        if bin_dir is not None:
+            env["PATH"] = f"{bin_dir}:{env.get('PATH', '/usr/bin:/bin')}"
+        return env
+
     def test_missing_betterleaks_binary_fails_closed(self, tmp_path: Path):
         hook_copy = tmp_path / "betterleaks-hook.sh"
         # Strip Homebrew fallback PATH in isolated copy so host betterleaks is hidden
@@ -386,8 +395,7 @@ exit 0
         if ignore_file:
             (repo_dir / ignore_file).write_text("", encoding="utf-8")
 
-        env = os.environ.copy()
-        env["PATH"] = f"{bin_dir}:{env.get('PATH', '/usr/bin:/bin')}"
+        env = self._isolated_env(bin_dir)
         env["BETTERLEAKS_CONFIG_DIR"] = str(cfg_dir)
 
         proc = subprocess.run(
@@ -449,8 +457,7 @@ exit 0
 """,
         )
 
-        env = os.environ.copy()
-        env["PATH"] = f"{bin_dir}:{env.get('PATH', '/usr/bin:/bin')}"
+        env = self._isolated_env(bin_dir)
         env["BETTERLEAKS_CONFIG_DIR"] = str(cfg_dir)
 
         proc = subprocess.run(
@@ -490,8 +497,7 @@ exit 0
         bin_dir.mkdir()
         self._make_executable(bin_dir / "betterleaks", "#!/bin/sh\necho 'betterleaks 2.0.0'\n")
 
-        env = os.environ.copy()
-        env["PATH"] = f"{bin_dir}:{env.get('PATH', '/usr/bin:/bin')}"
+        env = self._isolated_env(bin_dir)
         env["BETTERLEAKS_CONFIG_DIR"] = str(cfg_dir)
         env["GIT_CONFIG_GLOBAL"] = str(gitconfig)
         env["GIT_CONFIG_NOSYSTEM"] = "1"
@@ -556,10 +562,9 @@ exit 0
         bin_dir.mkdir()
         self._make_executable(bin_dir / "betterleaks", "#!/bin/sh\necho 'betterleaks 2.0.0'\n")
 
-        env = os.environ.copy()
+        env = self._isolated_env(bin_dir)
         env.pop("BETTERLEAKS_CONFIG_DIR", None)
         env["HOME"] = str(home_dir)
-        env["PATH"] = f"{bin_dir}:{env.get('PATH', '/usr/bin:/bin')}"
         env["GIT_CONFIG_GLOBAL"] = str(gitconfig)
         env["GIT_CONFIG_NOSYSTEM"] = "1"
 

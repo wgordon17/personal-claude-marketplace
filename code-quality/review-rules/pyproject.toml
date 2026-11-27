@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "review-rules"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "pyyaml>=6.0.2",
+    "jsonschema>=4.23.0",
+    "anthropic>=2.3.0,<3",
+]
+
+[project.scripts]
+review-rules = "review_rules.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/review_rules"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.9",
+    "pyright>=1.1.408",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["timing: wall-clock budget tests; skipped when CI is set (shared runners are too noisy)"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+
+[tool.ruff]
+extend = "../../pyproject.toml"

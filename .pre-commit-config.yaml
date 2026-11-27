@@ -21,3 +21,4 @@ repos:
       - id: lychee
         args: ["--offline", "--no-progress"]
         files: \.md$
+        exclude: ^code-quality/review-rules/
