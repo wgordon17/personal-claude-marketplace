@@ -2,8 +2,8 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#   "pyyaml>=6.0.2",
-#   "tomli-w>=1.1.0",
+#   "pyyaml==6.0.4",
+#   "tomli-w==1.2.0",
 # ]
 # ///
 """Automated Betterleaks v1/v2 unified rule-overlay compiler and validator.

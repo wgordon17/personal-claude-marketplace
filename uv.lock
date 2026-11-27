@@ -424,14 +424,14 @@ llm = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pyright", specifier = ">=1.1.408" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-xdist", specifier = ">=3" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "ruff", specifier = ">=0.9" },
-    { name = "tomli-w", specifier = ">=1.1.0" },
+    { name = "pyright", specifier = "==1.1.408" },
+    { name = "pytest", specifier = "==9.2.0" },
+    { name = "pytest-xdist", specifier = "==3.8.0" },
+    { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "ruff", specifier = "==0.15.1" },
+    { name = "tomli-w", specifier = "==1.2.0" },
 ]
-llm = [{ name = "anthropic", extras = ["vertex"], specifier = ">=0.59.0" }]
+llm = [{ name = "anthropic", extras = ["vertex"], specifier = "==2.7.0" }]
 
 [[package]]
 name = "pluggy"
