@@ -5,6 +5,8 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
+        "--python",
+        "<3.15",
         "--from",
         "git+https://github.com/Averyy/fetchaller-mcp@500078f7f349d080de1fb7f231cd5d11f3fc42d2",
         "--with",
